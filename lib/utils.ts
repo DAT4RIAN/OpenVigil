@@ -11,4 +11,3 @@ export function formatNumber(value: number, digits = 0) {
     minimumFractionDigits: digits,
   }).format(value);
 }
-

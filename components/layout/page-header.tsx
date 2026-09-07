@@ -23,7 +23,9 @@ export function PageHeader({
           {breadcrumb.map((item, index) => (
             <span key={`${item}-${index}`}>
               {index > 0 ? <ChevronRight size={13} aria-hidden="true" /> : null}
-              <span aria-current={index === breadcrumb.length - 1 ? "page" : undefined}>{item}</span>
+              <span aria-current={index === breadcrumb.length - 1 ? "page" : undefined}>
+                {item}
+              </span>
             </span>
           ))}
         </nav>
@@ -40,4 +42,3 @@ export function PageHeader({
     </header>
   );
 }
-

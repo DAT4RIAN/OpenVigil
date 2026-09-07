@@ -2,15 +2,9 @@ import { activityEvents, windFarm } from "@/lib";
 
 export const dynamic = "force-dynamic";
 
-const encodeEvent = (
-  event: string,
-  id: string,
-  data: unknown,
-): Uint8Array => {
+const encodeEvent = (event: string, id: string, data: unknown): Uint8Array => {
   const encoder = new TextEncoder();
-  return encoder.encode(
-    `event: ${event}\nid: ${id}\ndata: ${JSON.stringify(data)}\n\n`,
-  );
+  return encoder.encode(`event: ${event}\nid: ${id}\ndata: ${JSON.stringify(data)}\n\n`);
 };
 
 /**

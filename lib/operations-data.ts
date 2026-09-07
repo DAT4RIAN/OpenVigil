@@ -820,13 +820,7 @@ const featuredAlternatives: readonly DecisionAlternative[] = [
     estimatedDowntimeHours: 8,
     estimatedEnergyLossMWh: 58,
     weatherWindowId: "WW-20260814-AM",
-    requiredResources: [
-      "海维二组",
-      "CTV-03",
-      "主轴承检查工具包",
-      "工业内窥镜",
-      "润滑脂取样套件",
-    ],
+    requiredResources: ["海维二组", "CTV-03", "主轴承检查工具包", "工业内窥镜", "润滑脂取样套件"],
     recommended: true,
     rationale: "在可控恶化风险下利用最近安全窗口，显著降低发电损失并保留完整取证条件。",
   },
@@ -1138,7 +1132,12 @@ export const workOrders: readonly WorkOrder[] = [
     deadline: "2026-08-14T16:00:00+08:00",
     estimatedDurationHours: 7,
     riskLevel: "critical",
-    tasks: makeTasks("WO-20260812-015", ["采集齿轮油样", "检查磁性堵塞指示器", "内窥镜检查高速级", "上传油样编号和影像"]),
+    tasks: makeTasks("WO-20260812-015", [
+      "采集齿轮油样",
+      "检查磁性堵塞指示器",
+      "内窥镜检查高速级",
+      "上传油样编号和影像",
+    ]),
     ppeRequirements: ["全身式安全带", "救生衣", "耐油手套", "护目镜"],
     requiredTools: ["油样套件", "工业内窥镜", "便携式振动分析仪"],
     spareParts: [
@@ -1169,7 +1168,12 @@ export const workOrders: readonly WorkOrder[] = [
     deadline: "2026-08-14T16:00:00+08:00",
     estimatedDurationHours: 6,
     riskLevel: "high",
-    tasks: makeTasks("WO-20260812-014", ["复测停机结构模态", "检查 T3/T4 法兰外观", "执行超声螺栓预紧力抽检", "记录偏差并复核"]),
+    tasks: makeTasks("WO-20260812-014", [
+      "复测停机结构模态",
+      "检查 T3/T4 法兰外观",
+      "执行超声螺栓预紧力抽检",
+      "记录偏差并复核",
+    ]),
     ppeRequirements: ["全身式安全带", "救生衣", "防坠器"],
     requiredTools: ["结构采集仪", "超声螺栓检测仪", "液压扭矩工具"],
     spareParts: [],
@@ -1238,7 +1242,11 @@ export const workOrders: readonly WorkOrder[] = [
     deadline: "2026-08-12T18:00:00+08:00",
     estimatedDurationHours: 8,
     riskLevel: "medium",
-    tasks: makeTasks("WO-20260810-010", ["无人机叶片巡检", "检查接闪器", "测试引下线连续性", "归档影像"], 4),
+    tasks: makeTasks(
+      "WO-20260810-010",
+      ["无人机叶片巡检", "检查接闪器", "测试引下线连续性", "归档影像"],
+      4,
+    ),
     ppeRequirements: ["救生衣", "安全帽", "护目镜"],
     requiredTools: ["工业无人机", "低电阻测试仪"],
     spareParts: [],
@@ -1261,7 +1269,11 @@ export const workOrders: readonly WorkOrder[] = [
     deadline: "2026-08-09T16:00:00+08:00",
     estimatedDurationHours: 3,
     riskLevel: "low",
-    tasks: makeTasks("WO-20260808-008", ["隔离润滑泵", "更换入口滤芯", "排气并试运行", "复核供脂压力"], 4),
+    tasks: makeTasks(
+      "WO-20260808-008",
+      ["隔离润滑泵", "更换入口滤芯", "排气并试运行", "复核供脂压力"],
+      4,
+    ),
     ppeRequirements: ["耐油手套", "护目镜", "全身式安全带"],
     requiredTools: ["滤芯扳手", "压力表"],
     spareParts: [
@@ -1292,7 +1304,11 @@ export const workOrders: readonly WorkOrder[] = [
     deadline: "2026-08-14T18:00:00+08:00",
     estimatedDurationHours: 14,
     riskLevel: "low",
-    tasks: makeTasks("WO-20260807-006", ["更换液压滤芯", "检查机舱紧固件", "测试应急照明", "执行超速保护测试"], 2),
+    tasks: makeTasks(
+      "WO-20260807-006",
+      ["更换液压滤芯", "检查机舱紧固件", "测试应急照明", "执行超速保护测试"],
+      2,
+    ),
     ppeRequirements: ["全身式安全带", "救生衣", "护目镜"],
     requiredTools: ["液压工具包", "标定转速表"],
     spareParts: [
@@ -1417,12 +1433,7 @@ export const activityEvents: readonly ActivityEvent[] = [
     kind: "diagnosis",
     title: "形成主轴承早期退化诊断",
     detail: "融合五类证据后，主轴承退化概率为 87%。",
-    evidenceIds: [
-      "EV-023-VIB-001",
-      "EV-023-TEMP-002",
-      "EV-023-SPECTRUM-005",
-      "EV-023-HISTORY-006",
-    ],
+    evidenceIds: ["EV-023-VIB-001", "EV-023-TEMP-002", "EV-023-SPECTRUM-005", "EV-023-HISTORY-006"],
     outcome: "success",
   },
   {
@@ -1546,4 +1557,3 @@ export const activityEvents: readonly ActivityEvent[] = [
     outcome: "in-progress",
   },
 ] as const;
-

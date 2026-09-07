@@ -390,4 +390,3 @@ export const agentLayers = {
   review: agents.filter((agent) => agent.layer === "review"),
   execution: agents.filter((agent) => agent.layer === "execution"),
 } as const;
-

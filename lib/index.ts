@@ -1,6 +1,31 @@
 export type * from "./types";
+export type * from "./demo-workflow";
+export * from "./agent-tool-runtime";
+
+export {
+  canCompleteFeaturedWorkOrder,
+  canonicalDemoWorkflow,
+  featuredWorkOrderTaskIds,
+  transitionDemoWorkflow,
+} from "./demo-workflow";
 
 export { agentLayers, agents } from "./agent-data";
+export {
+  ALARM_ARCHIVE_TOTAL,
+  FAILURE_CASE_TOTAL,
+  HISTORICAL_WORK_ORDER_TOTAL,
+  SCADA_ARCHIVE_INTERVAL_MINUTES,
+  SCADA_ARCHIVE_MAX_PAGE_SIZE,
+  SCADA_ARCHIVE_METRICS,
+  SCADA_ARCHIVE_SAMPLES_PER_SERIES,
+  SCADA_ARCHIVE_TOTAL,
+  alarmArchive,
+  demoDatasetCounts,
+  failureCases,
+  historicalWorkOrders,
+  queryScadaMeasurements,
+  validateArchiveData,
+} from "./archive-data";
 export { fleetSummary, turbine023, turbines, windFarm } from "./farm-data";
 export { knowledgeDocuments } from "./knowledge-data";
 export {
@@ -13,13 +38,10 @@ export {
   missions,
   workOrders,
 } from "./operations-data";
-export {
-  scadaSeries,
-  subsystemHealth,
-  weatherWindows,
-} from "./telemetry-data";
+export { scadaSeries, subsystemHealth, weatherWindows } from "./telemetry-data";
 
 import { agents } from "./agent-data";
+import { validateArchiveData } from "./archive-data";
 import { turbines } from "./farm-data";
 import { knowledgeDocuments } from "./knowledge-data";
 import {
@@ -77,30 +99,22 @@ export const getDecision = (id: string): Decision | undefined => {
   return decisions.find((decision) => decision.id === normalized);
 };
 
-export const getKnowledgeDocument = (
-  id: string,
-): KnowledgeDocument | undefined => {
+export const getKnowledgeDocument = (id: string): KnowledgeDocument | undefined => {
   const normalized = normalizeAssetId(id);
   return knowledgeDocuments.find((document) => document.id === normalized);
 };
 
-export const getEvidenceForMission = (
-  missionId: string,
-): readonly EvidenceItem[] => {
+export const getEvidenceForMission = (missionId: string): readonly EvidenceItem[] => {
   const normalized = normalizeAssetId(missionId);
   return evidenceItems.filter((evidence) => evidence.missionId === normalized);
 };
 
-export const getActivityForMission = (
-  missionId: string,
-): readonly ActivityEvent[] => {
+export const getActivityForMission = (missionId: string): readonly ActivityEvent[] => {
   const normalized = normalizeAssetId(missionId);
   return activityEvents.filter((event) => event.missionId === normalized);
 };
 
-export const getAlarmsForTurbine = (
-  turbineId: string,
-): readonly Alarm[] => {
+export const getAlarmsForTurbine = (turbineId: string): readonly Alarm[] => {
   const normalized = normalizeAssetId(turbineId);
   return alarms.filter((alarm) => alarm.turbineId === normalized);
 };
@@ -110,9 +124,7 @@ export const getScadaSeries = (
   turbineId = "WT-023",
 ): ScadaSeries | undefined => {
   const normalized = normalizeAssetId(turbineId);
-  return scadaSeries.find(
-    (series) => series.turbineId === normalized && series.metric === metric,
-  );
+  return scadaSeries.find((series) => series.turbineId === normalized && series.metric === metric);
 };
 
 /**
@@ -120,7 +132,7 @@ export const getScadaSeries = (
  * An empty array means every checked cross-domain link is valid.
  */
 export const validateDomainData = (): readonly string[] => {
-  const errors: string[] = [];
+  const errors: string[] = [...validateArchiveData()];
   const turbineIds = new Set(turbines.map((turbine) => turbine.id));
   const agentIds = new Set(agents.map((agent) => agent.id));
   const missionIds = new Set(missions.map((mission) => mission.id));
@@ -208,4 +220,3 @@ export const validateDomainData = (): readonly string[] => {
 
   return errors;
 };
-

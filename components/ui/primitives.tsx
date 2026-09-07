@@ -60,17 +60,36 @@ export function CardHeader({
   );
 }
 
-export function Progress({ value, tone = "primary", label }: { value: number; tone?: string; label?: string }) {
+export function Progress({
+  value,
+  tone = "primary",
+  label,
+}: {
+  value: number;
+  tone?: string;
+  label?: string;
+}) {
   return (
     <div className="progress-wrap" aria-label={label ?? `进度 ${value}%`}>
       <div className="progress-track">
-        <span className={cn("progress-value", `progress-value--${tone}`)} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
+        <span
+          className={cn("progress-value", `progress-value--${tone}`)}
+          style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+        />
       </div>
     </div>
   );
 }
 
-export function Avatar({ label, tone = "blue", size = "md" }: { label: string; tone?: string; size?: "sm" | "md" }) {
+export function Avatar({
+  label,
+  tone = "blue",
+  size = "md",
+}: {
+  label: string;
+  tone?: string;
+  size?: "sm" | "md";
+}) {
   const initials = label
     .split(/\s+/)
     .filter(Boolean)
@@ -84,7 +103,15 @@ export function Avatar({ label, tone = "blue", size = "md" }: { label: string; t
   );
 }
 
-export function KeyValue({ label, value, mono = false }: { label: string; value: ReactNode; mono?: boolean }) {
+export function KeyValue({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
+}) {
   return (
     <div className="key-value">
       <span>{label}</span>
@@ -93,7 +120,15 @@ export function KeyValue({ label, value, mono = false }: { label: string; value:
   );
 }
 
-export function EmptyState({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
+export function EmptyState({
+  icon,
+  title,
+  description,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+}) {
   return (
     <div className="empty-state">
       <div className="empty-state__icon">{icon}</div>
@@ -102,4 +137,3 @@ export function EmptyState({ icon, title, description }: { icon: ReactNode; titl
     </div>
   );
 }
-

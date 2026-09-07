@@ -6,10 +6,7 @@ interface TurbineScadaRouteContext {
   readonly params: Promise<{ readonly id: string }>;
 }
 
-export async function GET(
-  _request: Request,
-  context: TurbineScadaRouteContext,
-): Promise<Response> {
+export async function GET(_request: Request, context: TurbineScadaRouteContext): Promise<Response> {
   const { id } = await context.params;
   const turbine = getTurbine(id);
 

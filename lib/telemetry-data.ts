@@ -546,4 +546,3 @@ export const weatherWindows: readonly WeatherWindow[] = [
     recommendedFor: ["CTV transfer", "tower access", "minor lifting"],
   },
 ] as const;
-

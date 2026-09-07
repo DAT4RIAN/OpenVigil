@@ -13,10 +13,7 @@ interface TurbineRouteContext {
   readonly params: Promise<{ readonly id: string }>;
 }
 
-export async function GET(
-  _request: Request,
-  context: TurbineRouteContext,
-): Promise<Response> {
+export async function GET(_request: Request, context: TurbineRouteContext): Promise<Response> {
   const { id } = await context.params;
   const turbine = getTurbine(id);
 

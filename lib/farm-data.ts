@@ -10,8 +10,7 @@ const round = (value: number, precision = 1): number => {
   return Math.round(value * factor) / factor;
 };
 
-const pad = (value: number, width = 3): string =>
-  value.toString().padStart(width, "0");
+const pad = (value: number, width = 3): string => value.toString().padStart(width, "0");
 
 const statusOverrides: Readonly<Partial<Record<number, TurbineStatus>>> = {
   7: "warning",
@@ -93,16 +92,11 @@ export const turbines: readonly WindTurbine[] = Array.from(
       number === 23
         ? 9.7
         : round(9.5 + 0.85 * Math.sin(number * 0.41) + 0.22 * Math.cos(number * 0.17), 1);
-    const rotorSpeedRpm =
-      number === 23
-        ? 11.6
-        : round(10.8 + (windSpeedMps - 8.8) * 0.72, 1);
+    const rotorSpeedRpm = number === 23 ? 11.6 : round(10.8 + (windSpeedMps - 8.8) * 0.72, 1);
     const lastMaintenanceDate = new Date(
       Date.UTC(2026, 5 + (number % 2), 2 + (number % 24), 1 + (number % 8)),
     ).toISOString();
-    const nextInspectionDate = new Date(
-      Date.UTC(2026, 8, 2 + (number % 25), 0, 0),
-    ).toISOString();
+    const nextInspectionDate = new Date(Date.UTC(2026, 8, 2 + (number % 25), 0, 0)).toISOString();
 
     return {
       id: `WT-${pad(number)}`,
@@ -146,19 +140,14 @@ export const turbines: readonly WindTurbine[] = Array.from(
 /** The cross-page focal asset for the main-bearing degradation demo. */
 export const turbine023: WindTurbine = turbines[22];
 
-const operatingStatuses: readonly TurbineStatus[] = [
-  "running",
-  "warning",
-  "critical",
-];
+const operatingStatuses: readonly TurbineStatus[] = ["running", "warning", "critical"];
 
 const currentPowerMW = round(
   turbines.reduce((total, turbine) => total + turbine.powerMW, 0),
   1,
 );
 const averageHealthScore = round(
-  turbines.reduce((total, turbine) => total + turbine.healthScore, 0) /
-    turbines.length,
+  turbines.reduce((total, turbine) => total + turbine.healthScore, 0) / turbines.length,
   1,
 );
 
@@ -176,23 +165,16 @@ export const windFarm: WindFarm = {
   totalCapacityMW: TURBINE_COUNT * RATED_POWER_MW,
   turbineCount: turbines.length,
   turbineModel: "Goldwind GW165-6.0MW",
-  operatingTurbines: turbines.filter((turbine) =>
-    operatingStatuses.includes(turbine.status),
-  ).length,
-  maintenanceTurbines: turbines.filter(
-    (turbine) => turbine.status === "maintenance",
-  ).length,
+  operatingTurbines: turbines.filter((turbine) => operatingStatuses.includes(turbine.status))
+    .length,
+  maintenanceTurbines: turbines.filter((turbine) => turbine.status === "maintenance").length,
   offlineTurbines: turbines.filter(
-    (turbine) =>
-      turbine.status === "offline" || turbine.status === "communication-lost",
+    (turbine) => turbine.status === "offline" || turbine.status === "communication-lost",
   ).length,
   currentPowerMW,
   todayGenerationGWh: 3.81,
   averageHealthScore,
-  activeAlarmCount: turbines.reduce(
-    (total, turbine) => total + turbine.activeAlarmCount,
-    0,
-  ),
+  activeAlarmCount: turbines.reduce((total, turbine) => total + turbine.activeAlarmCount, 0),
   activeMissionCount: 8,
   weatherSummary: "多云 · 东南风 9.7 m/s · 浪高 1.3 m",
   lastUpdatedAt: SNAPSHOT_AT,
@@ -209,4 +191,3 @@ export const fleetSummary = {
   currentPowerMW: windFarm.currentPowerMW,
   averageHealthScore: windFarm.averageHealthScore,
 } as const;
-

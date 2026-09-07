@@ -9,9 +9,11 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "pnpm run build && node --test tests/rendered-html.test.mjs",
+    "test": "pnpm run build && node --experimental-strip-types --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
@@ -44,6 +46,7 @@
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "16.4.0",
+    "prettier": "^3.9.6",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",

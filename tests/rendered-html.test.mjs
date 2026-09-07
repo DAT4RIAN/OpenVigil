@@ -46,17 +46,30 @@ test("server-renders the WindOps command center instead of the starter", async (
   assert.doesNotMatch(html, /react-loading-skeleton|Your site is taking shape|Building your site/i);
 });
 
-test("mock APIs expose complete, referentially valid fixture counts", async () => {
-  const [health, farms, turbines, alarms, missions, agents, workOrders] =
-    await Promise.all([
-      fetchJson("/api/health"),
-      fetchJson("/api/wind-farms"),
-      fetchJson("/api/turbines"),
-      fetchJson("/api/alarms"),
-      fetchJson("/api/missions"),
-      fetchJson("/api/agents"),
-      fetchJson("/api/work-orders"),
-    ]);
+test("mock APIs distinguish live and archive fixture counts", async () => {
+  const [
+    health,
+    farms,
+    turbines,
+    alarms,
+    archivedAlarms,
+    missions,
+    agents,
+    workOrders,
+    historicalWorkOrders,
+    failureCases,
+  ] = await Promise.all([
+    fetchJson("/api/health"),
+    fetchJson("/api/wind-farms"),
+    fetchJson("/api/turbines"),
+    fetchJson("/api/alarms"),
+    fetchJson("/api/alarms?scope=archive"),
+    fetchJson("/api/missions"),
+    fetchJson("/api/agents"),
+    fetchJson("/api/work-orders"),
+    fetchJson("/api/work-orders?scope=archive"),
+    fetchJson("/api/failure-cases"),
+  ]);
 
   assert.equal(health.status, "healthy");
   assert.equal(health.deterministic, true);
@@ -70,12 +83,40 @@ test("mock APIs expose complete, referentially valid fixture counts", async () =
   assert.equal(farms.meta.count, 1);
   assert.equal(turbines.meta.count, 64);
   assert.equal(farms.data[0].turbineCount, turbines.meta.count);
-  assert.equal(health.counts.windFarms, farms.meta.count);
-  assert.equal(health.counts.turbines, turbines.meta.count);
-  assert.equal(health.counts.alarms, alarms.meta.count);
-  assert.equal(health.counts.missions, missions.meta.count);
-  assert.equal(health.counts.agents, agents.meta.count);
-  assert.equal(health.counts.workOrders, workOrders.meta.count);
+  assert.equal(alarms.meta.scope, "live");
+  assert.equal(workOrders.meta.scope, "live");
+  assert.equal(archivedAlarms.meta.scope, "archive");
+  assert.equal(historicalWorkOrders.meta.scope, "archive");
+  assert.equal(failureCases.meta.scope, "archive");
+
+  assert.equal(health.counts.live.windFarms, farms.meta.count);
+  assert.equal(health.counts.live.turbines, turbines.meta.count);
+  assert.equal(health.counts.live.scadaSeries, 17);
+  assert.equal(health.counts.live.scadaPoints, 1_649);
+  assert.equal(health.counts.live.alarms, alarms.meta.count);
+  assert.equal(health.counts.live.missions, missions.meta.count);
+  assert.equal(health.counts.live.agents, agents.meta.count);
+  assert.equal(health.counts.live.workOrders, workOrders.meta.count);
+
+  assert.equal(archivedAlarms.meta.count, 100);
+  assert.equal(historicalWorkOrders.meta.count, 30);
+  assert.equal(failureCases.meta.count, 20);
+  assert.deepEqual(health.counts.archive, {
+    scadaMeasurements: 131_072,
+    alarms: 100,
+    historicalWorkOrders: 30,
+    failureCases: 20,
+  });
+  assert.deepEqual(health.counts.dataset, {
+    turbines: 64,
+    scadaMeasurements: 131_072,
+    alarms: 100,
+    liveAlarms: alarms.meta.count,
+    workOrders: workOrders.meta.count + historicalWorkOrders.meta.count,
+    liveWorkOrders: workOrders.meta.count,
+    historicalWorkOrders: 30,
+    failureCases: 20,
+  });
 
   const turbineIds = new Set(turbines.data.map((turbine) => turbine.id));
   const missionIds = new Set(missions.data.map((mission) => mission.id));
@@ -102,6 +143,78 @@ test("mock APIs expose complete, referentially valid fixture counts", async () =
       );
     }
   }
+
+  const historicalWorkOrderIds = new Set(
+    historicalWorkOrders.data.map((workOrder) => workOrder.id),
+  );
+  for (const alarm of archivedAlarms.data) {
+    assert.ok(turbineIds.has(alarm.turbineId), `${alarm.id} has an unknown turbine`);
+    if (alarm.missionId) {
+      assert.ok(missionIds.has(alarm.missionId), `${alarm.id} has an unknown mission`);
+    }
+  }
+  for (const workOrder of historicalWorkOrders.data) {
+    assert.ok(turbineIds.has(workOrder.turbineId), `${workOrder.id} has an unknown turbine`);
+  }
+  for (const failureCase of failureCases.data) {
+    assert.ok(turbineIds.has(failureCase.turbineId), `${failureCase.id} has an unknown turbine`);
+    assert.ok(
+      historicalWorkOrderIds.has(failureCase.relatedWorkOrderId),
+      `${failureCase.id} has an unknown work order`,
+    );
+  }
+
+  const badAlarmScope = await fetchJson("/api/alarms?scope=everything", 400);
+  assert.equal(badAlarmScope.error.code, "INVALID_SCOPE");
+  const badWorkOrderScope = await fetchJson("/api/work-orders?scope=everything", 400);
+  assert.equal(badWorkOrderScope.error.code, "INVALID_SCOPE");
+});
+
+test("SCADA archive pagination and filters are exact and deterministic", async () => {
+  const [first, repeated, next, turbine, metric, combined] = await Promise.all([
+    fetchJson("/api/scada-measurements?offset=4095&limit=5"),
+    fetchJson("/api/scada-measurements?offset=4095&limit=5"),
+    fetchJson("/api/scada-measurements?offset=4100&limit=5"),
+    fetchJson("/api/scada-measurements?turbineId=wt-023&limit=1000"),
+    fetchJson("/api/scada-measurements?metric=main-bearing-temperature&limit=1000"),
+    fetchJson(
+      "/api/scada-measurements?turbineId=WT-023&metric=main-bearing-temperature&limit=1000",
+    ),
+  ]);
+
+  assert.equal(first.meta.total, 131_072);
+  assert.equal(first.meta.offset, 4_095);
+  assert.equal(first.meta.limit, 5);
+  assert.equal(first.meta.count, 5);
+  assert.deepEqual(repeated, first);
+  assert.equal(
+    first.data.some((measurement) =>
+      next.data.some((candidate) => candidate.id === measurement.id),
+    ),
+    false,
+  );
+
+  assert.equal(turbine.meta.total, 2_048);
+  assert.equal(turbine.meta.turbineId, "WT-023");
+  assert.ok(turbine.data.every((measurement) => measurement.turbineId === "WT-023"));
+
+  assert.equal(metric.meta.total, 8_192);
+  assert.equal(metric.meta.metric, "main-bearing-temperature");
+  assert.ok(metric.data.every((measurement) => measurement.metric === "main-bearing-temperature"));
+
+  assert.equal(combined.meta.total, 128);
+  assert.equal(combined.meta.count, 128);
+  assert.ok(
+    combined.data.every(
+      (measurement) =>
+        measurement.turbineId === "WT-023" && measurement.metric === "main-bearing-temperature",
+    ),
+  );
+
+  const invalidOffset = await fetchJson("/api/scada-measurements?offset=-1", 400);
+  assert.equal(invalidOffset.error.code, "INVALID_PAGINATION");
+  const invalidLimit = await fetchJson("/api/scada-measurements?limit=1001", 400);
+  assert.equal(invalidLimit.error.code, "INVALID_PAGINATION");
 });
 
 test("WT-023 APIs preserve the alarm-to-mission-to-work-order closed loop", async () => {
@@ -118,27 +231,18 @@ test("WT-023 APIs preserve the alarm-to-mission-to-work-order closed loop", asyn
   assert.ok(scada.meta.count >= 1);
   assert.ok(scada.data.every((series) => series.turbineId === "WT-023"));
 
-  const mission = missions.data.find(
-    (candidate) => candidate.id === "MISSION-2026-0823",
-  );
+  const mission = missions.data.find((candidate) => candidate.id === "MISSION-2026-0823");
   assert.ok(mission, "the featured WT-023 mission must exist");
   assert.equal(mission.turbineId, "WT-023");
   assert.ok(mission.alarmIds.length >= 1);
   assert.ok(mission.decisionId);
   assert.ok(mission.workOrderId);
 
-  const relatedAlarms = alarms.data.filter(
-    (alarm) => alarm.missionId === mission.id,
-  );
-  assert.deepEqual(
-    new Set(relatedAlarms.map((alarm) => alarm.id)),
-    new Set(mission.alarmIds),
-  );
+  const relatedAlarms = alarms.data.filter((alarm) => alarm.missionId === mission.id);
+  assert.deepEqual(new Set(relatedAlarms.map((alarm) => alarm.id)), new Set(mission.alarmIds));
   assert.ok(relatedAlarms.every((alarm) => alarm.turbineId === "WT-023"));
 
-  const workOrder = workOrders.data.find(
-    (candidate) => candidate.relatedMissionId === mission.id,
-  );
+  const workOrder = workOrders.data.find((candidate) => candidate.relatedMissionId === mission.id);
   assert.ok(workOrder, "the featured mission must generate a work order");
   assert.equal(workOrder.id, mission.workOrderId);
   assert.equal(workOrder.turbineId, "WT-023");
@@ -146,10 +250,7 @@ test("WT-023 APIs preserve the alarm-to-mission-to-work-order closed loop", asyn
 
   assert.ok(detail.relationships.missionIds.includes(mission.id));
   assert.ok(detail.relationships.workOrderIds.includes(workOrder.id));
-  assert.deepEqual(
-    new Set(detail.relationships.alarmIds),
-    new Set(mission.alarmIds),
-  );
+  assert.deepEqual(new Set(detail.relationships.alarmIds), new Set(mission.alarmIds));
 
   const missing = await fetchJson("/api/turbines/WT-999", 404);
   assert.equal(missing.error.code, "TURBINE_NOT_FOUND");
@@ -162,10 +263,7 @@ test("agent activity endpoint is a deterministic finite SSE replay", async () =>
   ]);
 
   assert.equal(response.status, 200);
-  assert.match(
-    response.headers.get("content-type") ?? "",
-    /^text\/event-stream\b/i,
-  );
+  assert.match(response.headers.get("content-type") ?? "", /^text\/event-stream\b/i);
 
   const body = await response.text();
   assert.match(body, /^event: snapshot/m);
@@ -174,6 +272,6 @@ test("agent activity endpoint is a deterministic finite SSE replay", async () =>
   assert.match(body, /event: complete/);
   assert.equal(
     (body.match(/^event: agent-activity$/gm) ?? []).length,
-    health.counts.agentEvents,
+    health.counts.live.agentEvents,
   );
 });

@@ -1,0 +1,7 @@
+dist
+.next
+.vinext
+.wrangler
+node_modules
+pnpm-lock.yaml
+public/og.png

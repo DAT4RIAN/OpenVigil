@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LineChart } from "echarts/charts";
 import {
   DataZoomComponent,
@@ -56,6 +56,13 @@ export function TimeSeriesChart({
   compact?: boolean;
 }) {
   const elementRef = useRef<HTMLDivElement>(null);
+  const [themeRevision, setThemeRevision] = useState(0);
+
+  useEffect(() => {
+    const handleTheme = () => setThemeRevision((value) => value + 1);
+    window.addEventListener("windops-theme-change", handleTheme);
+    return () => window.removeEventListener("windops-theme-change", handleTheme);
+  }, []);
 
   useEffect(() => {
     if (!elementRef.current) return;
@@ -67,24 +74,29 @@ export function TimeSeriesChart({
     const info = css("--info", "#3978b9");
     const warning = css("--warning", "#b8790b");
 
-    const anomalies = data.filter((point) => point.anomaly).map((point) => [point.timestamp, point.value]);
-    const aiEvents = data.filter((point) => point.aiEvent).map((point) => [point.timestamp, point.value]);
+    const anomalies = data
+      .filter((point) => point.anomaly)
+      .map((point) => [point.timestamp, point.value]);
+    const aiEvents = data
+      .filter((point) => point.aiEvent)
+      .map((point) => [point.timestamp, point.value]);
 
     chart.setOption({
       animationDuration: 450,
       grid: compact
         ? { left: 4, right: 4, top: 6, bottom: 2, containLabel: false }
         : { left: 12, right: 18, top: 36, bottom: 28, containLabel: true },
-      legend: compact || !secondaryData
-        ? undefined
-        : {
-            data: [primaryName, secondaryName ?? "对比值"],
-            right: 10,
-            top: 5,
-            textStyle: { color: text, fontSize: 9 },
-            itemWidth: 12,
-            itemHeight: 3,
-          },
+      legend:
+        compact || !secondaryData
+          ? undefined
+          : {
+              data: [primaryName, secondaryName ?? "对比值"],
+              right: 10,
+              top: 5,
+              textStyle: { color: text, fontSize: 9 },
+              itemWidth: 12,
+              itemHeight: 3,
+            },
       tooltip: compact
         ? undefined
         : {
@@ -108,7 +120,9 @@ export function TimeSeriesChart({
         type: "value",
         scale: true,
         splitNumber: compact ? 2 : 4,
-        axisLabel: compact ? { show: false } : { color: text, fontSize: 9, formatter: `{value} ${unit}` },
+        axisLabel: compact
+          ? { show: false }
+          : { color: text, fontSize: 9, formatter: `{value} ${unit}` },
         splitLine: { lineStyle: { color: grid, type: "dashed" } },
       },
       dataZoom: compact
@@ -131,15 +145,23 @@ export function TimeSeriesChart({
               { offset: 1, color: color.modifyAlpha(primary, 0.01) },
             ]),
           },
-          markLine: threshold === undefined
-            ? undefined
-            : {
-                silent: true,
-                symbol: "none",
-                label: compact ? { show: false } : { formatter: `阈值 ${threshold} ${unit}`, color: warning, fontSize: 9, position: "insideEndTop" },
-                lineStyle: { color: warning, type: "dashed", width: 1 },
-                data: [{ yAxis: threshold }],
-              },
+          markLine:
+            threshold === undefined
+              ? undefined
+              : {
+                  silent: true,
+                  symbol: "none",
+                  label: compact
+                    ? { show: false }
+                    : {
+                        formatter: `阈值 ${threshold} ${unit}`,
+                        color: warning,
+                        fontSize: 9,
+                        position: "insideEndTop",
+                      },
+                  lineStyle: { color: warning, type: "dashed", width: 1 },
+                  data: [{ yAxis: threshold }],
+                },
           markPoint: compact
             ? undefined
             : {
@@ -147,8 +169,16 @@ export function TimeSeriesChart({
                 symbolSize: 7,
                 label: { show: false },
                 data: [
-                  ...anomalies.map(([xAxis, yAxis]) => ({ coord: [xAxis, yAxis], itemStyle: { color: critical }, name: "异常" })),
-                  ...aiEvents.map(([xAxis, yAxis]) => ({ coord: [xAxis, yAxis], itemStyle: { color: info }, name: "AI 事件" })),
+                  ...anomalies.map(([xAxis, yAxis]) => ({
+                    coord: [xAxis, yAxis],
+                    itemStyle: { color: critical },
+                    name: "异常",
+                  })),
+                  ...aiEvents.map(([xAxis, yAxis]) => ({
+                    coord: [xAxis, yAxis],
+                    itemStyle: { color: info },
+                    name: "AI 事件",
+                  })),
                 ],
               },
         },
@@ -173,7 +203,14 @@ export function TimeSeriesChart({
       observer.disconnect();
       chart.dispose();
     };
-  }, [compact, data, primaryName, secondaryData, secondaryName, threshold, unit]);
+  }, [compact, data, primaryName, secondaryData, secondaryName, themeRevision, threshold, unit]);
 
-  return <div ref={elementRef} role="img" aria-label={`${primaryName}时间序列图`} style={{ height, width: "100%" }} />;
+  return (
+    <div
+      ref={elementRef}
+      role="img"
+      aria-label={`${primaryName}时间序列图`}
+      style={{ height, width: "100%" }}
+    />
+  );
 }

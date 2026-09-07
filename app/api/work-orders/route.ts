@@ -1,9 +1,22 @@
-import { windFarm, workOrders } from "@/lib";
+import { historicalWorkOrders, windFarm, workOrders } from "@/lib";
 
-import { collectionResponse } from "../_shared";
+import { collectionResponse, errorResponse } from "../_shared";
 
-export function GET(): Response {
-  return collectionResponse(workOrders, {
+export function GET(request: Request): Response {
+  const requestedScope = new URL(request.url).searchParams.get("scope");
+
+  if (requestedScope !== null && requestedScope !== "live" && requestedScope !== "archive") {
+    return errorResponse(
+      "INVALID_SCOPE",
+      'The scope query parameter must be either "live" or "archive".',
+    );
+  }
+
+  const scope = requestedScope ?? "live";
+  const data = scope === "archive" ? historicalWorkOrders : workOrders;
+
+  return collectionResponse(data, {
+    scope,
     snapshotAt: windFarm.lastUpdatedAt,
   });
 }

@@ -166,4 +166,3 @@ export const knowledgeDocuments: readonly KnowledgeDocument[] = [
     relatedMissionIds: ["MISSION-2026-0823"],
   },
 ] as const;
-

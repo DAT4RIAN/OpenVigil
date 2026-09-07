@@ -7,20 +7,9 @@
 export type ISODateTime = string;
 
 export type TurbineStatus =
-  | "running"
-  | "warning"
-  | "critical"
-  | "maintenance"
-  | "offline"
-  | "communication-lost";
+  "running" | "warning" | "critical" | "maintenance" | "offline" | "communication-lost";
 
-export type HealthState =
-  | "healthy"
-  | "watch"
-  | "degraded"
-  | "critical"
-  | "maintenance"
-  | "offline";
+export type HealthState = "healthy" | "watch" | "degraded" | "critical" | "maintenance" | "offline";
 
 export type TrendDirection = "improving" | "stable" | "declining";
 export type RiskLevel = "critical" | "high" | "medium" | "low";
@@ -115,23 +104,10 @@ export interface SubsystemHealth {
   readonly assessedAt: ISODateTime;
 }
 
-export type AlarmSeverity =
-  | "critical"
-  | "major"
-  | "minor"
-  | "warning"
-  | "info";
-export type AlarmStatus =
-  | "active"
-  | "acknowledged"
-  | "suppressed"
-  | "resolved";
+export type AlarmSeverity = "critical" | "major" | "minor" | "warning" | "info";
+export type AlarmStatus = "active" | "acknowledged" | "suppressed" | "resolved";
 export type AlarmAIStatus =
-  | "queued"
-  | "analyzing"
-  | "diagnosed"
-  | "action-created"
-  | "not-required";
+  "queued" | "analyzing" | "diagnosed" | "action-created" | "not-required";
 
 export interface Alarm {
   readonly id: string;
@@ -157,13 +133,7 @@ export interface Alarm {
 
 export type AgentLayer = "decision" | "review" | "execution";
 export type AgentStatus =
-  | "idle"
-  | "thinking"
-  | "working"
-  | "waiting"
-  | "reviewing"
-  | "failed"
-  | "offline";
+  "idle" | "thinking" | "working" | "waiting" | "reviewing" | "failed" | "offline";
 
 export interface AgentMetrics {
   readonly successRate: number;
@@ -280,16 +250,8 @@ export interface ActivityEvent {
 }
 
 export type DecisionStatus =
-  | "draft"
-  | "under-review"
-  | "approved"
-  | "rejected"
-  | "revision-requested";
-export type ApprovalAction =
-  | "approve"
-  | "reject"
-  | "request-revision"
-  | "escalate";
+  "draft" | "under-review" | "approved" | "rejected" | "revision-requested";
+export type ApprovalAction = "approve" | "reject" | "request-revision" | "escalate";
 
 export interface DecisionAlternative {
   readonly id: string;
@@ -339,13 +301,7 @@ export interface Decision {
 
 export type WorkOrderPriority = "critical" | "high" | "medium" | "low";
 export type WorkOrderStatus =
-  | "draft"
-  | "pending-approval"
-  | "scheduled"
-  | "in-progress"
-  | "paused"
-  | "completed"
-  | "closed";
+  "draft" | "pending-approval" | "scheduled" | "in-progress" | "paused" | "completed" | "closed";
 
 export interface WorkOrderTask {
   readonly id: string;
@@ -385,6 +341,26 @@ export interface WorkOrder {
   readonly safetyProcedures: readonly string[];
   readonly createdAt: ISODateTime;
   readonly updatedAt: ISODateTime;
+}
+
+/** A closed-loop failure record retained for similarity search and RAG demos. */
+export interface FailureCase {
+  readonly id: string;
+  readonly turbineId: string;
+  readonly subsystem: SubsystemKey;
+  readonly title: string;
+  readonly failureMode: string;
+  readonly symptoms: readonly string[];
+  readonly rootCause: string;
+  readonly correctiveAction: string;
+  readonly severity: RiskLevel;
+  readonly detectedAt: ISODateTime;
+  readonly resolvedAt: ISODateTime;
+  readonly downtimeHours: number;
+  readonly energyLossMWh: number;
+  readonly repairCostCny: number;
+  readonly relatedWorkOrderId: string;
+  readonly tags: readonly string[];
 }
 
 export type ScadaMetric =
@@ -435,6 +411,49 @@ export interface ScadaSeries {
   readonly points: readonly ScadaPoint[];
 }
 
+/** One row in the generated, query-only SCADA archive. */
+export interface ScadaMeasurement {
+  readonly id: string;
+  readonly sequence: number;
+  readonly turbineId: string;
+  readonly metric: ScadaMetric;
+  readonly label: string;
+  readonly timestamp: ISODateTime;
+  readonly value: number;
+  readonly unit: string;
+  readonly quality: ScadaPoint["quality"];
+  readonly isAnomaly: boolean;
+}
+
+export interface ScadaMeasurementQuery {
+  readonly offset?: number;
+  readonly limit?: number;
+  /** Canonical filter name used by the API layer. */
+  readonly turbineId?: string;
+  /** Convenience alias for direct data-layer consumers. */
+  readonly turbine?: string;
+  readonly metric?: ScadaMetric;
+}
+
+export interface ScadaMeasurementPage {
+  readonly items: readonly ScadaMeasurement[];
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly snapshotAt: ISODateTime;
+}
+
+export interface DemoDatasetCounts {
+  readonly turbines: number;
+  readonly scadaMeasurements: number;
+  readonly alarms: number;
+  readonly liveAlarms: number;
+  readonly workOrders: number;
+  readonly liveWorkOrders: number;
+  readonly historicalWorkOrders: number;
+  readonly failureCases: number;
+}
+
 export type WeatherSuitability = "suitable" | "conditional" | "unsafe";
 
 export interface WeatherWindow {
@@ -481,4 +500,3 @@ export interface KnowledgeDocument {
   readonly relatedTurbineIds: readonly string[];
   readonly relatedMissionIds: readonly string[];
 }
-

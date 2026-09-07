@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 
-export type StatusTone = "success" | "warning" | "critical" | "offline" | "info" | "maintenance" | "neutral";
+export type StatusTone =
+  "success" | "warning" | "critical" | "offline" | "info" | "maintenance" | "neutral";
 
 const toneMap: Record<string, StatusTone> = {
   running: "success",
@@ -47,7 +48,13 @@ export function StatusBadge({
 }) {
   const resolved = tone ?? toneMap[value.toLowerCase()] ?? "neutral";
   return (
-    <span className={cn("status-badge", `status-badge--${resolved}`, compact && "status-badge--compact")}>
+    <span
+      className={cn(
+        "status-badge",
+        `status-badge--${resolved}`,
+        compact && "status-badge--compact",
+      )}
+    >
       <span className={cn("status-dot", pulse && "status-dot--pulse")} aria-hidden="true" />
       {label ?? value.toUpperCase()}
     </span>
@@ -58,4 +65,3 @@ export function HealthBadge({ score }: { score: number }) {
   const tone: StatusTone = score >= 90 ? "success" : score >= 75 ? "warning" : "critical";
   return <StatusBadge value={String(score)} label={`${score} / 100`} tone={tone} compact />;
 }
-

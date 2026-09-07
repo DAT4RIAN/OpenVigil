@@ -22,13 +22,16 @@ export const collectionResponse = <T>(
     },
   });
 
-export const turbineNotFoundResponse = (id: string): Response =>
+export const errorResponse = (code: string, message: string, status = 400): Response =>
   jsonResponse(
     {
       error: {
-        code: "TURBINE_NOT_FOUND",
-        message: `Wind turbine ${id} was not found.`,
+        code,
+        message,
       },
     },
-    404,
+    status,
   );
+
+export const turbineNotFoundResponse = (id: string): Response =>
+  errorResponse("TURBINE_NOT_FOUND", `Wind turbine ${id} was not found.`, 404);
