@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -22,25 +22,30 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { TimeSeriesChart, type TimeSeriesPoint } from "@/components/charts/time-series-chart";
-import { scadaSeries, turbine023 } from "@/lib";
+import { getTurbine, scadaSeries, turbine023 } from "@/lib";
 import { apiGet } from "@/lib/api-client";
+import type { ScadaHistoryRange, ScadaHistorySnapshot } from "@/lib/scada-history";
+import type { RealtimeFrame } from "@/lib/realtime-stream";
 import type { ScadaSeries } from "@/lib/types";
+import { useRealtimeChannel } from "@/lib/use-realtime-channel";
 import { cn } from "@/lib/utils";
 
-const ranges = ["LIVE", "1H", "6H", "24H", "7D", "30D"] as const;
+const ranges: readonly ScadaHistoryRange[] = ["LIVE", "1H", "6H", "24H", "7D", "30D"];
 
-const rangePointCounts: Record<(typeof ranges)[number], number> = {
-  LIVE: 12,
-  "1H": 5,
-  "6H": 25,
-  "24H": 97,
-  "7D": 97,
-  "30D": 97,
-};
+interface LiveScadaValue {
+  readonly seriesId: string;
+  readonly turbineId: string;
+  readonly metric: string;
+  readonly value: number;
+  readonly quality: "good" | "uncertain" | "bad";
+  readonly isAnomaly: boolean;
+}
 
-function toChartData(series: ScadaSeries, range: (typeof ranges)[number]): TimeSeriesPoint[] {
-  return series.points.slice(-rangePointCounts[range]).map((point) => ({
-    timestamp: new Date(point.timestamp).toLocaleTimeString("zh-CN", {
+function toChartData(series: ScadaSeries, range: ScadaHistoryRange): TimeSeriesPoint[] {
+  return series.points.map((point) => ({
+    timestamp: new Date(point.timestamp).toLocaleString("zh-CN", {
+      month: range === "7D" || range === "30D" ? "2-digit" : undefined,
+      day: range === "7D" || range === "30D" ? "2-digit" : undefined,
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
@@ -69,29 +74,84 @@ function signalState(series: ScadaSeries) {
 }
 
 export function ScadaPage() {
+  const [turbineId, setTurbineId] = useState(turbine023.id);
+  const [range, setRange] = useState<ScadaHistoryRange>("24H");
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customFrom, setCustomFrom] = useState("2026-08-06");
+  const [customTo, setCustomTo] = useState("2026-08-13");
+  const scadaStream = useRealtimeChannel("scada", range === "LIVE" && turbineId === turbine023.id);
+  const streamStatus = scadaStream.status;
+  const liveFrame = scadaStream.frame as RealtimeFrame | null;
   const scadaQuery = useQuery({
-    queryKey: ["scada", turbine023.id],
+    queryKey: ["scada-history", turbineId, range],
     queryFn: ({ signal }) =>
-      apiGet<{
-        data: ScadaSeries[];
-        meta: { count: number; turbineId: string; snapshotAt: string };
-      }>(`/api/turbines/${turbine023.id}/scada`, signal),
+      apiGet<ScadaHistorySnapshot>(
+        `/api/scada-history?turbineId=${turbineId}&range=${range}`,
+        signal,
+      ),
     initialData: {
       data: [...scadaSeries],
       meta: {
         count: scadaSeries.length,
-        turbineId: turbine023.id,
+        pointCount: scadaSeries.reduce((total, series) => total + series.points.length, 0),
+        turbineId,
+        range: "24H",
+        interval: "15 min",
+        startsAt: scadaSeries[0]?.points[0]?.timestamp ?? "2026-08-12T10:30:00+08:00",
+        endsAt: "2026-08-13T10:30:00+08:00",
         snapshotAt: "2026-08-13T10:30:00+08:00",
+        deterministic: true,
       },
     },
+    // The 24-hour fixture is an SSR/failure fallback, not fresh data for every range key.
+    initialDataUpdatedAt: 0,
+    staleTime: 0,
+    placeholderData: (previous) => previous,
   });
-  const availableSeries = scadaQuery.data.data;
+  const availableSeries = useMemo(() => {
+    if (range !== "LIVE" || !liveFrame || !Array.isArray(liveFrame.data.values)) {
+      return scadaQuery.data.data;
+    }
+    const values = liveFrame.data.values as readonly LiveScadaValue[];
+    const bySeries = new Map(values.map((value) => [value.seriesId, value]));
+    return scadaQuery.data.data.map((series) => {
+      const update = bySeries.get(series.id);
+      if (!update) return series;
+      return {
+        ...series,
+        currentValue: update.value,
+        points: [
+          ...series.points.slice(-11),
+          {
+            timestamp: liveFrame.emittedAt,
+            value: update.value,
+            quality: update.quality,
+            isAnomaly: update.isAnomaly,
+            aiEvent: null,
+          },
+        ],
+      };
+    });
+  }, [liveFrame, range, scadaQuery.data.data]);
   const initial =
     availableSeries.find((item) => item.metric === "main-bearing-vibration-rms") ??
     availableSeries[0];
   const [selectedId, setSelectedId] = useState(initial?.id ?? "");
-  const [range, setRange] = useState<(typeof ranges)[number]>("24H");
   const [query, setQuery] = useState("");
+  useEffect(() => {
+    const parameters = new URLSearchParams(window.location.search);
+    const requestedTurbineId = parameters.get("turbineId")?.toUpperCase();
+    const metric = parameters.get("metric");
+    const matchingSeries = metric
+      ? scadaSeries.find((series) => series.metric === metric || series.id === metric)
+      : undefined;
+    const timer = window.setTimeout(() => {
+      if (requestedTurbineId && getTurbine(requestedTurbineId)) setTurbineId(requestedTurbineId);
+      if (matchingSeries) setSelectedId(matchingSeries.id);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const turbine = getTurbine(turbineId) ?? turbine023;
   const selected = availableSeries.find((item) => item.id === selectedId) ?? initial;
   const filtered = useMemo(
     () =>
@@ -119,17 +179,15 @@ export function ScadaPage() {
   function exportCsv() {
     const rows = [
       "timestamp,value,quality,is_anomaly,ai_event",
-      ...selected.points
-        .slice(-rangePointCounts[range])
-        .map((point) =>
-          [
-            point.timestamp,
-            point.value,
-            point.quality,
-            point.isAnomaly,
-            JSON.stringify(point.aiEvent ?? ""),
-          ].join(","),
-        ),
+      ...selected.points.map((point) =>
+        [
+          point.timestamp,
+          point.value,
+          point.quality,
+          point.isAnomaly,
+          JSON.stringify(point.aiEvent ?? ""),
+        ].join(","),
+      ),
     ];
     const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -145,15 +203,23 @@ export function ScadaPage() {
       <PageHeader
         eyebrow="SCADA 数据平面"
         title="实时监测"
-        description={`${turbine023.id} · ${turbine023.model} · 高频测点、阈值与 AI 事件联合监控`}
-        breadcrumb={["资产与监测", "实时监测", turbine023.id]}
+        description={`${turbine.id} · ${turbine.model} · 高频测点、阈值与 AI 事件联合监控`}
+        breadcrumb={["资产与监测", "实时监测", turbine.id]}
         meta={
           <>
             <StatusBadge
-              value={scadaQuery.isError ? "degraded" : "running"}
-              label={scadaQuery.isError ? "接口降级 · 本地快照" : "数据流正常"}
-              tone={scadaQuery.isError ? "warning" : "success"}
-              pulse={!scadaQuery.isError}
+              value={scadaQuery.isError || streamStatus === "fallback" ? "degraded" : "running"}
+              label={
+                scadaQuery.isError
+                  ? "接口降级 · 本地快照"
+                  : range === "LIVE" && streamStatus === "connected"
+                    ? "WEBSOCKET 实时"
+                    : range === "LIVE" && streamStatus === "fallback"
+                      ? "WEBSOCKET 回退 · API 快照"
+                      : "数据流正常"
+              }
+              tone={scadaQuery.isError || streamStatus === "fallback" ? "warning" : "success"}
+              pulse={!scadaQuery.isError && streamStatus !== "fallback"}
             />
             <span className="page-meta-text">
               {availableSeries.length} / {availableSeries.length} 测点在线 · 快照{" "}
@@ -167,7 +233,7 @@ export function ScadaPage() {
         }
         actions={
           <>
-            <Button variant="secondary">
+            <Button variant="secondary" onClick={() => setCustomOpen((value) => !value)}>
               <CalendarDays size={15} /> 自定义时段
             </Button>
             <Button variant="secondary" onClick={exportCsv}>
@@ -183,6 +249,44 @@ export function ScadaPage() {
           </>
         }
       />
+
+      {customOpen ? (
+        <Card className="scada-custom-range" role="region" aria-label="自定义 SCADA 时段">
+          <label>
+            开始日期
+            <input
+              type="date"
+              value={customFrom}
+              onChange={(event) => setCustomFrom(event.target.value)}
+            />
+          </label>
+          <span>→</span>
+          <label>
+            结束日期
+            <input
+              type="date"
+              value={customTo}
+              onChange={(event) => setCustomTo(event.target.value)}
+            />
+          </label>
+          <Button
+            variant="primary"
+            onClick={() => {
+              const days = Math.max(
+                1,
+                Math.ceil(
+                  (new Date(customTo).getTime() - new Date(customFrom).getTime()) / 86_400_000,
+                ),
+              );
+              setRange(days <= 1 ? "24H" : days <= 7 ? "7D" : "30D");
+              setCustomOpen(false);
+            }}
+          >
+            应用范围
+          </Button>
+          <small>演示数据会按所选跨度自动采用 15 分钟、1 小时或 4 小时采样。</small>
+        </Card>
+      ) : null}
 
       <section className="scada-control-bar">
         <div className="asset-selector">
@@ -209,7 +313,12 @@ export function ScadaPage() {
           ))}
         </div>
         <span className="stream-indicator">
-          <i /> LIVE STREAM · 12s
+          <i />{" "}
+          {range === "LIVE"
+            ? streamStatus === "connected"
+              ? "LIVE WEBSOCKET · 1s"
+              : "LIVE SNAPSHOT · reconnecting"
+            : `${range} · ${scadaQuery.data.meta.interval}`}
         </span>
       </section>
 

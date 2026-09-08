@@ -28,7 +28,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, KeyValue } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
-import { decisions, evidenceItems, featuredDecision, featuredMission, weatherWindows } from "@/lib";
+import { decisions, evidenceItems, featuredDecision, weatherWindows } from "@/lib";
 import type { DecisionAlternative } from "@/lib/types";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
@@ -116,20 +116,27 @@ function AlternativeCard({
 }
 
 export function DecisionCenterPage() {
+  const [activeDecisionId, setActiveDecisionId] = useState(featuredDecision.id);
   const [selectedId, setSelectedId] = useState(featuredDecision.recommendedAlternativeId);
   const [comment, setComment] = useState("同意执行方案 B。已确认安全措施、资源和气象窗口。");
   const workflow = useDemoWorkflow();
-  const approval = workflow.approval?.action ?? "pending";
+  const currentDecision =
+    decisions.find((decision) => decision.id === activeDecisionId) ?? featuredDecision;
+  const isFeaturedDecision = currentDecision.id === featuredDecision.id;
+  const approval = isFeaturedDecision
+    ? (workflow.approval?.action ?? "pending")
+    : (currentDecision.approval.action ?? "pending");
   const selected =
-    featuredDecision.alternatives.find((option) => option.id === selectedId) ??
-    featuredDecision.alternatives[0];
+    currentDecision.alternatives.find((option) => option.id === selectedId) ??
+    currentDecision.alternatives[0];
   const window =
     weatherWindows.find((item) => item.id === selected?.weatherWindowId) ?? weatherWindows[0];
   const relatedEvidence = evidenceItems.filter((item) =>
-    featuredDecision.evidenceIds.includes(item.id),
+    currentDecision.evidenceIds.includes(item.id),
   );
 
   function submitApproval(action: "approve" | "reject" | "request-revision" | "escalate") {
+    if (!isFeaturedDecision) return;
     workflow.dispatch({
       type: "submit-approval",
       action,
@@ -158,20 +165,36 @@ export function DecisionCenterPage() {
         meta={
           <>
             <StatusBadge
-              value={workflow.decisionStatus}
-              label={workflow.decisionStatus.replaceAll("-", " ").toUpperCase()}
-              tone={workflow.decisionStatus === "approved" ? "success" : "warning"}
-              pulse={workflow.decisionStatus === "under-review"}
+              value={isFeaturedDecision ? workflow.decisionStatus : currentDecision.status}
+              label={(isFeaturedDecision ? workflow.decisionStatus : currentDecision.status)
+                .replaceAll("-", " ")
+                .toUpperCase()}
+              tone={
+                (isFeaturedDecision ? workflow.decisionStatus : currentDecision.status) ===
+                "approved"
+                  ? "success"
+                  : "warning"
+              }
+              pulse={
+                (isFeaturedDecision ? workflow.decisionStatus : currentDecision.status) ===
+                "under-review"
+              }
             />
             <span className="page-meta-text">Human approval policy · 所有动作写入审计记录</span>
           </>
         }
         actions={
           <>
-            <Button variant="secondary">
+            <Button
+              variant="secondary"
+              onClick={() => document.getElementById("decision-evidence")?.scrollIntoView()}
+            >
               <FileSearch size={15} /> Evidence Policy
             </Button>
-            <Button variant="primary">
+            <Button
+              variant="primary"
+              onClick={() => document.getElementById("decision-review-queue")?.scrollIntoView()}
+            >
               <ShieldCheck size={15} /> Review Queue
             </Button>
           </>
@@ -179,7 +202,7 @@ export function DecisionCenterPage() {
       />
 
       <section className="decision-layout">
-        <aside className="decision-queue">
+        <aside className="decision-queue" id="decision-review-queue">
           <div className="decision-queue__header">
             <div>
               <span className="eyebrow">REVIEW QUEUE</span>
@@ -189,8 +212,13 @@ export function DecisionCenterPage() {
           </div>
           {decisions.map((decision, index) => (
             <button
-              className={cn("decision-queue-item", decision.id === featuredDecision.id && "active")}
+              className={cn("decision-queue-item", decision.id === currentDecision.id && "active")}
               key={decision.id}
+              onClick={() => {
+                setActiveDecisionId(decision.id);
+                setSelectedId(decision.recommendedAlternativeId);
+              }}
+              aria-pressed={decision.id === currentDecision.id}
             >
               <span
                 className={cn(
@@ -225,21 +253,21 @@ export function DecisionCenterPage() {
               <AlarmTriangle size={21} />
             </div>
             <div className="decision-incident__copy">
-              <span className="eyebrow">INCIDENT · {featuredMission.id}</span>
-              <h2>{featuredDecision.incident}</h2>
-              <p>{featuredDecision.diagnosis}</p>
+              <span className="eyebrow">INCIDENT · {currentDecision.missionId}</span>
+              <h2>{currentDecision.incident}</h2>
+              <p>{currentDecision.diagnosis}</p>
             </div>
             <div className="decision-confidence">
               <small>AI CONFIDENCE</small>
-              <strong>{featuredDecision.confidencePercent}%</strong>
+              <strong>{currentDecision.confidencePercent}%</strong>
               <span>High</span>
             </div>
-            <a href={`/missions/${featuredMission.id}`}>
+            <a href={`/missions/${currentDecision.missionId}`}>
               Mission Detail <ArrowRight size={13} />
             </a>
           </Card>
 
-          <section className="decision-evidence-bar">
+          <section className="decision-evidence-bar" id="decision-evidence">
             <div>
               <FileSearch size={15} />
               <span>
@@ -269,7 +297,7 @@ export function DecisionCenterPage() {
               }
             />
             <div className="alternative-grid">
-              {featuredDecision.alternatives.map((option, index) => (
+              {currentDecision.alternatives.map((option, index) => (
                 <AlternativeCard
                   key={option.id}
                   option={option}
@@ -294,7 +322,7 @@ export function DecisionCenterPage() {
                 </span>
                 <span>
                   <strong>降低安全风险</strong>
-                  <small>降载可将短期灾难性故障概率从 34% 降至 12%</small>
+                  <small>所选方案的恶化概率为 {selected?.deteriorationRiskPercent}%</small>
                 </span>
               </div>
               <div>
@@ -303,7 +331,11 @@ export function DecisionCenterPage() {
                 </span>
                 <span>
                   <strong>匹配作业窗口</strong>
-                  <small>8 月 14 日 08:00–16:00 满足风速与浪高限制</small>
+                  <small>
+                    {selected?.weatherWindowId
+                      ? "已关联满足风速与浪高约束的作业窗口"
+                      : "该方案不依赖现场气象窗口"}
+                  </small>
                 </span>
               </div>
               <div>
@@ -312,7 +344,10 @@ export function DecisionCenterPage() {
                 </span>
                 <span>
                   <strong>控制经济损失</strong>
-                  <small>相比立即停机，预计减少发电损失 34.8 MWh</small>
+                  <small>
+                    预计成本 ¥{((selected?.estimatedCostCny ?? 0) / 10000).toFixed(1)} 万，发电损失{" "}
+                    {selected?.estimatedEnergyLossMWh} MWh
+                  </small>
                 </span>
               </div>
               <div>
@@ -321,7 +356,7 @@ export function DecisionCenterPage() {
                 </span>
                 <span>
                   <strong>资源已就绪</strong>
-                  <small>备件、船舶、人员与专用工具均可在窗口前到位</small>
+                  <small>{selected?.requiredResources.join("、") || "无需额外现场资源"}</small>
                 </span>
               </div>
             </div>
@@ -384,26 +419,23 @@ export function DecisionCenterPage() {
               <StatusBadge value="suitable" label="适合" tone="success" compact />
             </div>
             <div className="execution-resource-list">
-              <span>
-                <Users size={13} />
-                <strong>叶轮机械班组 A</strong>
-                <Check size={12} />
-              </span>
-              <span>
-                <Ship size={13} />
-                <strong>海巡运维 07</strong>
-                <Check size={12} />
-              </span>
-              <span>
-                <PackageCheck size={13} />
-                <strong>主轴承备件 × 1</strong>
-                <Check size={12} />
-              </span>
-              <span>
-                <Wrench size={13} />
-                <strong>专用液压工具</strong>
-                <Check size={12} />
-              </span>
+              {(selected?.requiredResources ?? currentDecision.requiredResources).map(
+                (resource, index) => (
+                  <span key={resource}>
+                    {index === 0 ? (
+                      <Users size={13} />
+                    ) : resource.includes("CTV") || resource.includes("船") ? (
+                      <Ship size={13} />
+                    ) : resource.includes("备件") || resource.includes("套件") ? (
+                      <PackageCheck size={13} />
+                    ) : (
+                      <Wrench size={13} />
+                    )}
+                    <strong>{resource}</strong>
+                    <Check size={12} />
+                  </span>
+                ),
+              )}
             </div>
           </Card>
 
@@ -415,7 +447,18 @@ export function DecisionCenterPage() {
               title="授权执行"
               description="批准、拒绝、修订与升级均写入审计记录"
             />
-            {approval === "pending" ? (
+            {!isFeaturedDecision ? (
+              <div className="approval-policy" role="note">
+                <ShieldCheck size={15} />
+                <span>
+                  <strong>只读决策快照 · {currentDecision.status.replaceAll("-", " ")}</strong>
+                  <small>
+                    当前演示仅允许 {featuredDecision.id} 写入浏览器审计状态；该决策不会误改 WT-023
+                    闭环。
+                  </small>
+                </span>
+              </div>
+            ) : approval === "pending" ? (
               <>
                 <div className="approval-policy">
                   <ShieldCheck size={15} />

@@ -10,11 +10,7 @@ export class WindOpsApiError extends Error {
   }
 }
 
-export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, {
-    headers: { accept: "application/json" },
-    signal,
-  });
+async function parseResponse<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as T & {
     error?: { code?: string; message?: string };
   };
@@ -26,4 +22,25 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
     );
   }
   return payload;
+}
+
+export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, {
+    headers: { accept: "application/json" },
+    signal,
+  });
+  return parseResponse<T>(response);
+}
+
+export async function apiPost<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  return parseResponse<T>(response);
 }

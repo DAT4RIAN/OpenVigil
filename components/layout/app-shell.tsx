@@ -68,7 +68,7 @@ const navigation: NavigationGroup[] = [
       { label: "风场", href: "/wind-farms", icon: Wind },
       { label: "风机", href: "/turbines/WT-023", icon: TowerControl },
       { label: "实时监测", href: "/scada", icon: Activity },
-      { label: "设备健康", href: "#health", icon: HeartPulse, disabled: true },
+      { label: "设备健康", href: "/health", icon: HeartPulse },
     ],
   },
   {
@@ -76,7 +76,7 @@ const navigation: NavigationGroup[] = [
     items: [
       { label: "告警中心", href: "/alarms", icon: AlarmTriangle, badge: "17" },
       { label: "智能诊断", href: "#diagnosis", icon: BrainCircuit, disabled: true },
-      { label: "预测性维护", href: "#predictive", icon: CircleGauge, disabled: true },
+      { label: "预测性维护", href: "/predictive-maintenance", icon: CircleGauge },
     ],
   },
   {
@@ -92,13 +92,13 @@ const navigation: NavigationGroup[] = [
     items: [
       { label: "工单中心", href: "/work-orders", icon: ClipboardCheck },
       { label: "维护计划", href: "#maintenance", icon: Wrench, disabled: true },
-      { label: "运维资源", href: "#resources", icon: PackageSearch, disabled: true },
+      { label: "运维资源", href: "/resources", icon: PackageSearch },
     ],
   },
   {
     label: "知识与数据",
     items: [
-      { label: "知识库", href: "#knowledge", icon: Library, disabled: true },
+      { label: "知识库", href: "/knowledge", icon: Library },
       { label: "故障知识图谱", href: "#graph", icon: Boxes, disabled: true },
       { label: "数据中心", href: "#data", icon: Database, disabled: true },
       { label: "运维报告", href: "#reports", icon: FileBarChart, disabled: true },
@@ -125,6 +125,30 @@ const primaryCommands = [
     description: "主轴承异常 · 可重放完整闭环",
     href: "/missions/MISSION-2026-0823",
     icon: GitBranch,
+  },
+  {
+    label: "打开设备健康矩阵",
+    description: "64 台机组 · 风险与 RUL",
+    href: "/health",
+    icon: HeartPulse,
+  },
+  {
+    label: "打开预测性维护",
+    description: "64 台机组 · 失效概率 · RUL · 风险矩阵",
+    href: "/predictive-maintenance",
+    icon: CircleGauge,
+  },
+  {
+    label: "查询运维资源",
+    description: "备件 · 班组 · 船舶 · 工具 · 天气窗",
+    href: "/resources",
+    icon: PackageSearch,
+  },
+  {
+    label: "打开知识库",
+    description: "文档检索 · WT-023 引用式问答",
+    href: "/knowledge",
+    icon: Library,
   },
   { label: "查看实时 SCADA", description: "17 个在线测点", href: "/scada", icon: Activity },
   { label: "打开告警中心", description: "17 个活跃告警", href: "/alarms", icon: AlarmTriangle },

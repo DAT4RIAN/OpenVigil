@@ -11,8 +11,6 @@ import {
   CheckCircle2,
   ChevronRight,
   FileSearch,
-  GitBranch,
-  Link2,
   MessageSquareText,
   MoreHorizontal,
   RefreshCcw,
@@ -26,6 +24,11 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
+import {
+  downloadMissionJson,
+  MissionActivityTimeline,
+  type LocalComment,
+} from "@/components/pages/mission-detail-support";
 import { Avatar, Button, Card, CardHeader, KeyValue, Progress } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import {
@@ -41,7 +44,7 @@ import {
   weatherWindows,
   workOrders,
 } from "@/lib";
-import type { ActivityEvent, Mission } from "@/lib/types";
+import type { Mission } from "@/lib/types";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
 
@@ -55,19 +58,6 @@ const steps = [
   "Executing",
   "Completed",
 ];
-const activityIcon: Record<ActivityEvent["kind"], typeof Activity> = {
-  detection: AlarmTriangle,
-  analysis: Activity,
-  retrieval: FileSearch,
-  diagnosis: Sparkles,
-  decision: GitBranch,
-  review: ShieldCheck,
-  approval: UserCheck,
-  "work-order": Wrench,
-  execution: TerminalSquare,
-  system: Bot,
-};
-
 function formatTime(timestamp: string) {
   return new Date(timestamp).toLocaleTimeString("zh-CN", {
     hour: "2-digit",
@@ -78,6 +68,8 @@ function formatTime(timestamp: string) {
 }
 
 function GenericMissionDetailPage({ mission }: { mission: Mission }) {
+  const [isCommenting, setIsCommenting] = useState(false);
+  const [localComments, setLocalComments] = useState<LocalComment[]>([]);
   const turbine = getTurbine(mission.turbineId);
   const lead = agents.find((item) => item.id === mission.leadAgentId);
   const team = agents.filter((item) => mission.agentIds.includes(item.id));
@@ -95,6 +87,24 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
     executing: 6,
     completed: 7,
   }[mission.status];
+
+  function exportMissionLog() {
+    downloadMissionJson(`${mission.id}-mission-log.json`, {
+      schemaVersion: "windops.mission-log.v1",
+      mission,
+      turbine: turbine ?? null,
+      leadAgent: lead ?? null,
+      participatingAgents: team,
+      evidence: relatedEvidence,
+      decision: decision ?? null,
+      workOrder: workOrder ?? null,
+      activity: events,
+      sessionComments: {
+        persistence: "page-session-only",
+        items: localComments,
+      },
+    });
+  }
 
   return (
     <AppShell activePath={`/missions/${mission.id}`}>
@@ -139,7 +149,14 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
             >
               <TerminalSquare size={15} /> 查看资产
             </a>
-            <Button variant="primary">
+            <Button variant="secondary" onClick={exportMissionLog}>
+              <TerminalSquare size={15} /> Export JSON
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => setIsCommenting((current) => !current)}
+              aria-expanded={isCommenting}
+            >
               <MessageSquareText size={15} /> Add Comment
             </Button>
           </>
@@ -229,50 +246,15 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
             </div>
           </Card>
         </div>
-        <Card className="mission-timeline-card">
-          <CardHeader
-            eyebrow="ACTIVITY TRACE"
-            title="Agent Activity Timeline"
-            description="公开结构化摘要，不展示隐藏推理"
-          />
-          <div className="mission-timeline">
-            {events.length ? (
-              events.map((event, index) => {
-                const Icon = activityIcon[event.kind];
-                return (
-                  <div
-                    className={cn(
-                      "timeline-event",
-                      index === events.length - 1 && "timeline-event--current",
-                    )}
-                    key={event.id}
-                  >
-                    <time>{formatTime(event.timestamp)}</time>
-                    <span className={`timeline-event__node timeline-event__node--${event.outcome}`}>
-                      <Icon size={13} />
-                    </span>
-                    <div className="timeline-event__body">
-                      <div>
-                        <span>
-                          <Avatar label={event.actorLabel} tone="teal" size="sm" />
-                          <span>
-                            <strong>{event.actorLabel}</strong>
-                            <small>{event.kind}</small>
-                          </span>
-                        </span>
-                        <StatusBadge value={event.outcome} compact />
-                      </div>
-                      <h3>{event.title}</h3>
-                      <p>{event.detail}</p>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="command-empty">该 Mission 尚未产生公开活动事件</div>
-            )}
-          </div>
-        </Card>
+        <MissionActivityTimeline
+          events={events}
+          agents={agents}
+          description="公开结构化摘要，不展示隐藏推理"
+          isCommenting={isCommenting}
+          onCommentingChange={setIsCommenting}
+          localComments={localComments}
+          onCommentsChange={setLocalComments}
+        />
         <div className="decision-column">
           <Card className="current-decision-card">
             <CardHeader
@@ -321,6 +303,8 @@ function FeaturedMissionDetailPage() {
   const [comment, setComment] = useState(
     "同意按方案 B 降载运行，并于 8 月 14 日窗口执行主轴承检查。",
   );
+  const [isCommenting, setIsCommenting] = useState(false);
+  const [localComments, setLocalComments] = useState<LocalComment[]>([]);
   const workflow = useDemoWorkflow();
   const approval = workflow.approval?.action ?? "pending";
   const relatedEvents = activityEvents.filter((event) => event.missionId === featuredMission.id);
@@ -344,6 +328,30 @@ function FeaturedMissionDetailPage() {
     executing: 6,
     completed: 7,
   }[workflow.missionStatus];
+  function exportMissionLog() {
+    downloadMissionJson(`${featuredMission.id}-mission-log.json`, {
+      schemaVersion: "windops.mission-log.v1",
+      mission: featuredMission,
+      turbine: turbine023,
+      participatingAgents: missionAgents,
+      evidence: relatedEvidence,
+      decision: featuredDecision,
+      workOrder: workOrder ?? null,
+      activity: relatedEvents,
+      workflow: {
+        missionStatus: workflow.missionStatus,
+        missionProgress: workflow.missionProgress,
+        decisionStatus: workflow.decisionStatus,
+        workOrderStatus: workflow.workOrderStatus,
+        approval: workflow.approval,
+        auditTrail: workflow.auditTrail,
+      },
+      sessionComments: {
+        persistence: "page-session-only",
+        items: localComments,
+      },
+    });
+  }
 
   function submitApproval(action: "approve" | "reject" | "request-revision" | "escalate") {
     workflow.dispatch({
@@ -397,13 +405,17 @@ function FeaturedMissionDetailPage() {
         }
         actions={
           <>
-            <Button variant="secondary">
-              <TerminalSquare size={15} /> Export Log
+            <Button variant="secondary" onClick={exportMissionLog}>
+              <TerminalSquare size={15} /> Export JSON
             </Button>
-            <Button variant="secondary">
+            <Button variant="secondary" disabled title="当前版本暂无更多操作">
               <MoreHorizontal size={15} /> More
             </Button>
-            <Button variant="primary">
+            <Button
+              variant="primary"
+              onClick={() => setIsCommenting((current) => !current)}
+              aria-expanded={isCommenting}
+            >
               <MessageSquareText size={15} /> Add Comment
             </Button>
           </>
@@ -616,109 +628,17 @@ function FeaturedMissionDetailPage() {
           </Card>
         </div>
 
-        <Card className="mission-timeline-card">
-          <CardHeader
-            eyebrow="LIVE ACTIVITY"
-            title="Agent Activity Timeline"
-            description="按时间记录 Tool、Evidence 与状态转换"
-            action={
-              <StatusBadge
-                value={workflow.missionStatus}
-                label="AUDITED"
-                tone="info"
-                pulse={workflow.missionStatus !== "completed"}
-                compact
-              />
-            }
-          />
-          <div className="timeline-filter">
-            <button className="active">All activity</button>
-            <button>Agents</button>
-            <button>Evidence</button>
-            <button>Reviews</button>
-          </div>
-          <div className="mission-timeline">
-            {relatedEvents.map((event) => {
-              const Icon = activityIcon[event.kind];
-              const agent = event.agentId ? agents.find((item) => item.id === event.agentId) : null;
-              return (
-                <div className="timeline-event" key={event.id}>
-                  <time>{formatTime(event.timestamp)}</time>
-                  <span className={`timeline-event__node timeline-event__node--${event.outcome}`}>
-                    <Icon size={13} />
-                  </span>
-                  <div className="timeline-event__body">
-                    <div>
-                      <span>
-                        <Avatar
-                          label={agent?.shortName ?? event.actorLabel}
-                          tone={event.kind === "review" ? "amber" : "teal"}
-                          size="sm"
-                        />
-                        <span>
-                          <strong>{agent?.shortName ?? event.actorLabel}</strong>
-                          <small>{event.kind}</small>
-                        </span>
-                      </span>
-                      <StatusBadge
-                        value={event.outcome}
-                        label={event.outcome.toUpperCase()}
-                        tone={
-                          event.outcome === "success"
-                            ? "success"
-                            : event.outcome === "attention"
-                              ? "warning"
-                              : event.outcome === "in-progress"
-                                ? "info"
-                                : "neutral"
-                        }
-                        compact
-                      />
-                    </div>
-                    <h3>{event.title}</h3>
-                    <p>{event.detail}</p>
-                    {event.evidenceIds.length ? (
-                      <div className="timeline-evidence">
-                        <Link2 size={11} /> {event.evidenceIds.length} linked evidence
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
-            {workflow.auditTrail.map((event, index) => (
-              <div
-                className={cn(
-                  "timeline-event",
-                  index === workflow.auditTrail.length - 1 && "timeline-event--current",
-                )}
-                key={event.id}
-              >
-                <time>{formatTime(event.timestamp)}</time>
-                <span className="timeline-event__node timeline-event__node--success">
-                  <UserCheck size={13} />
-                </span>
-                <div className="timeline-event__body">
-                  <div>
-                    <span>
-                      <Avatar label={event.actor} tone="amber" size="sm" />
-                      <span>
-                        <strong>{event.actor}</strong>
-                        <small>{event.kind}</small>
-                      </span>
-                    </span>
-                    <StatusBadge value="audited" label="AUDITED" tone="success" compact />
-                  </div>
-                  <h3>{event.title}</h3>
-                  <p>{event.detail}</p>
-                  <div className="timeline-evidence">
-                    <Link2 size={11} /> immutable demo audit
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+        <MissionActivityTimeline
+          events={relatedEvents}
+          agents={agents}
+          auditTrail={workflow.auditTrail}
+          missionStatus={workflow.missionStatus}
+          description="按时间记录 Tool、Evidence 与状态转换"
+          isCommenting={isCommenting}
+          onCommentingChange={setIsCommenting}
+          localComments={localComments}
+          onCommentsChange={setLocalComments}
+        />
 
         <div className="decision-column">
           <Card className="current-decision-card">

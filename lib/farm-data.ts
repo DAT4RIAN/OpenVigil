@@ -49,6 +49,7 @@ const alarmCounts: Readonly<Partial<Record<number, number>>> = {
 };
 
 const missionByTurbine: Readonly<Partial<Record<number, string>>> = {
+  3: "MISSION-2026-0827",
   5: "MISSION-2026-0819",
   7: "MISSION-2026-0825",
   12: "MISSION-2026-0822",
@@ -58,6 +59,7 @@ const missionByTurbine: Readonly<Partial<Record<number, string>>> = {
   33: "MISSION-2026-0826",
   34: "MISSION-2026-0817",
   41: "MISSION-2026-0824",
+  45: "MISSION-2026-0828",
   56: "MISSION-2026-0818",
 };
 
@@ -175,7 +177,7 @@ export const windFarm: WindFarm = {
   todayGenerationGWh: 3.81,
   averageHealthScore,
   activeAlarmCount: turbines.reduce((total, turbine) => total + turbine.activeAlarmCount, 0),
-  activeMissionCount: 8,
+  activeMissionCount: 10,
   weatherSummary: "多云 · 东南风 9.7 m/s · 浪高 1.3 m",
   lastUpdatedAt: SNAPSHOT_AT,
 };

@@ -532,28 +532,40 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
         }
         actions={
           <>
-            <Button variant="secondary">
+            <a
+              className="button button--secondary button--md"
+              href={`/work-orders?turbineId=${turbine.id}`}
+            >
               <CalendarClock size={15} /> 维护计划
-            </Button>
+            </a>
             <a
               className="button button--secondary button--md"
               href={`/api/turbines/${turbine.id}/scada`}
             >
               <Activity size={15} /> 数据接口
             </a>
-            <Button variant="primary">
-              <Play size={15} /> 启动 AI 诊断
-            </Button>
+            {turbine.currentMissionId ? (
+              <a
+                className="button button--primary button--md"
+                href={`/missions/${turbine.currentMissionId}`}
+              >
+                <Play size={15} /> 打开 AI 诊断
+              </a>
+            ) : (
+              <Button variant="primary" disabled title="当前机组没有可打开的诊断 Mission">
+                <Play size={15} /> 暂无诊断 Mission
+              </Button>
+            )}
           </>
         }
       />
       <nav className="detail-tabs" aria-label="机组详情标签页">
         <button className="active">Overview</button>
-        <a href="/scada">SCADA</a>
-        <a href="/alarms">
+        <a href={`/scada?turbineId=${turbine.id}`}>SCADA</a>
+        <a href={`/alarms?turbineId=${turbine.id}`}>
           Alarms <span>{relatedAlarms.length}</span>
         </a>
-        <a href="/work-orders">
+        <a href={`/work-orders?turbineId=${turbine.id}`}>
           Maintenance <span>{relatedWorkOrders.length}</span>
         </a>
       </nav>
@@ -793,15 +805,24 @@ function FeaturedTurbineDetailPage() {
         }
         actions={
           <>
-            <Button variant="secondary">
+            <a
+              className="button button--secondary button--md"
+              href={`/work-orders?turbineId=${turbine023.id}`}
+            >
               <CalendarClock size={15} /> 维护计划
-            </Button>
-            <Button variant="secondary">
+            </a>
+            <a
+              className="button button--secondary button--md"
+              href={`/scada?turbineId=${turbine023.id}&metric=main-bearing-vibration-rms`}
+            >
               <Activity size={15} /> 历史趋势
-            </Button>
-            <Button variant="primary">
-              <Play size={15} /> 启动 AI 诊断
-            </Button>
+            </a>
+            <a
+              className="button button--primary button--md"
+              href={`/missions/${featuredMission.id}`}
+            >
+              <Play size={15} /> 打开 AI 诊断
+            </a>
           </>
         }
       />

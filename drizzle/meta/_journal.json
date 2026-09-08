@@ -8,6 +8,13 @@
       "when": 1786564391808,
       "tag": "0000_windops_domain",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786567029092,
+      "tag": "0001_resource_inventory",
+      "breakpoints": true
     }
   ]
 }

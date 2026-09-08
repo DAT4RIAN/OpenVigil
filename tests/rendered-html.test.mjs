@@ -83,6 +83,11 @@ test("mock APIs distinguish live and archive fixture counts", async () => {
   assert.equal(farms.meta.count, 1);
   assert.equal(turbines.meta.count, 64);
   assert.equal(farms.data[0].turbineCount, turbines.meta.count);
+  assert.equal(
+    alarms.data.filter((alarm) => alarm.status !== "resolved").length,
+    farms.data[0].activeAlarmCount,
+  );
+  assert.equal(farms.data[0].activeAlarmCount, 17);
   assert.equal(alarms.meta.scope, "live");
   assert.equal(workOrders.meta.scope, "live");
   assert.equal(archivedAlarms.meta.scope, "archive");
@@ -94,7 +99,25 @@ test("mock APIs distinguish live and archive fixture counts", async () => {
   assert.equal(health.counts.live.scadaSeries, 17);
   assert.equal(health.counts.live.scadaPoints, 1_649);
   assert.equal(health.counts.live.alarms, alarms.meta.count);
+  assert.equal(health.counts.live.unresolvedAlarms, 17);
   assert.equal(health.counts.live.missions, missions.meta.count);
+  assert.equal(missions.meta.count, 12);
+  assert.equal(
+    missions.data.filter((mission) => mission.status !== "completed").length,
+    10,
+    "the command center must expose ten active missions",
+  );
+  assert.equal(health.counts.live.activeMissions, 10);
+  assert.equal(health.counts.live.agentTools, 17);
+  assert.deepEqual(
+    {
+      spareParts: health.counts.live.spareParts,
+      maintenanceCrews: health.counts.live.maintenanceCrews,
+      serviceVessels: health.counts.live.serviceVessels,
+      maintenanceTools: health.counts.live.maintenanceTools,
+    },
+    { spareParts: 7, maintenanceCrews: 4, serviceVessels: 3, maintenanceTools: 6 },
+  );
   assert.equal(health.counts.live.agents, agents.meta.count);
   assert.equal(health.counts.live.workOrders, workOrders.meta.count);
 

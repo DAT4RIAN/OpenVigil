@@ -1,0 +1,176 @@
+.root {
+  overflow: visible;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.toolbar,
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 14px;
+  color: var(--foreground-muted);
+  font-size: 12px;
+}
+
+.toolbar {
+  border-bottom: 1px solid var(--border);
+}
+
+.columnsMenu {
+  position: relative;
+}
+
+.columnsMenu summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--foreground-muted);
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+
+.columnsMenu summary::-webkit-details-marker {
+  display: none;
+}
+
+.columnsPopover {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 7px);
+  right: 0;
+  display: grid;
+  min-width: 188px;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 14px 40px rgb(4 18 32 / 20%);
+}
+
+.columnsPopover label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 6px;
+  border-radius: 6px;
+  color: var(--foreground-muted);
+  cursor: pointer;
+}
+
+.columnsPopover label:hover {
+  background: var(--surface-subtle);
+}
+
+.scroller {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 880px;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.table th {
+  height: 44px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground-muted);
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.table tbody tr {
+  transition: background 120ms ease;
+}
+
+.table tbody tr[tabindex] {
+  cursor: pointer;
+}
+
+.table tbody tr:hover,
+.table tbody tr:focus-visible,
+.activeRow {
+  background: var(--surface-subtle);
+  outline: none;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.sortButton {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sortButton:hover {
+  color: var(--foreground);
+}
+
+.empty {
+  height: 150px;
+  color: var(--foreground-muted) !important;
+  text-align: center;
+}
+
+.pagination {
+  border-top: 1px solid var(--border);
+}
+
+.pagination > div {
+  display: flex;
+  gap: 6px;
+}
+
+.pagination button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--foreground-muted);
+  background: var(--surface);
+  cursor: pointer;
+  place-items: center;
+}
+
+.pagination button:hover:not(:disabled) {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.pagination button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}

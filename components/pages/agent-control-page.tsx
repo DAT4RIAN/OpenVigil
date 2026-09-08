@@ -1,14 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useMutation } from "@tanstack/react-query";
 import {
   Activity,
   ArrowRight,
   Box,
   BrainCircuit,
+  BookOpen,
+  CheckCircle2,
   Clock3,
   Cpu,
   Filter,
+  FileClock,
   Gauge,
   Layers3,
   MoreHorizontal,
@@ -25,8 +30,11 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Avatar, Button, KeyValue } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
-import { agents } from "@/lib";
+import { activityEvents, agents, knowledgeDocuments } from "@/lib";
+import { apiPost } from "@/lib/api-client";
+import type { AgentToolExecution } from "@/lib/agent-tool-runtime";
 import type { Agent, AgentLayer, AgentStatus } from "@/lib/types";
+import { useRealtimeChannel } from "@/lib/use-realtime-channel";
 import { cn } from "@/lib/utils";
 
 const layerMeta: Record<
@@ -63,9 +71,30 @@ const statusLabel: Record<AgentStatus, string> = {
   offline: "OFFLINE",
 };
 
+type ToolTestResponse = {
+  ok: true;
+  data: { execution: AgentToolExecution };
+  error: null;
+};
+
 function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) {
   const layer = layerMeta[agent.layer];
   const LayerIcon = layer.icon;
+  const [configOpen, setConfigOpen] = useState(false);
+  const knowledgeSources = knowledgeDocuments.filter((document) =>
+    agent.knowledgeSourceIds.includes(document.id),
+  );
+  const executionHistory = activityEvents
+    .filter((event) => event.agentId === agent.id)
+    .slice(-5)
+    .reverse();
+  const toolTest = useMutation({
+    mutationFn: () =>
+      apiPost<ToolTestResponse>("/api/agent-tools", {
+        tool: "get_turbine_status",
+        args: { turbineId: "WT-023" },
+      }),
+  });
   return (
     <>
       <button className="drawer-backdrop" onClick={onClose} aria-label="关闭 Agent 详情" />
@@ -159,6 +188,23 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
           </div>
         </section>
         <section className="drawer-section">
+          <h3>Knowledge Sources</h3>
+          <div className="agent-knowledge-list">
+            {knowledgeSources.map((document) => (
+              <Link href={`/knowledge?document=${document.id}`} key={document.id}>
+                <BookOpen size={13} />
+                <span>
+                  <strong>{document.title}</strong>
+                  <small>
+                    {document.id} · {document.version}
+                  </small>
+                </span>
+                <ArrowRight size={12} />
+              </Link>
+            ))}
+          </div>
+        </section>
+        <section className="drawer-section">
           <h3>过去 24 小时</h3>
           <div className="agent-metrics-grid">
             <div>
@@ -177,16 +223,88 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
               <small>Avg Latency</small>
               <strong>{agent.metrics.averageLatencySeconds}s</strong>
             </div>
+            <div>
+              <small>Token Usage</small>
+              <strong>{agent.metrics.tokenUsage24h.toLocaleString("zh-CN")}</strong>
+            </div>
+            <div>
+              <small>Missions Completed</small>
+              <strong>{agent.metrics.missionsCompleted}</strong>
+            </div>
           </div>
         </section>
+        <section className="drawer-section" id={`agent-history-${agent.id}`}>
+          <h3>Execution History</h3>
+          <div className="agent-execution-history">
+            {executionHistory.length ? (
+              executionHistory.map((event) => (
+                <div key={event.id}>
+                  <span className="agent-execution-history__icon">
+                    {event.outcome === "success" ? (
+                      <CheckCircle2 size={13} />
+                    ) : (
+                      <FileClock size={13} />
+                    )}
+                  </span>
+                  <span>
+                    <strong>{event.title}</strong>
+                    <small>{event.detail}</small>
+                  </span>
+                  <time>
+                    {new Date(event.timestamp).toLocaleTimeString("zh-CN", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: false,
+                    })}
+                  </time>
+                </div>
+              ))
+            ) : (
+              <p className="agent-history-empty">过去 24 小时没有公开执行事件。</p>
+            )}
+          </div>
+        </section>
+        {configOpen ? (
+          <section className="drawer-section agent-config-preview">
+            <h3>只读配置快照</h3>
+            <p>
+              {agent.model} · {agent.promptVersion} · {agent.tools.length} tools ·{" "}
+              {agent.knowledgeSourceIds.length} sources
+            </p>
+            <small>演示环境不允许在浏览器中修改生产 Agent 配置。</small>
+          </section>
+        ) : null}
+        {toolTest.data || toolTest.error ? (
+          <section className="drawer-section agent-tool-test-result" aria-live="polite">
+            <h3>Sandbox Tool Test</h3>
+            {toolTest.data ? (
+              <p>
+                <CheckCircle2 size={13} /> get_turbine_status ·{" "}
+                {toolTest.data.data.execution.status} · {toolTest.data.data.execution.latencyMs} ms
+                · {toolTest.data.data.execution.correlationId}
+              </p>
+            ) : (
+              <p className="critical-text">
+                测试未完成：{toolTest.error instanceof Error ? toolTest.error.message : "未知错误"}
+              </p>
+            )}
+          </section>
+        ) : null}
         <footer className="detail-drawer__footer">
-          <Button variant="secondary">
+          <Button
+            variant="secondary"
+            onClick={() =>
+              document
+                .getElementById(`agent-history-${agent.id}`)
+                ?.scrollIntoView({ behavior: "smooth" })
+            }
+          >
             <TerminalSquare size={14} /> 查看日志
           </Button>
-          <Button variant="secondary">
+          <Button variant="secondary" onClick={() => setConfigOpen((value) => !value)}>
             <Cpu size={14} /> 配置
           </Button>
-          <Button variant="primary">
+          <Button variant="primary" loading={toolTest.isPending} onClick={() => toolTest.mutate()}>
             <Play size={14} /> 运行测试
           </Button>
         </footer>
@@ -200,6 +318,7 @@ export function AgentControlPage() {
   const [status, setStatus] = useState<"all" | AgentStatus>("all");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Agent | null>(null);
+  const agentStream = useRealtimeChannel("agent-events");
   const active = agents.filter((agent) =>
     ["working", "thinking", "reviewing"].includes(agent.status),
   ).length;
@@ -221,6 +340,18 @@ export function AgentControlPage() {
     agents.reduce((sum, agent) => sum + agent.metrics.successRate, 0) / agents.length;
   const avgLatency =
     agents.reduce((sum, agent) => sum + agent.metrics.averageLatencySeconds, 0) / agents.length;
+  const totalTokens = agents.reduce((sum, agent) => sum + agent.metrics.tokenUsage24h, 0);
+  const missionsCompleted = agents.reduce((sum, agent) => sum + agent.metrics.missionsCompleted, 0);
+  const liveAgentEvent =
+    agentStream.frame?.event === "agent-activity"
+      ? {
+          id: agentStream.frame.correlationId,
+          actorLabel: String(agentStream.frame.data.actorLabel ?? "WindOps Agent"),
+          title: String(agentStream.frame.data.title ?? "Agent activity received"),
+          outcome: String(agentStream.frame.data.outcome ?? "neutral"),
+          timestamp: agentStream.frame.emittedAt,
+        }
+      : null;
 
   return (
     <AppShell activePath="/agents">
@@ -231,19 +362,38 @@ export function AgentControlPage() {
         breadcrumb={["AI Operations", "Agent Control"]}
         meta={
           <>
-            <StatusBadge value="working" label={`${active} AGENTS ACTIVE`} tone="info" pulse />
+            <StatusBadge
+              value="working"
+              label={`${active} AGENTS ACTIVE · ${agentStream.status === "connected" ? "WS LIVE" : "SNAPSHOT"}`}
+              tone="info"
+              pulse={agentStream.status === "connected"}
+            />
             <span className="page-meta-text">15 / 15 Online · Orchestrator healthy</span>
           </>
         }
         actions={
           <>
-            <Button variant="secondary">
+            <Button
+              variant="secondary"
+              onClick={() =>
+                document
+                  .getElementById("agent-live-activity")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+            >
               <TerminalSquare size={15} /> Live Logs
             </Button>
-            <Button variant="secondary">
+            <Button
+              variant="secondary"
+              onClick={() =>
+                document
+                  .getElementById("agent-organization")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+            >
               <Layers3 size={15} /> Organization
             </Button>
-            <Button variant="primary">
+            <Button variant="primary" onClick={() => setSelected(agents[0] ?? null)}>
               <Play size={15} /> Run Agent
             </Button>
           </>
@@ -276,8 +426,10 @@ export function AgentControlPage() {
             <Gauge size={15} />
           </span>
           <span>
-            <small>SUCCESS RATE</small>
-            <strong>{avgSuccess.toFixed(1)}%</strong>
+            <small>SUCCESS / FAILURE</small>
+            <strong>
+              {avgSuccess.toFixed(1)} / {(100 - avgSuccess).toFixed(1)}%
+            </strong>
           </span>
           <em>目标 ≥ 95%</em>
         </div>
@@ -297,10 +449,67 @@ export function AgentControlPage() {
           </span>
           <span>
             <small>TOKEN USAGE · 24H</small>
-            <strong>1.28M</strong>
+            <strong>{(totalTokens / 1_000_000).toFixed(2)}M</strong>
           </span>
           <em>预算 63%</em>
         </div>
+        <div>
+          <span className="observability-icon">
+            <CheckCircle2 size={15} />
+          </span>
+          <span>
+            <small>MISSIONS COMPLETED</small>
+            <strong>{missionsCompleted}</strong>
+          </span>
+          <em>lifetime fixture</em>
+        </div>
+      </section>
+
+      <section
+        className="agent-live-strip"
+        id="agent-live-activity"
+        aria-label="过去 24 小时 Agent Activity"
+      >
+        <span className="agent-live-strip__title">
+          <Activity size={14} />
+          <strong>24H AGENT ACTIVITY</strong>
+          <small>公开结构化事件</small>
+        </span>
+        {liveAgentEvent ? (
+          <span className="agent-live-strip__event" key={liveAgentEvent.id}>
+            <i className={cn(`agent-live-strip__dot--${liveAgentEvent.outcome}`)} />
+            <span>
+              <strong>{liveAgentEvent.actorLabel}</strong>
+              <small>{liveAgentEvent.title}</small>
+            </span>
+            <time>
+              {new Date(liveAgentEvent.timestamp).toLocaleTimeString("zh-CN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              })}
+            </time>
+          </span>
+        ) : null}
+        {activityEvents
+          .slice(-5)
+          .reverse()
+          .map((event) => (
+            <span className="agent-live-strip__event" key={event.id}>
+              <i className={cn(`agent-live-strip__dot--${event.outcome}`)} />
+              <span>
+                <strong>{event.actorLabel}</strong>
+                <small>{event.title}</small>
+              </span>
+              <time>
+                {new Date(event.timestamp).toLocaleTimeString("zh-CN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                })}
+              </time>
+            </span>
+          ))}
       </section>
 
       <section className="data-toolbar">
@@ -334,12 +543,20 @@ export function AgentControlPage() {
           </button>
         </div>
         <span className="toolbar-result">{filtered.length} Agents</span>
-        <Button variant="secondary">
-          <Filter size={14} /> Filters
+        <Button
+          variant="secondary"
+          disabled={layer === "all" && status === "all" && !query}
+          onClick={() => {
+            setLayer("all");
+            setStatus("all");
+            setQuery("");
+          }}
+        >
+          <Filter size={14} /> 重置筛选
         </Button>
       </section>
 
-      <section className="agent-organization">
+      <section className="agent-organization" id="agent-organization">
         {(["decision", "review", "execution"] as AgentLayer[]).map((agentLayer) => {
           const meta = layerMeta[agentLayer];
           const LayerIcon = meta.icon;

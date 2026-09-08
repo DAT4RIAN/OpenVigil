@@ -16,7 +16,7 @@ import {
   Wind,
   Zap,
 } from "lucide-react";
-import type { CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import Link from "next/link";
@@ -62,10 +62,21 @@ const activityIcons: Record<ActivityEvent["kind"], typeof Activity> = {
   system: Bot,
 };
 
-function chartData(): TimeSeriesPoint[] {
+const powerRanges = ["1H", "6H", "24H", "7D"] as const;
+
+type PowerRange = (typeof powerRanges)[number];
+
+const powerRangePointCounts: Record<Exclude<PowerRange, "7D">, number> = {
+  "1H": 5,
+  "6H": 25,
+  "24H": 97,
+};
+
+function chartData(range: PowerRange): TimeSeriesPoint[] {
   const power = scadaSeries.find((series) => series.metric === "active-power");
   if (!power) return [];
-  return power.points.map((point, index) => ({
+
+  const allPoints = power.points.map((point, index) => ({
     timestamp: new Date(point.timestamp).toLocaleTimeString("zh-CN", {
       hour: "2-digit",
       minute: "2-digit",
@@ -75,6 +86,31 @@ function chartData(): TimeSeriesPoint[] {
     anomaly: point.isAnomaly,
     aiEvent: Boolean(point.aiEvent),
   }));
+
+  if (range !== "7D") {
+    return allPoints.slice(-powerRangePointCounts[range]);
+  }
+
+  const bucketSize = Math.ceil(allPoints.length / 7);
+  const endDate = new Date(power.points.at(-1)?.timestamp ?? windFarm.lastUpdatedAt);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const bucket = allPoints.slice(
+      index * bucketSize,
+      Math.min((index + 1) * bucketSize, allPoints.length),
+    );
+    const bucketDate = new Date(endDate);
+    bucketDate.setDate(endDate.getDate() - (6 - index));
+
+    return {
+      timestamp: bucketDate.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" }),
+      value: Number(
+        (bucket.reduce((total, point) => total + point.value, 0) / bucket.length).toFixed(1),
+      ),
+      anomaly: bucket.some((point) => point.anomaly),
+      aiEvent: bucket.some((point) => point.aiEvent),
+    };
+  });
 }
 
 function formatTime(timestamp: string) {
@@ -87,6 +123,8 @@ function formatTime(timestamp: string) {
 
 export function DashboardPage() {
   const workflow = useDemoWorkflow();
+  const [powerRange, setPowerRange] = useState<PowerRange>("24H");
+  const powerChartData = useMemo(() => chartData(powerRange), [powerRange]);
   const running = turbines.filter((turbine) => turbine.status === "running").length;
   const operating = turbines.filter(
     (turbine) => !["maintenance", "offline", "communication-lost"].includes(turbine.status),
@@ -129,6 +167,30 @@ export function DashboardPage() {
     { label: "离线", value: offline, tone: "offline" },
   ];
 
+  const downloadDailyReport = () => {
+    const unresolvedAlarms = alarms.filter((alarm) => alarm.status !== "resolved").length;
+    const reportRows = [
+      ["WindOps 华东海上风电场运行日报", "2026-08-13", "白班"],
+      ["指标", "数值", "单位"],
+      ["当前功率", windFarm.currentPowerMW.toFixed(1), "MW"],
+      ["今日发电量", windFarm.todayGenerationGWh.toFixed(2), "GWh"],
+      ["并网运行机组", String(operating), "台"],
+      ["未闭环告警", String(unresolvedAlarms), "条"],
+      ["活跃 Missions", String(windFarm.activeMissionCount), "个"],
+      ["平均健康度", windFarm.averageHealthScore.toFixed(1), "%"],
+      ["重点事件", "WT-023 主轴承振动异常", missionLabels[workflow.missionStatus]],
+    ];
+    const csv = reportRows
+      .map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(","))
+      .join("\r\n");
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "windops-daily-report-2026-08-13.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <AppShell activePath="/">
       <PageHeader
@@ -143,10 +205,15 @@ export function DashboardPage() {
         }
         actions={
           <>
-            <Button variant="secondary">
+            <Button
+              type="button"
+              variant="secondary"
+              title="打开工单排程"
+              onClick={() => window.location.assign("/work-orders")}
+            >
               <CalendarDays size={15} /> 运行日历
             </Button>
-            <Button variant="primary">
+            <Button type="button" variant="primary" onClick={downloadDailyReport}>
               <Download size={15} /> 生成日报
             </Button>
           </>
@@ -258,15 +325,22 @@ export function DashboardPage() {
       <section className="dashboard-grid">
         <Card className="panel panel--power">
           <CardHeader
-            eyebrow="SCADA · 24H"
+            eyebrow={`SCADA · ${powerRange}`}
             title="全场有功功率"
             description="汇总功率曲线与 WT-023 AI 事件标记"
             action={
-              <div className="segmented">
-                <button>1H</button>
-                <button>6H</button>
-                <button className="active">24H</button>
-                <button>7D</button>
+              <div className="segmented" aria-label="功率趋势时间窗口">
+                {powerRanges.map((range) => (
+                  <button
+                    type="button"
+                    className={powerRange === range ? "active" : undefined}
+                    aria-pressed={powerRange === range}
+                    onClick={() => setPowerRange(range)}
+                    key={range}
+                  >
+                    {range}
+                  </button>
+                ))}
               </div>
             }
           />
@@ -290,7 +364,7 @@ export function DashboardPage() {
             </span>
           </div>
           <TimeSeriesChart
-            data={chartData()}
+            data={powerChartData}
             height={250}
             primaryName="全场有功功率"
             unit="MW"

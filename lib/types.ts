@@ -104,6 +104,21 @@ export interface SubsystemHealth {
   readonly assessedAt: ISODateTime;
 }
 
+/** Fleet-level health snapshot used by the asset-health and predictive views. */
+export interface HealthAssessment {
+  readonly id: string;
+  readonly turbineId: string;
+  readonly healthScore: number;
+  readonly state: HealthState;
+  readonly trend: TrendDirection;
+  readonly riskLevel: RiskLevel;
+  readonly failureProbability30d: number;
+  readonly remainingUsefulLifeDays: number;
+  readonly anomalyScore: number;
+  readonly primaryFinding: string;
+  readonly assessedAt: ISODateTime;
+}
+
 export type AlarmSeverity = "critical" | "major" | "minor" | "warning" | "info";
 export type AlarmStatus = "active" | "acknowledged" | "suppressed" | "resolved";
 export type AlarmAIStatus =
@@ -499,4 +514,66 @@ export interface KnowledgeDocument {
   readonly summary: string;
   readonly relatedTurbineIds: readonly string[];
   readonly relatedMissionIds: readonly string[];
+}
+
+export type ResourceAvailability = "available" | "reserved" | "assigned" | "maintenance";
+
+/** Independently managed spare inventory rather than an embedded work-order label. */
+export interface SparePart {
+  readonly id: string;
+  readonly partNumber: string;
+  readonly name: string;
+  readonly category: string;
+  readonly warehouse: string;
+  readonly onHand: number;
+  readonly reserved: number;
+  readonly available: number;
+  readonly reorderPoint: number;
+  readonly unit: string;
+  readonly status: "in-stock" | "low-stock" | "out-of-stock";
+  readonly reservedForWorkOrderIds: readonly string[];
+  readonly compatibleTurbineModels: readonly string[];
+  readonly updatedAt: ISODateTime;
+}
+
+export interface MaintenanceCrew {
+  readonly id: string;
+  readonly name: string;
+  readonly specialties: readonly string[];
+  readonly memberCount: number;
+  readonly availability: ResourceAvailability;
+  readonly assignedWorkOrderId: string | null;
+  readonly certifications: readonly string[];
+  readonly currentLocation: string;
+}
+
+export interface ServiceVessel {
+  readonly id: string;
+  readonly name: string;
+  readonly vesselType: "CTV" | "SOV" | "jack-up";
+  readonly availability: ResourceAvailability;
+  readonly assignedWorkOrderId: string | null;
+  readonly capacity: number;
+  readonly maxWaveHeightM: number;
+  readonly berth: string;
+  readonly eta: ISODateTime | null;
+}
+
+export interface MaintenanceTool {
+  readonly id: string;
+  readonly name: string;
+  readonly category: string;
+  readonly availability: ResourceAvailability;
+  readonly assignedWorkOrderId: string | null;
+  readonly calibrationDueAt: ISODateTime;
+  readonly location: string;
+}
+
+export interface ResourceCenterSnapshot {
+  readonly spareParts: readonly SparePart[];
+  readonly crews: readonly MaintenanceCrew[];
+  readonly vessels: readonly ServiceVessel[];
+  readonly tools: readonly MaintenanceTool[];
+  readonly weatherWindows: readonly WeatherWindow[];
+  readonly snapshotAt: ISODateTime;
 }

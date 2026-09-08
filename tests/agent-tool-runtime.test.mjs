@@ -37,14 +37,14 @@ async function jsonRequest(method, body, expectedStatus = 200) {
   return response.json();
 }
 
-test("deterministic Agent Tool API validates, executes, links, and records every P0 tool", async (t) => {
+test("deterministic Agent Tool API validates, executes, links, and records every declared tool", async (t) => {
   await t.test("catalog starts with an empty deterministic runtime history", async () => {
     const response = await jsonRequest("GET");
     assert.equal(response.ok, true);
     assert.equal(response.error, null);
     assert.equal(response.meta.deterministic, true);
     assert.equal(response.meta.persisted, false);
-    assert.equal(response.data.catalog.length, 11);
+    assert.equal(response.data.catalog.length, 17);
     assert.deepEqual(response.data.executionHistory, []);
 
     const names = response.data.catalog.map((entry) => entry.name);
@@ -60,7 +60,23 @@ test("deterministic Agent Tool API validates, executes, links, and records every
       "predict_rul",
       "create_decision",
       "create_work_order",
+      "query_manual",
+      "query_work_orders",
+      "query_spare_parts",
+      "query_crew",
+      "query_vessels",
+      "update_work_order",
     ]);
+
+    const nonReadOnly = response.data.catalog
+      .filter((entry) => !entry.readOnly)
+      .map((entry) => entry.name);
+    assert.deepEqual(nonReadOnly, ["create_decision", "create_work_order", "update_work_order"]);
+    assert.ok(
+      response.data.catalog
+        .filter((entry) => nonReadOnly.includes(entry.name))
+        .every((entry) => entry.dryRun === true),
+    );
   });
 
   await t.test(
@@ -77,6 +93,49 @@ test("deterministic Agent Tool API validates, executes, links, and records every
       assert.equal(invalid.data, null);
       assert.equal(invalid.error.code, "INVALID_TOOL_ARGUMENTS");
       assert.equal(invalid.meta.historyCount, 0);
+
+      const invalidManual = await jsonRequest(
+        "POST",
+        { tool: "query_manual", args: { query: 23 } },
+        422,
+      );
+      assert.equal(invalidManual.error.code, "INVALID_TOOL_ARGUMENTS");
+      assert.equal(invalidManual.error.details.argument, "query");
+
+      const invalidBoolean = await jsonRequest(
+        "POST",
+        { tool: "query_work_orders", args: { includeHistorical: "yes" } },
+        422,
+      );
+      assert.equal(invalidBoolean.error.code, "INVALID_TOOL_ARGUMENTS");
+      assert.equal(invalidBoolean.error.details.argument, "includeHistorical");
+
+      const statusMutation = await jsonRequest(
+        "POST",
+        {
+          tool: "update_work_order",
+          args: { workOrderId: "WO-20260823-017", status: "completed", dryRun: true },
+        },
+        422,
+      );
+      assert.equal(statusMutation.error.code, "INVALID_TOOL_ARGUMENTS");
+      assert.deepEqual(statusMutation.error.details.unknownKeys, ["status"]);
+
+      const persistenceAttempt = await jsonRequest(
+        "POST",
+        {
+          tool: "update_work_order",
+          args: {
+            workOrderId: "WO-20260823-017",
+            assignedTeam: "Unapproved reassignment",
+            dryRun: false,
+          },
+        },
+        422,
+      );
+      assert.equal(persistenceAttempt.error.code, "INVALID_TOOL_ARGUMENTS");
+      assert.equal(persistenceAttempt.error.details.acceptedValue, true);
+      assert.equal(persistenceAttempt.meta.historyCount, 0);
     },
   );
 
@@ -99,12 +158,28 @@ test("deterministic Agent Tool API validates, executes, links, and records every
         dryRun: true,
       },
     ],
+    ["query_manual", { query: "WT-023", turbineId: "WT-023", limit: 8 }],
+    ["query_work_orders", { turbineId: "WT-023", includeHistorical: true, limit: 20 }],
+    ["query_spare_parts", { turbineId: "WT-023", limit: 20 }],
+    ["query_crew", { turbineId: "WT-023", limit: 20 }],
+    ["query_vessels", { turbineId: "WT-023", limit: 20 }],
+    [
+      "update_work_order",
+      {
+        workOrderId: "WO-20260823-017",
+        assignedTeam: "Offshore Maintenance Team 2 / dry-run",
+        plannedStart: "2026-08-14T09:00:00+08:00",
+        deadline: "2026-08-14T17:00:00+08:00",
+        note: "Validate crew and vessel synchronization without persistence.",
+        dryRun: true,
+      },
+    ],
   ];
 
   const results = new Map();
 
   await t.test(
-    "all eleven tools execute against fixtures with complete observability records",
+    "all seventeen tools execute against fixtures with complete observability records",
     async () => {
       for (const [tool, args] of calls) {
         const response = await jsonRequest("POST", { tool, args });
@@ -117,6 +192,10 @@ test("deterministic Agent Tool API validates, executes, links, and records every
         assert.equal(execution.request.tool, tool);
         assert.equal(execution.status, "succeeded");
         assert.equal(execution.result.ok, true);
+        assert.equal(
+          execution.result.dryRun,
+          ["create_decision", "create_work_order", "update_work_order"].includes(tool),
+        );
         assert.equal(execution.deterministic, true);
         assert.match(
           execution.correlationId,
@@ -182,23 +261,114 @@ test("deterministic Agent Tool API validates, executes, links, and records every
     assert.equal(workOrder.draft.sourceWorkOrderId, "WO-20260823-017");
   });
 
+  await t.test("knowledge, work-order, and resource tools resolve the WT-023 field package", () => {
+    const manual = results.get("query_manual");
+    assert.equal(manual.filters.turbineId, "WT-023");
+    assert.ok(manual.documents.length > 0);
+    assert.ok(
+      manual.documents.every(
+        (document) =>
+          document.citation.documentId === document.id &&
+          document.relatedTurbineIds.includes("WT-023"),
+      ),
+    );
+
+    const workOrderQuery = results.get("query_work_orders");
+    const featuredWorkOrder = workOrderQuery.workOrders.find(
+      (workOrder) => workOrder.id === "WO-20260823-017",
+    );
+    assert.ok(featuredWorkOrder);
+    assert.equal(featuredWorkOrder.turbineId, "WT-023");
+
+    const parts = results.get("query_spare_parts");
+    assert.ok(parts.scope.linkedWorkOrderIds.includes("WO-20260823-017"));
+    assert.ok(parts.spareParts.some((part) => part.partNumber === "GB-MB-165-01"));
+    assert.ok(
+      parts.spareParts.every((part) =>
+        part.reservedForWorkOrderIds.some((id) => parts.scope.linkedWorkOrderIds.includes(id)),
+      ),
+    );
+
+    const crew = results.get("query_crew");
+    assert.ok(crew.scope.linkedWorkOrderIds.includes("WO-20260823-017"));
+    assert.ok(crew.crews.some((item) => item.id === "CREW-OFFSHORE-02"));
+
+    const vessels = results.get("query_vessels");
+    assert.ok(vessels.scope.linkedWorkOrderIds.includes("WO-20260823-017"));
+    assert.ok(vessels.vessels.some((item) => item.id === "VESSEL-CTV-03"));
+  });
+
+  await t.test(
+    "work-order updates are validated drafts and leave source state unchanged",
+    async () => {
+      const update = results.get("update_work_order");
+      assert.equal(update.dryRun, true);
+      assert.equal(update.persisted, false);
+      assert.equal(update.workOrderId, "WO-20260823-017");
+      assert.equal(update.before.status, "scheduled");
+      assert.equal(update.draft.status, update.before.status);
+      assert.notEqual(update.draft.assignedTeam, update.before.assignedTeam);
+
+      const unchanged = await jsonRequest("POST", {
+        tool: "query_work_orders",
+        args: { workOrderId: "WO-20260823-017" },
+      });
+      const source = unchanged.data.execution.result.data.workOrders[0];
+      assert.equal(source.status, update.before.status);
+      assert.equal(source.assignedTeam, update.before.assignedTeam);
+      assert.equal(source.plannedStart, update.before.plannedStart);
+      assert.equal(source.deadline, update.before.deadline);
+
+      const invalidSchedule = await jsonRequest(
+        "POST",
+        {
+          tool: "update_work_order",
+          args: {
+            workOrderId: "WO-20260823-017",
+            plannedStart: "2026-08-14T18:00:00+08:00",
+            deadline: "2026-08-14T17:00:00+08:00",
+            dryRun: true,
+          },
+        },
+        422,
+      );
+      assert.equal(invalidSchedule.error.code, "INVALID_WORK_ORDER_SCHEDULE");
+      assert.equal(invalidSchedule.data.execution.status, "failed");
+      assert.equal(invalidSchedule.data.execution.result.dryRun, true);
+    },
+  );
+
   await t.test(
     "GET exposes the deterministic execution ledger without validation noise",
     async () => {
       const response = await jsonRequest("GET");
       assert.equal(response.ok, true);
-      assert.equal(response.meta.historyCount, calls.length);
-      assert.equal(response.data.executionHistory.length, calls.length);
+      const recordedTools = [
+        ...calls.map(([tool]) => tool),
+        "query_work_orders",
+        "update_work_order",
+      ];
+      assert.equal(response.meta.historyCount, recordedTools.length);
+      assert.equal(response.data.executionHistory.length, recordedTools.length);
       assert.deepEqual(
         response.data.executionHistory.map((execution) => execution.request.tool),
-        calls.map(([tool]) => tool),
+        recordedTools,
       );
       assert.equal(
         new Set(response.data.executionHistory.map((execution) => execution.correlationId)).size,
-        calls.length,
+        recordedTools.length,
       );
-      assert.ok(
-        response.data.executionHistory.every((execution) => execution.status === "succeeded"),
+      assert.equal(
+        response.data.executionHistory.filter((execution) => execution.status === "failed").length,
+        1,
+      );
+      assert.equal(
+        response.data.executionHistory.at(-1).result.error.code,
+        "INVALID_WORK_ORDER_SCHEDULE",
+      );
+      assert.doesNotMatch(
+        JSON.stringify(response.data),
+        /chain.?of.?thought|\bcot\b|hidden reasoning/i,
       );
     },
   );

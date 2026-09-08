@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Bot,
@@ -25,8 +25,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, KeyValue, Progress } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
-import { featuredMission, workOrders } from "@/lib";
-import type { WorkOrder, WorkOrderStatus } from "@/lib/types";
+import { featuredMission, historicalWorkOrders, workOrders } from "@/lib";
+import type { WorkOrder, WorkOrderPriority, WorkOrderStatus } from "@/lib/types";
 import { canCompleteFeaturedWorkOrder } from "@/lib/demo-workflow";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
@@ -41,8 +41,72 @@ const statusLabels: Record<WorkOrderStatus, string> = {
   closed: "已关闭",
 };
 
+type WorkOrderStatusFilter = "all" | WorkOrderStatus | "completed-group";
+type PlannedStartFilter = "all" | "due" | "next-24h" | "next-7d";
+
+const PAGE_SIZE = 6;
+const WORKFLOW_WORK_ORDER_ID = "WO-20260823-017";
+const SNAPSHOT_TIMESTAMP = Date.parse("2026-08-13T12:00:00+08:00");
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const statusFilterOptions: readonly WorkOrderStatusFilter[] = [
+  "all",
+  "draft",
+  "pending-approval",
+  "scheduled",
+  "in-progress",
+  "paused",
+  "completed-group",
+];
+const statusFilterLabels: Record<WorkOrderStatusFilter, string> = {
+  all: "全部状态",
+  draft: "草稿",
+  "pending-approval": "待审批",
+  scheduled: "已排程",
+  "in-progress": "执行中",
+  paused: "暂停",
+  completed: "已完成",
+  closed: "已关闭",
+  "completed-group": "已完成 / 已关闭",
+};
+const priorityFilterOptions: readonly ("all" | WorkOrderPriority)[] = [
+  "all",
+  "critical",
+  "high",
+  "medium",
+  "low",
+];
+const priorityFilterLabels: Record<"all" | WorkOrderPriority, string> = {
+  all: "全部优先级",
+  critical: "严重",
+  high: "高",
+  medium: "中",
+  low: "低",
+};
+const plannedStartFilterOptions: readonly PlannedStartFilter[] = [
+  "all",
+  "due",
+  "next-24h",
+  "next-7d",
+];
+const plannedStartFilterLabels: Record<PlannedStartFilter, string> = {
+  all: "全部计划时间",
+  due: "计划时间已到",
+  "next-24h": "未来 24 小时",
+  "next-7d": "未来 7 天",
+};
+
+function nextOption<T extends string>(options: readonly T[], current: T): T {
+  return options[(options.indexOf(current) + 1) % options.length] ?? options[0];
+}
+
+function csvCell(value: string | number) {
+  return `"${String(value).replaceAll('"', '""')}"`;
+}
+
 function WorkOrderDrawer({
   workOrder,
+  isWorkflowWorkOrder,
   onClose,
   onToggleTask,
   onStart,
@@ -50,6 +114,7 @@ function WorkOrderDrawer({
   canComplete,
 }: {
   workOrder: WorkOrder;
+  isWorkflowWorkOrder: boolean;
   onClose: () => void;
   onToggleTask: (taskId: string) => void;
   onStart: () => void;
@@ -146,14 +211,29 @@ function WorkOrderDrawer({
             </span>
           </div>
           <Progress value={(completed / Math.max(1, workOrder.tasks.length)) * 100} tone="info" />
+          {!isWorkflowWorkOrder ? (
+            <div className="ai-generated-note" role="note">
+              <ShieldCheck size={15} />
+              <span>
+                <strong>只读 Demo 工单</strong>
+                <small>
+                  当前状态为 {statusLabels[workOrder.status]}；仅 {WORKFLOW_WORK_ORDER_ID} 接入
+                  WT-023 闭环，任务与执行动作已禁用。
+                </small>
+              </span>
+              <StatusBadge value="read-only" label="READ ONLY" tone="maintenance" compact />
+            </div>
+          ) : null}
           <div className="task-checklist">
             {workOrder.tasks.map((task) => (
               <label key={task.id}>
                 <input
                   type="checkbox"
                   checked={task.completed}
-                  disabled={workOrder.status !== "in-progress"}
-                  onChange={() => onToggleTask(task.id)}
+                  disabled={!isWorkflowWorkOrder || workOrder.status !== "in-progress"}
+                  onChange={() => {
+                    if (isWorkflowWorkOrder) onToggleTask(task.id);
+                  }}
                 />
                 <span>
                   <strong>
@@ -219,13 +299,21 @@ function WorkOrderDrawer({
           </div>
         </section>
         <footer className="detail-drawer__footer">
-          <Button variant="secondary">
+          <Button variant="secondary" onClick={() => window.print()}>
             <Download size={14} /> 导出 PDF
           </Button>
-          <Button variant="secondary">
+          <Button variant="secondary" disabled title="资源重新指派将在资源中心完成">
             <UserRound size={14} /> 重新指派
           </Button>
-          {workOrder.status === "scheduled" ? (
+          {!isWorkflowWorkOrder ? (
+            <Button
+              variant="primary"
+              disabled
+              title={`${workOrder.id} 为只读 Demo 工单，不会修改 WT-023 闭环状态`}
+            >
+              <ShieldCheck size={14} /> 只读 · {statusLabels[workOrder.status]}
+            </Button>
+          ) : workOrder.status === "scheduled" ? (
             <Button variant="primary" onClick={onStart}>
               <Wrench size={14} /> 开始执行
             </Button>
@@ -249,12 +337,27 @@ function WorkOrderDrawer({
 export function WorkOrderPage() {
   const workflow = useDemoWorkflow();
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<"all" | WorkOrderStatus>("all");
+  const [status, setStatus] = useState<WorkOrderStatusFilter>("all");
+  const [priority, setPriority] = useState<"all" | WorkOrderPriority>("all");
+  const [plannedStart, setPlannedStart] = useState<PlannedStartFilter>("all");
+  const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const parameters = new URLSearchParams(window.location.search);
+    const deepLinkedWorkOrderId = parameters.get("workOrder");
+    const deepLinkedTurbineId = parameters.get("turbineId");
+    const timer = window.setTimeout(() => {
+      if (deepLinkedWorkOrderId) setSelectedId(deepLinkedWorkOrderId);
+      else if (deepLinkedTurbineId) setQuery(deepLinkedTurbineId);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const displayWorkOrders = useMemo(
     () =>
       workOrders.map((item) =>
-        item.id === "WO-20260823-017"
+        item.id === WORKFLOW_WORK_ORDER_ID
           ? {
               ...item,
               status: workflow.workOrderStatus,
@@ -272,19 +375,39 @@ export function WorkOrderPage() {
   );
   const filtered = useMemo(
     () =>
-      displayWorkOrders.filter(
-        (item) =>
-          (status === "all" || item.status === status) &&
-          `${item.id} ${item.turbineId} ${item.issue} ${item.assignedTeam}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
-      ),
-    [displayWorkOrders, query, status],
+      displayWorkOrders.filter((item) => {
+        const normalizedQuery = query.trim().toLowerCase();
+        const matchesSearch = `${item.id} ${item.turbineId} ${item.issue} ${item.assignedTeam}`
+          .toLowerCase()
+          .includes(normalizedQuery);
+        const matchesStatus =
+          status === "all" ||
+          (status === "completed-group"
+            ? item.status === "completed" || item.status === "closed"
+            : item.status === status);
+        const matchesPriority = priority === "all" || item.priority === priority;
+        const plannedTimestamp = Date.parse(item.plannedStart);
+        const matchesPlannedStart =
+          plannedStart === "all" ||
+          (plannedStart === "due" && plannedTimestamp < SNAPSHOT_TIMESTAMP) ||
+          (plannedStart === "next-24h" &&
+            plannedTimestamp >= SNAPSHOT_TIMESTAMP &&
+            plannedTimestamp <= SNAPSHOT_TIMESTAMP + DAY_MS) ||
+          (plannedStart === "next-7d" &&
+            plannedTimestamp >= SNAPSHOT_TIMESTAMP &&
+            plannedTimestamp <= SNAPSHOT_TIMESTAMP + 7 * DAY_MS);
+
+        return matchesSearch && matchesStatus && matchesPriority && matchesPlannedStart;
+      }),
+    [displayWorkOrders, plannedStart, priority, query, status],
   );
   const featured =
     displayWorkOrders.find((item) => item.relatedMissionId === featuredMission.id) ??
     displayWorkOrders[0];
-  const selected = displayWorkOrders.find((item) => item.id === selectedId) ?? null;
+  const selected =
+    displayWorkOrders.find((item) => item.id === selectedId) ??
+    historicalWorkOrders.find((item) => item.id === selectedId) ??
+    null;
   const counts = {
     pending: displayWorkOrders.filter((item) => item.status === "pending-approval").length,
     scheduled: displayWorkOrders.filter((item) => item.status === "scheduled").length,
@@ -292,6 +415,74 @@ export function WorkOrderPage() {
     completed: displayWorkOrders.filter(
       (item) => item.status === "completed" || item.status === "closed",
     ).length,
+  };
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageRowIds = pageRows.map((item) => item.id);
+  const selectedFilteredCount = selectedIds.filter((id) =>
+    filtered.some((item) => item.id === id),
+  ).length;
+  const allPageRowsSelected =
+    pageRowIds.length > 0 && pageRowIds.every((id) => selectedIds.includes(id));
+  const hasFilters =
+    query.trim().length > 0 || status !== "all" || priority !== "all" || plannedStart !== "all";
+
+  const resetResultState = () => {
+    setPage(1);
+    setSelectedIds([]);
+  };
+
+  const applyStatus = (nextStatus: WorkOrderStatusFilter) => {
+    setStatus(nextStatus);
+    resetResultState();
+  };
+
+  const toggleRow = (id: string) => {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id],
+    );
+  };
+
+  const toggleCurrentPage = () => {
+    setSelectedIds((current) => {
+      if (pageRowIds.every((id) => current.includes(id))) {
+        return current.filter((id) => !pageRowIds.includes(id));
+      }
+      return [...new Set([...current, ...pageRowIds])];
+    });
+  };
+
+  const exportFilteredWorkOrders = () => {
+    const header = [
+      "Work Order ID",
+      "Wind Turbine",
+      "Issue",
+      "Priority",
+      "Status",
+      "Assigned Team",
+      "Related Mission",
+      "Planned Start",
+      "Deadline",
+    ];
+    const rows = filtered.map((item) => [
+      item.id,
+      item.turbineId,
+      item.issue,
+      item.priority,
+      statusLabels[item.status],
+      item.assignedTeam,
+      item.relatedMissionId ?? "",
+      item.plannedStart,
+      item.deadline,
+    ]);
+    const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `windops-work-orders-${new Date(SNAPSHOT_TIMESTAMP).toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -322,10 +513,14 @@ export function WorkOrderPage() {
         }
         actions={
           <>
-            <Button variant="secondary">
+            <Button
+              variant="secondary"
+              onClick={exportFilteredWorkOrders}
+              disabled={filtered.length === 0}
+            >
               <Download size={15} /> 导出
             </Button>
-            <Button variant="primary">
+            <Button variant="primary" disabled title="当前演示环境不写入新工单">
               <Plus size={15} /> 创建工单
             </Button>
           </>
@@ -374,8 +569,9 @@ export function WorkOrderPage() {
 
       <section className="work-order-summary">
         <button
-          onClick={() => setStatus("pending-approval")}
+          onClick={() => applyStatus(status === "pending-approval" ? "all" : "pending-approval")}
           className={cn(status === "pending-approval" && "active")}
+          aria-pressed={status === "pending-approval"}
         >
           <span className="wo-summary-icon wo-summary-icon--warning">
             <ShieldCheck size={16} />
@@ -386,8 +582,9 @@ export function WorkOrderPage() {
           </span>
         </button>
         <button
-          onClick={() => setStatus("scheduled")}
+          onClick={() => applyStatus(status === "scheduled" ? "all" : "scheduled")}
           className={cn(status === "scheduled" && "active")}
+          aria-pressed={status === "scheduled"}
         >
           <span className="wo-summary-icon wo-summary-icon--maintenance">
             <CalendarClock size={16} />
@@ -398,8 +595,9 @@ export function WorkOrderPage() {
           </span>
         </button>
         <button
-          onClick={() => setStatus("in-progress")}
+          onClick={() => applyStatus(status === "in-progress" ? "all" : "in-progress")}
           className={cn(status === "in-progress" && "active")}
+          aria-pressed={status === "in-progress"}
         >
           <span className="wo-summary-icon wo-summary-icon--info">
             <Wrench size={16} />
@@ -409,7 +607,11 @@ export function WorkOrderPage() {
             <strong>{counts.progress}</strong>
           </span>
         </button>
-        <button onClick={() => setStatus("all")} className={cn(status === "all" && "active")}>
+        <button
+          onClick={() => applyStatus(status === "completed-group" ? "all" : "completed-group")}
+          className={cn(status === "completed-group" && "active")}
+          aria-pressed={status === "completed-group"}
+        >
           <span className="wo-summary-icon wo-summary-icon--success">
             <CheckCircle2 size={16} />
           </span>
@@ -425,23 +627,55 @@ export function WorkOrderPage() {
           <Search size={15} />
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              resetResultState();
+            }}
             placeholder="搜索工单、机组或班组…"
             aria-label="搜索工单"
           />
         </div>
-        <Button variant="secondary">
-          <Filter size={14} /> Priority <ChevronDown size={12} />
+        <Button
+          variant="secondary"
+          onClick={() => applyStatus(nextOption(statusFilterOptions, status))}
+          aria-label={`状态筛选：${statusFilterLabels[status]}，点击切换`}
+          title="点击循环切换状态筛选"
+        >
+          <ClipboardCheck size={14} /> {statusFilterLabels[status]} <ChevronDown size={12} />
         </Button>
-        <Button variant="secondary">
-          <CalendarClock size={14} /> Planned Start <ChevronDown size={12} />
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setPriority(nextOption(priorityFilterOptions, priority));
+            resetResultState();
+          }}
+          aria-label={`优先级筛选：${priorityFilterLabels[priority]}，点击切换`}
+          title="点击循环切换优先级筛选"
+        >
+          <Filter size={14} /> {priorityFilterLabels[priority]} <ChevronDown size={12} />
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setPlannedStart(nextOption(plannedStartFilterOptions, plannedStart));
+            resetResultState();
+          }}
+          aria-label={`计划开始筛选：${plannedStartFilterLabels[plannedStart]}，点击切换`}
+          title="点击循环切换计划开始时间筛选"
+        >
+          <CalendarClock size={14} /> {plannedStartFilterLabels[plannedStart]}{" "}
+          <ChevronDown size={12} />
         </Button>
         <span className="toolbar-result">{filtered.length} Work Orders</span>
         <Button
           variant="ghost"
+          disabled={!hasFilters}
           onClick={() => {
             setStatus("all");
+            setPriority("all");
+            setPlannedStart("all");
             setQuery("");
+            resetResultState();
           }}
         >
           清除筛选
@@ -454,7 +688,13 @@ export function WorkOrderPage() {
             <thead>
               <tr>
                 <th>
-                  <input type="checkbox" aria-label="选择所有工单" />
+                  <input
+                    type="checkbox"
+                    aria-label="选择当前页所有工单"
+                    checked={allPageRowsSelected}
+                    disabled={pageRows.length === 0}
+                    onChange={toggleCurrentPage}
+                  />
                 </th>
                 <th>Work Order ID</th>
                 <th>Wind Turbine</th>
@@ -470,14 +710,22 @@ export function WorkOrderPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((item) => (
+              {pageRows.map((item) => (
                 <tr
-                  className={cn(item.id === featured?.id && "row-featured")}
+                  className={cn(
+                    item.id === featured?.id && "row-featured",
+                    selectedIds.includes(item.id) && "selected",
+                  )}
                   key={item.id}
                   onClick={() => setSelectedId(item.id)}
                 >
                   <td onClick={(event) => event.stopPropagation()}>
-                    <input type="checkbox" aria-label={`选择 ${item.id}`} />
+                    <input
+                      type="checkbox"
+                      aria-label={`选择 ${item.id}`}
+                      checked={selectedIds.includes(item.id)}
+                      onChange={() => toggleRow(item.id)}
+                    />
                   </td>
                   <td>
                     <strong className="mono">{item.id}</strong>
@@ -543,17 +791,38 @@ export function WorkOrderPage() {
                   </td>
                 </tr>
               ))}
+              {pageRows.length === 0 ? (
+                <tr>
+                  <td colSpan={12} style={{ padding: "32px", textAlign: "center" }}>
+                    没有符合当前筛选条件的工单
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
         <div className="table-pagination">
-          <span>已选择 0 / {filtered.length} 行</span>
-          <span>第 1 页，共 1 页</span>
+          <span>
+            已选择 {selectedFilteredCount} / {filtered.length} 行
+          </span>
+          <span>
+            第 {currentPage} 页，共 {pageCount} 页
+          </span>
           <div>
-            <Button size="sm" variant="secondary" disabled>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={currentPage <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
               上一页
             </Button>
-            <Button size="sm" variant="secondary" disabled>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={currentPage >= pageCount}
+              onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+            >
               下一页
             </Button>
           </div>
@@ -562,29 +831,33 @@ export function WorkOrderPage() {
       {selected ? (
         <WorkOrderDrawer
           workOrder={selected}
+          isWorkflowWorkOrder={selected.id === WORKFLOW_WORK_ORDER_ID}
           onClose={() => setSelectedId(null)}
-          onToggleTask={(taskId) =>
+          onToggleTask={(taskId) => {
+            if (selected.id !== WORKFLOW_WORK_ORDER_ID) return;
             workflow.dispatch({
               type: "toggle-task",
               taskId,
               timestamp: new Date().toISOString(),
               actor: "海维二组",
-            })
-          }
-          onStart={() =>
+            });
+          }}
+          onStart={() => {
+            if (selected.id !== WORKFLOW_WORK_ORDER_ID) return;
             workflow.dispatch({
               type: "start-work-order",
               timestamp: new Date().toISOString(),
               actor: "海维二组",
-            })
-          }
-          onComplete={() =>
+            });
+          }}
+          onComplete={() => {
+            if (selected.id !== WORKFLOW_WORK_ORDER_ID) return;
             workflow.dispatch({
               type: "complete-work-order",
               timestamp: new Date().toISOString(),
               actor: "林工",
-            })
-          }
+            });
+          }}
           canComplete={canCompleteFeaturedWorkOrder(workflow)}
         />
       ) : null}

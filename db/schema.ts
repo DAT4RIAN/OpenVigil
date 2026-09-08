@@ -1,4 +1,13 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import {
+  check,
+  index,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 const timestamps = {
   createdAt: text("created_at").notNull(),
@@ -263,6 +272,205 @@ export const workOrdersTable = sqliteTable(
     ...timestamps,
   },
   (table) => [index("work_orders_turbine_status_idx").on(table.turbineId, table.status)],
+);
+
+/**
+ * Stock is stored once on the part master. Reserved and available quantities are
+ * derived from active inventory reservations so those values cannot drift apart.
+ */
+export const sparePartsTable = sqliteTable(
+  "spare_parts",
+  {
+    id: text("id").primaryKey(),
+    partNumber: text("part_number").notNull().unique(),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    warehouse: text("warehouse").notNull(),
+    onHand: integer("on_hand").notNull(),
+    reorderPoint: integer("reorder_point").notNull(),
+    unit: text("unit").notNull(),
+    status: text("status").notNull(),
+    compatibleTurbineModels: text("compatible_turbine_models", { mode: "json" }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("spare_parts_category_status_idx").on(table.category, table.status),
+    check("spare_parts_on_hand_nonnegative_chk", sql`${table.onHand} >= 0`),
+    check("spare_parts_reorder_point_nonnegative_chk", sql`${table.reorderPoint} >= 0`),
+    check(
+      "spare_parts_status_chk",
+      sql`${table.status} in ('in-stock', 'low-stock', 'out-of-stock', 'quarantined')`,
+    ),
+  ],
+);
+
+/** One row represents the planned/issued quantity of one part on one work order. */
+export const workOrderPartsTable = sqliteTable(
+  "work_order_parts",
+  {
+    id: text("id").primaryKey(),
+    workOrderId: text("work_order_id")
+      .notNull()
+      .references(() => workOrdersTable.id),
+    sparePartId: text("spare_part_id")
+      .notNull()
+      .references(() => sparePartsTable.id),
+    quantityRequired: integer("quantity_required").notNull(),
+    quantityIssued: integer("quantity_issued").notNull().default(0),
+    status: text("status").notNull(),
+    notes: text("notes"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("work_order_parts_work_order_part_uidx").on(table.workOrderId, table.sparePartId),
+    index("work_order_parts_part_status_idx").on(table.sparePartId, table.status),
+    check("work_order_parts_required_positive_chk", sql`${table.quantityRequired} > 0`),
+    check("work_order_parts_issued_nonnegative_chk", sql`${table.quantityIssued} >= 0`),
+    check(
+      "work_order_parts_issued_not_over_required_chk",
+      sql`${table.quantityIssued} <= ${table.quantityRequired}`,
+    ),
+    check(
+      "work_order_parts_status_chk",
+      sql`${table.status} in ('requested', 'reserved', 'issued', 'consumed', 'cancelled')`,
+    ),
+  ],
+);
+
+/**
+ * Reservation ledger. It references the normalized work-order/part requirement;
+ * the related work order and part are therefore unambiguous without duplicate FKs.
+ */
+export const inventoryReservationsTable = sqliteTable(
+  "inventory_reservations",
+  {
+    id: text("id").primaryKey(),
+    workOrderPartId: text("work_order_part_id")
+      .notNull()
+      .references(() => workOrderPartsTable.id),
+    quantity: integer("quantity").notNull(),
+    status: text("status").notNull(),
+    reservedAt: text("reserved_at").notNull(),
+    releasedAt: text("released_at"),
+    consumedAt: text("consumed_at"),
+    correlationId: text("correlation_id").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("inventory_reservations_requirement_status_idx").on(table.workOrderPartId, table.status),
+    index("inventory_reservations_correlation_idx").on(table.correlationId),
+    check("inventory_reservations_quantity_positive_chk", sql`${table.quantity} > 0`),
+    check(
+      "inventory_reservations_status_chk",
+      sql`${table.status} in ('reserved', 'released', 'consumed', 'cancelled')`,
+    ),
+  ],
+);
+
+export const crewsTable = sqliteTable(
+  "crews",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    specialties: text("specialties", { mode: "json" }).notNull(),
+    memberCount: integer("member_count").notNull(),
+    availability: text("availability").notNull(),
+    certifications: text("certifications", { mode: "json" }).notNull(),
+    currentLocation: text("current_location").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("crews_availability_idx").on(table.availability),
+    check("crews_member_count_positive_chk", sql`${table.memberCount} > 0`),
+    check(
+      "crews_availability_chk",
+      sql`${table.availability} in ('available', 'reserved', 'assigned', 'unavailable')`,
+    ),
+  ],
+);
+
+export const vesselsTable = sqliteTable(
+  "vessels",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    vesselType: text("vessel_type").notNull(),
+    availability: text("availability").notNull(),
+    capacity: integer("capacity").notNull(),
+    maxWaveHeightM: real("max_wave_height_m").notNull(),
+    berth: text("berth").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("vessels_availability_idx").on(table.availability),
+    check("vessels_capacity_positive_chk", sql`${table.capacity} > 0`),
+    check("vessels_max_wave_height_positive_chk", sql`${table.maxWaveHeightM} > 0`),
+    check(
+      "vessels_availability_chk",
+      sql`${table.availability} in ('available', 'reserved', 'assigned', 'unavailable')`,
+    ),
+  ],
+);
+
+export const maintenanceToolsTable = sqliteTable(
+  "maintenance_tools",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    availability: text("availability").notNull(),
+    calibrationDueAt: text("calibration_due_at").notNull(),
+    location: text("location").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("maintenance_tools_availability_idx").on(table.availability),
+    index("maintenance_tools_calibration_due_idx").on(table.calibrationDueAt),
+    check(
+      "maintenance_tools_availability_chk",
+      sql`${table.availability} in ('available', 'reserved', 'assigned', 'unavailable', 'calibration')`,
+    ),
+  ],
+);
+
+/**
+ * Normalized crew/vessel/tool allocation. The exactly-one check keeps the
+ * polymorphic assignment referentially sound while retaining concrete FKs.
+ */
+export const resourceAssignmentsTable = sqliteTable(
+  "resource_assignments",
+  {
+    id: text("id").primaryKey(),
+    workOrderId: text("work_order_id")
+      .notNull()
+      .references(() => workOrdersTable.id),
+    crewId: text("crew_id").references(() => crewsTable.id),
+    vesselId: text("vessel_id").references(() => vesselsTable.id),
+    maintenanceToolId: text("maintenance_tool_id").references(() => maintenanceToolsTable.id),
+    role: text("role").notNull(),
+    status: text("status").notNull(),
+    plannedFrom: text("planned_from").notNull(),
+    plannedTo: text("planned_to").notNull(),
+    assignedAt: text("assigned_at").notNull(),
+    releasedAt: text("released_at"),
+    correlationId: text("correlation_id").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("resource_assignments_work_order_status_idx").on(table.workOrderId, table.status),
+    index("resource_assignments_crew_idx").on(table.crewId),
+    index("resource_assignments_vessel_idx").on(table.vesselId),
+    index("resource_assignments_tool_idx").on(table.maintenanceToolId),
+    check(
+      "resource_assignments_exactly_one_resource_chk",
+      sql`(case when ${table.crewId} is not null then 1 else 0 end + case when ${table.vesselId} is not null then 1 else 0 end + case when ${table.maintenanceToolId} is not null then 1 else 0 end) = 1`,
+    ),
+    check(
+      "resource_assignments_status_chk",
+      sql`${table.status} in ('reserved', 'assigned', 'released', 'cancelled')`,
+    ),
+    check("resource_assignments_window_chk", sql`${table.plannedTo} > ${table.plannedFrom}`),
+  ],
 );
 
 export const maintenanceRecordsTable = sqliteTable("maintenance_records", {
