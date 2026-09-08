@@ -12,16 +12,16 @@ WindOps 是一个可运行的海上风电智能运维 Web 演示。它把风场�
 > [!IMPORTANT]
 > 本仓库是前端产品演示与领域原型，不是生产 SCADA、自动控制系统或已上线的 Agent 后端。所有风机、告警、气象、诊断、审批和执行数据均为确定性模拟数据，不得用于真实设备控制、安全判断或维护决策。
 
-| 当前真实实现                                          | 尚未实现 / 生产目标                         |
-| ----------------------------------------------------- | ------------------------------------------- |
-| React 19 + TypeScript 严格模式的 10 个核心页面        | 真实 SCADA、CMS、气象、ERP/EAM 接入         |
-| vinext / Vite 应用与 Cloudflare Worker/Sites 运行形态 | FastAPI 服务、后台任务与生产 WebSocket 总线 |
-| 64 台风机与大规模、可重复生成的领域数据               | PostgreSQL、TimescaleDB 等生产数据存储      |
-| 浏览器本地持久化的 WT-023 审批—执行—反馈闭环          | 服务端事务、RBAC、审批策略与不可变审计      |
-| 只读快照 API、有限 SSE 和确定性 Agent Tool Runtime    | LangGraph / LLM 的真实 Agent 编排与模型调用 |
-| 21 表 Drizzle Schema 与首个 SQLite/D1 迁移            | D1 运行时绑定、数据迁移、备份和恢复流程     |
+| 当前真实实现                                                        | 尚未实现 / 生产目标                         |
+| ------------------------------------------------------------------- | ------------------------------------------- |
+| React 19 + TypeScript 严格模式的 10 个核心闭环页面与 4 个专业工作台 | 真实 SCADA、CMS、气象、ERP/EAM 接入         |
+| vinext / Vite 应用与 Cloudflare Worker/Sites 运行形态               | FastAPI 服务、后台任务与生产 WebSocket 总线 |
+| 64 台风机与大规模、可重复生成的领域数据                             | PostgreSQL、TimescaleDB 等生产数据存储      |
+| 浏览器本地持久化的 WT-023 审批—执行—反馈闭环                        | 服务端事务、RBAC、审批策略与不可变审计      |
+| 只读快照 API、有限 SSE 和确定性 Agent Tool Runtime                  | LangGraph / LLM 的真实 Agent 编排与模型调用 |
+| 28 表 Drizzle Schema 与两步 SQLite/D1 迁移                          | D1 运行时绑定、数据迁移、备份和恢复流程     |
 
-## 10 个核心页面
+## 10 个核心闭环页面
 
 |   # | 页面                      | 路由            | 重点                                                                   |
 | --: | ------------------------- | --------------- | ---------------------------------------------------------------------- |
@@ -31,12 +31,27 @@ WindOps 是一个可运行的海上风电智能运维 Web 演示。它把风场�
 |  04 | SCADA Monitoring          | `/scada`        | 17 类实时预览时序、阈值、异常和 AI 事件联合监控                        |
 |  05 | Alarm Center              | `/alarms`       | 工业告警表、分级筛选、详情 Drawer 与 AI Diagnosis                      |
 |  06 | Agent Control Center      | `/agents`       | 15 个 Agent 的状态、三层组织、工具与运行指标                           |
-|  07 | Mission Center            | `/missions`     | 10 个 Mission 从 Detected 到 Completed 的任务看板                      |
+|  07 | Mission Center            | `/missions`     | 10 个活动 Mission 与 2 个已完成案例的任务看板                          |
 |  08 | Mission Detail            | `/missions/:id` | 协作时间线、证据、决策、审批与执行准备度                               |
 |  09 | Decision Center           | `/decisions`    | 三方案比较、推荐理由、风险权衡与人工审批                               |
 |  10 | Work Order Center         | `/work-orders`  | 工单状态、5 项任务门禁、PPE、工具、备件与安全程序                      |
 
+核心闭环之外还实现了 4 个可直接访问的专业工作台：
+
+| 页面                   | 路由                      | 能力                                                              |
+| ---------------------- | ------------------------- | ----------------------------------------------------------------- |
+| Asset Health           | `/health`                 | 64 台机组健康矩阵、失效概率、RUL、子系统健康与闭环回写            |
+| Predictive Maintenance | `/predictive-maintenance` | 风险排序、24H–90D 窗口、P×C 风险矩阵与 WT-023 预测故事            |
+| Resource Center        | `/resources`              | 备件库存、班组、船舶、工具、天气窗与工单资源预留                  |
+| Knowledge Base         | `/knowledge`              | TanStack Table 文档目录、详情 Drawer 与带来源引用的确定性问答预览 |
+
 `/turbines/:id` 和 `/missions/:id` 都会按动态 ID 查询真实的确定性数据。`WT-023` 与 `MISSION-2026-0823` 展示完整主故事，其余合法 ID 展示对应资产或 Mission 的通用详情；未知 ID 进入应用的 `not-found` 页面。风机详情 API 对未知 ID 同样返回结构化 `404`。
+
+## Screenshot
+
+![WindOps Operations Command Center](./public/windops-command-center.png)
+
+首页把全场 KPI、健康矩阵、告警态势、Agent 活动和 WT-023 主故事放在同一运营视图中；截图来自本仓库的本地确定性快照。
 
 ## WT-023 可交互闭环
 
@@ -73,8 +88,8 @@ WindOps 是一个可运行的海上风电智能运维 Web 演示。它把风场�
 ```mermaid
 flowchart TB
   browser["Browser"] --> runtime["vinext App Router + Vite"]
-  runtime --> pages["10 page routes"]
-  runtime --> api["Mock API + finite SSE"]
+  runtime --> pages["10 core routes + 4 specialist workspaces"]
+  runtime --> api["Mock API + finite SSE + WebSocket channels"]
   pages --> charts["Apache ECharts"]
   pages --> query["TanStack Query · SCADA"]
   pages --> workflow["Zustand demo workflow"]
@@ -82,28 +97,28 @@ flowchart TB
   query --> api
   api --> fixtures["Deterministic linked fixtures"]
   api --> archive["Generated archive pages"]
-  api --> tools["11-tool deterministic runtime"]
-  schema["21-table Drizzle schema + migration"] -. "not bound at runtime" .-> api
+  api --> tools["17-tool deterministic runtime"]
+  schema["28-table Drizzle schema + migrations"] -. "not bound at runtime" .-> api
 ```
 
-页面和 API 共享 `lib/` 中的规范化领域对象。SCADA 页面已通过统一 `apiGet` 客户端和 TanStack Query 读取 `/api/turbines/WT-023/scada`，并保留确定性初始快照和错误回退。WT-023 交互闭环使用 Zustand；其他领域页面仍主要直接消费同一套 fixture。
+页面和 API 共享 `lib/` 中的规范化领域对象。SCADA、健康、预测、资源与知识工作台通过统一 API 客户端和 TanStack Query 读取 Mock API，并保留确定性初始快照和错误回退。WT-023 交互闭环使用 Zustand；其他领域页面仍主要直接消费同一套 fixture。
 
-ECharts 展示 17 组、每组 97 点的 24 小时预览；逻辑 SCADA 归档按请求页即时生成，不在内存中一次性物化 131,072 行。
+ECharts 可切换 `LIVE/1H/6H/24H/7D/30D` 六个不同采样窗口，24 小时窗口为 17 组、每组 97 点；逻辑 SCADA 归档按请求页即时生成，不在内存中一次性物化 131,072 行。
 
 ## 数据规模
 
 快照时间固定在 `2026-08-13`（`Asia/Shanghai`）。
 
-| 数据集            |                                      规模 | 说明                                        |
-| ----------------- | ----------------------------------------: | ------------------------------------------- |
-| 风场 / 风机       |                                  `1 / 64` | 总装机容量 `384 MW`                         |
-| SCADA 实时预览    |                      `17 × 97 = 1,649` 点 | 含物理测点和多变量异常分数                  |
-| SCADA 逻辑归档    |                              `131,072` 点 | `64 × 16 × 128`，15 分钟间隔，分页生成      |
-| 告警              |                 archive `100` / live `14` | archive scope 总数包含 live 快照            |
-| 工单              | historical `30` / live `9` / dataset `39` | 历史与当前集合分开查询                      |
-| 历史故障案例      |                                      `20` | 与历史工单保持有效引用                      |
-| Mission / Agent   |                                 `10 / 15` | Agent 分为 Decision、Review、Execution 三层 |
-| WT-023 子系统健康 |                                      `12` | 包含主轴承、齿轮箱、发电机等                |
+| 数据集            |                                      规模 | 说明                                                               |
+| ----------------- | ----------------------------------------: | ------------------------------------------------------------------ |
+| 风场 / 风机       |                                  `1 / 64` | 总装机容量 `384 MW`                                                |
+| SCADA 实时预览    |                      `17 × 97 = 1,649` 点 | 含物理测点和多变量异常分数                                         |
+| SCADA 逻辑归档    |                              `131,072` 点 | `64 × 16 × 128`，15 分钟间隔，分页生成                             |
+| 告警              |                 archive `100` / live `19` | live 中 17 条未关闭；archive scope 总数包含 live 快照              |
+| 工单              | historical `30` / live `9` / dataset `39` | 历史与当前集合分开查询                                             |
+| 历史故障案例      |                                      `20` | 与历史工单保持有效引用                                             |
+| Mission / Agent   |                    `12（10 active） / 15` | Agent 分为 Decision、Review、Execution 三层；另保留 2 个已完成案例 |
+| WT-023 子系统健康 |                                      `12` | 包含主轴承、齿轮箱、发电机等                                       |
 
 物理 SCADA 归档有 16 个指标；实时预览额外包含模型输出的多变量异常分数，因此是 17 组。所有 ID、时间、数值、排序和跨实体引用都是确定性的，便于截图和回归测试。
 
@@ -117,12 +132,18 @@ ECharts 展示 17 组、每组 97 点的 24 小时预览；逻辑 SCADA 归档�
 | `GET`  | `/api/turbines`                        | 64 台风机                                               |
 | `GET`  | `/api/turbines/:id`                    | 单台风机及关联 ID；未知 ID 返回 `404`                   |
 | `GET`  | `/api/turbines/:id/scada`              | 单机实时 SCADA 预览                                     |
+| `GET`  | `/api/scada-history`                   | `LIVE/1H/6H/24H/7D/30D` 六个真实不同采样窗口            |
 | `GET`  | `/api/scada-measurements`              | 归档分页；支持 `offset`、`limit`、`turbineId`、`metric` |
-| `GET`  | `/api/alarms?scope=live\|archive`      | 默认 `live`；分别返回 14 或 100 条                      |
-| `GET`  | `/api/missions`                        | 10 个 Mission                                           |
+| `GET`  | `/api/alarms?scope=live\|archive`      | 默认 `live`；分别返回 19 或 100 条                      |
+| `GET`  | `/api/missions`                        | 12 个 Mission，其中 10 个处于活动阶段                   |
 | `GET`  | `/api/agents`                          | 15 个 Agent                                             |
 | `GET`  | `/api/work-orders?scope=live\|archive` | 默认 `live`；分别返回 9 条当前工单或 30 条历史工单      |
 | `GET`  | `/api/failure-cases`                   | 20 个历史故障闭环案例                                   |
+| `GET`  | `/api/health-assessments`              | 64 台机组健康、趋势、失效概率与 RUL                     |
+| `GET`  | `/api/predictive-assessments`          | 可过滤、排序、分页的预测性维护快照                      |
+| `GET`  | `/api/resources`                       | 备件、班组、船舶、工具与天气窗；支持工单过滤            |
+| `GET`  | `/api/knowledge-documents`             | 文档检索、类型过滤、排序与分页                          |
+| `POST` | `/api/knowledge-assistant`             | WT-023 确定性检索问答与可点击来源引用                   |
 | `GET`  | `/api/health`                          | 完整性检查和分层数据计数                                |
 | `GET`  | `/api/agent-events`                    | 有限、可重放的 `text/event-stream` Agent 活动流         |
 
@@ -141,19 +162,21 @@ ECharts 展示 17 组、每组 97 点的 24 小时预览；逻辑 SCADA 归档�
 }
 ```
 
-错误响应遵循 `{ "error": { "code": "...", "message": "..." } }`。SSE 按 `snapshot → agent-activity × N → complete` 发送有限事件后关闭，不是持续连接的生产事件总线。
+错误响应遵循 `{ "error": { "code": "...", "message": "..." } }`。SSE 按 `snapshot → agent-activity × N → complete` 发送有限事件后关闭。
+
+同时提供三个 `windops.realtime.v1` Mock WebSocket 通道：`/ws/scada`、`/ws/alarms`、`/ws/agent-events`。Cloudflare WebSocket 运行时收到 Upgrade 后会发送 `hello` 与持续的确定性变化帧，支持 `ping → pong` 并在断连时清理定时器；普通 HTTP 或不支持 `WebSocketPair` 的本地 Node 运行时返回结构化 `426 WEBSOCKET_UPGRADE_REQUIRED`。这些通道用于演示客户端协议和实时 UI 接入，不是带持久化、重放游标或消息代理的生产事件总线。
 
 `/api/health` 将数量分为三层：
 
 ```text
-counts.live     当前 UI 快照：64 turbines、14 alarms、10 missions、15 agents、9 work orders 等
+counts.live     当前 UI 快照：64 turbines、19 alarms（17 unresolved）、12 missions（10 active）、15 agents、9 work orders 等
 counts.archive  131072 scadaMeasurements、100 alarms、30 historicalWorkOrders、20 failureCases
 counts.dataset  64 turbines、131072 scadaMeasurements、100 alarms、39 workOrders、20 failureCases 等
 ```
 
 ### Agent Tool Runtime
 
-确定性工具运行时暴露 11 个工具：
+确定性工具运行时暴露 17 个工具。以下 11 个是原始规格中的核心工具：
 
 ```text
 get_turbine_status
@@ -168,6 +191,8 @@ predict_rul
 create_decision
 create_work_order
 ```
+
+为让 Agent 卡片声明与可调用目录保持一致，还实现了 `query_manual`、`query_work_orders`、`query_spare_parts`、`query_crew`、`query_vessels` 与 `update_work_order`。其中 `update_work_order` 与两个 `create_*` 工具一样，只生成严格校验、可审计的 dry-run 草稿，不修改浏览器状态或数据库。
 
 | Method | Endpoint           | 行为                                           |
 | ------ | ------------------ | ---------------------------------------------- |
@@ -189,13 +214,13 @@ create_work_order
 
 每条执行记录包含 `correlationId`、规范化输入、结构化结果、开始/结束时间、成功状态、确定性延迟和基于 UTF-8 字节的 token 估算。执行历史最多保留 100 条，只存在于当前 Worker/Node 进程，重启后清空。
 
-`create_decision` 与 `create_work_order` 是 **dry-run mutation**：它们只返回带 `persisted: false` 的草稿，不改变 Decision、审批、Mission 或工单数据，也不会调度现场动作。其他 9 个工具均为只读查询或确定性计算。该运行时没有调用 LLM，也不是 LangGraph 执行器。
+`create_decision`、`create_work_order` 与 `update_work_order` 是 **dry-run mutation**：它们只返回带 `persisted: false` 的草稿，不改变 Decision、审批、Mission 或工单数据，也不会调度现场动作。其他 14 个工具均为只读查询或确定性计算。该运行时没有调用 LLM，也不是 LangGraph 执行器。
 
 ## Drizzle 数据模型
 
-`db/schema.ts` 已定义 21 张 SQLite/D1 表：风场、风机、子系统、传感器、SCADA 测量、告警、健康评估、Agent、技能、工具、Mission、Mission Task、证据、Decision、审批、工单、维护记录、知识文档、故障案例、Agent Execution 和 Activity Event。Schema 包含关键外键、唯一约束、索引、关联 ID、时间戳和审计字段。
+`db/schema.ts` 已定义 28 张 SQLite/D1 表。除风场、风机、子系统、传感器、SCADA 测量、告警、健康评估、Agent、技能、工具、Mission、Mission Task、证据、Decision、审批、工单、维护记录、知识文档、故障案例、Agent Execution 和 Activity Event 外，还独立建模了 `spare_parts`、`work_order_parts`、`inventory_reservations`、`crews`、`vessels`、`maintenance_tools` 与 `resource_assignments`。Schema 包含关键外键、唯一约束、索引、库存/数量/状态 CHECK、关联 ID、时间戳和审计字段。
 
-首个迁移已生成到 `drizzle/0000_windops_domain.sql`。但是 `.openai/hosting.json` 当前的 `d1` 与 `r2` 都是 `null`：运行时没有 D1 binding，也没有将 fixture 或浏览器状态写入数据库。Schema 和迁移是后续接入的准备，不应被理解为已经交付持久化后端。
+基础迁移位于 `drizzle/0000_windops_domain.sql`，资源规范化迁移位于 `drizzle/0001_resource_inventory.sql`。但是 `.openai/hosting.json` 当前的 `d1` 与 `r2` 都是 `null`：运行时没有 D1 binding，也没有将 fixture 或浏览器状态写入数据库。Schema 和迁移是后续接入的准备，不应被理解为已经交付持久化后端。
 
 ## 目录结构
 
@@ -211,20 +236,24 @@ components/
   charts/                      ECharts 时序组件
   data-display/                指标卡、状态、健康语义和表格组件
   layout/                      App Shell、Sidebar、Topbar、Command Palette
-  pages/                       10 个领域页面
+  pages/                       核心闭环与专业工作台页面
   providers/query-provider.tsx TanStack Query Provider
 lib/
   api-client.ts                统一浏览器 API 客户端与结构化错误
   archive-data.ts              大规模确定性归档与按页生成器
   demo-workflow.ts             WT-023 合法状态迁移和完成门禁
   use-demo-workflow.ts         Zustand + localStorage 状态层
-  agent-tool-runtime.ts        11 个工具、校验、dry-run 与可观测记录
+  agent-tool-runtime.ts        17 个工具、校验、dry-run 与可观测记录
   farm-data.ts                 风场与 64 台风机
   telemetry-data.ts            SCADA 预览、健康与天气窗口
   agent-data.ts                三层 Agent 组织
   operations-data.ts           告警、证据、Mission、Decision、工单与事件
   knowledge-data.ts            知识文档
-db/schema.ts                   21 表 Drizzle Schema
+  health-data.ts               64 台机组健康评估
+  resource-data.ts             备件、班组、船舶、工具与工单预留
+  scada-history.ts             六个确定性监控时间窗
+  realtime-stream.ts           三个 WebSocket 通道的公共变化帧
+db/schema.ts                   28 表 Drizzle Schema
 drizzle/                       已生成的 SQLite/D1 迁移与元数据
 worker/                        Cloudflare Worker 入口
 tests/                         构建产物、API、工作流和工具运行时测试
@@ -232,16 +261,16 @@ tests/                         构建产物、API、工作流和工具运行时�
 
 ## 技术栈
 
-| 范畴            | 当前使用                                                                          |
-| --------------- | --------------------------------------------------------------------------------- |
-| UI              | React 19、TypeScript、Tailwind CSS 4、项目内 shadcn 风格 primitives、Lucide Icons |
-| Runtime / Build | vinext、Vite 8、React Server Components 工具链                                    |
-| Visualization   | Apache ECharts 6                                                                  |
-| Client State    | TanStack Query（SCADA）、Zustand（WT-023 演示闭环）                               |
-| Data            | 类型安全的确定性 TypeScript fixture 与按页归档生成器                              |
-| Schema          | Drizzle ORM、SQLite/D1 迁移（尚未绑定 D1）                                        |
-| Hosting         | Cloudflare Worker runtime + Cloudflare Sites 集成                                 |
-| Quality         | TypeScript strict、ESLint、Prettier、Node test runner、生产构建验证               |
+| 范畴            | 当前使用                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------- |
+| UI              | React 19、TypeScript、Tailwind CSS 4、项目内 shadcn 风格 primitives、Lucide Icons                       |
+| Runtime / Build | vinext、Vite 8、React Server Components 工具链                                                          |
+| Visualization   | Apache ECharts 6                                                                                        |
+| Client State    | TanStack Query（SCADA、健康、预测、资源、知识）、TanStack Table（知识目录）、Zustand（WT-023 演示闭环） |
+| Data            | 类型安全的确定性 TypeScript fixture 与按页归档生成器                                                    |
+| Schema          | Drizzle ORM、SQLite/D1 迁移（尚未绑定 D1）                                                              |
+| Hosting         | Cloudflare Worker runtime + Cloudflare Sites 集成                                                       |
+| Quality         | TypeScript strict、ESLint、Prettier、Node test runner、生产构建验证                                     |
 
 ## Getting Started
 
@@ -271,7 +300,7 @@ pnpm test
 ```
 
 - `pnpm format` 使用 Prettier 写入格式，`pnpm format:check` 只检查。
-- `pnpm test` 会先执行生产构建，再用 Node test runner 验证 10 个页面、Mock API、归档分页与过滤、错误响应、SSE、WT-023 状态机及 Agent Tool Runtime。
+- `pnpm test` 会先执行生产构建，再用 Node test runner 验证核心与专业页面、Mock API、归档分页与过滤、六个 SCADA 时间窗、知识引用、资源关联、WebSocket 回退契约、SSE、WT-023 状态机及 Agent Tool Runtime。
 - `pnpm db:generate` 可根据 Drizzle Schema 生成新迁移；在 D1 尚未绑定时，它不会创建或填充运行时数据库。
 - 本地生产构建可通过 `pnpm start` 启动。
 
@@ -297,7 +326,7 @@ flowchart LR
   workorder --> feedback["Health verification and knowledge feedback"]
 ```
 
-界面只展示可公开、可审计的事件、证据、工具结果和决策摘要，**不展示也不伪造模型的隐藏 Chain-of-Thought**。当前没有运行 LangGraph、FastAPI、RAG 或 LLM。
+界面只展示可公开、可审计的事件、证据、工具结果和决策摘要，**不展示也不伪造模型的隐藏 Chain-of-Thought**。知识问答是带来源引用的确定性关键词检索预览，并明确返回 `realEmbedding: false`；当前没有运行 LangGraph、FastAPI、向量数据库或 LLM。
 
 ## 诚实边界与 Roadmap
 
