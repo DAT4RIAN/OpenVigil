@@ -1,8 +1,10 @@
 import { historicalWorkOrders, windFarm, workOrders } from "@/lib";
+import { overlayWorkflowWorkOrder } from "@/lib/server-workflow-overlays";
 
 import { collectionResponse, errorResponse } from "../_shared";
+import { readWorkflowForApi } from "../_workflow";
 
-export function GET(request: Request): Response {
+export async function GET(request: Request): Promise<Response> {
   const requestedScope = new URL(request.url).searchParams.get("scope");
 
   if (requestedScope !== null && requestedScope !== "live" && requestedScope !== "archive") {
@@ -13,10 +15,16 @@ export function GET(request: Request): Response {
   }
 
   const scope = requestedScope ?? "live";
-  const data = scope === "archive" ? historicalWorkOrders : workOrders;
+  const workflow = await readWorkflowForApi();
+  const data =
+    scope === "archive"
+      ? historicalWorkOrders
+      : overlayWorkflowWorkOrder(workOrders, workflow.snapshot);
 
   return collectionResponse(data, {
     scope,
-    snapshotAt: windFarm.lastUpdatedAt,
+    snapshotAt: scope === "archive" ? windFarm.lastUpdatedAt : workflow.snapshot.updatedAt,
+    workflowPersistence: workflow.persistence,
+    workflowRevision: workflow.snapshot.revision,
   });
 }

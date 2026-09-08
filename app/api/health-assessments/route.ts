@@ -1,7 +1,9 @@
-import { healthAssessments, windFarm } from "@/lib";
+import { healthAssessments } from "@/lib";
+import { overlayWorkflowHealth } from "@/lib/server-workflow-overlays";
 import type { HealthState, RiskLevel } from "@/lib/types";
 
 import { jsonResponse } from "../_shared";
+import { readWorkflowForApi } from "../_workflow";
 
 const healthStates: readonly HealthState[] = [
   "healthy",
@@ -13,7 +15,7 @@ const healthStates: readonly HealthState[] = [
 ];
 const riskLevels: readonly RiskLevel[] = ["critical", "high", "medium", "low"];
 
-export function GET(request: Request): Response {
+export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const turbineId = url.searchParams.get("turbineId")?.trim().toUpperCase() ?? null;
   const state = url.searchParams.get("state")?.trim().toLowerCase() ?? null;
@@ -32,7 +34,9 @@ export function GET(request: Request): Response {
     );
   }
 
-  const data = healthAssessments.filter(
+  const workflow = await readWorkflowForApi();
+  const currentAssessments = overlayWorkflowHealth(healthAssessments, workflow.snapshot);
+  const data = currentAssessments.filter(
     (assessment) =>
       (!turbineId || assessment.turbineId === turbineId) &&
       (!state || assessment.state === state) &&
@@ -43,12 +47,14 @@ export function GET(request: Request): Response {
     data,
     meta: {
       count: data.length,
-      total: healthAssessments.length,
+      total: currentAssessments.length,
       turbineId,
       state,
       risk,
-      snapshotAt: windFarm.lastUpdatedAt,
+      snapshotAt: workflow.snapshot.updatedAt,
       deterministic: true,
+      workflowPersistence: workflow.persistence,
+      workflowRevision: workflow.snapshot.revision,
     },
   });
 }

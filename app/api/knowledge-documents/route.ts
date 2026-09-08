@@ -1,7 +1,9 @@
 import { knowledgeDocuments } from "@/lib/knowledge-data";
+import { overlayWorkflowKnowledge } from "@/lib/server-workflow-overlays";
 import type { KnowledgeDocument, KnowledgeDocumentType } from "@/lib/types";
 
 import { jsonResponse } from "../_shared";
+import { readWorkflowForApi } from "../_workflow";
 
 const documentTypes: readonly KnowledgeDocumentType[] = [
   "equipment-manual",
@@ -86,7 +88,7 @@ const compareDocuments = (
   return left[sort].localeCompare(right[sort], "zh-CN") * direction;
 };
 
-export function GET(request: Request): Response {
+export async function GET(request: Request): Promise<Response> {
   const searchParams = new URL(request.url).searchParams;
   const query = (searchParams.get("q") ?? "").trim();
   const typeValue = (searchParams.get("type") ?? "all").trim();
@@ -123,8 +125,10 @@ export function GET(request: Request): Response {
   const pageSize = parseInteger(searchParams.get("pageSize"), "pageSize", 10, 50);
   if (pageSize instanceof Response) return pageSize;
 
+  const workflow = await readWorkflowForApi();
+  const catalog = overlayWorkflowKnowledge(knowledgeDocuments, workflow.snapshot);
   const normalizedQuery = query.toLocaleLowerCase("zh-CN");
-  const filtered = knowledgeDocuments.filter((document) => {
+  const filtered = catalog.filter((document) => {
     if (typeValue !== "all" && document.type !== typeValue) return false;
     if (!normalizedQuery) return true;
     const searchable = [
@@ -150,7 +154,7 @@ export function GET(request: Request): Response {
   const typeCounts = Object.fromEntries(
     documentTypes.map((type) => [
       type,
-      knowledgeDocuments.filter((document) => document.type === type).length,
+      catalog.filter((document) => document.type === type).length,
     ]),
   );
 
@@ -160,7 +164,7 @@ export function GET(request: Request): Response {
       documents,
       facets: {
         documentTypes: typeCounts,
-        vectorized: knowledgeDocuments.filter((document) => document.vectorized).length,
+        vectorized: catalog.filter((document) => document.vectorized).length,
       },
     },
     error: null,
@@ -174,6 +178,10 @@ export function GET(request: Request): Response {
       type: typeValue,
       sort: sortValue,
       order: orderValue,
+      snapshotAt: workflow.snapshot.updatedAt,
+      persisted: workflow.persistence === "d1",
+      workflowPersistence: workflow.persistence,
+      workflowRevision: workflow.snapshot.revision,
     }),
   });
 }

@@ -20,24 +20,32 @@ import {
   turbines,
   validateDomainData,
   weatherWindows,
-  windFarm,
   workOrders,
 } from "@/lib";
 
 import { jsonResponse } from "../_shared";
+import { readWorkflowForApi } from "../_workflow";
 
-export function GET(): Response {
+export async function GET(): Promise<Response> {
   const errors = validateDomainData();
   const healthy = errors.length === 0;
+  const workflow = await readWorkflowForApi();
+  const workflowCompleted = workflow.snapshot.mission.status === "completed";
 
   return jsonResponse(
     {
       status: healthy ? "healthy" : "degraded",
-      service: "windops-mock-api",
+      service: "windops-worker-api",
       version: 1,
-      snapshotAt: windFarm.lastUpdatedAt,
+      snapshotAt: workflow.snapshot.updatedAt,
       deterministic: true,
-      readOnly: true,
+      readOnly: !workflow.writable,
+      persistence: {
+        workflow: workflow.persistence,
+        workflowWritable: workflow.writable,
+        workflowRevision: workflow.snapshot.revision,
+        fixtureCatalog: "read-only",
+      },
       integrity: {
         valid: healthy,
         errorCount: errors.length,
@@ -53,12 +61,15 @@ export function GET(): Response {
           alarms: alarms.length,
           unresolvedAlarms: alarms.filter((alarm) => alarm.status !== "resolved").length,
           missions: missions.length,
-          activeMissions: missions.filter((mission) => mission.status !== "completed").length,
+          activeMissions:
+            missions.filter((mission) => mission.status !== "completed").length -
+            (workflowCompleted ? 1 : 0),
           decisions: decisions.length,
           evidence: evidenceItems.length,
           agents: agents.length,
           workOrders: workOrders.length,
-          knowledgeDocuments: knowledgeDocuments.length,
+          knowledgeDocuments:
+            knowledgeDocuments.length + (workflow.snapshot.knowledgeCaseId ? 1 : 0),
           weatherWindows: weatherWindows.length,
           agentEvents: activityEvents.length,
           agentTools: agentToolCatalog.length,
@@ -66,6 +77,7 @@ export function GET(): Response {
           maintenanceCrews: maintenanceCrews.length,
           serviceVessels: serviceVessels.length,
           maintenanceTools: maintenanceTools.length,
+          workflowAuditEvents: workflow.snapshot.auditEvents.length,
         },
         archive: {
           scadaMeasurements: demoDatasetCounts.scadaMeasurements,

@@ -1,7 +1,10 @@
 import { answerKnowledgeQuestion } from "@/lib/knowledge-assistant";
+import { knowledgeDocuments } from "@/lib/knowledge-data";
 import { featuredMission } from "@/lib/operations-data";
+import { overlayWorkflowKnowledge } from "@/lib/server-workflow-overlays";
 
 import { jsonResponse } from "../_shared";
+import { readWorkflowForApi } from "../_workflow";
 
 const SNAPSHOT_AT = "2026-08-13T10:24:00+08:00";
 const allowedFields = new Set(["question", "turbineId", "missionId"]);
@@ -96,7 +99,14 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const answer = answerKnowledgeQuestion(question, { turbineId, missionId });
+  const workflow = await readWorkflowForApi();
+  const documents = overlayWorkflowKnowledge(knowledgeDocuments, workflow.snapshot);
+  const answer = answerKnowledgeQuestion(question, {
+    turbineId,
+    missionId,
+    documents,
+    workflowSnapshot: workflow.snapshot,
+  });
   return jsonResponse({
     ok: true,
     data: { answer },
@@ -104,6 +114,11 @@ export async function POST(request: Request): Promise<Response> {
     meta: baseMeta({
       citationCount: answer.citations.length,
       candidateCount: answer.retrieval.candidateCount,
+      persisted: workflow.persistence === "d1",
+      snapshotAt: workflow.snapshot.updatedAt,
+      workflowPersistence: workflow.persistence,
+      workflowRevision: workflow.snapshot.revision,
+      knowledgeCaseId: workflow.snapshot.knowledgeCaseId,
     }),
   });
 }

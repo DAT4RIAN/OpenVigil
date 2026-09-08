@@ -107,6 +107,7 @@ function csvCell(value: string | number) {
 function WorkOrderDrawer({
   workOrder,
   isWorkflowWorkOrder,
+  workflowWritable,
   onClose,
   onToggleTask,
   onStart,
@@ -115,6 +116,7 @@ function WorkOrderDrawer({
 }: {
   workOrder: WorkOrder;
   isWorkflowWorkOrder: boolean;
+  workflowWritable: boolean;
   onClose: () => void;
   onToggleTask: (taskId: string) => void;
   onStart: () => void;
@@ -211,14 +213,15 @@ function WorkOrderDrawer({
             </span>
           </div>
           <Progress value={(completed / Math.max(1, workOrder.tasks.length)) * 100} tone="info" />
-          {!isWorkflowWorkOrder ? (
+          {!isWorkflowWorkOrder || !workflowWritable ? (
             <div className="ai-generated-note" role="note">
               <ShieldCheck size={15} />
               <span>
-                <strong>只读 Demo 工单</strong>
+                <strong>{isWorkflowWorkOrder ? "D1 暂不可写" : "只读 Demo 工单"}</strong>
                 <small>
-                  当前状态为 {statusLabels[workOrder.status]}；仅 {WORKFLOW_WORK_ORDER_ID} 接入
-                  WT-023 闭环，任务与执行动作已禁用。
+                  {isWorkflowWorkOrder
+                    ? "服务器持久化不可用，任务与执行动作已安全禁用。"
+                    : `当前状态为 ${statusLabels[workOrder.status]}；仅 ${WORKFLOW_WORK_ORDER_ID} 接入 WT-023 闭环，任务与执行动作已禁用。`}
                 </small>
               </span>
               <StatusBadge value="read-only" label="READ ONLY" tone="maintenance" compact />
@@ -230,7 +233,9 @@ function WorkOrderDrawer({
                 <input
                   type="checkbox"
                   checked={task.completed}
-                  disabled={!isWorkflowWorkOrder || workOrder.status !== "in-progress"}
+                  disabled={
+                    !isWorkflowWorkOrder || !workflowWritable || workOrder.status !== "in-progress"
+                  }
                   onChange={() => {
                     if (isWorkflowWorkOrder) onToggleTask(task.id);
                   }}
@@ -305,11 +310,15 @@ function WorkOrderDrawer({
           <Button variant="secondary" disabled title="资源重新指派将在资源中心完成">
             <UserRound size={14} /> 重新指派
           </Button>
-          {!isWorkflowWorkOrder ? (
+          {!isWorkflowWorkOrder || !workflowWritable ? (
             <Button
               variant="primary"
               disabled
-              title={`${workOrder.id} 为只读 Demo 工单，不会修改 WT-023 闭环状态`}
+              title={
+                isWorkflowWorkOrder
+                  ? "D1 持久化当前不可用"
+                  : `${workOrder.id} 为只读 Demo 工单，不会修改 WT-023 闭环状态`
+              }
             >
               <ShieldCheck size={14} /> 只读 · {statusLabels[workOrder.status]}
             </Button>
@@ -832,6 +841,7 @@ export function WorkOrderPage() {
         <WorkOrderDrawer
           workOrder={selected}
           isWorkflowWorkOrder={selected.id === WORKFLOW_WORK_ORDER_ID}
+          workflowWritable={workflow.writable}
           onClose={() => setSelectedId(null)}
           onToggleTask={(taskId) => {
             if (selected.id !== WORKFLOW_WORK_ORDER_ID) return;

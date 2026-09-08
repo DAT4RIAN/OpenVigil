@@ -532,7 +532,13 @@ export const agentExecutionsTable = sqliteTable(
     error: text("error"),
     correlationId: text("correlation_id").notNull(),
   },
-  (table) => [index("agent_executions_mission_time_idx").on(table.missionId, table.startedAt)],
+  (table) => [
+    index("agent_executions_mission_time_idx").on(table.missionId, table.startedAt),
+    index("agent_executions_agent_time_idx").on(table.agentId, table.startedAt),
+    index("agent_executions_status_time_idx").on(table.status, table.startedAt),
+    index("agent_executions_tool_time_idx").on(table.toolName, table.startedAt),
+    uniqueIndex("agent_executions_correlation_uidx").on(table.correlationId),
+  ],
 );
 
 export const activityEventsTable = sqliteTable(
@@ -551,4 +557,134 @@ export const activityEventsTable = sqliteTable(
     correlationId: text("correlation_id").notNull(),
   },
   (table) => [index("activity_mission_time_idx").on(table.missionId, table.timestamp)],
+);
+
+/**
+ * Authoritative server-side state for the WT-023 closed-loop demo. The runtime
+ * store intentionally keeps this workflow separate from the read-only fixture
+ * tables above so it can safely bootstrap on a newly provisioned D1 database.
+ */
+export const workflowInstancesTable = sqliteTable(
+  "workflow_instances",
+  {
+    missionId: text("mission_id").primaryKey(),
+    turbineId: text("turbine_id").notNull().unique(),
+    missionStatus: text("mission_status").notNull(),
+    missionProgressPercent: integer("mission_progress_percent").notNull(),
+    decisionId: text("decision_id").notNull().unique(),
+    decisionStatus: text("decision_status").notNull(),
+    decisionRisk: text("decision_risk").notNull(),
+    approvalRequired: integer("approval_required", { mode: "boolean" }).notNull().default(true),
+    approvalRecord: text("approval_record", { mode: "json" }),
+    workOrderId: text("work_order_id").notNull().unique(),
+    workOrderStatus: text("work_order_status").notNull(),
+    turbineHealthScore: integer("turbine_health_score").notNull(),
+    mainBearingHealthScore: integer("main_bearing_health_score").notNull(),
+    knowledgeCaseId: text("knowledge_case_id"),
+    revision: integer("revision").notNull().default(0),
+    ...timestamps,
+  },
+  (table) => [
+    index("workflow_instances_turbine_idx").on(table.turbineId),
+    check(
+      "workflow_instances_mission_status_chk",
+      sql`${table.missionStatus} in ('under-review', 'approved', 'decision-pending', 'diagnosed', 'executing', 'completed')`,
+    ),
+    check(
+      "workflow_instances_decision_status_chk",
+      sql`${table.decisionStatus} in ('under-review', 'approved', 'rejected', 'revision-requested')`,
+    ),
+    check("workflow_instances_decision_risk_chk", sql`${table.decisionRisk} = 'high'`),
+    check(
+      "workflow_instances_work_order_status_chk",
+      sql`${table.workOrderStatus} in ('draft', 'scheduled', 'in-progress', 'completed')`,
+    ),
+    check(
+      "workflow_instances_mission_progress_chk",
+      sql`${table.missionProgressPercent} between 0 and 100`,
+    ),
+    check(
+      "workflow_instances_turbine_health_chk",
+      sql`${table.turbineHealthScore} between 0 and 100`,
+    ),
+    check(
+      "workflow_instances_main_bearing_health_chk",
+      sql`${table.mainBearingHealthScore} between 0 and 100`,
+    ),
+    check("workflow_instances_revision_nonnegative_chk", sql`${table.revision} >= 0`),
+  ],
+);
+
+export const workflowTasksTable = sqliteTable(
+  "workflow_tasks",
+  {
+    id: text("id").primaryKey(),
+    missionId: text("mission_id")
+      .notNull()
+      .references(() => workflowInstancesTable.missionId),
+    sequence: integer("sequence").notNull(),
+    title: text("title").notNull(),
+    completed: integer("completed", { mode: "boolean" }).notNull().default(false),
+    completedAt: text("completed_at"),
+    completedBy: text("completed_by"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("workflow_tasks_mission_sequence_uidx").on(table.missionId, table.sequence),
+    index("workflow_tasks_mission_completed_idx").on(table.missionId, table.completed),
+    check("workflow_tasks_sequence_positive_chk", sql`${table.sequence} > 0`),
+  ],
+);
+
+export const workflowAuditEventsTable = sqliteTable(
+  "workflow_audit_events",
+  {
+    id: text("id").primaryKey(),
+    missionId: text("mission_id")
+      .notNull()
+      .references(() => workflowInstancesTable.missionId),
+    revision: integer("revision").notNull(),
+    eventSequence: integer("event_sequence").notNull(),
+    action: text("action").notNull(),
+    kind: text("kind").notNull(),
+    actorId: text("actor_id").notNull(),
+    actorName: text("actor_name").notNull(),
+    actorRole: text("actor_role"),
+    correlationId: text("correlation_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    fromState: text("from_state", { mode: "json" }).notNull(),
+    toState: text("to_state", { mode: "json" }).notNull(),
+    detail: text("detail").notNull(),
+    timestamp: text("timestamp").notNull(),
+  },
+  (table) => [
+    uniqueIndex("workflow_audit_mission_revision_sequence_uidx").on(
+      table.missionId,
+      table.revision,
+      table.eventSequence,
+    ),
+    index("workflow_audit_mission_time_idx").on(table.missionId, table.timestamp),
+    index("workflow_audit_correlation_idx").on(table.correlationId),
+    check("workflow_audit_revision_positive_chk", sql`${table.revision} > 0`),
+    check("workflow_audit_event_sequence_positive_chk", sql`${table.eventSequence} > 0`),
+    check(
+      "workflow_audit_kind_chk",
+      sql`${table.kind} in ('approval', 'execution', 'verification', 'knowledge', 'reset')`,
+    ),
+  ],
+);
+
+export const workflowIdempotencyTable = sqliteTable(
+  "workflow_idempotency",
+  {
+    idempotencyKey: text("idempotency_key").primaryKey(),
+    missionId: text("mission_id")
+      .notNull()
+      .references(() => workflowInstancesTable.missionId),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    responseSnapshot: text("response_snapshot", { mode: "json" }).notNull(),
+    correlationId: text("correlation_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [index("workflow_idempotency_mission_time_idx").on(table.missionId, table.createdAt)],
 );

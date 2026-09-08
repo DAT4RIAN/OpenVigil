@@ -1,8 +1,11 @@
 import { jsonResponse } from "@/app/api/_shared";
+import { readWorkflowForApi } from "@/app/api/_workflow";
 
 import {
   predictiveAssessments,
   predictiveModelMeta,
+  matrixRiskFor,
+  probabilityBandFor,
   predictiveRiskLevels,
   predictiveTrends,
   type PredictiveAssessment,
@@ -51,7 +54,7 @@ const sortAssessments = (
     );
   });
 
-export function GET(request: Request): Response {
+export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const turbineId = url.searchParams.get("turbineId")?.trim().toUpperCase() ?? null;
   const risk = url.searchParams.get("risk")?.trim().toLowerCase() ?? null;
@@ -91,7 +94,37 @@ export function GET(request: Request): Response {
     );
   }
 
-  const filtered = predictiveAssessments.filter(
+  const workflow = await readWorkflowForApi();
+  const currentAssessments = predictiveAssessments.map((assessment) => {
+    if (assessment.turbineId !== workflow.snapshot.turbineId) return assessment;
+    const closed = workflow.snapshot.workOrder.status === "completed";
+    const failureProbability30d = closed ? 12 : assessment.failureProbability30d;
+    const probabilityBand = probabilityBandFor(failureProbability30d);
+    const consequenceBand = closed ? 3 : assessment.consequenceBand;
+    const riskScore = probabilityBand * consequenceBand;
+    return {
+      ...assessment,
+      healthScore: workflow.snapshot.health.turbineScore,
+      componentHealth: workflow.snapshot.health.mainBearingScore,
+      trend: closed ? ("improving" as const) : assessment.trend,
+      failureProbability30d,
+      remainingUsefulLifeDays: closed ? 126 : assessment.remainingUsefulLifeDays,
+      anomalyScore: closed ? 0.42 : assessment.anomalyScore,
+      primaryFinding: closed ? "主轴承检查与复测已完成，健康趋势恢复" : assessment.primaryFinding,
+      probabilityBand,
+      consequenceBand,
+      matrixRisk: matrixRiskFor(probabilityBand, consequenceBand),
+      riskScore,
+      priorityScore: Number(
+        (
+          failureProbability30d * consequenceBand +
+          (closed ? 0.42 : assessment.anomalyScore) * 10
+        ).toFixed(2),
+      ),
+      assessedAt: workflow.snapshot.updatedAt,
+    };
+  });
+  const filtered = currentAssessments.filter(
     (assessment) =>
       (!turbineId || assessment.turbineId === turbineId) &&
       (!risk || assessment.matrixRisk === risk) &&
@@ -108,13 +141,16 @@ export function GET(request: Request): Response {
     data,
     meta: {
       count: data.length,
-      total: predictiveAssessments.length,
+      total: currentAssessments.length,
       filteredTotal: filtered.length,
       offset,
       limit,
       filters: { turbineId, risk, trend, query: query || null },
       sort,
       model: predictiveModelMeta,
+      snapshotAt: workflow.snapshot.updatedAt,
+      workflowPersistence: workflow.persistence,
+      workflowRevision: workflow.snapshot.revision,
     },
   });
 }

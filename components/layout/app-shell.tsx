@@ -498,9 +498,44 @@ export function AppShell({
             >
               <Menu size={19} />
             </Button>
-            <div className="live-context">
+            <div className="live-context" aria-live="polite">
               <StatusBadge value="running" label="LIVE" tone="success" pulse compact />
               <span>数据更新于 12 秒前</span>
+              <span
+                title={
+                  workflow.lastSyncError ??
+                  `WT-023 server workflow revision ${workflow.serverRevision}`
+                }
+              >
+                <StatusBadge
+                  value={workflow.syncStatus}
+                  label={
+                    workflow.syncStatus === "loading"
+                      ? "SYNC"
+                      : workflow.syncStatus === "saving"
+                        ? "SAVING"
+                        : workflow.syncStatus === "error"
+                          ? "OFFLINE"
+                          : !workflow.writable
+                            ? "READ ONLY"
+                            : workflow.persistence === "d1"
+                              ? `D1 · R${workflow.serverRevision}`
+                              : "MEMORY"
+                  }
+                  tone={
+                    workflow.syncStatus === "error"
+                      ? "critical"
+                      : workflow.syncStatus === "loading" || workflow.syncStatus === "saving"
+                        ? "info"
+                        : !workflow.writable
+                          ? "warning"
+                          : workflow.persistence === "d1"
+                            ? "success"
+                            : "warning"
+                  }
+                  compact
+                />
+              </span>
             </div>
           </div>
           <div className="topbar__right">

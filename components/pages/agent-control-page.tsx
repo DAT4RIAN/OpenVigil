@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowRight,
@@ -77,14 +77,37 @@ type ToolTestResponse = {
   error: null;
 };
 
-function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+type AgentLedgerResponse = {
+  ok: true;
+  data: {
+    catalog: readonly unknown[];
+    executionHistory: readonly AgentToolExecution[];
+  };
+  error: null;
+  meta: {
+    persistence: "d1" | "runtime-memory";
+    persisted: boolean;
+    historyCount: number;
+    totalHistoryCount: number;
+  };
+};
+
+function AgentDrawer({
+  agent,
+  onClose,
+  executions,
+}: {
+  agent: Agent;
+  onClose: () => void;
+  executions: readonly AgentToolExecution[];
+}) {
   const layer = layerMeta[agent.layer];
   const LayerIcon = layer.icon;
   const [configOpen, setConfigOpen] = useState(false);
   const knowledgeSources = knowledgeDocuments.filter((document) =>
     agent.knowledgeSourceIds.includes(document.id),
   );
-  const executionHistory = activityEvents
+  const publicActivityHistory = activityEvents
     .filter((event) => event.agentId === agent.id)
     .slice(-5)
     .reverse();
@@ -93,6 +116,9 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
       apiPost<ToolTestResponse>("/api/agent-tools", {
         tool: "get_turbine_status",
         args: { turbineId: "WT-023" },
+        agentId: agent.id,
+        missionId: agent.currentMissionId ?? undefined,
+        idempotencyKey: `agent-control-${agent.id}-${Date.now()}`,
       }),
   });
   return (
@@ -236,8 +262,37 @@ function AgentDrawer({ agent, onClose }: { agent: Agent; onClose: () => void }) 
         <section className="drawer-section" id={`agent-history-${agent.id}`}>
           <h3>Execution History</h3>
           <div className="agent-execution-history">
-            {executionHistory.length ? (
-              executionHistory.map((event) => (
+            {executions.length ? (
+              executions
+                .slice(-5)
+                .reverse()
+                .map((execution) => (
+                  <div key={execution.executionId}>
+                    <span className="agent-execution-history__icon">
+                      {execution.status === "succeeded" ? (
+                        <CheckCircle2 size={13} />
+                      ) : (
+                        <FileClock size={13} />
+                      )}
+                    </span>
+                    <span>
+                      <strong>{execution.request.tool}</strong>
+                      <small>
+                        {execution.missionId ?? "No mission"} · {execution.latencyMs} ms ·{" "}
+                        {execution.tokenEstimate.total} tokens
+                      </small>
+                    </span>
+                    <time>
+                      {new Date(execution.completedAt).toLocaleTimeString("zh-CN", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: false,
+                      })}
+                    </time>
+                  </div>
+                ))
+            ) : publicActivityHistory.length ? (
+              publicActivityHistory.map((event) => (
                 <div key={event.id}>
                   <span className="agent-execution-history__icon">
                     {event.outcome === "success" ? (
@@ -319,6 +374,18 @@ export function AgentControlPage() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Agent | null>(null);
   const agentStream = useRealtimeChannel("agent-events");
+  const ledgerQuery = useQuery({
+    queryKey: ["agent-tool-ledger"],
+    queryFn: async () => {
+      const response = await fetch("/api/agent-tools?limit=100", {
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(`Agent ledger returned ${response.status}`);
+      return (await response.json()) as AgentLedgerResponse;
+    },
+    refetchInterval: 15_000,
+  });
+  const executions = ledgerQuery.data?.data.executionHistory ?? [];
   const active = agents.filter((agent) =>
     ["working", "thinking", "reviewing"].includes(agent.status),
   ).length;
@@ -342,6 +409,19 @@ export function AgentControlPage() {
     agents.reduce((sum, agent) => sum + agent.metrics.averageLatencySeconds, 0) / agents.length;
   const totalTokens = agents.reduce((sum, agent) => sum + agent.metrics.tokenUsage24h, 0);
   const missionsCompleted = agents.reduce((sum, agent) => sum + agent.metrics.missionsCompleted, 0);
+  const durableRequests = ledgerQuery.data?.meta.totalHistoryCount ?? 0;
+  const durableTools = executions.length;
+  const durableSuccess = durableTools
+    ? (executions.filter((execution) => execution.status === "succeeded").length / durableTools) *
+      100
+    : null;
+  const durableLatency = durableTools
+    ? executions.reduce((sum, execution) => sum + execution.latencyMs, 0) / durableTools / 1_000
+    : null;
+  const durableTokens = executions.reduce(
+    (sum, execution) => sum + execution.tokenEstimate.total,
+    0,
+  );
   const liveAgentEvent =
     agentStream.frame?.event === "agent-activity"
       ? {
@@ -368,7 +448,9 @@ export function AgentControlPage() {
               tone="info"
               pulse={agentStream.status === "connected"}
             />
-            <span className="page-meta-text">15 / 15 Online · Orchestrator healthy</span>
+            <span className="page-meta-text">
+              15 / 15 Online · Ledger {ledgerQuery.data?.meta.persistence ?? "loading"}
+            </span>
           </>
         }
         actions={
@@ -407,7 +489,7 @@ export function AgentControlPage() {
           </span>
           <span>
             <small>REQUESTS · 24H</small>
-            <strong>{totalRequests.toLocaleString("zh-CN")}</strong>
+            <strong>{(durableRequests || totalRequests).toLocaleString("zh-CN")}</strong>
           </span>
           <em>+12.4%</em>
         </div>
@@ -417,7 +499,7 @@ export function AgentControlPage() {
           </span>
           <span>
             <small>TOOL CALLS</small>
-            <strong>{totalTools.toLocaleString("zh-CN")}</strong>
+            <strong>{(durableTools || totalTools).toLocaleString("zh-CN")}</strong>
           </span>
           <em>3.1 / request</em>
         </div>
@@ -428,7 +510,8 @@ export function AgentControlPage() {
           <span>
             <small>SUCCESS / FAILURE</small>
             <strong>
-              {avgSuccess.toFixed(1)} / {(100 - avgSuccess).toFixed(1)}%
+              {(durableSuccess ?? avgSuccess).toFixed(1)} /{" "}
+              {(100 - (durableSuccess ?? avgSuccess)).toFixed(1)}%
             </strong>
           </span>
           <em>目标 ≥ 95%</em>
@@ -439,7 +522,7 @@ export function AgentControlPage() {
           </span>
           <span>
             <small>AVG LATENCY</small>
-            <strong>{avgLatency.toFixed(1)}s</strong>
+            <strong>{(durableLatency ?? avgLatency).toFixed(1)}s</strong>
           </span>
           <em>-0.8s WoW</em>
         </div>
@@ -449,7 +532,11 @@ export function AgentControlPage() {
           </span>
           <span>
             <small>TOKEN USAGE · 24H</small>
-            <strong>{(totalTokens / 1_000_000).toFixed(2)}M</strong>
+            <strong>
+              {durableTokens
+                ? durableTokens.toLocaleString("zh-CN")
+                : `${(totalTokens / 1_000_000).toFixed(2)}M`}
+            </strong>
           </span>
           <em>预算 63%</em>
         </div>
@@ -637,7 +724,13 @@ export function AgentControlPage() {
           );
         })}
       </section>
-      {selected ? <AgentDrawer agent={selected} onClose={() => setSelected(null)} /> : null}
+      {selected ? (
+        <AgentDrawer
+          agent={selected}
+          onClose={() => setSelected(null)}
+          executions={executions.filter((execution) => execution.agentId === selected.id)}
+        />
+      ) : null}
     </AppShell>
   );
 }

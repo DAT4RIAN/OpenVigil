@@ -453,7 +453,7 @@ export function DecisionCenterPage() {
                 <span>
                   <strong>只读决策快照 · {currentDecision.status.replaceAll("-", " ")}</strong>
                   <small>
-                    当前演示仅允许 {featuredDecision.id} 写入浏览器审计状态；该决策不会误改 WT-023
+                    当前演示仅允许 {featuredDecision.id} 写入服务器审计状态；该决策不会误改 WT-023
                     闭环。
                   </small>
                 </span>
@@ -464,27 +464,47 @@ export function DecisionCenterPage() {
                   <ShieldCheck size={15} />
                   <span>
                     <strong>审批策略 HITL-HIGH-02</strong>
-                    <small>高风险检修方案需要值班工程师批准</small>
+                    <small>
+                      {workflow.writable
+                        ? "高风险检修方案需要值班工程师批准，结果持久化到 D1"
+                        : "D1 当前不可写；审批动作已切换为只读"}
+                    </small>
                   </span>
                 </div>
                 <label className="approval-field">
                   <span>审批理由</span>
-                  <textarea value={comment} onChange={(event) => setComment(event.target.value)} />
+                  <textarea
+                    value={comment}
+                    onChange={(event) => setComment(event.target.value)}
+                    disabled={!workflow.writable}
+                  />
                 </label>
                 <div className="decision-approval__actions">
-                  <Button variant="secondary" onClick={() => submitApproval("reject")}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => submitApproval("reject")}
+                    disabled={!workflow.writable}
+                  >
                     <X size={14} /> Reject
                   </Button>
-                  <Button variant="secondary" onClick={() => submitApproval("request-revision")}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => submitApproval("request-revision")}
+                    disabled={!workflow.writable}
+                  >
                     <RefreshCcw size={14} /> Request Revision
                   </Button>
-                  <Button variant="secondary" onClick={() => submitApproval("escalate")}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => submitApproval("escalate")}
+                    disabled={!workflow.writable}
+                  >
                     <ArrowUpRight size={14} /> Escalate
                   </Button>
                   <Button
                     variant="primary"
                     onClick={() => submitApproval("approve")}
-                    disabled={!comment.trim()}
+                    disabled={!comment.trim() || !workflow.writable}
                   >
                     <UserCheck size={14} /> Approve Plan
                   </Button>
@@ -525,6 +545,7 @@ export function DecisionCenterPage() {
                 </small>
                 <Button
                   variant="secondary"
+                  disabled={!workflow.writable}
                   onClick={() =>
                     workflow.dispatch({
                       type: "replay-approval",

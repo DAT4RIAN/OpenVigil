@@ -6,8 +6,10 @@ import {
   windFarm,
   workOrders,
 } from "@/lib";
+import { overlayWorkflowTurbine } from "@/lib/server-workflow-overlays";
 
 import { jsonResponse, turbineNotFoundResponse } from "../../_shared";
+import { readWorkflowForApi } from "../../_workflow";
 
 interface TurbineRouteContext {
   readonly params: Promise<{ readonly id: string }>;
@@ -18,6 +20,8 @@ export async function GET(_request: Request, context: TurbineRouteContext): Prom
   const turbine = getTurbine(id);
 
   if (!turbine) return turbineNotFoundResponse(id);
+  const workflow = await readWorkflowForApi();
+  const currentTurbine = overlayWorkflowTurbine([turbine], workflow.snapshot)[0] ?? turbine;
 
   const alarmIds = getAlarmsForTurbine(turbine.id).map((alarm) => alarm.id);
   const missionIds = missions
@@ -31,7 +35,7 @@ export async function GET(_request: Request, context: TurbineRouteContext): Prom
     .map((subsystem) => subsystem.id);
 
   return jsonResponse({
-    data: turbine,
+    data: currentTurbine,
     relationships: {
       alarmIds,
       missionIds,
@@ -39,7 +43,12 @@ export async function GET(_request: Request, context: TurbineRouteContext): Prom
       subsystemIds,
     },
     meta: {
-      snapshotAt: windFarm.lastUpdatedAt,
+      snapshotAt:
+        currentTurbine.id === workflow.snapshot.turbineId
+          ? workflow.snapshot.updatedAt
+          : windFarm.lastUpdatedAt,
+      workflowPersistence: workflow.persistence,
+      workflowRevision: workflow.snapshot.revision,
     },
   });
 }

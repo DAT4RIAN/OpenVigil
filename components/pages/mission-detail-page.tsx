@@ -759,7 +759,11 @@ function FeaturedMissionDetailPage() {
                     <ShieldCheck size={15} />
                     <p>
                       <strong>安全与工程审核已通过</strong>
-                      <small>请确认风险、资源和天气窗口后执行。</small>
+                      <small>
+                        {workflow.writable
+                          ? "请确认风险、资源和天气窗口后执行；审批将写入 D1。"
+                          : "D1 当前不可写；审批动作已切换为只读。"}
+                      </small>
                     </p>
                   </div>
                 </div>
@@ -769,21 +773,34 @@ function FeaturedMissionDetailPage() {
                   aria-label="审批意见"
                   value={comment}
                   onChange={(event) => setComment(event.target.value)}
+                  disabled={!workflow.writable}
                 />
                 <div className="approval-actions">
-                  <Button variant="secondary" onClick={() => submitApproval("reject")}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => submitApproval("reject")}
+                    disabled={!workflow.writable}
+                  >
                     <X size={14} /> Reject
                   </Button>
-                  <Button variant="secondary" onClick={() => submitApproval("request-revision")}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => submitApproval("request-revision")}
+                    disabled={!workflow.writable}
+                  >
                     <RefreshCcw size={14} /> Request Revision
                   </Button>
-                  <Button variant="secondary" onClick={() => submitApproval("escalate")}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => submitApproval("escalate")}
+                    disabled={!workflow.writable}
+                  >
                     <ArrowUpRight size={14} /> Escalate
                   </Button>
                   <Button
                     variant="primary"
                     onClick={() => submitApproval("approve")}
-                    disabled={!comment.trim()}
+                    disabled={!comment.trim() || !workflow.writable}
                   >
                     <Check size={14} /> Approve
                   </Button>
@@ -822,7 +839,7 @@ function FeaturedMissionDetailPage() {
                     ? new Date(workflow.approval.timestamp).toLocaleString("zh-CN")
                     : "—"}
                 </small>
-                <Button variant="secondary" onClick={replayApproval}>
+                <Button variant="secondary" onClick={replayApproval} disabled={!workflow.writable}>
                   重放审批环节
                 </Button>
               </div>
