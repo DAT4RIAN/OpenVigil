@@ -182,7 +182,7 @@ test("deterministic Agent Tool API validates, executes, links, and records every
     "all seventeen tools execute against fixtures with complete observability records",
     async () => {
       for (const [tool, args] of calls) {
-        const response = await jsonRequest("POST", { tool, args });
+        const response = await jsonRequest("POST", { tool, args, persist: false });
         assert.equal(response.ok, true, `${tool} should succeed`);
         assert.equal(response.error, null);
         assert.equal(response.meta.deterministic, true);
@@ -190,6 +190,10 @@ test("deterministic Agent Tool API validates, executes, links, and records every
 
         const execution = response.data.execution;
         assert.equal(execution.request.tool, tool);
+        assert.match(execution.executionId, /^AGEXEC-[0-9A-F]{64}$/);
+        assert.match(execution.agentId, /^agent-/);
+        assert.equal(typeof execution.idempotencyKey, "string");
+        assert.match(execution.requestFingerprint, /^[0-9a-f]{64}$/);
         assert.equal(execution.status, "succeeded");
         assert.equal(execution.result.ok, true);
         assert.equal(
@@ -199,7 +203,7 @@ test("deterministic Agent Tool API validates, executes, links, and records every
         assert.equal(execution.deterministic, true);
         assert.match(
           execution.correlationId,
-          new RegExp(`^WOPS-${tool.toUpperCase()}-[0-9a-f]{8}-\\d{4}$`),
+          new RegExp(`^WOPS-${tool.toUpperCase()}-AGEXEC-[0-9A-F]{64}$`),
         );
         assert.match(execution.startedAt, /^2026-08-13T/);
         assert.match(execution.completedAt, /^2026-08-13T/);
@@ -312,6 +316,7 @@ test("deterministic Agent Tool API validates, executes, links, and records every
       const unchanged = await jsonRequest("POST", {
         tool: "query_work_orders",
         args: { workOrderId: "WO-20260823-017" },
+        persist: false,
       });
       const source = unchanged.data.execution.result.data.workOrders[0];
       assert.equal(source.status, update.before.status);
@@ -329,6 +334,7 @@ test("deterministic Agent Tool API validates, executes, links, and records every
             deadline: "2026-08-14T17:00:00+08:00",
             dryRun: true,
           },
+          persist: false,
         },
         422,
       );
