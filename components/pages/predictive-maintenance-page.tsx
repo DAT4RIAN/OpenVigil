@@ -115,6 +115,58 @@ function withWorkflowState(
   };
 }
 
+function workflowRecommendation(workflow: DemoWorkflowState): {
+  readonly title: string;
+  readonly detail: string;
+} {
+  if (workflow.missionStatus === "completed" || workflow.workOrderStatus === "completed") {
+    return {
+      title: "维护闭环已验证",
+      detail: `${workflow.knowledgeCaseId ?? "WT-023 闭环案例"} 已沉淀，风险由 HIGH 降至 MEDIUM。`,
+    };
+  }
+
+  if (workflow.workOrderStatus === "in-progress") {
+    return {
+      title: "现场工单执行中",
+      detail: `WO-20260823-017 已完成 ${workflow.completedTaskIds.length}/5 项任务，等待复测与结果验证。`,
+    };
+  }
+
+  if (workflow.workOrderStatus === "scheduled") {
+    return {
+      title: "方案 B 已批准并排程",
+      detail: "人工审批已记录；WO-20260823-017 等待现场班组启动。",
+    };
+  }
+
+  if (workflow.decisionStatus === "rejected" || workflow.missionStatus === "decision-pending") {
+    return {
+      title: "方案 B 已被拒绝",
+      detail: "高风险执行门禁保持锁定；等待 Agent 生成新的处置方案。",
+    };
+  }
+
+  if (workflow.decisionStatus === "revision-requested" || workflow.missionStatus === "diagnosed") {
+    return {
+      title: "方案 B 待修订",
+      detail: "审批人已请求补充证据或调整方案；WO-20260823-017 保持草稿。",
+    };
+  }
+
+  if (workflow.decisionStatus === "approved") {
+    return {
+      title: "方案 B 已获人工批准",
+      detail: "审批记录已写入；WO-20260823-017 等待排程同步。",
+    };
+  }
+
+  return {
+    title: "方案 B 等待人工审批",
+    detail: "高风险执行门禁仍锁定；WO-20260823-017 保持草稿，尚未排程。",
+  };
+}
+
 function createTrendData(
   assessment: PredictiveAssessment,
   window: TimeWindow,
@@ -247,6 +299,13 @@ export function PredictiveMaintenancePage() {
   }, [assessmentsQuery.data.data, query, riskFilter, trendFilter, workflow]);
   const selected = fleet.find((assessment) => assessment.turbineId === selectedId) ?? fleet[0]!;
   const closedLoop = selected.turbineId === "WT-023" && workflow.workOrderStatus === "completed";
+  const recommendation =
+    selected.turbineId === "WT-023"
+      ? workflowRecommendation(workflow)
+      : {
+          title: "按风险优先级安排维护",
+          detail: `${selected.component} 当前为 ${riskLabels[selected.matrixRisk]}风险，建议结合 RUL 与资源窗口持续评估。`,
+        };
   const trendData = useMemo(
     () => createTrendData(selected, timeWindow, closedLoop),
     [closedLoop, selected, timeWindow],
@@ -383,12 +442,8 @@ export function PredictiveMaintenancePage() {
           <div className={styles.storyStatus} data-complete={closedLoop || undefined}>
             {closedLoop ? <ShieldCheck size={17} /> : <AlertTriangle size={17} />}
             <div>
-              <strong>{closedLoop ? "维护闭环已验证" : "72 小时内建议检查"}</strong>
-              <p>
-                {closedLoop
-                  ? `${workflow.knowledgeCaseId} 已沉淀，风险由 HIGH 降至 MEDIUM。`
-                  : "方案 B 已批准；等待 WO-20260823-017 现场执行与结果验证。"}
-              </p>
+              <strong>{recommendation.title}</strong>
+              <p>{recommendation.detail}</p>
             </div>
           </div>
         </article>

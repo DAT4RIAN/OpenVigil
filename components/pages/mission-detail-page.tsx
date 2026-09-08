@@ -38,6 +38,8 @@ import {
   evidenceItems,
   featuredDecision,
   featuredMission,
+  getCurrentWorkflowAuditCycle,
+  getFeaturedMissionNarrative,
   getMission,
   getTurbine,
   turbine023,
@@ -307,7 +309,15 @@ function FeaturedMissionDetailPage() {
   const [localComments, setLocalComments] = useState<LocalComment[]>([]);
   const workflow = useDemoWorkflow();
   const approval = workflow.approval?.action ?? "pending";
-  const relatedEvents = activityEvents.filter((event) => event.missionId === featuredMission.id);
+  const featuredNarrative = getFeaturedMissionNarrative(workflow);
+  const currentAuditTrail = getCurrentWorkflowAuditCycle(workflow.auditTrail);
+  const relatedEvents = activityEvents.filter(
+    (event) =>
+      event.missionId === featuredMission.id &&
+      event.kind !== "approval" &&
+      event.kind !== "work-order" &&
+      event.kind !== "execution",
+  );
   const relatedEvidence = evidenceItems.filter((item) => item.missionId === featuredMission.id);
   const missionAgents = agents.filter((agent) => featuredMission.agentIds.includes(agent.id));
   const recommended =
@@ -331,12 +341,27 @@ function FeaturedMissionDetailPage() {
   function exportMissionLog() {
     downloadMissionJson(`${featuredMission.id}-mission-log.json`, {
       schemaVersion: "windops.mission-log.v1",
-      mission: featuredMission,
+      mission: {
+        ...featuredMission,
+        status: workflow.missionStatus,
+        progressPercent: workflow.missionProgress,
+        summary: featuredNarrative.summary,
+        nextAction: featuredNarrative.nextAction,
+      },
       turbine: turbine023,
       participatingAgents: missionAgents,
       evidence: relatedEvidence,
       decision: featuredDecision,
-      workOrder: workOrder ?? null,
+      workOrder: workOrder
+        ? {
+            ...workOrder,
+            status: workflow.workOrderStatus,
+            tasks: workOrder.tasks.map((task) => ({
+              ...task,
+              completed: workflow.completedTaskIds.includes(task.id),
+            })),
+          }
+        : null,
       activity: relatedEvents,
       workflow: {
         missionStatus: workflow.missionStatus,
@@ -344,7 +369,7 @@ function FeaturedMissionDetailPage() {
         decisionStatus: workflow.decisionStatus,
         workOrderStatus: workflow.workOrderStatus,
         approval: workflow.approval,
-        auditTrail: workflow.auditTrail,
+        auditTrail: currentAuditTrail,
       },
       sessionComments: {
         persistence: "page-session-only",
@@ -399,7 +424,7 @@ function FeaturedMissionDetailPage() {
             />
             <StatusBadge value={featuredMission.severity} label="HIGH SEVERITY" tone="critical" />
             <span className="page-meta-text">
-              审计事件 {workflow.auditTrail.length} 条 · 状态跨页面同步
+              当前周期审计事件 {currentAuditTrail.length} 条 · 完整历史保留于 D1
             </span>
           </>
         }
@@ -466,7 +491,7 @@ function FeaturedMissionDetailPage() {
               </span>
               <div>
                 <span className="mono">{turbine023.id} · MAIN BEARING</span>
-                <p>{featuredMission.summary}</p>
+                <p>{featuredNarrative.summary}</p>
               </div>
             </div>
             <div className="mission-overview-facts">
@@ -492,15 +517,7 @@ function FeaturedMissionDetailPage() {
             </div>
             <div className="mission-next-action">
               <small>NEXT ACTION</small>
-              <strong>
-                {workflow.missionStatus === "completed"
-                  ? "闭环验证完成，案例已沉淀"
-                  : workflow.workOrderStatus === "in-progress"
-                    ? "完成现场任务并提交复测结果"
-                    : workflow.workOrderStatus === "scheduled"
-                      ? "启动 WO-20260823-017"
-                      : featuredMission.nextAction}
-              </strong>
+              <strong>{featuredNarrative.nextAction}</strong>
             </div>
           </Card>
 
@@ -631,7 +648,7 @@ function FeaturedMissionDetailPage() {
         <MissionActivityTimeline
           events={relatedEvents}
           agents={agents}
-          auditTrail={workflow.auditTrail}
+          auditTrail={currentAuditTrail}
           missionStatus={workflow.missionStatus}
           description="按时间记录 Tool、Evidence 与状态转换"
           isCommenting={isCommenting}
@@ -821,7 +838,11 @@ function FeaturedMissionDetailPage() {
                 </span>
                 <h3>
                   {approval === "approve"
-                    ? "方案已批准并进入执行"
+                    ? workflow.workOrderStatus === "in-progress"
+                      ? "方案已批准并进入执行"
+                      : workflow.workOrderStatus === "completed"
+                        ? "方案已批准并完成闭环"
+                        : "方案已批准"
                     : approval === "request-revision"
                       ? "已请求修订"
                       : approval === "escalate"
@@ -830,7 +851,13 @@ function FeaturedMissionDetailPage() {
                 </h3>
                 <p>
                   {approval === "approve"
-                    ? "审批门禁已解除；WO-20260823-017 已排程，可进入现场执行。"
+                    ? workflow.workOrderStatus === "scheduled"
+                      ? "审批门禁已解除；WO-20260823-017 已排程，可进入现场执行。"
+                      : workflow.workOrderStatus === "in-progress"
+                        ? "审批门禁已解除；WO-20260823-017 正在现场执行。"
+                        : workflow.workOrderStatus === "completed"
+                          ? "WO-20260823-017 已完成，复测与知识沉淀均已记录。"
+                          : "审批记录已写入，等待工单状态同步。"
                     : workflow.approval?.comment}
                 </p>
                 <small>

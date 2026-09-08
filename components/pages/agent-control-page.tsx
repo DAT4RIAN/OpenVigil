@@ -30,11 +30,19 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Avatar, Button, KeyValue } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
-import { activityEvents, agents, knowledgeDocuments } from "@/lib";
+import {
+  activityEvents,
+  agents,
+  featuredMission,
+  getCurrentWorkflowAuditCycle,
+  knowledgeDocuments,
+} from "@/lib";
 import { apiPost } from "@/lib/api-client";
 import type { AgentToolExecution } from "@/lib/agent-tool-runtime";
-import type { Agent, AgentLayer, AgentStatus } from "@/lib/types";
+import type { DemoWorkflowEvent, DemoWorkflowState } from "@/lib/demo-workflow";
+import type { ActivityEvent, Agent, AgentLayer, AgentStatus } from "@/lib/types";
 import { useRealtimeChannel } from "@/lib/use-realtime-channel";
+import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
 
 const layerMeta: Record<
@@ -92,14 +100,109 @@ type AgentLedgerResponse = {
   };
 };
 
+const workflowActivityKinds: Record<DemoWorkflowEvent["kind"], ActivityEvent["kind"]> = {
+  replay: "system",
+  approval: "approval",
+  execution: "execution",
+  verification: "review",
+  knowledge: "retrieval",
+};
+
+const postHitlActivityKinds = new Set<ActivityEvent["kind"]>([
+  "approval",
+  "work-order",
+  "execution",
+]);
+
+function isFeaturedPostHitlActivity(missionId: string, kind: string): boolean {
+  return (
+    missionId === featuredMission.id && postHitlActivityKinds.has(kind as ActivityEvent["kind"])
+  );
+}
+
+function currentWorkflowActivity(events: readonly DemoWorkflowEvent[]): ActivityEvent[] {
+  return getCurrentWorkflowAuditCycle(events).map((event) => ({
+    id: event.id,
+    missionId: featuredMission.id,
+    timestamp: event.timestamp,
+    agentId: event.kind === "knowledge" ? "agent-knowledge" : null,
+    actorLabel: event.actor,
+    kind: workflowActivityKinds[event.kind],
+    title: event.title,
+    detail: event.detail,
+    evidenceIds: [],
+    outcome:
+      event.kind === "replay"
+        ? ("attention" as const)
+        : event.kind === "execution"
+          ? ("in-progress" as const)
+          : ("success" as const),
+  }));
+}
+
+function workflowAwareTask(
+  agent: Agent,
+  workflow: Pick<DemoWorkflowState, "approval" | "decisionStatus" | "workOrderStatus">,
+): string | null {
+  if (agent.currentMissionId !== featuredMission.id) return agent.currentTask;
+
+  if (workflow.decisionStatus === "under-review") {
+    const gate = workflow.approval?.action === "escalate" ? "升级审批" : "人工审批";
+    const pendingTasks: Readonly<Record<string, string>> = {
+      "agent-maintenance-strategy": `等待 WT-023 ${gate}结论`,
+      "agent-work-order": `WT-023 等待${gate}，工单保持草案`,
+      "agent-crew-scheduling": `WT-023 等待${gate}，海维二组尚未排班`,
+      "agent-vessel-scheduling": `WT-023 等待${gate}，CTV-03 航次尚未确认`,
+    };
+    return pendingTasks[agent.id] ?? agent.currentTask;
+  }
+
+  if (["rejected", "revision-requested"].includes(workflow.decisionStatus)) {
+    const reason = workflow.decisionStatus === "rejected" ? "方案已拒绝" : "方案待修订";
+    const pausedTasks: Readonly<Record<string, string>> = {
+      "agent-maintenance-strategy": `WT-023 ${reason}，等待新方案`,
+      "agent-work-order": `WT-023 ${reason}，工单保持草案`,
+      "agent-crew-scheduling": `WT-023 ${reason}，班组排班暂停`,
+      "agent-vessel-scheduling": `WT-023 ${reason}，航次确认暂停`,
+    };
+    return pausedTasks[agent.id] ?? agent.currentTask;
+  }
+
+  if (workflow.workOrderStatus === "in-progress") {
+    const activeTasks: Readonly<Record<string, string>> = {
+      "agent-maintenance-strategy": "等待 WT-023 现场复测结果",
+      "agent-work-order": "跟踪 WO-20260823-017 现场执行",
+      "agent-crew-scheduling": "跟踪海维二组 WT-023 现场任务",
+      "agent-vessel-scheduling": "保障 CTV-03 WT-023 作业航次",
+    };
+    return activeTasks[agent.id] ?? agent.currentTask;
+  }
+
+  if (workflow.workOrderStatus === "completed") {
+    const closingTasks: Readonly<Record<string, string>> = {
+      "agent-maintenance-strategy": "复核 WT-023 闭环健康恢复",
+      "agent-work-order": "同步 WO-20260823-017 闭环记录",
+      "agent-crew-scheduling": "释放海维二组后续作业资源",
+      "agent-vessel-scheduling": "释放 CTV-03 后续航次资源",
+    };
+    return closingTasks[agent.id] ?? agent.currentTask;
+  }
+
+  return agent.currentTask;
+}
+
 function AgentDrawer({
   agent,
   onClose,
   executions,
+  publicEvents,
+  currentTask,
 }: {
   agent: Agent;
   onClose: () => void;
   executions: readonly AgentToolExecution[];
+  publicEvents: readonly ActivityEvent[];
+  currentTask: string | null;
 }) {
   const layer = layerMeta[agent.layer];
   const LayerIcon = layer.icon;
@@ -107,10 +210,9 @@ function AgentDrawer({
   const knowledgeSources = knowledgeDocuments.filter((document) =>
     agent.knowledgeSourceIds.includes(document.id),
   );
-  const publicActivityHistory = activityEvents
+  const publicActivityHistory = publicEvents
     .filter((event) => event.agentId === agent.id)
-    .slice(-5)
-    .reverse();
+    .slice(0, 5);
   const toolTest = useMutation({
     mutationFn: () =>
       apiPost<ToolTestResponse>("/api/agent-tools", {
@@ -169,14 +271,14 @@ function AgentDrawer({
             <KeyValue label="当前 Mission" value={agent.currentMissionId ?? "—"} mono />
           </div>
         </section>
-        {agent.currentTask ? (
+        {currentTask ? (
           <section className="current-agent-task">
             <span>
               <Activity size={15} />
             </span>
             <div>
               <small>CURRENT TASK</small>
-              <strong>{agent.currentTask}</strong>
+              <strong>{currentTask}</strong>
               <em>
                 执行中 · 最后活动{" "}
                 {new Date(agent.lastActiveAt).toLocaleTimeString("zh-CN", {
@@ -369,6 +471,7 @@ function AgentDrawer({
 }
 
 export function AgentControlPage() {
+  const workflow = useDemoWorkflow();
   const [layer, setLayer] = useState<"all" | AgentLayer>("all");
   const [status, setStatus] = useState<"all" | AgentStatus>("all");
   const [query, setQuery] = useState("");
@@ -386,6 +489,16 @@ export function AgentControlPage() {
     refetchInterval: 15_000,
   });
   const executions = ledgerQuery.data?.data.executionHistory ?? [];
+  const publicActivityEvents = useMemo(
+    () =>
+      [
+        ...currentWorkflowActivity(workflow.auditTrail),
+        ...activityEvents.filter(
+          (event) => !isFeaturedPostHitlActivity(event.missionId, event.kind),
+        ),
+      ].sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp)),
+    [workflow.auditTrail],
+  );
   const active = agents.filter((agent) =>
     ["working", "thinking", "reviewing"].includes(agent.status),
   ).length;
@@ -395,11 +508,11 @@ export function AgentControlPage() {
         (agent) =>
           (layer === "all" || agent.layer === layer) &&
           (status === "all" || agent.status === status) &&
-          `${agent.name} ${agent.role} ${agent.currentTask}`
+          `${agent.name} ${agent.role} ${workflowAwareTask(agent, workflow)}`
             .toLowerCase()
             .includes(query.toLowerCase()),
       ),
-    [layer, query, status],
+    [layer, query, status, workflow],
   );
   const totalRequests = agents.reduce((sum, agent) => sum + agent.metrics.requests24h, 0);
   const totalTools = agents.reduce((sum, agent) => sum + agent.metrics.toolCalls24h, 0);
@@ -423,7 +536,11 @@ export function AgentControlPage() {
     0,
   );
   const liveAgentEvent =
-    agentStream.frame?.event === "agent-activity"
+    agentStream.frame?.event === "agent-activity" &&
+    !isFeaturedPostHitlActivity(
+      String(agentStream.frame.data.missionId ?? ""),
+      String(agentStream.frame.data.kind ?? ""),
+    )
       ? {
           id: agentStream.frame.correlationId,
           actorLabel: String(agentStream.frame.data.actorLabel ?? "WindOps Agent"),
@@ -578,25 +695,22 @@ export function AgentControlPage() {
             </time>
           </span>
         ) : null}
-        {activityEvents
-          .slice(-5)
-          .reverse()
-          .map((event) => (
-            <span className="agent-live-strip__event" key={event.id}>
-              <i className={cn(`agent-live-strip__dot--${event.outcome}`)} />
-              <span>
-                <strong>{event.actorLabel}</strong>
-                <small>{event.title}</small>
-              </span>
-              <time>
-                {new Date(event.timestamp).toLocaleTimeString("zh-CN", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false,
-                })}
-              </time>
+        {publicActivityEvents.slice(0, 5).map((event) => (
+          <span className="agent-live-strip__event" key={event.id}>
+            <i className={cn(`agent-live-strip__dot--${event.outcome}`)} />
+            <span>
+              <strong>{event.actorLabel}</strong>
+              <small>{event.title}</small>
             </span>
-          ))}
+            <time>
+              {new Date(event.timestamp).toLocaleTimeString("zh-CN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              })}
+            </time>
+          </span>
+        ))}
       </section>
 
       <section className="data-toolbar">
@@ -692,7 +806,7 @@ export function AgentControlPage() {
                     </span>
                     <span className="agent-card__task">
                       <small>CURRENT TASK</small>
-                      <strong>{agent.currentTask ?? "等待新任务"}</strong>
+                      <strong>{workflowAwareTask(agent, workflow) ?? "等待新任务"}</strong>
                       <em>{agent.currentMissionId ?? "No active mission"}</em>
                     </span>
                     <span className="agent-card__metrics">
@@ -729,6 +843,8 @@ export function AgentControlPage() {
           agent={selected}
           onClose={() => setSelected(null)}
           executions={executions.filter((execution) => execution.agentId === selected.id)}
+          publicEvents={publicActivityEvents}
+          currentTask={workflowAwareTask(selected, workflow)}
         />
       ) : null}
     </AppShell>

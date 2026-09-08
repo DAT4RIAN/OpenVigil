@@ -232,7 +232,8 @@ export function DecisionCenterPage() {
                 <small className="mono">{decision.id}</small>
                 <strong>{decision.incident}</strong>
                 <em>
-                  {decision.turbineId} · {decision.status}
+                  {decision.turbineId} ·{" "}
+                  {decision.id === featuredDecision.id ? workflow.decisionStatus : decision.status}
                 </em>
               </span>
               <ChevronRight size={14} />
@@ -534,7 +535,13 @@ export function DecisionCenterPage() {
                 </h3>
                 <p>
                   {approval === "approve"
-                    ? "审批门禁已解除；工单 WO-20260823-017 已创建并排程。"
+                    ? workflow.workOrderStatus === "scheduled"
+                      ? "审批门禁已解除；工单 WO-20260823-017 已排程。"
+                      : workflow.workOrderStatus === "in-progress"
+                        ? "审批门禁已解除；工单 WO-20260823-017 正在现场执行。"
+                        : workflow.workOrderStatus === "completed"
+                          ? "审批门禁已解除；工单 WO-20260823-017 已完成并验证。"
+                          : "审批记录已写入，等待工单状态同步。"
                     : workflow.approval?.comment}
                 </p>
                 <small>

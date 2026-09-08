@@ -29,6 +29,7 @@ import {
   agents,
   alarms,
   featuredMission,
+  getCurrentWorkflowAuditCycle,
   missions,
   scadaSeries,
   turbines,
@@ -36,6 +37,7 @@ import {
   windFarm,
 } from "@/lib";
 import type { ActivityEvent, Mission } from "@/lib/types";
+import type { DemoWorkflowEvent } from "@/lib/demo-workflow";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 
 const missionLabels: Record<Mission["status"], string> = {
@@ -61,6 +63,36 @@ const activityIcons: Record<ActivityEvent["kind"], typeof Activity> = {
   execution: TowerControl,
   system: Bot,
 };
+
+const workflowActivityKinds: Record<DemoWorkflowEvent["kind"], ActivityEvent["kind"]> = {
+  replay: "system",
+  approval: "approval",
+  execution: "execution",
+  verification: "review",
+  knowledge: "retrieval",
+};
+
+function currentWorkflowActivity(events: readonly DemoWorkflowEvent[]): ActivityEvent[] {
+  return getCurrentWorkflowAuditCycle(events)
+    .map((event) => ({
+      id: event.id,
+      missionId: featuredMission.id,
+      timestamp: event.timestamp,
+      agentId: null,
+      actorLabel: event.actor,
+      kind: workflowActivityKinds[event.kind],
+      title: event.title,
+      detail: event.detail,
+      evidenceIds: [],
+      outcome:
+        event.kind === "replay"
+          ? ("attention" as const)
+          : event.kind === "execution"
+            ? ("in-progress" as const)
+            : ("success" as const),
+    }))
+    .reverse();
+}
 
 const powerRanges = ["1H", "6H", "24H", "7D"] as const;
 
@@ -147,10 +179,17 @@ export function DashboardPage() {
   const activeMissions = displayMissions
     .filter((mission) => mission.status !== "completed")
     .slice(0, 4);
-  const latestActivity = activityEvents
-    .filter((event) => event.missionId === featuredMission.id)
-    .slice(-6)
-    .reverse();
+  const baselineActivity = activityEvents.filter(
+    (event) =>
+      event.missionId === featuredMission.id &&
+      event.kind !== "approval" &&
+      event.kind !== "work-order" &&
+      event.kind !== "execution",
+  );
+  const latestActivity = [
+    ...currentWorkflowActivity(workflow.auditTrail),
+    ...baselineActivity.slice(-6).reverse(),
+  ].slice(0, 6);
   const statusSummary = [
     { label: "运行", value: running, tone: "success" },
     {

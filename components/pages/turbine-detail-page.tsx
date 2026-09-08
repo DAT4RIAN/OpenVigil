@@ -29,6 +29,7 @@ import { TimeSeriesChart, type TimeSeriesPoint } from "@/components/charts/time-
 import {
   alarms,
   featuredMission,
+  getFeaturedMissionNarrative,
   getTurbine,
   knowledgeDocuments,
   scadaSeries,
@@ -36,7 +37,7 @@ import {
   turbine023,
   workOrders,
 } from "@/lib";
-import type { SubsystemHealth, WindTurbine } from "@/lib/types";
+import type { SubsystemHealth, WindTurbine, WorkOrderStatus } from "@/lib/types";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
 
@@ -431,9 +432,11 @@ function HealthTab() {
 function RelatedList({
   type,
   knowledgeCaseId,
+  workflowWorkOrderStatus,
 }: {
   type: "alarms" | "maintenance" | "documents";
   knowledgeCaseId?: string | null;
+  workflowWorkOrderStatus?: WorkOrderStatus;
 }) {
   const items =
     type === "alarms"
@@ -452,7 +455,10 @@ function RelatedList({
               id: item.id,
               title: item.issue,
               meta: `${item.assignedTeam} · ${new Date(item.plannedStart).toLocaleDateString("zh-CN")}`,
-              status: item.status,
+              status:
+                item.id === "WO-20260823-017" && workflowWorkOrderStatus
+                  ? workflowWorkOrderStatus
+                  : item.status,
             }))
         : knowledgeDocuments
             .filter((item) => item.relatedTurbineIds.includes(turbine023.id))
@@ -780,6 +786,7 @@ function FeaturedTurbineDetailPage() {
   const [tab, setTab] = useState<Tab>("Overview");
   const workflow = useDemoWorkflow();
   const closed = workflow.missionStatus === "completed";
+  const featuredNarrative = getFeaturedMissionNarrative(workflow);
   return (
     <AppShell activePath="/turbines/WT-023">
       <PageHeader
@@ -853,7 +860,7 @@ function FeaturedTurbineDetailPage() {
           <span>
             <span className="eyebrow">{closed ? "CLOSED MISSION" : "ACTIVE MISSION"}</span>
             <h2>{featuredMission.title}</h2>
-            <p>{featuredMission.summary}</p>
+            <p>{featuredNarrative.summary}</p>
             <div>
               <StatusBadge
                 value={workflow.missionStatus}
@@ -869,7 +876,9 @@ function FeaturedTurbineDetailPage() {
           </a>
         </Card>
       ) : null}
-      {tab === "Maintenance" ? <RelatedList type="maintenance" /> : null}
+      {tab === "Maintenance" ? (
+        <RelatedList type="maintenance" workflowWorkOrderStatus={workflow.workOrderStatus} />
+      ) : null}
       {tab === "Documents" ? (
         <RelatedList type="documents" knowledgeCaseId={workflow.knowledgeCaseId} />
       ) : null}

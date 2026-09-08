@@ -20,7 +20,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Avatar, Button, Card, Progress } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
-import { agents, missions } from "@/lib";
+import { agents, getFeaturedMissionNarrative, missions } from "@/lib";
 import type { Mission, MissionStatus } from "@/lib/types";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
@@ -255,6 +255,7 @@ export function MissionCenterPage() {
   const [view, setView] = useState<MissionView>("kanban");
   const [severity, setSeverity] = useState<SeverityFilter>("all");
   const [leadAgentId, setLeadAgentId] = useState("all");
+  const featuredNarrative = getFeaturedMissionNarrative(workflow);
   const displayMissions = useMemo(
     () =>
       missions.map((mission) =>
@@ -263,10 +264,17 @@ export function MissionCenterPage() {
               ...mission,
               status: workflow.missionStatus,
               progressPercent: workflow.missionProgress,
+              summary: featuredNarrative.summary,
+              nextAction: featuredNarrative.nextAction,
             }
           : mission,
       ),
-    [workflow.missionProgress, workflow.missionStatus],
+    [
+      featuredNarrative.nextAction,
+      featuredNarrative.summary,
+      workflow.missionProgress,
+      workflow.missionStatus,
+    ],
   );
   const leadOptions = useMemo(
     () =>

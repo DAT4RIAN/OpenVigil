@@ -565,7 +565,18 @@ export function WorkOrderPage() {
             <span>
               <small>闭环状态</small>
               <strong className={workflow.knowledgeCaseId ? "success-text" : "warning-text"}>
-                {workflow.knowledgeCaseId ? "案例已沉淀" : "等待执行"}
+                {workflow.knowledgeCaseId
+                  ? "案例已沉淀"
+                  : workflow.workOrderStatus === "draft" ||
+                      workflow.workOrderStatus === "pending-approval"
+                    ? "等待审批"
+                    : workflow.workOrderStatus === "scheduled"
+                      ? "已排程"
+                      : workflow.workOrderStatus === "in-progress"
+                        ? "现场执行中"
+                        : workflow.workOrderStatus === "paused"
+                          ? "执行已暂停"
+                          : "等待验证"}
               </strong>
             </span>
           </div>
