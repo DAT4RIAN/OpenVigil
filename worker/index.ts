@@ -5,8 +5,9 @@ import {
   DEFAULT_IMAGE_SIZES,
 } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { runWithWorkerEnv, type WindOpsWorkerEnv } from "../lib/worker-env";
 
-interface Env {
+interface Env extends WindOpsWorkerEnv {
   ASSETS: Fetcher;
   DB: D1Database;
   IMAGES: {
@@ -50,7 +51,7 @@ const worker = {
       );
     }
 
-    return handler.fetch(request, env, ctx);
+    return runWithWorkerEnv(env, () => handler.fetch(request, env, ctx));
   },
 };
 
