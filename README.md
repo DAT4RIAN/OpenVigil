@@ -17,9 +17,9 @@ WindOps 是一个可运行的海上风电智能运维 Web 演示。它把风场�
 | React 19 + TypeScript 严格模式的 10 个核心闭环页面与 4 个专业工作台 | 真实 SCADA、CMS、气象、ERP/EAM 接入         |
 | vinext / Vite 应用与 Cloudflare Worker/Sites 运行形态               | FastAPI 服务、后台任务与生产 WebSocket 总线 |
 | 64 台风机与大规模、可重复生成的领域数据                             | PostgreSQL、TimescaleDB 等生产数据存储      |
-| 浏览器本地持久化的 WT-023 审批—执行—反馈闭环                        | 服务端事务、RBAC、审批策略与不可变审计      |
-| 只读快照 API、有限 SSE 和确定性 Agent Tool Runtime                  | LangGraph / LLM 的真实 Agent 编排与模型调用 |
-| 28 表 Drizzle Schema 与两步 SQLite/D1 迁移                          | D1 运行时绑定、数据迁移、备份和恢复流程     |
+| D1 持久化的 WT-023 审批—执行—反馈事务闭环与 revision 审计           | RBAC、生产审批策略、备份和恢复流程          |
+| 混合读写 API、有限 SSE、WebSocket 与确定性 Agent Tool Runtime       | LangGraph / LLM 的真实 Agent 编排与模型调用 |
+| 32 表 Drizzle Schema、四步迁移与 D1 运行时初始化                    | PostgreSQL / TimescaleDB 等生产数据平台     |
 
 ## 10 个核心闭环页面
 
@@ -64,7 +64,7 @@ WindOps 是一个可运行的海上风电智能运维 Web 演示。它把风场�
 | Multivariate Anomaly Score |      `0.18` |                `0.86` | 超过 `0.65` 告警阈值         |
 | BPFO band energy           |           — |                `+19%` | 包络谱出现外圈故障特征边带   |
 
-规范快照从“方案 B 已批准、工单已排程”开始。用户可以重放审批门禁，再从四种人工结果中选择：
+D1 服务器基线从“方案 B 待人工审批、工单草稿”开始。用户可以从四种人工结果中选择并重放完整审批门禁：
 
 - `approve`：Decision 进入 `approved`，Mission 回到 `executing`，工单进入 `scheduled`。
 - `reject`：Decision 进入 `rejected`，Mission 回到 `decision-pending`，工单保持 `draft`。
@@ -75,13 +75,13 @@ WindOps 是一个可运行的海上风电智能运维 Web 演示。它把风场�
 
 - Mission 进入 `completed / 100%`，工单进入 `completed`；
 - 风机健康度从 `68` 恢复到 `82`，主轴承健康度从 `63` 恢复到 `78`；
-- 验证事件和 Knowledge Agent 事件写入本地审计轨迹；
+- verification 与 knowledge 两条事件写入服务器审计轨迹；
 - 生成知识案例 `KB-CASE-2026-WT023-CLOSED`。
 
-该状态由 Zustand 管理，并持久化到浏览器 `localStorage` 的 `windops-wt023-demo-v1`。Dashboard、Mission Center、Mission Detail、Decision Center、Work Order Center 和 WT-023 详情会读取同一份浏览器状态。
+页面使用 Zustand 做乐观交互，但 D1 快照才是权威状态。每次变更都提交 `idempotencyKey`、`correlationId` 与 `expectedRevision`；任务使用显式 `set-task-completion(completed)`，避免重放 toggle 造成反向更新。Dashboard、Mission、Decision、Work Order、资产健康和 Knowledge 页面读取同一服务器快照，Topbar 会显示 `D1 · Rn / SAVING / OFFLINE`。写 API 只接受服务器维护的四个 Demo principal，并按动作限制审批、执行、复测与重置权限；响应明确标记 `authenticated: false`，这只是防止请求体任意改写审计身份，不是生产 SSO/RBAC。
 
 > [!NOTE]
-> 这条交互闭环仅存在于当前浏览器。Mock API 始终返回规范化的确定性只读快照，不会接收或持久化 UI 审批、任务进度、健康恢复或知识案例；清理站点存储或重置演示会恢复规范状态。
+> 若 D1 binding 缺失，`GET /api/workflow/WT-023` 会返回明确的只读 ephemeral 基线，所有写操作返回 `503 PERSISTENCE_UNAVAILABLE`；客户端不会把 localStorage 冒充为成功持久化。
 
 ## 当前架构
 
@@ -89,19 +89,21 @@ WindOps 是一个可运行的海上风电智能运维 Web 演示。它把风场�
 flowchart TB
   browser["Browser"] --> runtime["vinext App Router + Vite"]
   runtime --> pages["10 core routes + 4 specialist workspaces"]
-  runtime --> api["Mock API + finite SSE + WebSocket channels"]
+  runtime --> api["Worker API + finite SSE + WebSocket channels"]
   pages --> charts["Apache ECharts"]
   pages --> query["TanStack Query · SCADA"]
-  pages --> workflow["Zustand demo workflow"]
-  workflow --> storage["Browser localStorage"]
+  pages --> workflow["Zustand optimistic workflow client"]
+  workflow --> api
   query --> api
   api --> fixtures["Deterministic linked fixtures"]
   api --> archive["Generated archive pages"]
   api --> tools["17-tool deterministic runtime"]
-  schema["28-table Drizzle schema + migrations"] -. "not bound at runtime" .-> api
+  tools --> d1["D1 AgentExecution ledger"]
+  api --> d1["D1 workflow + immutable audit"]
+  schema["32-table Drizzle schema + migrations"] --> d1
 ```
 
-页面和 API 共享 `lib/` 中的规范化领域对象。SCADA、健康、预测、资源与知识工作台通过统一 API 客户端和 TanStack Query 读取 Mock API，并保留确定性初始快照和错误回退。WT-023 交互闭环使用 Zustand；其他领域页面仍主要直接消费同一套 fixture。
+页面和 API 共享 `lib/` 中的规范化领域对象。SCADA、健康、预测、资源与知识工作台通过统一 API 客户端和 TanStack Query 读取 Worker API。WT-023 服务器状态会覆盖 Mission、工单、风机健康、风场汇总和知识目录的对应 fixture，因此闭环完成后所有相关读 API 保持同源。
 
 ECharts 可切换 `LIVE/1H/6H/24H/7D/30D` 六个不同采样窗口，24 小时窗口为 17 组、每组 97 点；逻辑 SCADA 归档按请求页即时生成，不在内存中一次性物化 131,072 行。
 
@@ -122,9 +124,9 @@ ECharts 可切换 `LIVE/1H/6H/24H/7D/30D` 六个不同采样窗口，24 小时�
 
 物理 SCADA 归档有 16 个指标；实时预览额外包含模型输出的多变量异常分数，因此是 17 组。所有 ID、时间、数值、排序和跨实体引用都是确定性的，便于截图和回归测试。
 
-## Mock API
+## Worker API 与确定性数据接口
 
-领域 API 是 fixture-backed、确定性且无持久化的演示接口。
+大部分遥测与目录 API 仍由确定性 fixture 驱动；WT-023 工作流、审计事件和 AgentExecution 使用 D1 持久化。
 
 | Method | Endpoint                               | 内容 / 查询契约                                         |
 | ------ | -------------------------------------- | ------------------------------------------------------- |
@@ -146,6 +148,8 @@ ECharts 可切换 `LIVE/1H/6H/24H/7D/30D` 六个不同采样窗口，24 小时�
 | `POST` | `/api/knowledge-assistant`             | WT-023 确定性检索问答与可点击来源引用                   |
 | `GET`  | `/api/health`                          | 完整性检查和分层数据计数                                |
 | `GET`  | `/api/agent-events`                    | 有限、可重放的 `text/event-stream` Agent 活动流         |
+| `GET`  | `/api/workflow/WT-023`                 | D1 权威工作流快照、revision、任务与不可变审计事件       |
+| `POST` | `/api/workflow/WT-023`                 | 审批、显式任务更新、执行、完成与重置；带幂等和并发门禁  |
 
 `/api/scada-measurements` 的 `offset` 默认为 `0`，`limit` 默认为 `100`、最大为 `1000`。过滤后的 `meta.total` 表示匹配总数，响应中的 `meta` 同时包含 `offset`、`limit`、标准化后的 `turbineId`、`metric` 和 `snapshotAt`。非法分页或 scope 返回结构化 `400`；不存在的 SCADA 过滤值返回空页。
 
@@ -164,7 +168,7 @@ ECharts 可切换 `LIVE/1H/6H/24H/7D/30D` 六个不同采样窗口，24 小时�
 
 错误响应遵循 `{ "error": { "code": "...", "message": "..." } }`。SSE 按 `snapshot → agent-activity × N → complete` 发送有限事件后关闭。
 
-同时提供三个 `windops.realtime.v1` Mock WebSocket 通道：`/ws/scada`、`/ws/alarms`、`/ws/agent-events`。Cloudflare WebSocket 运行时收到 Upgrade 后会发送 `hello` 与持续的确定性变化帧，支持 `ping → pong` 并在断连时清理定时器；普通 HTTP 或不支持 `WebSocketPair` 的本地 Node 运行时返回结构化 `426 WEBSOCKET_UPGRADE_REQUIRED`。这些通道用于演示客户端协议和实时 UI 接入，不是带持久化、重放游标或消息代理的生产事件总线。
+同时提供三个 `windops.realtime.v1` 模拟 WebSocket 通道：`/ws/scada`、`/ws/alarms`、`/ws/agent-events`。Cloudflare WebSocket 运行时收到 Upgrade 后会发送 `hello` 与持续的确定性变化帧，支持 `ping → pong` 并在断连时清理定时器；普通 HTTP 或不支持 `WebSocketPair` 的本地 Node 运行时返回结构化 `426 WEBSOCKET_UPGRADE_REQUIRED`。这些通道用于演示客户端协议和实时 UI 接入，不是带持久化、重放游标或消息代理的生产事件总线。
 
 `/api/health` 将数量分为三层：
 
@@ -196,8 +200,8 @@ create_work_order
 
 | Method | Endpoint           | 行为                                           |
 | ------ | ------------------ | ---------------------------------------------- |
-| `GET`  | `/api/agent-tools` | 返回工具目录与当前进程内的执行历史             |
-| `POST` | `/api/agent-tools` | 校验 `{ tool, args }` 并执行一次确定性工具调用 |
+| `GET`  | `/api/agent-tools` | 返回工具目录与 D1 执行账本；可按关联和状态过滤 |
+| `POST` | `/api/agent-tools` | 校验上下文，执行工具并持久化 AgentExecution    |
 
 示例：
 
@@ -208,25 +212,28 @@ create_work_order
     "turbineId": "WT-023",
     "metric": "main-bearing-vibration-rms",
     "limit": 48
-  }
+  },
+  "agentId": "agent-scada-analysis",
+  "missionId": "MISSION-2026-0823",
+  "idempotencyKey": "mission-0823-scada-window-01"
 }
 ```
 
-每条执行记录包含 `correlationId`、规范化输入、结构化结果、开始/结束时间、成功状态、确定性延迟和基于 UTF-8 字节的 token 估算。执行历史最多保留 100 条，只存在于当前 Worker/Node 进程，重启后清空。
+每条执行记录包含 `executionId`、Agent/Mission 关联、`idempotencyKey`、`correlationId`、规范化输入、结构化结果、时间、状态、确定性延迟和 token 估算。默认请求要求 D1；无 binding 时返回 `503 AUDIT_PERSISTENCE_UNAVAILABLE`，只有显式 `persist:false` 才运行非持久的 runtime-memory 测试。
 
 `create_decision`、`create_work_order` 与 `update_work_order` 是 **dry-run mutation**：它们只返回带 `persisted: false` 的草稿，不改变 Decision、审批、Mission 或工单数据，也不会调度现场动作。其他 14 个工具均为只读查询或确定性计算。该运行时没有调用 LLM，也不是 LangGraph 执行器。
 
 ## Drizzle 数据模型
 
-`db/schema.ts` 已定义 28 张 SQLite/D1 表。除风场、风机、子系统、传感器、SCADA 测量、告警、健康评估、Agent、技能、工具、Mission、Mission Task、证据、Decision、审批、工单、维护记录、知识文档、故障案例、Agent Execution 和 Activity Event 外，还独立建模了 `spare_parts`、`work_order_parts`、`inventory_reservations`、`crews`、`vessels`、`maintenance_tools` 与 `resource_assignments`。Schema 包含关键外键、唯一约束、索引、库存/数量/状态 CHECK、关联 ID、时间戳和审计字段。
+`db/schema.ts` 已定义 32 张 SQLite/D1 表。除风场、风机、子系统、传感器、SCADA 测量、告警、健康评估、Agent、技能、工具、Mission、Mission Task、证据、Decision、审批、工单、维护记录、知识文档、故障案例、Agent Execution 和 Activity Event 外，还独立建模了资源库存以及 `workflow_instances`、`workflow_tasks`、`workflow_audit_events`、`workflow_idempotency`。Schema 包含关键外键、唯一约束、索引、CHECK、关联 ID、时间戳和审计字段。
 
-基础迁移位于 `drizzle/0000_windops_domain.sql`，资源规范化迁移位于 `drizzle/0001_resource_inventory.sql`。但是 `.openai/hosting.json` 当前的 `d1` 与 `r2` 都是 `null`：运行时没有 D1 binding，也没有将 fixture 或浏览器状态写入数据库。Schema 和迁移是后续接入的准备，不应被理解为已经交付持久化后端。
+基础迁移位于 `drizzle/0000_windops_domain.sql`，资源迁移位于 `drizzle/0001_resource_inventory.sql`，服务器闭环迁移位于 `drizzle/0002_server_workflow.sql`，AgentExecution 查询与 correlation 唯一索引迁移位于 `drizzle/0003_agent_execution_indexes.sql`。`.openai/hosting.json` 把逻辑 D1 binding 配置为 `DB`；空库用逐条 prepared SQL 与 batch 初始化 WT-023 基线。revision guard、审计 event sequence 与幂等响应共同保护并发写入和安全重放。
 
 ## 目录结构
 
 ```text
 app/
-  api/                         Mock API、有限 SSE 与 Agent Tool Runtime 路由
+  api/                         Worker API、有限 SSE 与 Agent Tool Runtime 路由
   turbines/[id]/               动态风机详情与 404 路由
   missions/[id]/               动态 Mission 详情与 404 路由
   loading.tsx                  全局加载状态
@@ -242,7 +249,8 @@ lib/
   api-client.ts                统一浏览器 API 客户端与结构化错误
   archive-data.ts              大规模确定性归档与按页生成器
   demo-workflow.ts             WT-023 合法状态迁移和完成门禁
-  use-demo-workflow.ts         Zustand + localStorage 状态层
+  use-demo-workflow.ts         Zustand 乐观客户端 + D1 权威快照同步
+  server-workflow-contract.ts  服务器状态机、revision 与审批/任务门禁
   agent-tool-runtime.ts        17 个工具、校验、dry-run 与可观测记录
   farm-data.ts                 风场与 64 台风机
   telemetry-data.ts            SCADA 预览、健康与天气窗口
@@ -253,7 +261,9 @@ lib/
   resource-data.ts             备件、班组、船舶、工具与工单预留
   scada-history.ts             六个确定性监控时间窗
   realtime-stream.ts           三个 WebSocket 通道的公共变化帧
-db/schema.ts                   28 表 Drizzle Schema
+db/runtime-store.ts            D1 工作流事务、幂等与审计读取
+db/agent-execution-store.ts    D1 AgentExecution 执行账本
+db/schema.ts                   32 表 Drizzle Schema
 drizzle/                       已生成的 SQLite/D1 迁移与元数据
 worker/                        Cloudflare Worker 入口
 tests/                         构建产物、API、工作流和工具运行时测试
@@ -261,16 +271,16 @@ tests/                         构建产物、API、工作流和工具运行时�
 
 ## 技术栈
 
-| 范畴            | 当前使用                                                                                                |
-| --------------- | ------------------------------------------------------------------------------------------------------- |
-| UI              | React 19、TypeScript、Tailwind CSS 4、项目内 shadcn 风格 primitives、Lucide Icons                       |
-| Runtime / Build | vinext、Vite 8、React Server Components 工具链                                                          |
-| Visualization   | Apache ECharts 6                                                                                        |
-| Client State    | TanStack Query（SCADA、健康、预测、资源、知识）、TanStack Table（知识目录）、Zustand（WT-023 演示闭环） |
-| Data            | 类型安全的确定性 TypeScript fixture 与按页归档生成器                                                    |
-| Schema          | Drizzle ORM、SQLite/D1 迁移（尚未绑定 D1）                                                              |
-| Hosting         | Cloudflare Worker runtime + Cloudflare Sites 集成                                                       |
-| Quality         | TypeScript strict、ESLint、Prettier、Node test runner、生产构建验证                                     |
+| 范畴            | 当前使用                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| UI              | React 19、TypeScript、Tailwind CSS 4、项目内 shadcn 风格 primitives、Lucide Icons                 |
+| Runtime / Build | vinext、Vite 8、React Server Components 工具链                                                    |
+| Visualization   | Apache ECharts 6                                                                                  |
+| Client State    | TanStack Query（SCADA、健康、预测、资源、知识、执行账本）、TanStack Table、Zustand 乐观闭环客户端 |
+| Data            | 类型安全的确定性 TypeScript fixture 与按页归档生成器                                              |
+| Schema          | Drizzle ORM、SQLite/D1 四步迁移、运行时 `DB` binding 与安全初始化                                 |
+| Hosting         | Cloudflare Worker runtime + Cloudflare Sites 集成                                                 |
+| Quality         | TypeScript strict、ESLint、Prettier、Node test runner、生产构建验证                               |
 
 ## Getting Started
 
@@ -300,8 +310,8 @@ pnpm test
 ```
 
 - `pnpm format` 使用 Prettier 写入格式，`pnpm format:check` 只检查。
-- `pnpm test` 会先执行生产构建，再用 Node test runner 验证核心与专业页面、Mock API、归档分页与过滤、六个 SCADA 时间窗、知识引用、资源关联、WebSocket 回退契约、SSE、WT-023 状态机及 Agent Tool Runtime。
-- `pnpm db:generate` 可根据 Drizzle Schema 生成新迁移；在 D1 尚未绑定时，它不会创建或填充运行时数据库。
+- `pnpm test` 会先执行生产构建，再用 Node test runner 验证核心与专业页面、fixture API、归档分页与过滤、六个 SCADA 时间窗、知识引用、资源关联、WebSocket 回退契约、SSE、WT-023 状态机及 Agent Tool Runtime。
+- `pnpm db:generate` 可根据 Drizzle Schema 生成新迁移；运行时初始化不替代部署环境的正式迁移与备份策略。
 - 本地生产构建可通过 `pnpm start` 启动。
 
 ## Multi-Agent Architecture
@@ -333,13 +343,13 @@ flowchart LR
 当前演示不包含以下生产能力：
 
 - OPC UA / MQTT / IEC 数据接入、质量码、乱序处理和持续流式总线；
-- FastAPI、Pydantic、SQLAlchemy、后台任务或服务端事务；
-- PostgreSQL、TimescaleDB、Redis、MinIO、pgvector 或实际 D1 持久化；
+- FastAPI、Pydantic、SQLAlchemy 或后台任务；当前服务端事务仅覆盖 WT-023 主闭环；
+- PostgreSQL、TimescaleDB、Redis、MinIO、pgvector，以及 D1 备份恢复/跨区域生产治理；
 - LangGraph / LiteLLM 编排、真实 Tool Calling、模型推理或 RAG 文档摄取；
 - SSO / RBAC、生产审批策略、不可变审计、密钥管理和安全沙箱；
 - Playwright 视觉回归、完整 WCAG 审计、SLO、备份恢复和灾难演练。
 
-下一阶段应优先把浏览器工作流迁移为服务端事务与不可变事件记录，再接入真实遥测和 EAM；随后才适合引入受控 Agent 编排、检索评测与生产可观测性。
+下一阶段应把当前 WT-023 D1 状态机推广到通用 Mission/工单，并接入真实遥测和 EAM；随后才适合引入受控 Agent 编排、检索评测与生产可观测性。
 
 ## 开源参考与致谢
 
