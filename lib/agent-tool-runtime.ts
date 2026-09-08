@@ -10,6 +10,13 @@ import { turbines, windFarm } from "./farm-data";
 import { knowledgeDocuments } from "./knowledge-data";
 import { alarms, decisions, missions, workOrders } from "./operations-data";
 import { maintenanceCrews, serviceVessels, spareParts } from "./resource-data";
+import type { ServerWorkflowSnapshot } from "./server-workflow-contract";
+import {
+  overlayWorkflowKnowledge,
+  overlayWorkflowMission,
+  overlayWorkflowTurbine,
+  overlayWorkflowWorkOrder,
+} from "./server-workflow-overlays";
 import { scadaSeries, subsystemHealth, weatherWindows } from "./telemetry-data";
 import type {
   AlarmSeverity,
@@ -101,6 +108,11 @@ export interface AgentToolFailureResult {
 export type AgentToolResult = AgentToolSuccessResult | AgentToolFailureResult;
 
 export interface AgentToolExecution {
+  readonly executionId: string;
+  readonly agentId: string;
+  readonly missionId: string | null;
+  readonly idempotencyKey: string;
+  readonly requestFingerprint: string;
   readonly correlationId: string;
   readonly request: AgentToolRequest;
   readonly result: AgentToolResult;
@@ -115,6 +127,17 @@ export interface AgentToolExecution {
 export interface AgentToolExecutionRequest {
   readonly tool: string;
   readonly args: unknown;
+}
+
+export interface AgentToolExecutionContext {
+  readonly executionId?: string;
+  readonly agentId?: string;
+  readonly missionId?: string | null;
+  readonly idempotencyKey?: string;
+  readonly requestFingerprint?: string;
+  readonly correlationId?: string;
+  readonly recordInMemory?: boolean;
+  readonly workflowSnapshot?: ServerWorkflowSnapshot;
 }
 
 export class AgentToolRuntimeError extends Error {
@@ -569,6 +592,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 export const isAgentToolName = (value: string): value is AgentToolName => toolNameSet.has(value);
 
+export const getDefaultAgentIdForTool = (tool: AgentToolName): string =>
+  agents.find((agent) => agent.tools.includes(tool))?.id ?? "agent-operations-coordinator";
+
 const invalidArguments = (
   tool: AgentToolName,
   message: string,
@@ -953,14 +979,26 @@ const aggregateNumbers = (values: readonly number[]) => ({
       : round(values.reduce((sum, value) => sum + value, 0) / values.length),
 });
 
-const getTurbineStatus = (args: AgentToolArguments): unknown => {
+const workflowSnapshotAt = (context: AgentToolExecutionContext): string =>
+  context.workflowSnapshot?.updatedAt ?? windFarm.lastUpdatedAt;
+
+const getTurbineStatus = (
+  args: AgentToolArguments,
+  context: AgentToolExecutionContext,
+): unknown => {
   const turbineId = args.turbineId as string;
-  const turbine = requiredTurbine(turbineId);
+  const fixtureTurbine = requiredTurbine(turbineId);
+  const turbine = context.workflowSnapshot
+    ? (overlayWorkflowTurbine([fixtureTurbine], context.workflowSnapshot)[0] ?? fixtureTurbine)
+    : fixtureTurbine;
   const assetSubsystems = subsystemHealth.filter((item) => item.turbineId === turbineId);
   const activeAlarms = alarms.filter(
     (alarm) => alarm.turbineId === turbineId && alarm.status !== "resolved",
   );
-  const activeMissions = missions.filter(
+  const currentMissions = context.workflowSnapshot
+    ? overlayWorkflowMission(missions, context.workflowSnapshot)
+    : missions;
+  const activeMissions = currentMissions.filter(
     (mission) => mission.turbineId === turbineId && mission.status !== "completed",
   );
   const lowestSubsystem = [...assetSubsystems].sort(
@@ -968,7 +1006,7 @@ const getTurbineStatus = (args: AgentToolArguments): unknown => {
   )[0];
 
   return {
-    snapshotAt: windFarm.lastUpdatedAt,
+    snapshotAt: workflowSnapshotAt(context),
     turbine,
     subsystemSummary: {
       count: assetSubsystems.length,
@@ -978,9 +1016,23 @@ const getTurbineStatus = (args: AgentToolArguments): unknown => {
       lowest: lowestSubsystem
         ? {
             subsystem: lowestSubsystem.key,
-            healthScore: lowestSubsystem.healthScore,
-            state: lowestSubsystem.state,
-            finding: lowestSubsystem.primaryFinding,
+            healthScore:
+              lowestSubsystem.key === "main-bearing" &&
+              turbineId === context.workflowSnapshot?.turbineId
+                ? context.workflowSnapshot.health.mainBearingScore
+                : lowestSubsystem.healthScore,
+            state:
+              lowestSubsystem.key === "main-bearing" &&
+              turbineId === context.workflowSnapshot?.turbineId &&
+              context.workflowSnapshot.workOrder.status === "completed"
+                ? "watch"
+                : lowestSubsystem.state,
+            finding:
+              lowestSubsystem.key === "main-bearing" &&
+              turbineId === context.workflowSnapshot?.turbineId &&
+              context.workflowSnapshot.workOrder.status === "completed"
+                ? "主轴承检查与复测已完成，健康趋势恢复"
+                : lowestSubsystem.primaryFinding,
           }
         : null,
     },
@@ -1129,11 +1181,17 @@ const queryWeather = (args: AgentToolArguments): unknown => {
   };
 };
 
-const queryMaintenanceHistory = (args: AgentToolArguments): unknown => {
+const queryMaintenanceHistory = (
+  args: AgentToolArguments,
+  context: AgentToolExecutionContext,
+): unknown => {
   const turbineId = args.turbineId as string;
   requiredTurbine(turbineId);
   const limit = args.limit as number;
-  const matching = [...workOrders, ...historicalWorkOrders]
+  const liveWorkOrders = context.workflowSnapshot
+    ? overlayWorkflowWorkOrder(workOrders, context.workflowSnapshot)
+    : workOrders;
+  const matching = [...liveWorkOrders, ...historicalWorkOrders]
     .filter((workOrder) => workOrder.turbineId === turbineId)
     .sort(
       (left, right) =>
@@ -1141,7 +1199,7 @@ const queryMaintenanceHistory = (args: AgentToolArguments): unknown => {
     );
 
   return {
-    snapshotAt: windFarm.lastUpdatedAt,
+    snapshotAt: workflowSnapshotAt(context),
     turbineId,
     total: matching.length,
     returned: Math.min(limit, matching.length),
@@ -1225,7 +1283,10 @@ const statusPenalty: Readonly<Record<string, number>> = Object.freeze({
   "communication-lost": 25,
 });
 
-const calculateHealthScore = (args: AgentToolArguments): unknown => {
+const calculateHealthScore = (
+  args: AgentToolArguments,
+  context: AgentToolExecutionContext,
+): unknown => {
   const turbineId = args.turbineId as string;
   const turbine = requiredTurbine(turbineId);
   const subsystem = args.subsystem as SubsystemKey | undefined;
@@ -1241,16 +1302,23 @@ const calculateHealthScore = (args: AgentToolArguments): unknown => {
         { turbineId, subsystem },
       );
     }
+    const workflowMainBearing =
+      turbineId === context.workflowSnapshot?.turbineId && subsystem === "main-bearing";
+    const closed = context.workflowSnapshot?.workOrder.status === "completed";
     return {
-      snapshotAt: assessment.assessedAt,
+      snapshotAt: workflowMainBearing ? context.workflowSnapshot?.updatedAt : assessment.assessedAt,
       turbineId,
       scope: "subsystem",
       subsystem,
-      healthScore: assessment.healthScore,
-      state: assessment.state,
-      trend: assessment.trend,
-      anomalyScore: assessment.anomalyScore,
-      formula: "fixture subsystem health snapshot",
+      healthScore: workflowMainBearing
+        ? context.workflowSnapshot?.health.mainBearingScore
+        : assessment.healthScore,
+      state: workflowMainBearing && closed ? "watch" : assessment.state,
+      trend: workflowMainBearing && closed ? "improving" : assessment.trend,
+      anomalyScore: workflowMainBearing && closed ? 0.42 : assessment.anomalyScore,
+      formula: workflowMainBearing
+        ? "D1 workflow health feedback"
+        : "fixture subsystem health snapshot",
     };
   }
 
@@ -1269,10 +1337,16 @@ const calculateHealthScore = (args: AgentToolArguments): unknown => {
   );
 
   return {
-    snapshotAt: windFarm.lastUpdatedAt,
+    snapshotAt:
+      turbineId === context.workflowSnapshot?.turbineId
+        ? context.workflowSnapshot.updatedAt
+        : windFarm.lastUpdatedAt,
     turbineId,
     scope: "asset",
-    healthScore: calculatedScore,
+    healthScore:
+      turbineId === context.workflowSnapshot?.turbineId
+        ? context.workflowSnapshot.health.turbineScore
+        : calculatedScore,
     fixtureHealthScore: turbine.healthScore,
     penalties,
     weakestSubsystemScore: matchingSubsystems.length > 0 ? lowestSubsystemScore : null,
@@ -1280,7 +1354,7 @@ const calculateHealthScore = (args: AgentToolArguments): unknown => {
   };
 };
 
-const predictRul = (args: AgentToolArguments): unknown => {
+const predictRul = (args: AgentToolArguments, context: AgentToolExecutionContext): unknown => {
   const turbineId = args.turbineId as string;
   requiredTurbine(turbineId);
   const subsystem = args.subsystem as SubsystemKey;
@@ -1295,20 +1369,28 @@ const predictRul = (args: AgentToolArguments): unknown => {
       { turbineId, subsystem },
     );
   }
-  const estimate = assessment.remainingUsefulLifeDays;
-  const confidencePercent = Math.max(50, Math.round(100 - assessment.anomalyScore * 15));
+  const workflowMainBearing =
+    turbineId === context.workflowSnapshot?.turbineId && subsystem === "main-bearing";
+  const closed = workflowMainBearing && context.workflowSnapshot?.workOrder.status === "completed";
+  const estimate = closed ? 126 : assessment.remainingUsefulLifeDays;
+  const anomalyScore = closed ? 0.42 : assessment.anomalyScore;
+  const confidencePercent = Math.max(50, Math.round(100 - anomalyScore * 15));
 
   return {
-    snapshotAt: assessment.assessedAt,
+    snapshotAt: workflowMainBearing ? context.workflowSnapshot?.updatedAt : assessment.assessedAt,
     turbineId,
     subsystem,
     predictedRulDays: estimate,
     predictionIntervalDays: [Math.floor(estimate * 0.8), Math.ceil(estimate * 1.2)],
     confidencePercent,
-    failureProbability30d: assessment.failureProbability30d,
-    healthScore: assessment.healthScore,
-    anomalyScore: assessment.anomalyScore,
-    method: "fixture-backed subsystem health estimate; no live model inference",
+    failureProbability30d: closed ? 12 : assessment.failureProbability30d,
+    healthScore: workflowMainBearing
+      ? context.workflowSnapshot?.health.mainBearingScore
+      : assessment.healthScore,
+    anomalyScore,
+    method: workflowMainBearing
+      ? "D1 workflow-backed deterministic estimate; no live model inference"
+      : "fixture-backed subsystem health estimate; no live model inference",
   };
 };
 
@@ -1480,7 +1562,7 @@ const resolveResourceScope = (args: AgentToolArguments): ResourceScope => {
   });
 };
 
-const queryManual = (args: AgentToolArguments): unknown => {
+const queryManual = (args: AgentToolArguments, context: AgentToolExecutionContext): unknown => {
   const query = (args.query as string | undefined)?.toLowerCase() ?? null;
   const documentId = (args.documentId as string | undefined) ?? null;
   const turbineId = (args.turbineId as string | undefined) ?? null;
@@ -1488,7 +1570,10 @@ const queryManual = (args: AgentToolArguments): unknown => {
   const limit = args.limit as number;
   if (turbineId) requiredTurbine(turbineId);
 
-  if (documentId && !knowledgeDocuments.some((document) => document.id === documentId)) {
+  const documents = context.workflowSnapshot
+    ? overlayWorkflowKnowledge(knowledgeDocuments, context.workflowSnapshot)
+    : knowledgeDocuments;
+  if (documentId && !documents.some((document) => document.id === documentId)) {
     throw new AgentToolRuntimeError(
       "KNOWLEDGE_DOCUMENT_NOT_FOUND",
       `Knowledge document ${documentId} was not found.`,
@@ -1498,7 +1583,7 @@ const queryManual = (args: AgentToolArguments): unknown => {
   }
 
   const queryTokens = query?.split(/\s+/u).filter(Boolean) ?? [];
-  const ranked = knowledgeDocuments
+  const ranked = documents
     .filter(
       (document) =>
         (!documentId || document.id === documentId) &&
@@ -1541,7 +1626,7 @@ const queryManual = (args: AgentToolArguments): unknown => {
     );
 
   return {
-    snapshotAt: windFarm.lastUpdatedAt,
+    snapshotAt: workflowSnapshotAt(context),
     query,
     filters: { documentId, turbineId, type },
     rankingMethod: "deterministic metadata field matching",
@@ -1562,7 +1647,7 @@ const queryManual = (args: AgentToolArguments): unknown => {
   };
 };
 
-const queryWorkOrders = (args: AgentToolArguments): unknown => {
+const queryWorkOrders = (args: AgentToolArguments, context: AgentToolExecutionContext): unknown => {
   const workOrderId = (args.workOrderId as string | undefined) ?? null;
   const turbineId = (args.turbineId as string | undefined) ?? null;
   const status = (args.status as WorkOrderStatus | undefined) ?? null;
@@ -1572,7 +1657,13 @@ const queryWorkOrders = (args: AgentToolArguments): unknown => {
   if (turbineId) requiredTurbine(turbineId);
   if (workOrderId) requiredWorkOrder(workOrderId);
 
-  const source = includeHistorical || workOrderId ? allWorkOrders : workOrders;
+  const liveWorkOrders = context.workflowSnapshot
+    ? overlayWorkflowWorkOrder(workOrders, context.workflowSnapshot)
+    : workOrders;
+  const source =
+    includeHistorical || workOrderId
+      ? [...liveWorkOrders, ...historicalWorkOrders]
+      : liveWorkOrders;
   const matching = source
     .filter(
       (workOrder) =>
@@ -1587,7 +1678,7 @@ const queryWorkOrders = (args: AgentToolArguments): unknown => {
     );
 
   return {
-    snapshotAt: windFarm.lastUpdatedAt,
+    snapshotAt: workflowSnapshotAt(context),
     filters: { workOrderId, turbineId, status, priority, includeHistorical },
     total: matching.length,
     returned: Math.min(limit, matching.length),
@@ -1683,9 +1774,12 @@ const queryVessels = (args: AgentToolArguments): unknown => {
   };
 };
 
-const updateWorkOrder = (args: AgentToolArguments): unknown => {
+const updateWorkOrder = (args: AgentToolArguments, context: AgentToolExecutionContext): unknown => {
   const workOrderId = args.workOrderId as string;
-  const source = workOrders.find((workOrder) => workOrder.id === workOrderId);
+  const currentWorkOrders = context.workflowSnapshot
+    ? overlayWorkflowWorkOrder(workOrders, context.workflowSnapshot)
+    : workOrders;
+  const source = currentWorkOrders.find((workOrder) => workOrder.id === workOrderId);
   if (!source) {
     throw new AgentToolRuntimeError(
       "LIVE_WORK_ORDER_NOT_FOUND",
@@ -1735,14 +1829,16 @@ const updateWorkOrder = (args: AgentToolArguments): unknown => {
       status: source.status,
       schedulingNote: note,
       sourceUpdatedAt: source.updatedAt,
-      generatedAt: windFarm.lastUpdatedAt,
+      generatedAt: workflowSnapshotAt(context),
     },
     notice:
       "Dry-run draft only. No work-order status, assignment, schedule, task, or resource record was persisted.",
   };
 };
 
-const handlers: Readonly<Record<AgentToolName, (args: AgentToolArguments) => unknown>> = {
+const handlers: Readonly<
+  Record<AgentToolName, (args: AgentToolArguments, context: AgentToolExecutionContext) => unknown>
+> = {
   get_turbine_status: getTurbineStatus,
   query_scada: queryScada,
   query_alarm_history: queryAlarmHistory,
@@ -1774,7 +1870,8 @@ const stableValue = (value: unknown): unknown => {
   return value;
 };
 
-const stableStringify = (value: unknown): string => JSON.stringify(stableValue(value));
+export const stableAgentToolStringify = (value: unknown): string =>
+  JSON.stringify(stableValue(value));
 
 const hashText = (value: string): string => {
   let hash = 0x811c9dc5;
@@ -1786,7 +1883,7 @@ const hashText = (value: string): string => {
 };
 
 const estimatedTokens = (value: unknown): number => {
-  const bytes = new TextEncoder().encode(stableStringify(value)).length;
+  const bytes = new TextEncoder().encode(stableAgentToolStringify(value)).length;
   return Math.max(1, Math.ceil(bytes / 4));
 };
 
@@ -1811,11 +1908,10 @@ const failedResult = (error: unknown, dryRun: boolean): AgentToolFailureResult =
   });
 };
 
-/**
- * Execute one deterministic demo tool call and append its observable record to
- * runtime-local history. Validation failures do not count as executions.
- */
-export const executeAgentTool = (request: AgentToolExecutionRequest): AgentToolExecution => {
+/** Validate and normalize one tool request without running its handler. */
+export const normalizeAgentToolExecutionRequest = (
+  request: AgentToolExecutionRequest,
+): AgentToolRequest => {
   if (typeof request.tool !== "string" || !isAgentToolName(request.tool)) {
     throw new AgentToolRuntimeError(
       "UNKNOWN_AGENT_TOOL",
@@ -1827,6 +1923,20 @@ export const executeAgentTool = (request: AgentToolExecutionRequest): AgentToolE
 
   const tool = request.tool;
   const args = normalizeArgs(tool, request.args);
+  return Object.freeze({ tool, args });
+};
+
+/**
+ * Execute one deterministic demo tool call. Runtime-memory recording remains
+ * the default for backwards-compatible local demos; the D1 ledger disables it
+ * and records the returned execution only after its durable write succeeds.
+ */
+export const executeAgentTool = (
+  request: AgentToolExecutionRequest,
+  context: AgentToolExecutionContext = {},
+): AgentToolExecution => {
+  const requestRecord = normalizeAgentToolExecutionRequest(request);
+  const { tool, args } = requestRecord;
   const catalog = catalogByName.get(tool);
   if (!catalog) {
     throw new AgentToolRuntimeError("UNKNOWN_AGENT_TOOL", `Unknown agent tool: ${tool}.`, 400);
@@ -1835,13 +1945,12 @@ export const executeAgentTool = (request: AgentToolExecutionRequest): AgentToolE
   const sequence = executionSequence;
   executionSequence += 1;
   const startedAtMs = BASE_EXECUTION_TIME_MS + sequence * 1_000;
-  const requestRecord: AgentToolRequest = Object.freeze({ tool, args });
   let result: AgentToolResult;
   try {
     result = Object.freeze({
       ok: true,
       dryRun: catalog.dryRun,
-      data: handlers[tool](args),
+      data: handlers[tool](args, context),
     });
   } catch (error) {
     result = failedResult(error, catalog.dryRun);
@@ -1849,9 +1958,19 @@ export const executeAgentTool = (request: AgentToolExecutionRequest): AgentToolE
 
   const inputTokens = estimatedTokens(requestRecord);
   const outputTokens = estimatedTokens(result);
-  const correlationHash = hashText(stableStringify(requestRecord));
+  const requestFingerprint =
+    context.requestFingerprint ?? hashText(stableAgentToolStringify(requestRecord));
+  const correlationHash = hashText(stableAgentToolStringify(requestRecord));
+  const executionOrdinal = String(sequence + 1).padStart(4, "0");
+  const executionId = context.executionId ?? `AGEXEC-RUNTIME-${executionOrdinal}`;
   const execution: AgentToolExecution = Object.freeze({
-    correlationId: `WOPS-${tool.toUpperCase()}-${correlationHash}-${String(sequence + 1).padStart(4, "0")}`,
+    executionId,
+    agentId: context.agentId ?? getDefaultAgentIdForTool(tool),
+    missionId: context.missionId ?? null,
+    idempotencyKey: context.idempotencyKey ?? `runtime-${executionId}`,
+    requestFingerprint,
+    correlationId:
+      context.correlationId ?? `WOPS-${tool.toUpperCase()}-${correlationHash}-${executionOrdinal}`,
     request: requestRecord,
     result,
     startedAt: new Date(startedAtMs).toISOString(),
@@ -1867,8 +1986,10 @@ export const executeAgentTool = (request: AgentToolExecutionRequest): AgentToolE
     deterministic: true,
   });
 
-  history.push(execution);
-  if (history.length > HISTORY_LIMIT) history.splice(0, history.length - HISTORY_LIMIT);
+  if (context.recordInMemory !== false) {
+    history.push(execution);
+    if (history.length > HISTORY_LIMIT) history.splice(0, history.length - HISTORY_LIMIT);
+  }
   return execution;
 };
 

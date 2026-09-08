@@ -1,6 +1,7 @@
 import { failureCases } from "./archive-data";
 import { knowledgeDocuments } from "./knowledge-data";
 import { evidenceItems, featuredMission } from "./operations-data";
+import type { ServerWorkflowSnapshot } from "./server-workflow-contract";
 import type { FailureCase, KnowledgeDocument } from "./types";
 
 export const DEFAULT_KNOWLEDGE_QUESTION = "WT-023为什么被判断为主轴承退化？";
@@ -106,11 +107,13 @@ export function rankKnowledgeDocuments(
   question: string,
   turbineId = "WT-023",
   missionId = featuredMission.id,
+  documents: readonly KnowledgeDocument[] = knowledgeDocuments,
+  preferredDocumentId: string | null = null,
 ): readonly RankedDocument[] {
   const queryTerms = extractKnowledgeQueryTerms(question);
   const normalizedTurbineId = turbineId.toUpperCase();
 
-  return knowledgeDocuments
+  return documents
     .map((document) => {
       const searchable = normalize(
         [
@@ -131,7 +134,9 @@ export function rankKnowledgeDocuments(
         (document.relatedTurbineIds.includes(normalizedTurbineId) ? 7 : 0) +
         (document.relatedMissionIds.includes(missionId) ? 6 : 0);
       const vectorizedScore = document.vectorized ? 1 : 0;
-      const curatedBoost = curatedBoostByDocumentId[document.id] ?? 0;
+      const curatedBoost =
+        (curatedBoostByDocumentId[document.id] ?? 0) +
+        (document.id === preferredDocumentId ? 40 : 0);
 
       return {
         document,
@@ -185,12 +190,25 @@ const evidenceSummary = (id: (typeof RELATED_EVIDENCE_IDS)[number]): string =>
 
 export function answerKnowledgeQuestion(
   question: string,
-  options: { readonly turbineId?: string; readonly missionId?: string } = {},
+  options: {
+    readonly turbineId?: string;
+    readonly missionId?: string;
+    readonly documents?: readonly KnowledgeDocument[];
+    readonly workflowSnapshot?: ServerWorkflowSnapshot;
+  } = {},
 ): KnowledgeAssistantAnswer {
   const normalizedQuestion = question.trim();
   const turbineId = (options.turbineId ?? featuredMission.turbineId).toUpperCase();
   const missionId = options.missionId ?? featuredMission.id;
-  const rankedDocuments = rankKnowledgeDocuments(normalizedQuestion, turbineId, missionId);
+  const documents = options.documents ?? knowledgeDocuments;
+  const generatedCaseId = options.workflowSnapshot?.knowledgeCaseId ?? null;
+  const rankedDocuments = rankKnowledgeDocuments(
+    normalizedQuestion,
+    turbineId,
+    missionId,
+    documents,
+    generatedCaseId,
+  );
   const citations = rankedDocuments.slice(0, 4).map(({ document }) => createCitation(document));
   const supportingFailures = relatedMainBearingFailures().slice(0, 2);
 
@@ -199,7 +217,9 @@ export function answerKnowledgeQuestion(
     question: normalizedQuestion,
     scope: { turbineId, missionId },
     answer: {
-      headline: "多源趋势与故障特征共同指向主轴承早期退化",
+      headline: generatedCaseId
+        ? "WT-023 主轴承处置已完成闭环验证并沉淀知识案例"
+        : "多源趋势与故障特征共同指向主轴承早期退化",
       summary:
         "判断不是由单个阈值触发，而是振动、温升、包络谱、联合异常模型、历史相似案例和既往巡检记录相互印证。",
       findings: [
@@ -228,19 +248,21 @@ export function answerKnowledgeQuestion(
           evidenceIds: ["EV-023-ANOMALY-004", "EV-023-HISTORY-006"],
         },
       ],
-      conclusion: `${featuredMission.diagnosis ?? "主轴承早期退化"}。综合置信度 ${featuredMission.confidencePercent ?? 87}%；仍需按规程完成润滑脂取样与内窥镜检查后确认根因。`,
+      conclusion: generatedCaseId
+        ? `${generatedCaseId} 已记录五项现场任务、复测结果与健康回写；机组健康度为 ${options.workflowSnapshot?.health.turbineScore ?? 82}，主轴承健康度为 ${options.workflowSnapshot?.health.mainBearingScore ?? 78}。`
+        : `${featuredMission.diagnosis ?? "主轴承早期退化"}。综合置信度 ${featuredMission.confidencePercent ?? 87}%；仍需按规程完成润滑脂取样与内窥镜检查后确认根因。`,
       confidencePercent: featuredMission.confidencePercent ?? 87,
     },
     citations,
     retrieval: {
       mode: "deterministic-keyword-demo",
       queryTerms: extractKnowledgeQueryTerms(normalizedQuestion),
-      candidateCount: knowledgeDocuments.length + failureCases.length,
+      candidateCount: documents.length + failureCases.length,
       retrievedCount: citations.length,
       evidenceIds: RELATED_EVIDENCE_IDS,
       supportingFailureCaseIds: supportingFailures.map((failureCase) => failureCase.id),
     },
-    generatedAt: SNAPSHOT_AT,
+    generatedAt: options.workflowSnapshot?.updatedAt ?? SNAPSHOT_AT,
     disclaimer:
       "这是基于固定演示数据、关键词打分和人工校准权重的确定性检索预览，不是生产级 embedding、向量数据库或真实大模型生成结果。",
   };
