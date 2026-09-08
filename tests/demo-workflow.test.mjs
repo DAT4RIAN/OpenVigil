@@ -5,6 +5,8 @@ import {
   canCompleteFeaturedWorkOrder,
   canonicalDemoWorkflow,
   featuredWorkOrderTaskIds,
+  getCurrentWorkflowAuditCycle,
+  getFeaturedMissionNarrative,
   transitionDemoWorkflow,
 } from "../lib/demo-workflow.ts";
 
@@ -111,4 +113,37 @@ test("reject, revision and escalation produce distinct audited outcomes", () => 
     assert.equal(result.workOrderStatus, "draft");
     assert.match(result.auditTrail.at(-1)?.title ?? "", new RegExp(action));
   }
+});
+
+test("featured Mission copy follows the current approval and execution state", () => {
+  const baseline = getFeaturedMissionNarrative(canonicalDemoWorkflow);
+  assert.match(baseline.summary, /等待人工审批/);
+  assert.doesNotMatch(baseline.summary, /已批准/);
+
+  const approved = transitionDemoWorkflow(canonicalDemoWorkflow, approval);
+  assert.match(getFeaturedMissionNarrative(approved).summary, /已获人工批准/);
+
+  const started = transitionDemoWorkflow(approved, {
+    type: "start-work-order",
+    timestamp: "2026-08-14T08:00:00+08:00",
+    actor: "海维二组",
+  });
+  assert.match(getFeaturedMissionNarrative(started).nextAction, /现场任务/);
+});
+
+test("visible workflow activity starts at the latest reset while D1 keeps full history", () => {
+  const approved = transitionDemoWorkflow(canonicalDemoWorkflow, approval);
+  const reset = transitionDemoWorkflow(approved, {
+    type: "replay-approval",
+    timestamp: "2026-08-13T10:00:00+08:00",
+  });
+  const reapproved = transitionDemoWorkflow(reset, {
+    ...approval,
+    timestamp: "2026-08-13T10:05:00+08:00",
+  });
+
+  assert.deepEqual(
+    getCurrentWorkflowAuditCycle(reapproved.auditTrail).map((event) => event.kind),
+    ["replay", "approval"],
+  );
 });

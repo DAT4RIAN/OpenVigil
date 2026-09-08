@@ -34,6 +34,11 @@ export interface DemoWorkflowState {
   readonly auditTrail: readonly DemoWorkflowEvent[];
 }
 
+export interface FeaturedMissionNarrative {
+  readonly summary: string;
+  readonly nextAction: string;
+}
+
 export type DemoWorkflowAction =
   | { readonly type: "replay-approval"; readonly timestamp: string }
   | { readonly type: "reset-canonical" }
@@ -55,15 +60,6 @@ export type DemoWorkflowAction =
     }
   | { readonly type: "complete-work-order"; readonly timestamp: string; readonly actor: string };
 
-const canonicalApproval: DemoApprovalRecord = {
-  action: "approve",
-  approver: "李明远",
-  approverRole: "值班总工程师",
-  timestamp: "2026-08-13T09:02:00+08:00",
-  reason: "方案 B 在安全风险、停机损失与作业窗口之间取得最佳平衡。",
-  comment: "同意降载运行，并于 8 月 14 日窗口执行主轴承检查。",
-};
-
 export const featuredWorkOrderTaskIds = [
   "WO-20260823-017-TASK-01",
   "WO-20260823-017-TASK-02",
@@ -73,26 +69,77 @@ export const featuredWorkOrderTaskIds = [
 ] as const;
 
 export const canonicalDemoWorkflow: DemoWorkflowState = {
-  missionStatus: "executing",
-  missionProgress: 84,
-  decisionStatus: "approved",
-  approval: canonicalApproval,
-  workOrderStatus: "scheduled",
+  missionStatus: "under-review",
+  missionProgress: 72,
+  decisionStatus: "under-review",
+  approval: null,
+  workOrderStatus: "draft",
   completedTaskIds: [],
   turbineHealthScore: 68,
   mainBearingHealthScore: 63,
   knowledgeCaseId: null,
-  auditTrail: [
-    {
-      id: "DEMO-EVENT-APPROVED",
-      kind: "approval",
-      timestamp: canonicalApproval.timestamp,
-      actor: canonicalApproval.approver,
-      title: "方案 B 已获人工批准",
-      detail: "审批门禁解除，WO-20260823-017 已创建并排程。",
-    },
-  ],
+  auditTrail: [],
 };
+
+export function getFeaturedMissionNarrative(
+  state: Pick<
+    DemoWorkflowState,
+    "missionStatus" | "decisionStatus" | "approval" | "workOrderStatus" | "knowledgeCaseId"
+  >,
+): FeaturedMissionNarrative {
+  if (state.missionStatus === "completed") {
+    return {
+      summary: "主轴承异常已完成现场检查与复测，健康度结果和处置证据已回写闭环。",
+      nextAction: state.knowledgeCaseId
+        ? `复核并复用知识案例 ${state.knowledgeCaseId}`
+        : "完成闭环知识案例归档",
+    };
+  }
+  if (state.workOrderStatus === "in-progress") {
+    return {
+      summary: "主轴承联合异常已通过人工审批，现场检查工单正在执行。",
+      nextAction: "完成现场任务并提交振动、温度与检查结果",
+    };
+  }
+  if (state.workOrderStatus === "scheduled" || state.decisionStatus === "approved") {
+    return {
+      summary: "主轴承联合异常处置方案已获人工批准，现场检查工单已排程。",
+      nextAction: "在 8 月 14 日安全窗口启动 WO-20260823-017",
+    };
+  }
+  if (state.decisionStatus === "rejected") {
+    return {
+      summary: "主轴承联合异常证据已完成汇总，当前处置方案被人工拒绝。",
+      nextAction: "生成替代处置方案并重新提交人工审批",
+    };
+  }
+  if (state.decisionStatus === "revision-requested") {
+    return {
+      summary: "主轴承联合异常证据已完成汇总，人工审核要求修订处置方案。",
+      nextAction: "补充降载曲线与返航预案后重新提交",
+    };
+  }
+  if (state.approval?.action === "escalate") {
+    return {
+      summary: "主轴承联合异常证据已完成汇总，高风险处置方案已升级复核。",
+      nextAction: "等待场站经理与值班总工程师联合决策",
+    };
+  }
+  return {
+    summary: "主轴承振动、温度和功率波动出现联合异常，方案 B 正等待人工审批。",
+    nextAction: "完成高风险处置方案的人工审批",
+  };
+}
+
+export function getCurrentWorkflowAuditCycle(
+  events: readonly DemoWorkflowEvent[],
+): readonly DemoWorkflowEvent[] {
+  let currentCycleStart = 0;
+  events.forEach((event, index) => {
+    if (event.kind === "replay") currentCycleStart = index;
+  });
+  return events.slice(currentCycleStart);
+}
 
 const eventId = (kind: DemoWorkflowEventKind, timestamp: string): string =>
   `DEMO-${kind.toUpperCase()}-${timestamp.replace(/\D/g, "").slice(-14)}`;

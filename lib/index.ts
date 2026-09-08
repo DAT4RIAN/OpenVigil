@@ -6,6 +6,8 @@ export {
   canCompleteFeaturedWorkOrder,
   canonicalDemoWorkflow,
   featuredWorkOrderTaskIds,
+  getCurrentWorkflowAuditCycle,
+  getFeaturedMissionNarrative,
   transitionDemoWorkflow,
 } from "./demo-workflow";
 
