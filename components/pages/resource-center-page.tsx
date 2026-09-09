@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   Anchor,
   ArrowRight,
@@ -15,12 +16,13 @@ import {
   Wrench,
 } from "lucide-react";
 import { StatusBadge } from "@/components/data-display/status-badge";
+import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, EmptyState, Progress } from "@/components/ui/primitives";
 import { apiGet } from "@/lib/api-client";
 import { resourceCenterSnapshot } from "@/lib";
-import type { ResourceCenterSnapshot } from "@/lib/types";
+import type { ResourceCenterSnapshot, SparePart } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type ResourceTab = "spare-parts" | "crews" | "vessels" | "tools" | "weather";
@@ -50,6 +52,72 @@ const availabilityLabel = {
   maintenance: "维护中",
 } as const;
 
+const sparePartColumns: readonly LegacyColumnDef<SparePart, unknown>[] = [
+  {
+    id: "part",
+    header: "备件",
+    accessorFn: (item) => `${item.name} ${item.partNumber} ${item.category}`,
+    cell: ({ row }) => (
+      <span>
+        <strong>{row.original.name}</strong>
+        <small>
+          {row.original.partNumber} · {row.original.category}
+        </small>
+      </span>
+    ),
+  },
+  { accessorKey: "warehouse", header: "位置" },
+  {
+    accessorKey: "onHand",
+    header: "在库",
+    cell: ({ row }) => `${row.original.onHand} ${row.original.unit}`,
+  },
+  { accessorKey: "reserved", header: "预留" },
+  {
+    accessorKey: "available",
+    header: "可用",
+    cell: ({ row }) => <strong>{row.original.available}</strong>,
+  },
+  {
+    accessorKey: "status",
+    header: "状态",
+    cell: ({ row }) => (
+      <StatusBadge
+        value={row.original.status}
+        label={
+          row.original.status === "in-stock"
+            ? "库存正常"
+            : row.original.status === "low-stock"
+              ? "低库存"
+              : "缺货"
+        }
+        tone={
+          row.original.status === "in-stock"
+            ? "success"
+            : row.original.status === "low-stock"
+              ? "warning"
+              : "critical"
+        }
+        compact
+      />
+    ),
+  },
+  {
+    id: "workOrders",
+    header: "关联",
+    accessorFn: (item) => item.reservedForWorkOrderIds.join(" "),
+    cell: ({ row }) => (
+      <span>
+        {row.original.reservedForWorkOrderIds.map((id) => (
+          <Link key={id} href="/work-orders">
+            {id}
+          </Link>
+        ))}
+      </span>
+    ),
+  },
+];
+
 function ResourceContent({
   tab,
   resources,
@@ -69,66 +137,44 @@ function ResourceContent({
     );
     return parts.length ? (
       <div className="resource-table-wrap">
-        <table className="resource-table">
-          <thead>
-            <tr>
-              <th>备件</th>
-              <th>位置</th>
-              <th>在库</th>
-              <th>预留</th>
-              <th>可用</th>
-              <th>状态</th>
-              <th>关联</th>
-            </tr>
-          </thead>
-          <tbody>
-            {parts.map((item) => (
-              <tr key={item.id}>
-                <td>
-                  <strong>{item.name}</strong>
-                  <small>
-                    {item.partNumber} · {item.category}
-                  </small>
-                </td>
-                <td>{item.warehouse}</td>
-                <td>
-                  {item.onHand} {item.unit}
-                </td>
-                <td>{item.reserved}</td>
-                <td>
-                  <strong>{item.available}</strong>
-                </td>
-                <td>
-                  <StatusBadge
-                    value={item.status}
-                    label={
-                      item.status === "in-stock"
-                        ? "库存正常"
-                        : item.status === "low-stock"
-                          ? "低库存"
-                          : "缺货"
-                    }
-                    tone={
-                      item.status === "in-stock"
-                        ? "success"
-                        : item.status === "low-stock"
-                          ? "warning"
-                          : "critical"
-                    }
-                    compact
-                  />
-                </td>
-                <td>
-                  {item.reservedForWorkOrderIds.map((id) => (
-                    <Link key={id} href="/work-orders">
-                      {id}
-                    </Link>
-                  ))}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          data={parts}
+          columns={sparePartColumns}
+          getRowId={(part) => part.id}
+          initialSorting={[{ id: "available", desc: false }]}
+          pageSize={6}
+          searchTextForRow={(part) =>
+            `${part.id} ${part.name} ${part.partNumber} ${part.category} ${part.warehouse}`
+          }
+          searchPlaceholder="在当前备件台账内搜索…"
+          bulkActions={[
+            {
+              label: "复制备件编号",
+              onActivate: (selectedParts) =>
+                navigator.clipboard.writeText(
+                  selectedParts.map((part) => part.partNumber).join("\n"),
+                ),
+            },
+          ]}
+          csvExport={{
+            filename: "windops-spare-parts.csv",
+            columns: [
+              { label: "备件ID", value: (part) => part.id },
+              { label: "备件编号", value: (part) => part.partNumber },
+              { label: "名称", value: (part) => part.name },
+              { label: "类别", value: (part) => part.category },
+              { label: "仓库", value: (part) => part.warehouse },
+              { label: "在库", value: (part) => part.onHand },
+              { label: "预留", value: (part) => part.reserved },
+              { label: "可用", value: (part) => part.available },
+              { label: "状态", value: (part) => part.status },
+              {
+                label: "关联工单",
+                value: (part) => part.reservedForWorkOrderIds.join(";"),
+              },
+            ],
+          }}
+        />
       </div>
     ) : (
       <ResourceEmpty />

@@ -1,8 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, InputHTMLAttributes, KeyboardEvent, MouseEvent } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Columns3 } from "lucide-react";
+import type { ChangeEvent, InputHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  Columns3,
+  Download,
+  Search,
+} from "lucide-react";
 import { flexRender } from "@tanstack/react-table";
 import type {
   ColumnVisibilityState,
@@ -43,6 +52,44 @@ export interface DataTableProps<TData extends RowData> {
   readonly initialSorting?: SortingState;
   readonly pageSize?: number;
   readonly emptyMessage?: string;
+  readonly searchTextForRow?: (row: TData) => string;
+  readonly searchPlaceholder?: string;
+  readonly filterControls?: ReactNode;
+  readonly bulkActions?: readonly DataTableBulkAction<TData>[];
+  readonly csvExport?: DataTableCsvExport<TData>;
+  readonly onSelectionChange?: (rows: readonly TData[]) => void;
+}
+
+export interface DataTableBulkAction<TData> {
+  readonly label: string;
+  readonly onActivate: (rows: readonly TData[]) => void | Promise<void>;
+}
+
+export interface DataTableCsvExport<TData> {
+  readonly filename: string;
+  readonly columns: readonly {
+    readonly label: string;
+    readonly value: (row: TData) => string | number | boolean | null | undefined;
+  }[];
+}
+
+const csvCell = (value: string | number | boolean | null | undefined): string =>
+  `"${String(value ?? "").replaceAll('"', '""')}"`;
+
+function downloadCsv<TData>(config: DataTableCsvExport<TData>, rows: readonly TData[]): void {
+  const header = config.columns.map((column) => csvCell(column.label)).join(",");
+  const body = rows.map((row) =>
+    config.columns.map((column) => csvCell(column.value(row))).join(","),
+  );
+  const blob = new Blob(["\uFEFF", [header, ...body].join("\r\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = config.filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function DataTable<TData extends RowData>({
@@ -54,6 +101,12 @@ export function DataTable<TData extends RowData>({
   initialSorting = [],
   pageSize = 6,
   emptyMessage = "没有匹配的记录",
+  searchTextForRow,
+  searchPlaceholder = "搜索记录…",
+  filterControls,
+  bulkActions = [],
+  csvExport,
+  onSelectionChange,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({});
@@ -62,6 +115,12 @@ export function DataTable<TData extends RowData>({
     pageIndex: 0,
     pageSize,
   });
+  const [query, setQuery] = useState("");
+  const filteredData = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    if (!normalized || !searchTextForRow) return [...data];
+    return data.filter((row) => searchTextForRow(row).toLocaleLowerCase().includes(normalized));
+  }, [data, query, searchTextForRow]);
 
   const selectionColumn = useMemo<LegacyColumnDef<TData, unknown>>(
     () => ({
@@ -97,7 +156,7 @@ export function DataTable<TData extends RowData>({
   );
 
   const table = useLegacyTable({
-    data: [...data],
+    data: filteredData,
     columns: tableColumns,
     state: { sorting, columnVisibility, rowSelection, pagination },
     onSortingChange: setSorting,
@@ -113,51 +172,112 @@ export function DataTable<TData extends RowData>({
 
   useEffect(() => {
     table.setPageIndex(0);
-  }, [data, table]);
+  }, [filteredData, table]);
 
   const visibleRows = table.getRowModel().rows;
   const selectedCount = Object.keys(rowSelection).length;
+  const selectedRows = useMemo(
+    () => filteredData.filter((row) => rowSelection[getRowId(row)]),
+    [filteredData, getRowId, rowSelection],
+  );
+  const exportRows = selectedRows.length ? selectedRows : filteredData;
   const pageCount = Math.max(1, table.getPageCount());
   const pageIndex = Math.min(pagination.pageIndex, pageCount - 1);
 
   const activateRow = (row: TData): void => onRowActivate?.(row);
+  const cameFromInteractiveChild = (
+    event: KeyboardEvent<HTMLTableRowElement> | MouseEvent<HTMLTableRowElement>,
+  ): boolean => {
+    if (event.target === event.currentTarget || !(event.target instanceof Element)) return false;
+    return Boolean(
+      event.target.closest(
+        'a[href],button,input,select,textarea,summary,[role="button"],[role="link"],[contenteditable="true"],[tabindex]:not([tabindex="-1"]),[data-row-activation-ignore]',
+      ),
+    );
+  };
   const onRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, row: TData): void => {
+    if (cameFromInteractiveChild(event)) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       activateRow(row);
     }
   };
 
+  useEffect(() => {
+    onSelectionChange?.(selectedRows);
+  }, [onSelectionChange, selectedRows]);
+
   return (
     <div className={styles.root}>
       <div className={styles.toolbar}>
-        <span aria-live="polite">
-          {data.length} 条记录 · 已选择 {selectedCount} 条
-        </span>
-        <details className={styles.columnsMenu}>
-          <summary>
-            <Columns3 size={14} aria-hidden="true" /> 列显示
-          </summary>
-          <div className={styles.columnsPopover}>
-            {table
-              .getAllLeafColumns()
-              .filter((column) => column.getCanHide())
-              .map((column) => (
-                <label key={column.id}>
-                  <input
-                    checked={column.getIsVisible()}
-                    type="checkbox"
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      column.toggleVisibility(event.target.checked)
-                    }
-                  />
-                  {typeof column.columnDef.header === "string"
-                    ? column.columnDef.header
-                    : column.id}
-                </label>
-              ))}
-          </div>
-        </details>
+        <div className={styles.toolbarPrimary}>
+          {searchTextForRow ? (
+            <label className={styles.searchField}>
+              <Search size={14} aria-hidden="true" />
+              <span className={styles.srOnly}>搜索表格</span>
+              <input
+                aria-label="搜索表格"
+                placeholder={searchPlaceholder}
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+          ) : null}
+          {filterControls}
+          <span aria-live="polite">
+            {filteredData.length} 条记录 · 已选择 {selectedCount} 条
+          </span>
+        </div>
+        <div className={styles.toolbarActions}>
+          {bulkActions.map((action) => (
+            <button
+              disabled={!selectedRows.length}
+              key={action.label}
+              type="button"
+              onClick={() =>
+                void Promise.resolve(action.onActivate(selectedRows)).then(() =>
+                  setRowSelection({}),
+                )
+              }
+            >
+              {action.label}
+            </button>
+          ))}
+          {csvExport ? (
+            <button
+              disabled={!exportRows.length}
+              type="button"
+              onClick={() => downloadCsv(csvExport, exportRows)}
+            >
+              <Download size={14} aria-hidden="true" /> 导出 CSV
+            </button>
+          ) : null}
+          <details className={styles.columnsMenu}>
+            <summary>
+              <Columns3 size={14} aria-hidden="true" /> 列显示
+            </summary>
+            <div className={styles.columnsPopover}>
+              {table
+                .getAllLeafColumns()
+                .filter((column) => column.getCanHide())
+                .map((column) => (
+                  <label key={column.id}>
+                    <input
+                      checked={column.getIsVisible()}
+                      type="checkbox"
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        column.toggleVisibility(event.target.checked)
+                      }
+                    />
+                    {typeof column.columnDef.header === "string"
+                      ? column.columnDef.header
+                      : column.id}
+                  </label>
+                ))}
+            </div>
+          </details>
+        </div>
       </div>
 
       <div className={styles.scroller}>
@@ -200,7 +320,9 @@ export function DataTable<TData extends RowData>({
                   className={selectedRowId === row.id ? styles.activeRow : undefined}
                   key={row.id}
                   tabIndex={onRowActivate ? 0 : undefined}
-                  onClick={() => activateRow(row.original)}
+                  onClick={(event) => {
+                    if (!cameFromInteractiveChild(event)) activateRow(row.original);
+                  }}
                   onKeyDown={(event) => onRowKeyDown(event, row.original)}
                 >
                   {row.getVisibleCells().map((cell) => (

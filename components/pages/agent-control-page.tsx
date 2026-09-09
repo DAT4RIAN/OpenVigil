@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -7,7 +6,6 @@ import {
   Activity,
   ArrowRight,
   Box,
-  BrainCircuit,
   BookOpen,
   CheckCircle2,
   Clock3,
@@ -19,15 +17,14 @@ import {
   MoreHorizontal,
   Play,
   Search,
-  ShieldCheck,
   Sparkles,
   TerminalSquare,
-  Wrench,
   X,
   Zap,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
+import { AgentControlTable } from "@/components/pages/agent-control-table";
 import { Avatar, Button, KeyValue } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import {
@@ -46,40 +43,12 @@ import type { ActivityEvent, Agent, AgentLayer, AgentStatus } from "@/lib/types"
 import { useRealtimeChannel } from "@/lib/use-realtime-channel";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
-
-const layerMeta: Record<
-  AgentLayer,
-  { label: string; description: string; icon: typeof BrainCircuit; tone: string }
-> = {
-  decision: {
-    label: "Decision Layer",
-    description: "发现、分析与策略生成",
-    icon: BrainCircuit,
-    tone: "teal",
-  },
-  review: {
-    label: "Review Layer",
-    description: "安全、工程与经济审核",
-    icon: ShieldCheck,
-    tone: "amber",
-  },
-  execution: {
-    label: "Execution Layer",
-    description: "资源编排与现场执行",
-    icon: Wrench,
-    tone: "blue",
-  },
-};
-
-const statusLabel: Record<AgentStatus, string> = {
-  idle: "IDLE",
-  thinking: "THINKING",
-  working: "WORKING",
-  waiting: "WAITING",
-  reviewing: "REVIEWING",
-  failed: "FAILED",
-  offline: "OFFLINE",
-};
+import { overlayClientAgents } from "@/lib/client-workflow-overlays";
+import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
+import {
+  agentLayerMeta as layerMeta,
+  agentStatusLabel as statusLabel,
+} from "@/lib/agent-control-meta";
 
 type ToolTestResponse = {
   ok: true;
@@ -294,6 +263,7 @@ function AgentDrawer({
   publicEvents: readonly ActivityEvent[];
   currentTask: string | null;
 }) {
+  const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
   const layer = layerMeta[agent.layer];
   const LayerIcon = layer.icon;
   const [configOpen, setConfigOpen] = useState(false);
@@ -324,6 +294,8 @@ function AgentDrawer({
     <>
       <button className="drawer-backdrop" onClick={onClose} aria-label="关闭 Agent 详情" />
       <aside
+        ref={dialogRef}
+        tabIndex={-1}
         className="detail-drawer agent-drawer"
         role="dialog"
         aria-modal="true"
@@ -621,6 +593,7 @@ export function AgentControlPage() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Agent | null>(null);
   const agentStream = useRealtimeChannel("agent-events");
+  const displayAgents = useMemo(() => overlayClientAgents(agents, workflow), [workflow]);
 
   useEffect(() => {
     const requestedAgentId = new URLSearchParams(window.location.search)
@@ -628,13 +601,13 @@ export function AgentControlPage() {
       ?.trim()
       .toLowerCase();
     const requestedAgent = requestedAgentId
-      ? agents.find((agent) => agent.id === requestedAgentId)
+      ? displayAgents.find((agent) => agent.id === requestedAgentId)
       : undefined;
     if (!requestedAgent) return;
 
     const timer = window.setTimeout(() => setSelected(requestedAgent), 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [displayAgents]);
 
   const ledgerQuery = useQuery({
     queryKey: ["agent-tool-ledger"],
@@ -652,15 +625,15 @@ export function AgentControlPage() {
       ].sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp)),
     [workflow.auditTrail],
   );
-  const active = agents.filter((agent) =>
+  const active = displayAgents.filter((agent) =>
     ["working", "thinking", "reviewing"].includes(agent.status),
   ).length;
-  const online = agents.filter(
+  const online = displayAgents.filter(
     (agent) => agent.status !== "offline" && agent.status !== "failed",
   ).length;
   const filtered = useMemo(
     () =>
-      agents.filter(
+      displayAgents.filter(
         (agent) =>
           (layer === "all" || agent.layer === layer) &&
           (status === "all" || agent.status === status) &&
@@ -668,7 +641,7 @@ export function AgentControlPage() {
             .toLowerCase()
             .includes(query.toLowerCase()),
       ),
-    [layer, query, status, workflow],
+    [displayAgents, layer, query, status, workflow],
   );
   const totalRequests = agents.reduce((sum, agent) => sum + agent.metrics.requests24h, 0);
   const totalTools = agents.reduce((sum, agent) => sum + agent.metrics.toolCalls24h, 0);
@@ -722,7 +695,7 @@ export function AgentControlPage() {
               pulse={agentStream.status === "connected"}
             />
             <span className="page-meta-text">
-              {online} / {agents.length} Online · Ledger{" "}
+              {online} / {displayAgents.length} Online · Ledger{" "}
               {ledgerQuery.isError
                 ? "unavailable · snapshot fallback"
                 : (ledgerQuery.data?.meta.persistence ?? "loading")}
@@ -751,7 +724,7 @@ export function AgentControlPage() {
             >
               <Layers3 size={15} /> Organization
             </Button>
-            <Button variant="primary" onClick={() => setSelected(agents[0] ?? null)}>
+            <Button variant="primary" onClick={() => setSelected(displayAgents[0] ?? null)}>
               <Sparkles size={15} /> Inspect Agent
             </Button>
           </>
@@ -884,22 +857,22 @@ export function AgentControlPage() {
         </div>
         <div className="agent-filter-tabs">
           <button className={cn(status === "all" && "active")} onClick={() => setStatus("all")}>
-            All <span>{agents.length}</span>
+            All <span>{displayAgents.length}</span>
           </button>
           <button
             className={cn(status === "working" && "active")}
             onClick={() => setStatus("working")}
           >
-            Working <span>{agents.filter((item) => item.status === "working").length}</span>
+            Working <span>{displayAgents.filter((item) => item.status === "working").length}</span>
           </button>
           <button className={cn(status === "idle" && "active")} onClick={() => setStatus("idle")}>
-            Idle <span>{agents.filter((item) => item.status === "idle").length}</span>
+            Idle <span>{displayAgents.filter((item) => item.status === "idle").length}</span>
           </button>
           <button
             className={cn(status === "failed" && "active")}
             onClick={() => setStatus("failed")}
           >
-            Failed <span>{agents.filter((item) => item.status === "failed").length}</span>
+            Failed <span>{displayAgents.filter((item) => item.status === "failed").length}</span>
           </button>
         </div>
         <span className="toolbar-result">{filtered.length} Agents</span>
@@ -996,6 +969,22 @@ export function AgentControlPage() {
             </div>
           );
         })}
+      </section>
+
+      <section aria-labelledby="agent-table-title" id="agent-table">
+        <div className="page-header__copy">
+          <span className="eyebrow">Operational ledger</span>
+          <h2 id="agent-table-title">Agent Table</h2>
+          <p>统一的搜索、排序、列显隐、分页、行选择、批量检查与 CSV 导出视图。</p>
+        </div>
+        <AgentControlTable
+          rows={filtered.map((agent) => ({
+            agent,
+            currentTask: workflowAwareTask(agent, workflow) ?? "等待新任务",
+          }))}
+          selectedAgentId={selected?.id ?? null}
+          onInspect={setSelected}
+        />
       </section>
       {selected ? (
         <AgentDrawer

@@ -12,24 +12,26 @@ import {
   Download,
   Filter,
   HardHat,
-  MoreHorizontal,
   PackageCheck,
   Plus,
-  Search,
   ShieldCheck,
   UserRound,
   Wrench,
   X,
 } from "lucide-react";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
+import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button, Card, KeyValue, Progress } from "@/components/ui/primitives";
+import { Button, KeyValue, Progress } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { featuredMission, historicalWorkOrders, workOrders } from "@/lib";
 import type { WorkOrder, WorkOrderPriority, WorkOrderStatus } from "@/lib/types";
 import { canCompleteFeaturedWorkOrder } from "@/lib/demo-workflow";
+import { overlayClientWorkOrders } from "@/lib/client-workflow-overlays";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
+import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
 
 const statusLabels: Record<WorkOrderStatus, string> = {
   draft: "草稿",
@@ -44,7 +46,6 @@ const statusLabels: Record<WorkOrderStatus, string> = {
 type WorkOrderStatusFilter = "all" | WorkOrderStatus | "completed-group";
 type PlannedStartFilter = "all" | "due" | "next-24h" | "next-7d";
 
-const PAGE_SIZE = 6;
 const WORKFLOW_WORK_ORDER_ID = "WO-20260823-017";
 const SNAPSHOT_TIMESTAMP = Date.parse("2026-08-13T12:00:00+08:00");
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -100,9 +101,123 @@ function nextOption<T extends string>(options: readonly T[], current: T): T {
   return options[(options.indexOf(current) + 1) % options.length] ?? options[0];
 }
 
-function csvCell(value: string | number) {
-  return `"${String(value).replaceAll('"', '""')}"`;
-}
+const workOrderColumns: readonly LegacyColumnDef<WorkOrder, unknown>[] = [
+  {
+    accessorKey: "id",
+    header: "Work Order ID",
+    cell: ({ row }) => <strong className="mono">{row.original.id}</strong>,
+  },
+  {
+    accessorKey: "turbineId",
+    header: "Wind Turbine",
+    cell: ({ row }) => <span className="mono">{row.original.turbineId}</span>,
+  },
+  {
+    accessorKey: "issue",
+    header: "Issue",
+    cell: ({ row }) => (
+      <span className="alarm-title-cell">
+        <strong>{row.original.issue}</strong>
+        <small>{row.original.description}</small>
+      </span>
+    ),
+    size: 300,
+  },
+  {
+    accessorKey: "priority",
+    header: "Priority",
+    cell: ({ row }) => (
+      <StatusBadge
+        value={row.original.priority}
+        label={row.original.priority.toUpperCase()}
+        tone={
+          row.original.priority === "critical"
+            ? "critical"
+            : row.original.priority === "high"
+              ? "warning"
+              : "info"
+        }
+        compact
+      />
+    ),
+  },
+  {
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => (
+      <StatusBadge
+        value={row.original.status}
+        label={statusLabels[row.original.status]}
+        tone={
+          row.original.status === "completed" || row.original.status === "closed"
+            ? "success"
+            : row.original.status === "in-progress"
+              ? "info"
+              : row.original.status === "scheduled"
+                ? "maintenance"
+                : "warning"
+        }
+        compact
+      />
+    ),
+  },
+  {
+    accessorKey: "assignedTeam",
+    header: "Assigned Team",
+    cell: ({ row }) => (
+      <span className="team-cell">
+        <UserRound size={13} /> {row.original.assignedTeam}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "createdByAgentId",
+    header: "Created By",
+    cell: ({ row }) =>
+      row.original.createdByAgentId ? (
+        <span className="ai-status-cell">
+          <Bot size={13} /> AI Agent
+        </span>
+      ) : (
+        "人工创建"
+      ),
+  },
+  {
+    accessorKey: "relatedMissionId",
+    header: "Related Mission",
+    cell: ({ row }) => <span className="mono">{row.original.relatedMissionId ?? "—"}</span>,
+  },
+  {
+    accessorKey: "plannedStart",
+    header: "Planned Start",
+    cell: ({ row }) => new Date(row.original.plannedStart).toLocaleDateString("zh-CN"),
+  },
+  {
+    accessorKey: "deadline",
+    header: "Deadline",
+    cell: ({ row }) => new Date(row.original.deadline).toLocaleDateString("zh-CN"),
+  },
+];
+
+const workOrderCsvExport = {
+  filename: "windops-work-orders-2026-08-13.csv",
+  columns: [
+    { label: "Work Order ID", value: (workOrder: WorkOrder) => workOrder.id },
+    { label: "Wind Turbine", value: (workOrder: WorkOrder) => workOrder.turbineId },
+    { label: "Issue", value: (workOrder: WorkOrder) => workOrder.issue },
+    { label: "Priority", value: (workOrder: WorkOrder) => workOrder.priority },
+    { label: "Status", value: (workOrder: WorkOrder) => statusLabels[workOrder.status] },
+    { label: "Assigned Team", value: (workOrder: WorkOrder) => workOrder.assignedTeam },
+    { label: "Related Mission", value: (workOrder: WorkOrder) => workOrder.relatedMissionId },
+    { label: "Planned Start", value: (workOrder: WorkOrder) => workOrder.plannedStart },
+    { label: "Deadline", value: (workOrder: WorkOrder) => workOrder.deadline },
+  ],
+} as const;
+
+const workOrderSearchText = (workOrder: WorkOrder): string =>
+  `${workOrder.id} ${workOrder.turbineId} ${workOrder.issue} ${workOrder.description} ${workOrder.assignedTeam} ${workOrder.relatedMissionId ?? ""}`;
+
+const workOrderRowId = (workOrder: WorkOrder): string => workOrder.id;
 
 function WorkOrderDrawer({
   workOrder,
@@ -123,11 +238,14 @@ function WorkOrderDrawer({
   onComplete: () => void;
   canComplete: boolean;
 }) {
+  const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
   const completed = workOrder.tasks.filter((task) => task.completed).length;
   return (
     <>
       <button className="drawer-backdrop" onClick={onClose} aria-label="关闭工单详情" />
       <aside
+        ref={dialogRef}
+        tabIndex={-1}
         className="detail-drawer work-order-drawer"
         role="dialog"
         aria-modal="true"
@@ -345,50 +463,33 @@ function WorkOrderDrawer({
 
 export function WorkOrderPage() {
   const workflow = useDemoWorkflow();
-  const [query, setQuery] = useState("");
   const [status, setStatus] = useState<WorkOrderStatusFilter>("all");
   const [priority, setPriority] = useState<"all" | WorkOrderPriority>("all");
   const [plannedStart, setPlannedStart] = useState<PlannedStartFilter>("all");
-  const [page, setPage] = useState(1);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [turbineScope, setTurbineScope] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createIntent, setCreateIntent] = useState(false);
 
   useEffect(() => {
     const parameters = new URLSearchParams(window.location.search);
     const deepLinkedWorkOrderId = parameters.get("workOrder");
     const deepLinkedTurbineId = parameters.get("turbineId");
+    const requestedCreateIntent = parameters.get("intent") === "create";
     const timer = window.setTimeout(() => {
       if (deepLinkedWorkOrderId) setSelectedId(deepLinkedWorkOrderId);
-      else if (deepLinkedTurbineId) setQuery(deepLinkedTurbineId);
+      else if (deepLinkedTurbineId) setTurbineScope(deepLinkedTurbineId.toUpperCase());
+      setCreateIntent(requestedCreateIntent);
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
   const displayWorkOrders = useMemo(
-    () =>
-      workOrders.map((item) =>
-        item.id === WORKFLOW_WORK_ORDER_ID
-          ? {
-              ...item,
-              status: workflow.workOrderStatus,
-              tasks: item.tasks.map((task) => ({
-                ...task,
-                completed: workflow.completedTaskIds.includes(task.id),
-                completionNote: workflow.completedTaskIds.includes(task.id)
-                  ? "已按作业指导书完成并记录"
-                  : null,
-              })),
-            }
-          : item,
-      ),
-    [workflow.completedTaskIds, workflow.workOrderStatus],
+    () => overlayClientWorkOrders(workOrders, workflow),
+    [workflow],
   );
   const filtered = useMemo(
     () =>
       displayWorkOrders.filter((item) => {
-        const normalizedQuery = query.trim().toLowerCase();
-        const matchesSearch = `${item.id} ${item.turbineId} ${item.issue} ${item.assignedTeam}`
-          .toLowerCase()
-          .includes(normalizedQuery);
+        const matchesTurbine = turbineScope === null || item.turbineId === turbineScope;
         const matchesStatus =
           status === "all" ||
           (status === "completed-group"
@@ -406,9 +507,9 @@ export function WorkOrderPage() {
             plannedTimestamp >= SNAPSHOT_TIMESTAMP &&
             plannedTimestamp <= SNAPSHOT_TIMESTAMP + 7 * DAY_MS);
 
-        return matchesSearch && matchesStatus && matchesPriority && matchesPlannedStart;
+        return matchesTurbine && matchesStatus && matchesPriority && matchesPlannedStart;
       }),
-    [displayWorkOrders, plannedStart, priority, query, status],
+    [displayWorkOrders, plannedStart, priority, status, turbineScope],
   );
   const featured =
     displayWorkOrders.find((item) => item.relatedMissionId === featuredMission.id) ??
@@ -425,73 +526,11 @@ export function WorkOrderPage() {
       (item) => item.status === "completed" || item.status === "closed",
     ).length,
   };
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const pageRowIds = pageRows.map((item) => item.id);
-  const selectedFilteredCount = selectedIds.filter((id) =>
-    filtered.some((item) => item.id === id),
-  ).length;
-  const allPageRowsSelected =
-    pageRowIds.length > 0 && pageRowIds.every((id) => selectedIds.includes(id));
   const hasFilters =
-    query.trim().length > 0 || status !== "all" || priority !== "all" || plannedStart !== "all";
-
-  const resetResultState = () => {
-    setPage(1);
-    setSelectedIds([]);
-  };
+    turbineScope !== null || status !== "all" || priority !== "all" || plannedStart !== "all";
 
   const applyStatus = (nextStatus: WorkOrderStatusFilter) => {
     setStatus(nextStatus);
-    resetResultState();
-  };
-
-  const toggleRow = (id: string) => {
-    setSelectedIds((current) =>
-      current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id],
-    );
-  };
-
-  const toggleCurrentPage = () => {
-    setSelectedIds((current) => {
-      if (pageRowIds.every((id) => current.includes(id))) {
-        return current.filter((id) => !pageRowIds.includes(id));
-      }
-      return [...new Set([...current, ...pageRowIds])];
-    });
-  };
-
-  const exportFilteredWorkOrders = () => {
-    const header = [
-      "Work Order ID",
-      "Wind Turbine",
-      "Issue",
-      "Priority",
-      "Status",
-      "Assigned Team",
-      "Related Mission",
-      "Planned Start",
-      "Deadline",
-    ];
-    const rows = filtered.map((item) => [
-      item.id,
-      item.turbineId,
-      item.issue,
-      item.priority,
-      statusLabels[item.status],
-      item.assignedTeam,
-      item.relatedMissionId ?? "",
-      item.plannedStart,
-      item.deadline,
-    ]);
-    const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
-    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `windops-work-orders-${new Date(SNAPSHOT_TIMESTAMP).toISOString().slice(0, 10)}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -521,20 +560,31 @@ export function WorkOrderPage() {
           </>
         }
         actions={
-          <>
-            <Button
-              variant="secondary"
-              onClick={exportFilteredWorkOrders}
-              disabled={filtered.length === 0}
-            >
-              <Download size={15} /> 导出
-            </Button>
-            <Button variant="primary" disabled title="当前演示环境不写入新工单">
-              <Plus size={15} /> 创建工单
-            </Button>
-          </>
+          <Button variant="primary" disabled title="当前演示环境不写入新工单">
+            <Plus size={15} /> 创建工单
+          </Button>
         }
       />
+
+      {createIntent ? (
+        <section className="controlled-entry-note" role="status">
+          <ShieldCheck size={16} />
+          <span>
+            <strong>已打开受控工单创建入口</strong>
+            <small>
+              {turbineScope ? `资产范围：${turbineScope}。` : "未指定资产范围。"}{" "}
+              当前没有通用工单写入 API；页面仅展示可审计的只读工作台，不会假创建工单。
+            </small>
+          </span>
+          <Button
+            variant="ghost"
+            onClick={() => setCreateIntent(false)}
+            aria-label="关闭受控入口提示"
+          >
+            <X size={14} />
+          </Button>
+        </section>
+      ) : null}
 
       {featured ? (
         <section className="featured-work-order">
@@ -642,212 +692,74 @@ export function WorkOrderPage() {
         </button>
       </section>
 
-      <section className="data-toolbar">
-        <div className="search-field">
-          <Search size={15} />
-          <input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              resetResultState();
-            }}
-            placeholder="搜索工单、机组或班组…"
-            aria-label="搜索工单"
-          />
-        </div>
-        <Button
-          variant="secondary"
-          onClick={() => applyStatus(nextOption(statusFilterOptions, status))}
-          aria-label={`状态筛选：${statusFilterLabels[status]}，点击切换`}
-          title="点击循环切换状态筛选"
-        >
-          <ClipboardCheck size={14} /> {statusFilterLabels[status]} <ChevronDown size={12} />
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setPriority(nextOption(priorityFilterOptions, priority));
-            resetResultState();
-          }}
-          aria-label={`优先级筛选：${priorityFilterLabels[priority]}，点击切换`}
-          title="点击循环切换优先级筛选"
-        >
-          <Filter size={14} /> {priorityFilterLabels[priority]} <ChevronDown size={12} />
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setPlannedStart(nextOption(plannedStartFilterOptions, plannedStart));
-            resetResultState();
-          }}
-          aria-label={`计划开始筛选：${plannedStartFilterLabels[plannedStart]}，点击切换`}
-          title="点击循环切换计划开始时间筛选"
-        >
-          <CalendarClock size={14} /> {plannedStartFilterLabels[plannedStart]}{" "}
-          <ChevronDown size={12} />
-        </Button>
-        <span className="toolbar-result">{filtered.length} Work Orders</span>
-        <Button
-          variant="ghost"
-          disabled={!hasFilters}
-          onClick={() => {
-            setStatus("all");
-            setPriority("all");
-            setPlannedStart("all");
-            setQuery("");
-            resetResultState();
-          }}
-        >
-          清除筛选
-        </Button>
-      </section>
-
-      <Card className="data-table-card">
-        <div className="table-scroll">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    aria-label="选择当前页所有工单"
-                    checked={allPageRowsSelected}
-                    disabled={pageRows.length === 0}
-                    onChange={toggleCurrentPage}
-                  />
-                </th>
-                <th>Work Order ID</th>
-                <th>Wind Turbine</th>
-                <th>Issue</th>
-                <th>Priority</th>
-                <th>Status</th>
-                <th>Assigned Team</th>
-                <th>Created By</th>
-                <th>Related Mission</th>
-                <th>Planned Start</th>
-                <th>Deadline</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((item) => (
-                <tr
-                  className={cn(
-                    item.id === featured?.id && "row-featured",
-                    selectedIds.includes(item.id) && "selected",
-                  )}
-                  key={item.id}
-                  onClick={() => setSelectedId(item.id)}
-                >
-                  <td onClick={(event) => event.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      aria-label={`选择 ${item.id}`}
-                      checked={selectedIds.includes(item.id)}
-                      onChange={() => toggleRow(item.id)}
-                    />
-                  </td>
-                  <td>
-                    <strong className="mono">{item.id}</strong>
-                  </td>
-                  <td className="mono">{item.turbineId}</td>
-                  <td>
-                    <span className="alarm-title-cell">
-                      <strong>{item.issue}</strong>
-                      <small>{item.description}</small>
-                    </span>
-                  </td>
-                  <td>
-                    <StatusBadge
-                      value={item.priority}
-                      label={item.priority.toUpperCase()}
-                      tone={
-                        item.priority === "critical"
-                          ? "critical"
-                          : item.priority === "high"
-                            ? "warning"
-                            : "info"
-                      }
-                      compact
-                    />
-                  </td>
-                  <td>
-                    <StatusBadge
-                      value={item.status}
-                      label={statusLabels[item.status]}
-                      tone={
-                        item.status === "completed" || item.status === "closed"
-                          ? "success"
-                          : item.status === "in-progress"
-                            ? "info"
-                            : item.status === "scheduled"
-                              ? "maintenance"
-                              : "warning"
-                      }
-                      compact
-                    />
-                  </td>
-                  <td>
-                    <span className="team-cell">
-                      <UserRound size={13} /> {item.assignedTeam}
-                    </span>
-                  </td>
-                  <td>
-                    {item.createdByAgentId ? (
-                      <span className="ai-status-cell">
-                        <Bot size={13} /> AI Agent
-                      </span>
-                    ) : (
-                      "人工创建"
-                    )}
-                  </td>
-                  <td className="mono">{item.relatedMissionId ?? "—"}</td>
-                  <td>{new Date(item.plannedStart).toLocaleDateString("zh-CN")}</td>
-                  <td>{new Date(item.deadline).toLocaleDateString("zh-CN")}</td>
-                  <td>
-                    <Button size="icon" variant="ghost" aria-label="更多">
-                      <MoreHorizontal size={14} />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-              {pageRows.length === 0 ? (
-                <tr>
-                  <td colSpan={12} style={{ padding: "32px", textAlign: "center" }}>
-                    没有符合当前筛选条件的工单
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-        <div className="table-pagination">
-          <span>
-            已选择 {selectedFilteredCount} / {filtered.length} 行
-          </span>
-          <span>
-            第 {currentPage} 页，共 {pageCount} 页
-          </span>
-          <div>
+      <DataTable
+        bulkActions={[
+          {
+            label: "打开首个所选工单",
+            onActivate: (rows) => {
+              const workOrder = rows[0];
+              if (workOrder) setSelectedId(workOrder.id);
+            },
+          },
+        ]}
+        columns={workOrderColumns}
+        csvExport={workOrderCsvExport}
+        data={filtered}
+        emptyMessage="没有符合当前筛选条件的工单"
+        getRowId={workOrderRowId}
+        initialSorting={[{ id: "plannedStart", desc: false }]}
+        onRowActivate={(workOrder) => setSelectedId(workOrder.id)}
+        pageSize={6}
+        searchPlaceholder="搜索工单、机组或班组…"
+        searchTextForRow={workOrderSearchText}
+        selectedRowId={selectedId ?? featured?.id}
+        filterControls={
+          <>
             <Button
-              size="sm"
               variant="secondary"
-              disabled={currentPage <= 1}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              onClick={() => applyStatus(nextOption(statusFilterOptions, status))}
+              aria-label={`状态筛选：${statusFilterLabels[status]}，点击切换`}
+              title="点击循环切换状态筛选"
             >
-              上一页
+              <ClipboardCheck size={14} /> {statusFilterLabels[status]} <ChevronDown size={12} />
             </Button>
             <Button
-              size="sm"
               variant="secondary"
-              disabled={currentPage >= pageCount}
-              onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+              onClick={() => setPriority(nextOption(priorityFilterOptions, priority))}
+              aria-label={`优先级筛选：${priorityFilterLabels[priority]}，点击切换`}
+              title="点击循环切换优先级筛选"
             >
-              下一页
+              <Filter size={14} /> {priorityFilterLabels[priority]} <ChevronDown size={12} />
             </Button>
-          </div>
-        </div>
-      </Card>
+            <Button
+              variant="secondary"
+              onClick={() => setPlannedStart(nextOption(plannedStartFilterOptions, plannedStart))}
+              aria-label={`计划开始筛选：${plannedStartFilterLabels[plannedStart]}，点击切换`}
+              title="点击循环切换计划开始时间筛选"
+            >
+              <CalendarClock size={14} /> {plannedStartFilterLabels[plannedStart]}{" "}
+              <ChevronDown size={12} />
+            </Button>
+            {turbineScope ? (
+              <Button variant="secondary" onClick={() => setTurbineScope(null)}>
+                机组 {turbineScope} <X size={12} />
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              disabled={!hasFilters}
+              onClick={() => {
+                setStatus("all");
+                setPriority("all");
+                setPlannedStart("all");
+                setTurbineScope(null);
+              }}
+            >
+              清除筛选
+            </Button>
+          </>
+        }
+      />
       {selected ? (
         <WorkOrderDrawer
           workOrder={selected}

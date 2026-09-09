@@ -1,6 +1,7 @@
 import {
   applyServerWorkflowMutation,
   initialServerWorkflowSnapshot,
+  isServerWorkflowAlternativeId,
   requireServerWorkflowPersistence,
   SERVER_WORKFLOW_DECISION_ID,
   SERVER_WORKFLOW_MISSION_ID,
@@ -10,6 +11,7 @@ import {
   ServerWorkflowTransitionError,
   type ServerWorkflowApproval,
   type ServerWorkflowAuditEvent,
+  type ServerWorkflowFieldEvidence,
   type ServerWorkflowMutationRequest,
   type ServerWorkflowSnapshot,
   type ServerWorkflowStateSummary,
@@ -53,6 +55,7 @@ interface WorkflowTaskRow {
   readonly completed: number;
   readonly completed_at: string | null;
   readonly completed_by: string | null;
+  readonly field_evidence: unknown;
 }
 
 interface WorkflowAuditRow {
@@ -70,6 +73,7 @@ interface WorkflowAuditRow {
   readonly from_state: unknown;
   readonly to_state: unknown;
   readonly detail: string;
+  readonly field_evidence: unknown;
   readonly timestamp: string;
 }
 
@@ -107,6 +111,7 @@ const CREATE_STATEMENTS = [
     completed INTEGER NOT NULL DEFAULT 0,
     completed_at TEXT,
     completed_by TEXT,
+    field_evidence TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE (mission_id, sequence)
@@ -127,6 +132,7 @@ const CREATE_STATEMENTS = [
     from_state TEXT NOT NULL,
     to_state TEXT NOT NULL,
     detail TEXT NOT NULL,
+    field_evidence TEXT,
     timestamp TEXT NOT NULL,
     UNIQUE (mission_id, revision, event_sequence)
   )`,
@@ -165,13 +171,26 @@ const requestFingerprint = (request: ServerWorkflowMutationRequest): string =>
     },
     correlationId: request.correlationId,
     expectedRevision: request.expectedRevision,
+    selectedAlternativeId: request.selectedAlternativeId ?? null,
     reason: request.reason ?? null,
     comment: request.comment ?? null,
     taskId: request.taskId ?? null,
     completed: request.completed ?? null,
+    fieldEvidence: request.fieldEvidence ?? null,
   });
 
 const initializationByDatabase = new WeakMap<D1Database, Promise<void>>();
+
+async function ensureEvidenceColumns(database: D1Database): Promise<void> {
+  for (const table of ["workflow_tasks", "workflow_audit_events"] as const) {
+    const columns = await database.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+    if (!columns.results.some((column) => column.name === "field_evidence")) {
+      await database.batch([
+        database.prepare(`ALTER TABLE ${table} ADD COLUMN field_evidence TEXT`),
+      ]);
+    }
+  }
+}
 
 async function initialize(database: D1Database): Promise<void> {
   const existing = initializationByDatabase.get(database);
@@ -179,6 +198,7 @@ async function initialize(database: D1Database): Promise<void> {
 
   const initialization = (async () => {
     await database.batch(CREATE_STATEMENTS.map((statement) => database.prepare(statement)));
+    await ensureEvidenceColumns(database);
 
     const baseline = initialServerWorkflowSnapshot();
     const seedStatements = [
@@ -216,8 +236,8 @@ async function initialize(database: D1Database): Promise<void> {
           .prepare(
             `INSERT OR IGNORE INTO workflow_tasks (
             id, mission_id, sequence, title, completed, completed_at,
-            completed_by, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            completed_by, field_evidence, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             task.id,
@@ -225,6 +245,7 @@ async function initialize(database: D1Database): Promise<void> {
             task.sequence,
             task.title,
             0,
+            null,
             null,
             null,
             baseline.updatedAt,
@@ -277,6 +298,9 @@ async function readD1Snapshot(database: D1Database): Promise<ServerWorkflowSnaps
     completed: task.completed === 1,
     completedAt: task.completed_at,
     completedBy: task.completed_by,
+    fieldEvidence: task.field_evidence
+      ? parseJson<ServerWorkflowFieldEvidence>(task.field_evidence)
+      : null,
   }));
   if (tasks.length !== serverWorkflowTaskDefinitions.length) {
     throw new ServerWorkflowTransitionError(
@@ -304,9 +328,24 @@ async function readD1Snapshot(database: D1Database): Promise<ServerWorkflowSnaps
       fromState: parseJson<ServerWorkflowStateSummary>(event.from_state),
       toState: parseJson<ServerWorkflowStateSummary>(event.to_state),
       detail: event.detail,
+      fieldEvidence: event.field_evidence
+        ? parseJson<ServerWorkflowFieldEvidence>(event.field_evidence)
+        : null,
       timestamp: event.timestamp,
     }),
   );
+
+  const storedApproval = instance.approval_record
+    ? parseJson<ServerWorkflowApproval>(instance.approval_record)
+    : null;
+  const approval = storedApproval
+    ? {
+        ...storedApproval,
+        selectedAlternativeId: isServerWorkflowAlternativeId(storedApproval.selectedAlternativeId)
+          ? storedApproval.selectedAlternativeId
+          : ("ALT-0823-B" as const),
+      }
+    : null;
 
   return {
     turbineId: SERVER_WORKFLOW_TURBINE_ID,
@@ -320,13 +359,13 @@ async function readD1Snapshot(database: D1Database): Promise<ServerWorkflowSnaps
       risk: "high",
       status: instance.decision_status as DecisionStatus,
       approvalRequired: true,
-      approval: instance.approval_record
-        ? parseJson<ServerWorkflowApproval>(instance.approval_record)
-        : null,
+      selectedAlternativeId: approval?.selectedAlternativeId ?? null,
+      approval,
     },
     workOrder: {
       id: SERVER_WORKFLOW_WORK_ORDER_ID,
       status: instance.work_order_status as WorkOrderStatus,
+      alternativeId: approval?.action === "approve" ? approval.selectedAlternativeId : null,
       tasks,
       completedTaskCount: tasks.filter((task) => task.completed).length,
       totalTaskCount: tasks.length,
@@ -424,13 +463,15 @@ export async function mutateServerWorkflow(
     ...next.workOrder.tasks.map((task) =>
       database
         .prepare(
-          `UPDATE workflow_tasks SET completed = ?, completed_at = ?, completed_by = ?, updated_at = ?
+          `UPDATE workflow_tasks SET title = ?, completed = ?, completed_at = ?, completed_by = ?, field_evidence = ?, updated_at = ?
           WHERE id = ? AND mission_id = ?`,
         )
         .bind(
+          task.title,
           task.completed ? 1 : 0,
           task.completedAt,
           task.completedBy,
+          task.fieldEvidence ? JSON.stringify(task.fieldEvidence) : null,
           next.updatedAt,
           task.id,
           next.mission.id,
@@ -442,8 +483,8 @@ export async function mutateServerWorkflow(
           `INSERT INTO workflow_audit_events (
             id, mission_id, revision, event_sequence, action, kind, actor_id,
             actor_name, actor_role, correlation_id, idempotency_key, from_state,
-            to_state, detail, timestamp
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            to_state, detail, field_evidence, timestamp
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           event.id,
@@ -460,6 +501,7 @@ export async function mutateServerWorkflow(
           JSON.stringify(event.fromState),
           JSON.stringify(event.toState),
           event.detail,
+          event.fieldEvidence ? JSON.stringify(event.fieldEvidence) : null,
           event.timestamp,
         ),
     ),

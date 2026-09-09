@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   AlertTriangle,
   Anchor,
@@ -21,6 +22,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { StatusBadge, type StatusTone } from "@/components/data-display/status-badge";
+import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyState, Progress } from "@/components/ui/primitives";
@@ -141,6 +143,89 @@ const timeFormatter = new Intl.DateTimeFormat("zh-CN", {
 const formatDate = (value: string): string => dateFormatter.format(new Date(value));
 const formatDateTime = (value: string): string => dateTimeFormatter.format(new Date(value));
 const formatTime = (value: string): string => timeFormatter.format(new Date(value));
+
+const planColumns: readonly LegacyColumnDef<MaintenancePlan, unknown>[] = [
+  {
+    id: "plan",
+    header: "计划 / 工单",
+    accessorFn: (plan) => `${plan.turbineId} ${plan.issue} ${plan.workOrderId}`,
+    cell: ({ row }) => (
+      <span>
+        <strong>
+          {row.original.turbineId} · {row.original.issue}
+        </strong>
+        <small>{row.original.workOrderId}</small>
+      </span>
+    ),
+  },
+  {
+    id: "startsAt",
+    header: "时段",
+    accessorFn: (plan) => plan.startsAt,
+    cell: ({ row }) => (
+      <span>
+        <strong>{formatDate(row.original.startsAt)}</strong>
+        <small>
+          {formatTime(row.original.startsAt)}–{formatTime(row.original.endsAt)}
+        </small>
+      </span>
+    ),
+  },
+  {
+    accessorKey: "status",
+    header: "状态",
+    cell: ({ row }) => (
+      <StatusBadge
+        value={row.original.status}
+        label={statusLabels[row.original.status]}
+        tone={statusTones[row.original.status]}
+        compact
+      />
+    ),
+  },
+  {
+    id: "crew",
+    header: "班组",
+    accessorFn: (plan) => plan.crew.label,
+    cell: ({ row }) => (
+      <span>
+        <strong>{row.original.crew.label}</strong>
+        <small>{resourceStateLabels[row.original.crew.state]}</small>
+      </span>
+    ),
+  },
+  {
+    id: "weather",
+    header: "天气窗口",
+    accessorFn: (plan) => plan.weather.state,
+    cell: ({ row }) => (
+      <StatusBadge
+        value={row.original.weather.state}
+        label={windowLabels[row.original.weather.state]}
+        tone={windowTone(row.original.weather.state)}
+        compact
+      />
+    ),
+  },
+  {
+    accessorKey: "readinessPercent",
+    header: "就绪度",
+    cell: ({ row }) => <strong>{row.original.readinessPercent}%</strong>,
+  },
+  {
+    id: "conflicts",
+    header: "提示",
+    accessorFn: (plan) => plan.conflicts.length,
+    cell: ({ row }) => (
+      <span
+        className={styles.conflictCount}
+        data-critical={row.original.conflicts.some((item) => item.severity === "critical")}
+      >
+        <AlertTriangle size={12} /> {row.original.conflicts.length}
+      </span>
+    ),
+  },
+];
 
 function ResourceRows({
   icon,
@@ -676,72 +761,42 @@ export function MaintenancePlanPage() {
             </div>
           ) : (
             <div className={styles.tableScroll}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>计划 / 工单</th>
-                    <th>时段</th>
-                    <th>状态</th>
-                    <th>班组</th>
-                    <th>天气窗口</th>
-                    <th>就绪度</th>
-                    <th>提示</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visiblePlans.map((plan) => (
-                    <tr key={plan.id} data-selected={selectedPlan?.id === plan.id}>
-                      <td>
-                        <button type="button" onClick={() => setSelectedId(plan.workOrderId)}>
-                          <strong>
-                            {plan.turbineId} · {plan.issue}
-                          </strong>
-                          <small>{plan.workOrderId}</small>
-                        </button>
-                      </td>
-                      <td>
-                        <strong>{formatDate(plan.startsAt)}</strong>
-                        <small>
-                          {formatTime(plan.startsAt)}–{formatTime(plan.endsAt)}
-                        </small>
-                      </td>
-                      <td>
-                        <StatusBadge
-                          value={plan.status}
-                          label={statusLabels[plan.status]}
-                          tone={statusTones[plan.status]}
-                          compact
-                        />
-                      </td>
-                      <td>
-                        <strong>{plan.crew.label}</strong>
-                        <small>{resourceStateLabels[plan.crew.state]}</small>
-                      </td>
-                      <td>
-                        <StatusBadge
-                          value={plan.weather.state}
-                          label={windowLabels[plan.weather.state]}
-                          tone={windowTone(plan.weather.state)}
-                          compact
-                        />
-                      </td>
-                      <td>
-                        <strong>{plan.readinessPercent}%</strong>
-                      </td>
-                      <td>
-                        <span
-                          className={styles.conflictCount}
-                          data-critical={plan.conflicts.some(
-                            (item) => item.severity === "critical",
-                          )}
-                        >
-                          <AlertTriangle size={12} /> {plan.conflicts.length}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <DataTable
+                data={visiblePlans}
+                columns={planColumns}
+                getRowId={(plan) => plan.id}
+                selectedRowId={selectedPlan?.id}
+                onRowActivate={(plan) => setSelectedId(plan.workOrderId)}
+                initialSorting={[{ id: "startsAt", desc: false }]}
+                pageSize={6}
+                searchTextForRow={(plan) =>
+                  `${plan.id} ${plan.workOrderId} ${plan.turbineId} ${plan.issue} ${plan.assignedTeam}`
+                }
+                searchPlaceholder="在当前计划清单内搜索…"
+                bulkActions={[
+                  {
+                    label: "复制工单编号",
+                    onActivate: (plans) =>
+                      navigator.clipboard.writeText(
+                        plans.map((plan) => plan.workOrderId).join("\n"),
+                      ),
+                  },
+                ]}
+                csvExport={{
+                  filename: "windops-maintenance-plans.csv",
+                  columns: [
+                    { label: "计划ID", value: (plan) => plan.id },
+                    { label: "工单", value: (plan) => plan.workOrderId },
+                    { label: "机组", value: (plan) => plan.turbineId },
+                    { label: "作业内容", value: (plan) => plan.issue },
+                    { label: "开始时间", value: (plan) => plan.startsAt },
+                    { label: "结束时间", value: (plan) => plan.endsAt },
+                    { label: "状态", value: (plan) => statusLabels[plan.status] },
+                    { label: "班组", value: (plan) => plan.crew.label },
+                    { label: "就绪度", value: (plan) => plan.readinessPercent },
+                  ],
+                }}
+              />
             </div>
           )}
         </section>

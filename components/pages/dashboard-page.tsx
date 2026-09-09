@@ -39,6 +39,13 @@ import {
 import type { ActivityEvent, Mission } from "@/lib/types";
 import type { DemoWorkflowEvent } from "@/lib/demo-workflow";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
+import {
+  deriveWorkflowKpis,
+  overlayClientAgents,
+  overlayClientAlarms,
+  overlayClientMissions,
+  overlayClientTurbines,
+} from "@/lib/client-workflow-overlays";
 
 const missionLabels: Record<Mission["status"], string> = {
   detected: "已发现",
@@ -157,25 +164,26 @@ export function DashboardPage() {
   const workflow = useDemoWorkflow();
   const [powerRange, setPowerRange] = useState<PowerRange>("24H");
   const powerChartData = useMemo(() => chartData(powerRange), [powerRange]);
-  const running = turbines.filter((turbine) => turbine.status === "running").length;
-  const operating = turbines.filter(
+  const displayTurbines = useMemo(() => overlayClientTurbines(turbines, workflow), [workflow]);
+  const displayAlarms = useMemo(() => overlayClientAlarms(alarms, workflow), [workflow]);
+  const displayMissions = useMemo(() => overlayClientMissions(missions, workflow), [workflow]);
+  const displayAgents = useMemo(() => overlayClientAgents(agents, workflow), [workflow]);
+  const workflowKpis = useMemo(
+    () => deriveWorkflowKpis(displayTurbines, displayAlarms, displayMissions, displayAgents),
+    [displayAgents, displayAlarms, displayMissions, displayTurbines],
+  );
+  const running = displayTurbines.filter((turbine) => turbine.status === "running").length;
+  const operating = displayTurbines.filter(
     (turbine) => !["maintenance", "offline", "communication-lost"].includes(turbine.status),
   ).length;
-  const offline = turbines.filter(
+  const offline = displayTurbines.filter(
     (turbine) => turbine.status === "offline" || turbine.status === "communication-lost",
   ).length;
-  const faulted = turbines.filter((turbine) => turbine.status === "critical").length;
-  const activeAgents = agents.filter((agent) =>
-    ["working", "thinking", "reviewing"].includes(agent.status),
-  ).length;
-  const criticalAlarms = alarms
+  const faulted = displayTurbines.filter((turbine) => turbine.status === "critical").length;
+  const activeAgents = workflowKpis.activeAgentCount;
+  const criticalAlarms = displayAlarms
     .filter((alarm) => alarm.severity === "critical" || alarm.severity === "major")
     .slice(0, 4);
-  const displayMissions = missions.map((mission) =>
-    mission.id === featuredMission.id
-      ? { ...mission, status: workflow.missionStatus, progressPercent: workflow.missionProgress }
-      : mission,
-  );
   const activeMissions = displayMissions
     .filter((mission) => mission.status !== "completed")
     .slice(0, 4);
@@ -194,20 +202,20 @@ export function DashboardPage() {
     { label: "运行", value: running, tone: "success" },
     {
       label: "预警",
-      value: turbines.filter((turbine) => turbine.status === "warning").length,
+      value: displayTurbines.filter((turbine) => turbine.status === "warning").length,
       tone: "warning",
     },
     { label: "故障", value: faulted, tone: "critical" },
     {
       label: "维护",
-      value: turbines.filter((turbine) => turbine.status === "maintenance").length,
+      value: displayTurbines.filter((turbine) => turbine.status === "maintenance").length,
       tone: "maintenance",
     },
     { label: "离线", value: offline, tone: "offline" },
   ];
 
   const downloadDailyReport = () => {
-    const unresolvedAlarms = alarms.filter((alarm) => alarm.status !== "resolved").length;
+    const unresolvedAlarms = displayAlarms.filter((alarm) => alarm.status !== "resolved").length;
     const reportRows = [
       ["WindOps 华东海上风电场运行日报", "2026-08-13", "白班"],
       ["指标", "数值", "单位"],
@@ -215,8 +223,8 @@ export function DashboardPage() {
       ["今日发电量", windFarm.todayGenerationGWh.toFixed(2), "GWh"],
       ["并网运行机组", String(operating), "台"],
       ["未闭环告警", String(unresolvedAlarms), "条"],
-      ["活跃 Missions", String(windFarm.activeMissionCount), "个"],
-      ["平均健康度", windFarm.averageHealthScore.toFixed(1), "%"],
+      ["活跃 Missions", String(workflowKpis.activeMissionCount), "个"],
+      ["平均健康度", workflowKpis.averageHealth.toFixed(1), "%"],
       ["重点事件", "WT-023 主轴承振动异常", missionLabels[workflow.missionStatus]],
     ];
     const csv = reportRows
@@ -325,7 +333,7 @@ export function DashboardPage() {
         <MetricCard
           label="运行机组"
           value={`${operating} / 64`}
-          detail={`${running} 台正常 · ${turbines.length - operating - offline} 台维护`}
+          detail={`${running} 台正常 · ${displayTurbines.length - operating - offline} 台维护`}
           icon={<TowerControl size={15} />}
           tone="success"
         />
@@ -345,7 +353,7 @@ export function DashboardPage() {
         />
         <MetricCard
           label="平均健康度"
-          value={windFarm.averageHealthScore.toFixed(1)}
+          value={workflowKpis.averageHealth.toFixed(1)}
           unit="%"
           change={-0.6}
           changeLabel="过去 7 日"
@@ -354,14 +362,14 @@ export function DashboardPage() {
         />
         <MetricCard
           label="活跃告警"
-          value={String(windFarm.activeAlarmCount)}
+          value={String(workflowKpis.activeAlarmCount)}
           detail={`${criticalAlarms.length} 条高优先级`}
           icon={<AlarmTriangle size={15} />}
           tone="critical"
         />
         <MetricCard
           label="AI Missions"
-          value={String(windFarm.activeMissionCount)}
+          value={String(workflowKpis.activeMissionCount)}
           detail={`${activeAgents} 个 Agent 活跃`}
           icon={<Bot size={15} />}
           tone="info"

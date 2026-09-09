@@ -3,11 +3,10 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   Activity,
   AlertTriangle,
-  ArrowDown,
-  ArrowRight,
   BadgeCheck,
   CalendarClock,
   ChevronRight,
@@ -16,7 +15,6 @@ import {
   Database,
   Filter,
   RefreshCcw,
-  Search,
   ShieldCheck,
   Sparkles,
   TrendingDown,
@@ -31,6 +29,7 @@ import {
   type PredictiveAssessment,
 } from "@/app/api/predictive-assessments/fixtures";
 import { TimeSeriesChart, type TimeSeriesPoint } from "@/components/charts/time-series-chart";
+import { DataTable } from "@/components/data-display/data-table";
 import { HealthBadge, StatusBadge } from "@/components/data-display/status-badge";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -81,6 +80,72 @@ const riskTone = (risk: RiskLevel): "critical" | "warning" | "info" | "success" 
 
 const byPriority = (left: PredictiveAssessment, right: PredictiveAssessment): number =>
   right.priorityScore - left.priorityScore || left.turbineId.localeCompare(right.turbineId);
+
+const assessmentColumns: readonly LegacyColumnDef<PredictiveAssessment, unknown>[] = [
+  {
+    accessorKey: "priorityScore",
+    header: "优先分",
+    cell: ({ row }) => <span className={styles.rank}>{row.original.priorityScore.toFixed(1)}</span>,
+  },
+  {
+    id: "asset",
+    header: "机组 / 部件",
+    accessorFn: (assessment) => `${assessment.turbineId} ${assessment.component}`,
+    cell: ({ row }) => (
+      <span>
+        <strong>{row.original.turbineId}</strong>
+        <small>{row.original.component}</small>
+      </span>
+    ),
+  },
+  {
+    accessorKey: "componentHealth",
+    header: "健康度",
+    cell: ({ row }) => <HealthBadge score={row.original.componentHealth} />,
+  },
+  {
+    accessorKey: "failureProbability30d",
+    header: "30 天失效概率",
+    cell: ({ row }) => (
+      <span>
+        <strong>{row.original.failureProbability30d}%</strong>
+        <small>Band {row.original.probabilityBand}/5</small>
+      </span>
+    ),
+  },
+  {
+    accessorKey: "remainingUsefulLifeDays",
+    header: "Estimated RUL",
+    cell: ({ row }) => (
+      <span>
+        <strong>{row.original.remainingUsefulLifeDays} d</strong>
+        <small>±12 days</small>
+      </span>
+    ),
+  },
+  {
+    accessorKey: "anomalyScore",
+    header: "异常分数",
+    cell: ({ row }) => (
+      <span>
+        <strong>{row.original.anomalyScore.toFixed(2)}</strong>
+        <small>{trendLabels[row.original.trend]}</small>
+      </span>
+    ),
+  },
+  {
+    accessorKey: "matrixRisk",
+    header: "矩阵风险",
+    cell: ({ row }) => (
+      <StatusBadge
+        value={row.original.matrixRisk}
+        label={riskLabels[row.original.matrixRisk]}
+        tone={riskTone(row.original.matrixRisk)}
+        compact
+      />
+    ),
+  },
+];
 
 const dateLabel = (date: Date, window: TimeWindow): string =>
   window === "24H"
@@ -240,7 +305,6 @@ export function PredictiveMaintenancePage() {
   const workflow = useDemoWorkflow();
   const [selectedId, setSelectedId] = useState("WT-023");
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("30D");
-  const [query, setQuery] = useState("");
   const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
   const [trendFilter, setTrendFilter] = useState<TrendFilter>("all");
 
@@ -253,11 +317,10 @@ export function PredictiveMaintenancePage() {
 
   const endpoint = useMemo(() => {
     const params = new URLSearchParams({ limit: "64", sort: "risk-desc" });
-    if (query.trim()) params.set("q", query.trim());
     if (riskFilter !== "all") params.set("risk", riskFilter);
     if (trendFilter !== "all") params.set("trend", trendFilter);
     return `/api/predictive-assessments?${params.toString()}`;
-  }, [query, riskFilter, trendFilter]);
+  }, [riskFilter, trendFilter]);
 
   const assessmentsQuery = useQuery({
     queryKey: ["predictive-assessments", endpoint],
@@ -283,20 +346,15 @@ export function PredictiveMaintenancePage() {
     [workflow],
   );
   const visible = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
     return assessmentsQuery.data.data
       .map((assessment) => withWorkflowState(assessment, workflow))
       .filter(
         (assessment) =>
           (riskFilter === "all" || assessment.matrixRisk === riskFilter) &&
-          (trendFilter === "all" || assessment.trend === trendFilter) &&
-          (!normalized ||
-            `${assessment.turbineId} ${assessment.component} ${assessment.primaryFinding}`
-              .toLowerCase()
-              .includes(normalized)),
+          (trendFilter === "all" || assessment.trend === trendFilter),
       )
       .sort(byPriority);
-  }, [assessmentsQuery.data.data, query, riskFilter, trendFilter, workflow]);
+  }, [assessmentsQuery.data.data, riskFilter, trendFilter, workflow]);
   const selected = fleet.find((assessment) => assessment.turbineId === selectedId) ?? fleet[0]!;
   const closedLoop = selected.turbineId === "WT-023" && workflow.workOrderStatus === "completed";
   const recommendation =
@@ -667,126 +725,81 @@ export function PredictiveMaintenancePage() {
                 : "API 已同步"}
           </div>
         </div>
-        <div className={styles.tableToolbar}>
-          <label className={styles.searchBox}>
-            <Search size={15} />
-            <input
-              aria-label="搜索预测性维护评估"
-              placeholder="搜索机组、部件或发现…"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-          <label>
-            <Filter size={14} />
-            <select
-              value={riskFilter}
-              onChange={(event) => setRiskFilter(event.target.value as RiskFilter)}
-            >
-              <option value="all">全部风险</option>
-              <option value="critical">严重风险</option>
-              <option value="high">高风险</option>
-              <option value="medium">中风险</option>
-              <option value="low">低风险</option>
-            </select>
-          </label>
-          <label>
-            <Activity size={14} />
-            <select
-              value={trendFilter}
-              onChange={(event) => setTrendFilter(event.target.value as TrendFilter)}
-            >
-              <option value="all">全部趋势</option>
-              <option value="declining">下降</option>
-              <option value="stable">稳定</option>
-              <option value="improving">改善</option>
-            </select>
-          </label>
-          <span>{visible.length} / 64 turbines</span>
-        </div>
         <div className={styles.tableScroll}>
-          <table>
-            <thead>
-              <tr>
-                <th>
-                  <span>
-                    优先级 <ArrowDown size={11} />
-                  </span>
-                </th>
-                <th>机组 / 部件</th>
-                <th>健康度</th>
-                <th>30 天失效概率</th>
-                <th>Estimated RUL</th>
-                <th>异常分数</th>
-                <th>矩阵风险</th>
-                <th aria-label="打开详情" />
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((assessment, index) => (
-                <tr
-                  key={assessment.turbineId}
-                  className={
-                    assessment.turbineId === selected.turbineId ? styles.selectedRow : undefined
-                  }
-                >
-                  <td>
-                    <span className={styles.rank}>#{String(index + 1).padStart(2, "0")}</span>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className={styles.rowSelect}
-                      onClick={() => setSelectedId(assessment.turbineId)}
-                    >
-                      <strong>{assessment.turbineId}</strong>
-                      <small>{assessment.component}</small>
-                    </button>
-                  </td>
-                  <td>
-                    <HealthBadge score={assessment.componentHealth} />
-                  </td>
-                  <td>
-                    <strong>{assessment.failureProbability30d}%</strong>
-                    <small>Band {assessment.probabilityBand}/5</small>
-                  </td>
-                  <td>
-                    <strong>{assessment.remainingUsefulLifeDays} d</strong>
-                    <small>±12 days</small>
-                  </td>
-                  <td>
-                    <strong>{assessment.anomalyScore.toFixed(2)}</strong>
-                    <small>{trendLabels[assessment.trend]}</small>
-                  </td>
-                  <td>
-                    <StatusBadge
-                      value={assessment.matrixRisk}
-                      label={riskLabels[assessment.matrixRisk]}
-                      tone={riskTone(assessment.matrixRisk)}
-                      compact
-                    />
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className={styles.openRow}
-                      onClick={() => setSelectedId(assessment.turbineId)}
-                      aria-label={`选择 ${assessment.turbineId}`}
-                    >
-                      <ArrowRight size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!visible.length ? (
-            <div className={styles.emptyState}>
-              <Search size={20} />
-              <strong>没有匹配的预测评估</strong>
-              <p>调整搜索关键词或风险筛选后重试。</p>
-            </div>
-          ) : null}
+          <DataTable
+            data={visible}
+            columns={assessmentColumns}
+            getRowId={(assessment) => assessment.turbineId}
+            selectedRowId={selected.turbineId}
+            onRowActivate={(assessment) => setSelectedId(assessment.turbineId)}
+            initialSorting={[{ id: "priorityScore", desc: true }]}
+            pageSize={8}
+            emptyMessage="没有匹配的预测评估"
+            searchTextForRow={(assessment) =>
+              `${assessment.turbineId} ${assessment.component} ${assessment.primaryFinding}`
+            }
+            searchPlaceholder="搜索机组、部件或发现…"
+            filterControls={
+              <>
+                <label>
+                  <Filter size={14} />
+                  <select
+                    aria-label="筛选风险"
+                    value={riskFilter}
+                    onChange={(event) => setRiskFilter(event.target.value as RiskFilter)}
+                  >
+                    <option value="all">全部风险</option>
+                    <option value="critical">严重风险</option>
+                    <option value="high">高风险</option>
+                    <option value="medium">中风险</option>
+                    <option value="low">低风险</option>
+                  </select>
+                </label>
+                <label>
+                  <Activity size={14} />
+                  <select
+                    aria-label="筛选趋势"
+                    value={trendFilter}
+                    onChange={(event) => setTrendFilter(event.target.value as TrendFilter)}
+                  >
+                    <option value="all">全部趋势</option>
+                    <option value="declining">下降</option>
+                    <option value="stable">稳定</option>
+                    <option value="improving">改善</option>
+                  </select>
+                </label>
+                <span>{visible.length} / 64 turbines</span>
+              </>
+            }
+            bulkActions={[
+              {
+                label: "复制机组编号",
+                onActivate: (assessments) =>
+                  navigator.clipboard.writeText(
+                    assessments.map((assessment) => assessment.turbineId).join("\n"),
+                  ),
+              },
+            ]}
+            csvExport={{
+              filename: "windops-predictive-assessments.csv",
+              columns: [
+                { label: "机组", value: (assessment) => assessment.turbineId },
+                { label: "部件", value: (assessment) => assessment.component },
+                { label: "优先分", value: (assessment) => assessment.priorityScore },
+                { label: "部件健康度", value: (assessment) => assessment.componentHealth },
+                {
+                  label: "30天失效概率",
+                  value: (assessment) => assessment.failureProbability30d,
+                },
+                {
+                  label: "剩余寿命天数",
+                  value: (assessment) => assessment.remainingUsefulLifeDays,
+                },
+                { label: "异常分数", value: (assessment) => assessment.anomalyScore },
+                { label: "矩阵风险", value: (assessment) => assessment.matrixRisk },
+              ],
+            }}
+          />
         </div>
       </section>
 

@@ -1,5 +1,5 @@
 import { handleRealtimeWebSocket } from "../_shared";
 
-export function GET(request: Request): Response {
+export function GET(request: Request): Promise<Response> {
   return handleRealtimeWebSocket(request, "scada");
 }

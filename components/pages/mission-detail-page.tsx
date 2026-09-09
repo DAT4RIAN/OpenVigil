@@ -12,7 +12,6 @@ import {
   ChevronRight,
   FileSearch,
   MessageSquareText,
-  MoreHorizontal,
   RefreshCcw,
   ShieldCheck,
   Sparkles,
@@ -48,6 +47,8 @@ import {
 } from "@/lib";
 import type { Mission } from "@/lib/types";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
+import { overlayClientDecisions, overlayClientWorkOrders } from "@/lib/client-workflow-overlays";
+import { isServerWorkflowAlternativeId } from "@/lib/server-workflow-contract";
 import { cn } from "@/lib/utils";
 
 const steps = [
@@ -226,7 +227,7 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
             <CardHeader eyebrow="MISSION TEAM" title={`${team.length} Participating Agents`} />
             <div>
               {team.map((agent) => (
-                <button key={agent.id}>
+                <a href={`/agents?agent=${encodeURIComponent(agent.id)}`} key={agent.id}>
                   <Avatar
                     label={agent.shortName}
                     tone={
@@ -243,7 +244,7 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
                     <small>{agent.role}</small>
                   </span>
                   <StatusBadge value={agent.status} compact />
-                </button>
+                </a>
               ))}
             </div>
           </Card>
@@ -322,7 +323,9 @@ function FeaturedMissionDetailPage() {
   const missionAgents = agents.filter((agent) => featuredMission.agentIds.includes(agent.id));
   const recommended =
     featuredDecision.alternatives.find(
-      (item) => item.id === featuredDecision.recommendedAlternativeId,
+      (item) =>
+        item.id ===
+        (workflow.approval?.selectedAlternativeId ?? featuredDecision.recommendedAlternativeId),
     ) ?? featuredDecision.alternatives[0];
   const window =
     weatherWindows.find((item) => item.id === featuredDecision.weatherWindowId) ??
@@ -351,17 +354,8 @@ function FeaturedMissionDetailPage() {
       turbine: turbine023,
       participatingAgents: missionAgents,
       evidence: relatedEvidence,
-      decision: featuredDecision,
-      workOrder: workOrder
-        ? {
-            ...workOrder,
-            status: workflow.workOrderStatus,
-            tasks: workOrder.tasks.map((task) => ({
-              ...task,
-              completed: workflow.completedTaskIds.includes(task.id),
-            })),
-          }
-        : null,
+      decision: overlayClientDecisions([featuredDecision], workflow)[0],
+      workOrder: workOrder ? overlayClientWorkOrders([workOrder], workflow)[0] : null,
       activity: relatedEvents,
       workflow: {
         missionStatus: workflow.missionStatus,
@@ -379,9 +373,11 @@ function FeaturedMissionDetailPage() {
   }
 
   function submitApproval(action: "approve" | "reject" | "request-revision" | "escalate") {
+    if (!isServerWorkflowAlternativeId(recommended.id)) return;
     workflow.dispatch({
       type: "submit-approval",
       action,
+      selectedAlternativeId: recommended.id,
       approver: "李明远",
       approverRole: "值班总工程师",
       timestamp: new Date().toISOString(),
@@ -432,9 +428,6 @@ function FeaturedMissionDetailPage() {
           <>
             <Button variant="secondary" onClick={exportMissionLog}>
               <TerminalSquare size={15} /> Export JSON
-            </Button>
-            <Button variant="secondary" disabled title="当前版本暂无更多操作">
-              <MoreHorizontal size={15} /> More
             </Button>
             <Button
               variant="primary"
@@ -622,7 +615,7 @@ function FeaturedMissionDetailPage() {
             />
             <div>
               {missionAgents.slice(0, 7).map((agent) => (
-                <button key={agent.id}>
+                <a href={`/agents?agent=${encodeURIComponent(agent.id)}`} key={agent.id}>
                   <Avatar
                     label={agent.shortName}
                     tone={
@@ -639,7 +632,7 @@ function FeaturedMissionDetailPage() {
                     <small>{agent.currentTask ?? agent.role}</small>
                   </span>
                   <StatusBadge value={agent.status} compact />
-                </button>
+                </a>
               ))}
             </div>
           </Card>
@@ -661,12 +654,13 @@ function FeaturedMissionDetailPage() {
           <Card className="current-decision-card">
             <CardHeader
               eyebrow="CURRENT DECISION"
-              title="AI 推荐方案"
+              title={approval === "approve" ? "人工批准方案" : "AI 推荐方案"}
               description={`综合置信度 ${featuredDecision.confidencePercent}%`}
             />
             <div className="decision-recommendation">
               <span className="decision-recommendation__badge">
-                <Sparkles size={14} /> RECOMMENDED · {recommended?.label}
+                <Sparkles size={14} /> {approval === "approve" ? "APPROVED" : "RECOMMENDED"} ·{" "}
+                {recommended?.label}
               </span>
               <h3>{recommended?.title}</h3>
               <p>{recommended?.description}</p>

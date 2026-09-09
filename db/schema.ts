@@ -658,6 +658,7 @@ export const workflowTasksTable = sqliteTable(
     completed: integer("completed", { mode: "boolean" }).notNull().default(false),
     completedAt: text("completed_at"),
     completedBy: text("completed_by"),
+    fieldEvidence: text("field_evidence", { mode: "json" }),
     ...timestamps,
   },
   (table) => [
@@ -686,6 +687,7 @@ export const workflowAuditEventsTable = sqliteTable(
     fromState: text("from_state", { mode: "json" }).notNull(),
     toState: text("to_state", { mode: "json" }).notNull(),
     detail: text("detail").notNull(),
+    fieldEvidence: text("field_evidence", { mode: "json" }),
     timestamp: text("timestamp").notNull(),
   },
   (table) => [
@@ -718,4 +720,33 @@ export const workflowIdempotencyTable = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [index("workflow_idempotency_mission_time_idx").on(table.missionId, table.createdAt)],
+);
+
+export const alarmRuntimeStateTable = sqliteTable("alarm_runtime_state", {
+  alarmId: text("alarm_id").primaryKey(),
+  status: text("status").notNull(),
+  assignee: text("assignee"),
+  acknowledgedAt: text("acknowledged_at"),
+  revision: integer("revision").notNull().default(0),
+  mutationToken: text("mutation_token").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const alarmMutationAuditTable = sqliteTable(
+  "alarm_mutation_audit",
+  {
+    id: text("id").primaryKey(),
+    alarmId: text("alarm_id").notNull(),
+    action: text("action").notNull(),
+    actorId: text("actor_id").notNull(),
+    actorName: text("actor_name").notNull(),
+    actorRole: text("actor_role").notNull(),
+    beforeState: text("before_state", { mode: "json" }).notNull(),
+    afterState: text("after_state", { mode: "json" }).notNull(),
+    correlationId: text("correlation_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    timestamp: text("timestamp").notNull(),
+  },
+  (table) => [index("alarm_mutation_audit_alarm_time_idx").on(table.alarmId, table.timestamp)],
 );

@@ -31,6 +31,7 @@ import { StatusBadge } from "@/components/data-display/status-badge";
 import { decisions, evidenceItems, featuredDecision, weatherWindows } from "@/lib";
 import type { DecisionAlternative } from "@/lib/types";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
+import { isServerWorkflowAlternativeId } from "@/lib/server-workflow-contract";
 import { cn } from "@/lib/utils";
 
 const solutionIcons = [ShieldCheck, Scale, Zap];
@@ -120,14 +121,19 @@ export function DecisionCenterPage() {
   const [selectedId, setSelectedId] = useState(featuredDecision.recommendedAlternativeId);
   const [comment, setComment] = useState("同意执行方案 B。已确认安全措施、资源和气象窗口。");
   const workflow = useDemoWorkflow();
+  const [showAllEvidence, setShowAllEvidence] = useState(false);
   const currentDecision =
     decisions.find((decision) => decision.id === activeDecisionId) ?? featuredDecision;
   const isFeaturedDecision = currentDecision.id === featuredDecision.id;
   const approval = isFeaturedDecision
     ? (workflow.approval?.action ?? "pending")
     : (currentDecision.approval.action ?? "pending");
+  const effectiveSelectedId =
+    isFeaturedDecision && workflow.approval?.selectedAlternativeId
+      ? workflow.approval.selectedAlternativeId
+      : selectedId;
   const selected =
-    currentDecision.alternatives.find((option) => option.id === selectedId) ??
+    currentDecision.alternatives.find((option) => option.id === effectiveSelectedId) ??
     currentDecision.alternatives[0];
   const window =
     weatherWindows.find((item) => item.id === selected?.weatherWindowId) ?? weatherWindows[0];
@@ -136,10 +142,11 @@ export function DecisionCenterPage() {
   );
 
   function submitApproval(action: "approve" | "reject" | "request-revision" | "escalate") {
-    if (!isFeaturedDecision) return;
+    if (!isFeaturedDecision || !isServerWorkflowAlternativeId(selected?.id)) return;
     workflow.dispatch({
       type: "submit-approval",
       action,
+      selectedAlternativeId: selected.id,
       approver: "李明远",
       approverRole: "值班总工程师",
       timestamp: new Date().toISOString(),
@@ -276,13 +283,17 @@ export function DecisionCenterPage() {
                 <strong>{relatedEvidence.length} 结构化证据</strong>
               </span>
             </div>
-            {relatedEvidence.slice(0, 4).map((item) => (
+            {relatedEvidence.slice(0, showAllEvidence ? relatedEvidence.length : 4).map((item) => (
               <span className="evidence-source-chip" key={item.id}>
                 {item.type.replaceAll("-", " ")}
               </span>
             ))}
-            <button>
-              查看全部 <ArrowRight size={12} />
+            <button
+              type="button"
+              onClick={() => setShowAllEvidence((value) => !value)}
+              aria-expanded={showAllEvidence}
+            >
+              {showAllEvidence ? "收起证据" : "查看全部"} <ArrowRight size={12} />
             </button>
           </section>
 
@@ -303,7 +314,7 @@ export function DecisionCenterPage() {
                   key={option.id}
                   option={option}
                   index={index}
-                  selected={selectedId === option.id}
+                  selected={effectiveSelectedId === option.id}
                   onSelect={() => setSelectedId(option.id)}
                 />
               ))}
@@ -467,7 +478,7 @@ export function DecisionCenterPage() {
                     <strong>审批策略 HITL-HIGH-02</strong>
                     <small>
                       {workflow.writable
-                        ? "高风险检修方案需要值班工程师批准，结果持久化到 D1"
+                        ? `将${selected?.label ?? "所选方案"}（${selected?.id ?? "—"}）写入审批、审计与工单状态`
                         : "D1 当前不可写；审批动作已切换为只读"}
                     </small>
                   </span>
@@ -526,7 +537,7 @@ export function DecisionCenterPage() {
                 </span>
                 <h3>
                   {approval === "approve"
-                    ? "方案已批准"
+                    ? `${workflow.approval?.selectedAlternativeId ?? "所选方案"} 已批准`
                     : approval === "request-revision"
                       ? "已请求 AI 修订"
                       : approval === "escalate"
@@ -536,7 +547,7 @@ export function DecisionCenterPage() {
                 <p>
                   {approval === "approve"
                     ? workflow.workOrderStatus === "scheduled"
-                      ? "审批门禁已解除；工单 WO-20260823-017 已排程。"
+                      ? `${selected?.label ?? "所选方案"}「${selected?.title ?? ""}」已写入工单 WO-20260823-017 并排程。`
                       : workflow.workOrderStatus === "in-progress"
                         ? "审批门禁已解除；工单 WO-20260823-017 正在现场执行。"
                         : workflow.workOrderStatus === "completed"

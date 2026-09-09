@@ -1,4 +1,8 @@
 import { buildRealtimeFrame, realtimeHello, type RealtimeChannel } from "@/lib/realtime-stream";
+import { readServerWorkflow } from "@/db/runtime-store";
+import { getWorkerEnv } from "@/lib/worker-env";
+import { alarms } from "@/lib/operations-data";
+import { overlayAlarmRuntimeState } from "@/db/alarm-runtime-store";
 
 interface WorkerSocket {
   readonly readyState: number;
@@ -42,7 +46,10 @@ const upgradeRequired = (channel: RealtimeChannel, runtimeSupported: boolean): R
     },
   );
 
-export function handleRealtimeWebSocket(request: Request, channel: RealtimeChannel): Response {
+export async function handleRealtimeWebSocket(
+  request: Request,
+  channel: RealtimeChannel,
+): Promise<Response> {
   const pairConstructor = (
     globalThis as typeof globalThis & { WebSocketPair?: WebSocketPairConstructor }
   ).WebSocketPair;
@@ -65,10 +72,14 @@ export function handleRealtimeWebSocket(request: Request, channel: RealtimeChann
     if (timer !== undefined) clearTimeout(timer);
   };
   const send = (message: unknown) => server.send(JSON.stringify(message));
-  const tick = () => {
+  const tick = async () => {
     if (closed) return;
     try {
-      send(buildRealtimeFrame(channel, sequence));
+      const workflow =
+        channel === "scada" ? undefined : (await readServerWorkflow(getWorkerEnv().DB)).snapshot;
+      const alarmItems =
+        channel === "alarms" ? await overlayAlarmRuntimeState(getWorkerEnv().DB, alarms) : alarms;
+      send(buildRealtimeFrame(channel, sequence, workflow, alarmItems));
       sequence += 1;
       timer = setTimeout(tick, cadenceMs);
     } catch {

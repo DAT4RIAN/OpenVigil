@@ -32,38 +32,21 @@ import {
   getFeaturedMissionNarrative,
   getTurbine,
   knowledgeDocuments,
+  missions,
   scadaSeries,
   subsystemHealth,
   turbine023,
   workOrders,
 } from "@/lib";
-import type { SubsystemHealth, WindTurbine, WorkOrderStatus } from "@/lib/types";
+import type { WindTurbine, WorkOrderStatus } from "@/lib/types";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
 import { buildGenericSubsystemAssessments } from "@/lib/generic-subsystem-data";
-
-const tabs = [
-  "Overview",
-  "SCADA",
-  "Health",
-  "Alarms",
-  "Missions",
-  "Maintenance",
-  "Documents",
-] as const;
-type Tab = (typeof tabs)[number];
-
-function stateLabel(state: SubsystemHealth["state"]) {
-  const labels: Record<SubsystemHealth["state"], string> = {
-    healthy: "健康",
-    watch: "关注",
-    degraded: "退化",
-    critical: "严重",
-    maintenance: "维护",
-    offline: "离线",
-  };
-  return labels[state];
-}
+import {
+  subsystemStateLabel as stateLabel,
+  turbineDetailTabs as tabs,
+  type TurbineDetailTab as Tab,
+} from "./turbine-detail-support";
 
 function series(metric: string): TimeSeriesPoint[] {
   const match = scadaSeries.find((item) => item.metric === metric);
@@ -448,6 +431,9 @@ function RelatedList({
             title: item.title,
             meta: `${item.code} · ${item.severity.toUpperCase()}`,
             status: item.status,
+            ...(item.missionId === featuredMission.id && workflowWorkOrderStatus === "completed"
+              ? { status: "resolved" }
+              : {}),
           }))
       : type === "maintenance"
         ? workOrders
@@ -517,6 +503,10 @@ function RelatedList({
 function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
   const relatedAlarms = alarms.filter((item) => item.turbineId === turbine.id);
   const relatedWorkOrders = workOrders.filter((item) => item.turbineId === turbine.id);
+  const relatedMissions = missions.filter((item) => item.turbineId === turbine.id);
+  const relatedDocuments = knowledgeDocuments
+    .filter((document) => !document.equipment.startsWith("WT-023"))
+    .slice(0, 4);
   const assessments = buildGenericSubsystemAssessments(turbine);
 
   return (
@@ -567,16 +557,29 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
         }
       />
       <nav className="detail-tabs" aria-label="机组详情标签页">
-        <button className="active">Overview</button>
+        <a className="active" href="#overview">
+          Overview
+        </a>
         <a href={`/scada?turbineId=${turbine.id}`}>SCADA</a>
+        <a href="#health">Health</a>
         <a href={`/alarms?turbineId=${turbine.id}`}>
           Alarms <span>{relatedAlarms.length}</span>
+        </a>
+        <a
+          href={
+            turbine.currentMissionId
+              ? `/missions/${turbine.currentMissionId}`
+              : `/missions?turbineId=${turbine.id}`
+          }
+        >
+          Missions <span>{relatedMissions.length}</span>
         </a>
         <a href={`/work-orders?turbineId=${turbine.id}`}>
           Maintenance <span>{relatedWorkOrders.length}</span>
         </a>
+        <a href="#documents">Documents</a>
       </nav>
-      <div className="asset-overview-grid">
+      <div className="asset-overview-grid" id="overview">
         <Card className="asset-hero-card">
           <div className="asset-hero-card__visual">
             <span className="asset-hero-grid" />
@@ -700,7 +703,7 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
             </div>
           </div>
         </Card>
-        <Card className="subsystem-panel">
+        <Card className="subsystem-panel" id="health">
           <CardHeader
             eyebrow="COMPONENT HEALTH"
             title="子系统健康状态"
@@ -789,6 +792,81 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
             )}
           </div>
         </Card>
+        <Card className="asset-history-card">
+          <CardHeader
+            eyebrow="ALARMS & MISSIONS"
+            title="事件与诊断任务"
+            description={`${turbine.id} 的告警和 Mission 关联；空记录会明确显示而不生成虚假任务`}
+          />
+          <div className="asset-history-list">
+            {relatedAlarms.map((item) => (
+              <a href={`/alarms?alarm=${item.id}`} key={item.id}>
+                <span className="history-icon">
+                  <AlarmTriangle size={14} />
+                </span>
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>
+                    {item.id} · {item.subsystem}
+                  </small>
+                </span>
+                <StatusBadge value={item.status} compact />
+              </a>
+            ))}
+            {relatedMissions.map((item) => (
+              <a href={`/missions/${item.id}`} key={item.id}>
+                <span className="history-icon">
+                  <Bot size={14} />
+                </span>
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>
+                    {item.id} · lead {item.leadAgentId}
+                  </small>
+                </span>
+                <StatusBadge value={item.status} compact />
+              </a>
+            ))}
+            {!relatedAlarms.length && !relatedMissions.length ? (
+              <div>
+                <span className="history-icon">
+                  <Radio size={14} />
+                </span>
+                <span>
+                  <strong>当前没有关联事件</strong>
+                  <small>告警中心和 Mission Center 均保留该资产筛选入口</small>
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </Card>
+        <Card className="asset-history-card" id="documents">
+          <CardHeader
+            eyebrow="DOCUMENTS"
+            title="适用文档"
+            description="设备手册、维护规程与技术标准；通过 Knowledge Base 打开可追溯来源"
+          />
+          <div className="asset-history-list">
+            {relatedDocuments.map((document) => (
+              <a href={`/knowledge?document=${document.id}`} key={document.id}>
+                <span className="history-icon">
+                  <FileText size={14} />
+                </span>
+                <span>
+                  <strong>{document.title}</strong>
+                  <small>
+                    {document.id} · {document.type} · {document.version}
+                  </small>
+                </span>
+                <StatusBadge
+                  value={document.vectorized ? "vectorized" : "indexed"}
+                  label={document.vectorized ? "INDEXED" : "CATALOGED"}
+                  compact
+                />
+              </a>
+            ))}
+          </div>
+        </Card>
       </div>
     </AppShell>
   );
@@ -863,7 +941,9 @@ function FeaturedTurbineDetailPage() {
       ) : null}
       {tab === "SCADA" ? <ScadaTab /> : null}
       {tab === "Health" ? <HealthTab /> : null}
-      {tab === "Alarms" ? <RelatedList type="alarms" /> : null}
+      {tab === "Alarms" ? (
+        <RelatedList type="alarms" workflowWorkOrderStatus={workflow.workOrderStatus} />
+      ) : null}
       {tab === "Missions" ? (
         <Card className="mission-callout">
           <span className="mission-callout__icon">

@@ -2907,6 +2907,44 @@ kbd {
   z-index: 69;
   backdrop-filter: blur(1px);
 }
+
+.controlled-entry-note,
+.view-empty-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+
+.controlled-entry-note > span {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+}
+
+.controlled-entry-note strong {
+  color: var(--text-primary);
+}
+
+.controlled-entry-note small {
+  line-height: 1.5;
+}
+
+.view-empty-state {
+  justify-content: center;
+  min-height: 140px;
+  text-align: center;
+}
+
+.scada-main-chart:fullscreen {
+  overflow: auto;
+  padding: 24px;
+  background: var(--surface-subtle);
+}
 .detail-drawer {
   background: var(--surface);
   border-left: 1px solid var(--border);
@@ -3444,18 +3482,29 @@ kbd {
 .asset-history-list {
   border-top: 1px solid var(--border);
 }
-.asset-history-list > div {
+.asset-history-list > div,
+.asset-history-list > a {
   align-items: center;
+  color: inherit;
   display: flex;
   gap: 9px;
   padding: 10px 14px;
+  text-decoration: none;
 }
-.asset-history-list > div + div {
+.asset-history-list > div + div,
+.asset-history-list > a + a,
+.asset-history-list > div + a,
+.asset-history-list > a + div {
   border-top: 1px solid var(--border);
 }
-.asset-history-list > div > span:last-child {
+.asset-history-list > div > span:last-child,
+.asset-history-list > a > span:nth-child(2) {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+.asset-history-list > a:hover {
+  background: var(--surface-strong);
 }
 .asset-history-list strong {
   font-size: 8.5px;
@@ -5731,7 +5780,7 @@ kbd {
 .mission-agent-list > div:last-child {
   border-top: 1px solid var(--border);
 }
-.mission-agent-list button {
+.mission-agent-list :is(button, a) {
   align-items: center;
   background: transparent;
   border: 0;
@@ -5742,18 +5791,23 @@ kbd {
   min-height: 47px;
   padding: 7px 12px;
   text-align: left;
+  text-decoration: none;
   width: 100%;
 }
-.mission-agent-list button > span:nth-child(2) {
+.mission-agent-list :is(button, a):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.mission-agent-list :is(button, a) > span:nth-child(2) {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-width: 0;
 }
-.mission-agent-list button strong {
+.mission-agent-list :is(button, a) strong {
   font-size: 8px;
 }
-.mission-agent-list button small {
+.mission-agent-list :is(button, a) small {
   color: var(--foreground-subtle);
   font-size: 6.5px;
   margin-top: 2px;
@@ -7177,6 +7231,14 @@ kbd {
   position: fixed;
   z-index: 80;
   backdrop-filter: blur(2px);
+}
+
+.dialog-backdrop__dismiss {
+  background: transparent;
+  border: 0;
+  inset: 0;
+  padding: 0;
+  position: absolute;
 }
 
 .command-dialog {

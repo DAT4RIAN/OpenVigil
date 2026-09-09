@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   Archive,
   Braces,
@@ -16,6 +17,7 @@ import {
   TowerControl,
 } from "lucide-react";
 import { StatusBadge } from "@/components/data-display/status-badge";
+import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardHeader, EmptyState } from "@/components/ui/primitives";
@@ -87,20 +89,96 @@ function formatCount(value: number): string {
   return new Intl.NumberFormat("zh-CN").format(value);
 }
 
+const catalogColumns: readonly LegacyColumnDef<DataCatalogEntry, unknown>[] = [
+  {
+    id: "dataset",
+    header: "数据集",
+    accessorFn: (entry) => `${entry.name} ${entry.id}`,
+    cell: ({ row }) => {
+      const Icon = categoryIcons[row.original.category];
+      return (
+        <span className={styles.datasetName}>
+          <span>
+            <Icon size={15} />
+          </span>
+          <span>
+            <strong>{row.original.name}</strong>
+            <small>{row.original.id}</small>
+            <em>{row.original.description}</em>
+          </span>
+        </span>
+      );
+    },
+  },
+  {
+    accessorKey: "category",
+    header: "分类 / 状态",
+    cell: ({ row }) => (
+      <span className={styles.badgeStack}>
+        <span>{categoryLabels[row.original.category]}</span>
+        <StatusBadge
+          value={row.original.status}
+          label={statusLabels[row.original.status]}
+          tone={row.original.status === "ready" ? "success" : "neutral"}
+          compact
+        />
+      </span>
+    ),
+  },
+  {
+    accessorKey: "recordCount",
+    header: "规模",
+    cell: ({ row }) => (
+      <span>
+        <strong className={styles.monoValue}>{formatCount(row.original.recordCount)}</strong>
+        <small>{row.original.schemaObjectCount} schema objects</small>
+      </span>
+    ),
+  },
+  {
+    accessorKey: "freshness",
+    header: "Freshness / Quality",
+    cell: ({ row }) => (
+      <span>
+        <strong>{row.original.freshness}</strong>
+        <small>{row.original.quality}</small>
+      </span>
+    ),
+  },
+  {
+    accessorKey: "retention",
+    header: "Retention / Source",
+    cell: ({ row }) => (
+      <span>
+        <strong>{row.original.retention}</strong>
+        <small>{row.original.source}</small>
+      </span>
+    ),
+  },
+  {
+    id: "query",
+    header: "查询",
+    enableSorting: false,
+    cell: ({ row }) => (
+      <Link className={styles.queryLink} href={row.original.queryHref}>
+        {row.original.queryLabel} <ExternalLink size={12} />
+      </Link>
+    ),
+  },
+];
+
 export function DataCenterPage() {
-  const [query, setQuery] = useState("");
   const [category, setCategory] = useState<"all" | DataCatalogCategory>("all");
   const [status, setStatus] = useState<"all" | DataCatalogStatus>("all");
   const [selectedSubsystemKey, setSelectedSubsystemKey] = useState("main-bearing");
 
   const endpoint = useMemo(() => {
     const parameters = new URLSearchParams();
-    if (query.trim()) parameters.set("q", query.trim());
     if (category !== "all") parameters.set("category", category);
     if (status !== "all") parameters.set("status", status);
     const suffix = parameters.toString();
     return `/api/data-catalog${suffix ? `?${suffix}` : ""}`;
-  }, [category, query, status]);
+  }, [category, status]);
 
   const catalogQuery = useQuery({
     queryKey: ["data-catalog", endpoint],
@@ -115,7 +193,7 @@ export function DataCenterPage() {
     hierarchy.subsystems.find((subsystem) => subsystem.key === selectedSubsystemKey) ??
     hierarchy.subsystems[0];
   const entries = catalogQuery.data?.data ?? [];
-  const filtered = category !== "all" || status !== "all" || Boolean(query.trim());
+  const filtered = category !== "all" || status !== "all";
 
   return (
     <AppShell activePath="/data">
@@ -283,47 +361,6 @@ export function DataCenterPage() {
             </span>
           }
         />
-        <div className={styles.toolbar}>
-          <label className={styles.searchField}>
-            <Search size={15} />
-            <span className="sr-only">搜索数据集</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索名称、ID、来源…"
-              maxLength={100}
-            />
-          </label>
-          <label>
-            <span>分类</span>
-            <select
-              value={category}
-              onChange={(event) => setCategory(event.target.value as typeof category)}
-            >
-              <option value="all">全部分类</option>
-              {dataCatalogCategories.map((value) => (
-                <option value={value} key={value}>
-                  {categoryLabels[value]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>状态</span>
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value as typeof status)}
-            >
-              <option value="all">全部状态</option>
-              {dataCatalogStatuses.map((value) => (
-                <option value={value} key={value}>
-                  {statusLabels[value]}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
         {catalogQuery.isError ? (
           <div className={styles.errorBanner} role="alert">
             API 同步失败；目录继续显示最后一次确定性快照。
@@ -333,69 +370,75 @@ export function DataCenterPage() {
           <div className={styles.loadingState}>正在读取数据目录…</div>
         ) : entries.length ? (
           <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>数据集</th>
-                  <th>分类 / 状态</th>
-                  <th>规模</th>
-                  <th>Freshness / Quality</th>
-                  <th>Retention / Source</th>
-                  <th>查询</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry) => {
-                  const Icon = categoryIcons[entry.category];
-                  return (
-                    <tr key={entry.id}>
-                      <td>
-                        <span className={styles.datasetName}>
-                          <span>
-                            <Icon size={15} />
-                          </span>
-                          <span>
-                            <strong>{entry.name}</strong>
-                            <small>{entry.id}</small>
-                            <em>{entry.description}</em>
-                          </span>
-                        </span>
-                      </td>
-                      <td>
-                        <span className={styles.badgeStack}>
-                          <span>{categoryLabels[entry.category]}</span>
-                          <StatusBadge
-                            value={entry.status}
-                            label={statusLabels[entry.status]}
-                            tone={entry.status === "ready" ? "success" : "neutral"}
-                            compact
-                          />
-                        </span>
-                      </td>
-                      <td>
-                        <strong className={styles.monoValue}>
-                          {formatCount(entry.recordCount)}
-                        </strong>
-                        <small>{entry.schemaObjectCount} schema objects</small>
-                      </td>
-                      <td>
-                        <strong>{entry.freshness}</strong>
-                        <small>{entry.quality}</small>
-                      </td>
-                      <td>
-                        <strong>{entry.retention}</strong>
-                        <small>{entry.source}</small>
-                      </td>
-                      <td>
-                        <Link className={styles.queryLink} href={entry.queryHref}>
-                          {entry.queryLabel} <ExternalLink size={12} />
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <DataTable
+              data={entries}
+              columns={catalogColumns}
+              getRowId={(entry) => entry.id}
+              initialSorting={[{ id: "dataset", desc: false }]}
+              pageSize={6}
+              searchTextForRow={(entry) =>
+                `${entry.name} ${entry.id} ${entry.source} ${entry.description}`
+              }
+              searchPlaceholder="搜索名称、ID、来源…"
+              filterControls={
+                <>
+                  <label>
+                    <span>分类</span>
+                    <select
+                      aria-label="筛选数据集分类"
+                      value={category}
+                      onChange={(event) => setCategory(event.target.value as typeof category)}
+                    >
+                      <option value="all">全部分类</option>
+                      {dataCatalogCategories.map((value) => (
+                        <option value={value} key={value}>
+                          {categoryLabels[value]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>状态</span>
+                    <select
+                      aria-label="筛选数据集状态"
+                      value={status}
+                      onChange={(event) => setStatus(event.target.value as typeof status)}
+                    >
+                      <option value="all">全部状态</option>
+                      {dataCatalogStatuses.map((value) => (
+                        <option value={value} key={value}>
+                          {statusLabels[value]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              }
+              bulkActions={[
+                {
+                  label: "复制数据集 ID",
+                  onActivate: (selectedEntries) =>
+                    navigator.clipboard.writeText(
+                      selectedEntries.map((entry) => entry.id).join("\n"),
+                    ),
+                },
+              ]}
+              csvExport={{
+                filename: "windops-data-catalog.csv",
+                columns: [
+                  { label: "数据集ID", value: (entry) => entry.id },
+                  { label: "名称", value: (entry) => entry.name },
+                  { label: "分类", value: (entry) => categoryLabels[entry.category] },
+                  { label: "状态", value: (entry) => statusLabels[entry.status] },
+                  { label: "记录数", value: (entry) => entry.recordCount },
+                  { label: "新鲜度", value: (entry) => entry.freshness },
+                  { label: "质量", value: (entry) => entry.quality },
+                  { label: "保留策略", value: (entry) => entry.retention },
+                  { label: "来源", value: (entry) => entry.source },
+                  { label: "查询链接", value: (entry) => entry.queryHref },
+                ],
+              }}
+            />
           </div>
         ) : (
           <EmptyState

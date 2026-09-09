@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -40,9 +40,26 @@ import {
 } from "lucide-react";
 import { Avatar, Button } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
-import { agents, alarms, missions, turbines, weatherWindows, windFarm, workOrders } from "@/lib";
+import {
+  agents,
+  alarms,
+  decisions,
+  missions,
+  turbines,
+  weatherWindows,
+  windFarm,
+  workOrders,
+} from "@/lib";
 import { cn } from "@/lib/utils";
 import { hydrateDemoWorkflow, useDemoWorkflow } from "@/lib/use-demo-workflow";
+import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
+import {
+  deriveWorkflowKpis,
+  overlayClientAgents,
+  overlayClientAlarms,
+  overlayClientDecisions,
+  overlayClientMissions,
+} from "@/lib/client-workflow-overlays";
 
 type NavigationItem = {
   label: string;
@@ -57,9 +74,6 @@ type NavigationGroup = {
   items: NavigationItem[];
 };
 
-const onlineAgentCount = agents.filter(
-  (agent) => agent.status !== "offline" && agent.status !== "failed",
-).length;
 const activeAgentCount = agents.filter((agent) =>
   ["thinking", "working", "reviewing"].includes(agent.status),
 ).length;
@@ -149,6 +163,24 @@ const navigation: NavigationGroup[] = [
 
 const primaryCommands = [
   {
+    label: "Open Mission Center",
+    description: "查看全部 Mission，并支持机组范围筛选",
+    href: "/missions",
+    icon: GitBranch,
+  },
+  {
+    label: "Create Work Order · 只读受控入口",
+    description: "打开 WT-023 工单工作台并说明写入边界；此命令不会创建工单",
+    href: "/work-orders?turbineId=WT-023&intent=create",
+    icon: ClipboardCheck,
+  },
+  {
+    label: "Start Diagnosis · 只读诊断入口",
+    description: "仅打开 WT-023 现有 Mission 诊断视图；不会启动新 Agent 或写入诊断",
+    href: "/missions?turbineId=WT-023&intent=diagnosis",
+    icon: BrainCircuit,
+  },
+  {
     label: "打开 WT-023 机组详情",
     description: "健康度 68 · 主轴承预警",
     href: "/turbines/WT-023",
@@ -220,12 +252,6 @@ const primaryCommands = [
     description: "查看 AI 决策关联的可审计工单",
     href: "/work-orders?workOrder=WO-20260823-017",
     icon: ClipboardCheck,
-  },
-  {
-    label: "启动诊断工作流",
-    description: "打开 WT-023 诊断 Mission；高风险动作需人工审批",
-    href: "/missions/MISSION-2026-0823",
-    icon: BrainCircuit,
   },
   {
     label: "选择风场",
@@ -337,7 +363,7 @@ function ThemeControl() {
 }
 
 function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useAccessibleDialog<HTMLDivElement>(onClose, open);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const results = useMemo(() => {
@@ -349,45 +375,45 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
       : primaryCommands;
   }, [query]);
 
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
-
   if (!open) return null;
 
   return (
-    <div
-      className="dialog-backdrop"
-      role="button"
-      tabIndex={-1}
-      aria-label="关闭快捷命令"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onClose();
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          setActiveIndex((value) => Math.min(results.length - 1, value + 1));
-        }
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          setActiveIndex((value) => Math.max(0, value - 1));
-        }
-        if (event.key === "Enter" && results[activeIndex]) {
-          window.location.assign(results[activeIndex].href);
-        }
-      }}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div className="command-dialog" role="dialog" aria-modal="true" aria-label="WindOps 快捷命令">
+    <div className="dialog-backdrop">
+      <button
+        type="button"
+        className="dialog-backdrop__dismiss"
+        onClick={onClose}
+        aria-label="关闭快捷命令"
+      />
+      <div
+        ref={dialogRef}
+        className="command-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="WindOps 快捷命令"
+        tabIndex={-1}
+      >
         <div className="command-dialog__search">
           <Search size={18} aria-hidden="true" />
           <input
-            ref={inputRef}
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
               setActiveIndex(0);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setActiveIndex((value) => Math.min(results.length - 1, value + 1));
+              }
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setActiveIndex((value) => Math.max(0, value - 1));
+              }
+              if (event.key === "Enter" && results[activeIndex]) {
+                event.preventDefault();
+                window.location.assign(results[activeIndex].href);
+              }
             }}
             placeholder="搜索机组、告警、Mission 或工单…"
             aria-label="搜索快捷命令"
@@ -443,6 +469,21 @@ export function AppShell({
   activePath?: string;
 }) {
   const workflow = useDemoWorkflow();
+  const displayAlarms = useMemo(() => overlayClientAlarms(alarms, workflow), [workflow]);
+  const displayDecisions = useMemo(() => overlayClientDecisions(decisions, workflow), [workflow]);
+  const displayMissions = useMemo(() => overlayClientMissions(missions, workflow), [workflow]);
+  const displayAgents = useMemo(() => overlayClientAgents(agents, workflow), [workflow]);
+  const workflowKpis = useMemo(
+    () => deriveWorkflowKpis(turbines, displayAlarms, displayMissions, displayAgents),
+    [displayAgents, displayAlarms, displayMissions],
+  );
+  const pendingDecisionCount = useMemo(
+    () =>
+      displayDecisions.filter((decision) =>
+        ["under-review", "revision-requested"].includes(decision.status),
+      ).length,
+    [displayDecisions],
+  );
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -555,7 +596,19 @@ export function AppShell({
                     >
                       <Icon size={17} />
                       <span>{item.label}</span>
-                      {item.badge ? <small>{item.badge}</small> : null}
+                      {item.badge ? (
+                        <small>
+                          {item.href === "/alarms"
+                            ? workflowKpis.activeAlarmCount
+                            : item.href === "/missions"
+                              ? workflowKpis.activeMissionCount
+                              : item.href === "/decisions"
+                                ? pendingDecisionCount
+                                : item.href === "/agents"
+                                  ? workflowKpis.activeAgentCount
+                                  : item.badge}
+                        </small>
+                      ) : null}
                     </a>
                   );
                 })}
@@ -572,7 +625,7 @@ export function AppShell({
             <span>
               <strong>AI 系统正常</strong>
               <small>
-                {onlineAgentCount} / {agents.length} Agents online
+                {workflowKpis.onlineAgentCount} / {displayAgents.length} Agents online
               </small>
             </span>
             <span className="system-health__pulse" />

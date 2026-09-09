@@ -17,7 +17,74 @@
 }
 
 .toolbar {
+  gap: 12px;
   border-bottom: 1px solid var(--border);
+}
+
+.toolbarPrimary,
+.toolbarActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.toolbarPrimary {
+  flex: 1;
+}
+
+.toolbarActions > button,
+.searchField {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--foreground-muted);
+  background: var(--surface);
+}
+
+.toolbarActions > button {
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.toolbarActions > button:hover:not(:disabled) {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.toolbarActions > button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.searchField {
+  width: min(260px, 100%);
+}
+
+.searchField input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--foreground);
+  background: transparent;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .columnsMenu {
@@ -173,4 +240,21 @@
 .pagination button:disabled {
   opacity: 0.38;
   cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    padding-block: 10px;
+  }
+
+  .toolbarPrimary,
+  .toolbarActions {
+    flex-wrap: wrap;
+  }
+
+  .searchField {
+    flex: 1 1 220px;
+  }
 }

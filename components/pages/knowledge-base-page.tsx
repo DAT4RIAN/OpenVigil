@@ -38,6 +38,7 @@ import {
 import { knowledgeDocuments } from "@/lib/knowledge-data";
 import { featuredMission } from "@/lib/operations-data";
 import type { KnowledgeDocument, KnowledgeDocumentType } from "@/lib/types";
+import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 
 import styles from "./knowledge-base-page.module.css";
@@ -96,13 +97,7 @@ function DocumentDrawer({
   readonly citedPage: number | null;
   readonly onClose: () => void;
 }) {
-  useEffect(() => {
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+  const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
 
   return (
     <>
@@ -113,10 +108,12 @@ function DocumentDrawer({
         onClick={onClose}
       />
       <aside
+        ref={dialogRef}
         aria-label={`${document.title} 文档详情`}
         aria-modal="true"
         className={styles.drawer}
         role="dialog"
+        tabIndex={-1}
       >
         <header className={styles.drawerHeader}>
           <div>
@@ -517,7 +514,26 @@ export function KnowledgeBasePage() {
           </div>
 
           <DataTable
+            bulkActions={[
+              {
+                label: "复制文档 ID",
+                onActivate: async (rows) =>
+                  navigator.clipboard.writeText(rows.map((row) => row.id).join(", ")),
+              },
+            ]}
             columns={columns}
+            csvExport={{
+              filename: "windops-knowledge-documents.csv",
+              columns: [
+                { label: "Document ID", value: (row) => row.id },
+                { label: "Title", value: (row) => row.title },
+                { label: "Type", value: (row) => row.type },
+                { label: "Equipment", value: (row) => row.equipment },
+                { label: "Manufacturer", value: (row) => row.manufacturer },
+                { label: "Version", value: (row) => row.version },
+                { label: "Updated", value: (row) => row.updatedAt },
+              ],
+            }}
             data={filteredDocuments}
             emptyMessage="没有符合搜索与类型筛选条件的文档"
             getRowId={(document) => document.id}

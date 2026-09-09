@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
   ArrowRight,
   Bot,
@@ -15,7 +16,10 @@ import {
   Search,
   ShieldCheck,
   Users,
+  X,
 } from "lucide-react";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
+import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Avatar, Button, Card, Progress } from "@/components/ui/primitives";
@@ -123,73 +127,116 @@ function MissionCard({ mission }: { mission: Mission }) {
   );
 }
 
-function MissionList({ items }: { items: readonly Mission[] }) {
+const missionListColumns: readonly LegacyColumnDef<Mission, unknown>[] = [
+  {
+    accessorKey: "title",
+    header: "Mission",
+    cell: ({ row }) => (
+      <span className="alarm-title-cell">
+        <strong>{row.original.title}</strong>
+        <small className="mono">{row.original.id}</small>
+      </span>
+    ),
+    size: 280,
+  },
+  {
+    accessorKey: "status",
+    header: "状态",
+    cell: ({ row }) => (
+      <StatusBadge value={row.original.status} label={statusLabel(row.original.status)} compact />
+    ),
+  },
+  {
+    accessorKey: "severity",
+    header: "严重度",
+    cell: ({ row }) => (
+      <StatusBadge
+        value={row.original.severity}
+        label={row.original.severity.toUpperCase()}
+        tone={severityTone(row.original.severity)}
+        compact
+      />
+    ),
+  },
+  {
+    accessorKey: "turbineId",
+    header: "机组",
+    cell: ({ row }) => <span className="mono">{row.original.turbineId}</span>,
+  },
+  {
+    accessorKey: "leadAgentId",
+    header: "Lead Agent",
+    cell: ({ row }) =>
+      agents.find((agent) => agent.id === row.original.leadAgentId)?.shortName ?? "Unassigned",
+  },
+  {
+    accessorKey: "progressPercent",
+    header: "进度",
+    cell: ({ row }) => (
+      <span>
+        <strong>{row.original.progressPercent}%</strong>
+        <Progress value={row.original.progressPercent} />
+      </span>
+    ),
+  },
+  {
+    accessorKey: "updatedAt",
+    header: "更新时间",
+    cell: ({ row }) => <span className="mono">{formatUpdatedAt(row.original.updatedAt)}</span>,
+  },
+];
+
+const missionCsvExport = {
+  filename: "windops-missions.csv",
+  columns: [
+    { label: "Mission ID", value: (mission: Mission) => mission.id },
+    { label: "Title", value: (mission: Mission) => mission.title },
+    { label: "Status", value: (mission: Mission) => mission.status },
+    { label: "Severity", value: (mission: Mission) => mission.severity },
+    { label: "Wind Turbine", value: (mission: Mission) => mission.turbineId },
+    { label: "Lead Agent", value: (mission: Mission) => mission.leadAgentId },
+    { label: "Agents", value: (mission: Mission) => mission.agentIds.length },
+    { label: "Progress", value: (mission: Mission) => mission.progressPercent },
+    { label: "Updated At", value: (mission: Mission) => mission.updatedAt },
+  ],
+} as const;
+
+const missionSearchText = (mission: Mission): string =>
+  `${mission.id} ${mission.title} ${mission.turbineId} ${mission.summary} ${mission.diagnosis ?? ""}`;
+
+const missionRowId = (mission: Mission): string => mission.id;
+
+function MissionList({
+  items,
+  filterControls,
+}: {
+  readonly items: readonly Mission[];
+  readonly filterControls: ReactNode;
+}) {
   return (
-    <Card className="data-table-card">
-      <div className="table-scroll">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Mission</th>
-              <th>状态</th>
-              <th>严重度</th>
-              <th>机组</th>
-              <th>Lead Agent</th>
-              <th>进度</th>
-              <th>更新时间</th>
-              <th>
-                <span className="sr-only">操作</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((mission) => {
-              const lead = agents.find((agent) => agent.id === mission.leadAgentId);
-              return (
-                <tr key={mission.id}>
-                  <td>
-                    <strong>{mission.title}</strong>
-                    <span className="mono">{mission.id}</span>
-                  </td>
-                  <td>
-                    <StatusBadge
-                      value={mission.status}
-                      label={statusLabel(mission.status)}
-                      compact
-                    />
-                  </td>
-                  <td>
-                    <StatusBadge
-                      value={mission.severity}
-                      label={mission.severity.toUpperCase()}
-                      tone={severityTone(mission.severity)}
-                      compact
-                    />
-                  </td>
-                  <td className="mono">{mission.turbineId}</td>
-                  <td>{lead?.shortName ?? "Unassigned"}</td>
-                  <td>
-                    <strong>{mission.progressPercent}%</strong>
-                    <Progress value={mission.progressPercent} />
-                  </td>
-                  <td className="mono">{formatUpdatedAt(mission.updatedAt)}</td>
-                  <td>
-                    <a href={`/missions/${mission.id}`} aria-label={`查看 ${mission.id}`}>
-                      <ArrowRight size={15} />
-                    </a>
-                  </td>
-                </tr>
-              );
-            })}
-            {items.length === 0 ? (
-              <tr>
-                <td colSpan={8}>没有符合当前筛选条件的 Mission。</td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+    <DataTable
+      bulkActions={[
+        {
+          label: "打开首个所选 Mission",
+          onActivate: (rows) => {
+            const mission = rows[0];
+            if (mission) window.location.assign(`/missions/${mission.id}`);
+          },
+        },
+      ]}
+      columns={missionListColumns}
+      csvExport={missionCsvExport}
+      data={items}
+      emptyMessage="没有符合当前筛选条件的 Mission。"
+      filterControls={filterControls}
+      getRowId={missionRowId}
+      initialSorting={[{ id: "updatedAt", desc: true }]}
+      onRowActivate={(mission) => window.location.assign(`/missions/${mission.id}`)}
+      pageSize={6}
+      searchPlaceholder="搜索 Mission、机组或故障…"
+      searchTextForRow={missionSearchText}
+      selectedRowId="MISSION-2026-0823"
+    />
   );
 }
 
@@ -255,6 +302,21 @@ export function MissionCenterPage() {
   const [view, setView] = useState<MissionView>("kanban");
   const [severity, setSeverity] = useState<SeverityFilter>("all");
   const [leadAgentId, setLeadAgentId] = useState("all");
+  const [turbineScope, setTurbineScope] = useState<string | null>(null);
+  const [diagnosisIntent, setDiagnosisIntent] = useState(false);
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search)
+      .get("turbineId")
+      ?.trim()
+      .toUpperCase();
+    const intent = new URLSearchParams(window.location.search).get("intent");
+    if (!requested) return;
+    const timer = window.setTimeout(() => {
+      setTurbineScope(requested);
+      setDiagnosisIntent(intent === "diagnosis");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const featuredNarrative = getFeaturedMissionNarrative(workflow);
   const displayMissions = useMemo(
     () =>
@@ -281,22 +343,106 @@ export function MissionCenterPage() {
       agents.filter((agent) => displayMissions.some((mission) => mission.leadAgentId === agent.id)),
     [displayMissions],
   );
+  const filteredByControls = useMemo(
+    () =>
+      displayMissions.filter(
+        (mission) =>
+          (scope === "all" || mission.status !== "completed") &&
+          (turbineScope === null || mission.turbineId === turbineScope) &&
+          (severity === "all" || mission.severity === severity) &&
+          (leadAgentId === "all" || mission.leadAgentId === leadAgentId),
+      ),
+    [displayMissions, leadAgentId, scope, severity, turbineScope],
+  );
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return displayMissions.filter(
-      (mission) =>
-        (scope === "all" || mission.status !== "completed") &&
-        (severity === "all" || mission.severity === severity) &&
-        (leadAgentId === "all" || mission.leadAgentId === leadAgentId) &&
-        `${mission.id} ${mission.title} ${mission.turbineId} ${mission.summary}`
-          .toLowerCase()
-          .includes(normalizedQuery),
+    return filteredByControls.filter((mission) =>
+      `${mission.id} ${mission.title} ${mission.turbineId} ${mission.summary}`
+        .toLowerCase()
+        .includes(normalizedQuery),
     );
-  }, [displayMissions, leadAgentId, query, scope, severity]);
+  }, [filteredByControls, query]);
   const activeCount = displayMissions.filter((mission) => mission.status !== "completed").length;
   const reviewCount = displayMissions.filter((mission) => mission.status === "under-review").length;
   const executionCount = displayMissions.filter((mission) => mission.status === "executing").length;
   const completedCount = displayMissions.filter((mission) => mission.status === "completed").length;
+  const selectView = (nextView: MissionView) => {
+    if (nextView === "list") setQuery("");
+    setView(nextView);
+  };
+  const missionFilterControls = (
+    <>
+      <div className="agent-filter-tabs">
+        <button className={cn(scope === "active" && "active")} onClick={() => setScope("active")}>
+          Active
+        </button>
+        <button className={cn(scope === "all" && "active")} onClick={() => setScope("all")}>
+          All Missions
+        </button>
+      </div>
+      <label>
+        <span className="sr-only">按严重程度筛选</span>
+        <select
+          className="select-field"
+          value={severity}
+          onChange={(event) => setSeverity(event.target.value as SeverityFilter)}
+        >
+          <option value="all">Severity · All</option>
+          {severityOptions.map((option) => (
+            <option value={option} key={option}>
+              Severity · {option.toUpperCase()}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span className="sr-only">按 Lead Agent 筛选</span>
+        <select
+          className="select-field"
+          value={leadAgentId}
+          onChange={(event) => setLeadAgentId(event.target.value)}
+        >
+          <option value="all">Lead Agent · All</option>
+          {leadOptions.map((agent) => (
+            <option value={agent.id} key={agent.id}>
+              Lead Agent · {agent.shortName}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="view-switcher" aria-label="Mission 视图切换">
+        <button
+          className={cn(view === "kanban" && "active")}
+          onClick={() => selectView("kanban")}
+          aria-label="看板视图"
+          aria-pressed={view === "kanban"}
+        >
+          <LayoutGrid size={15} />
+        </button>
+        <button
+          className={cn(view === "list" && "active")}
+          onClick={() => selectView("list")}
+          aria-label="列表视图"
+          aria-pressed={view === "list"}
+        >
+          <List size={15} />
+        </button>
+        <button
+          className={cn(view === "timeline" && "active")}
+          onClick={() => selectView("timeline")}
+          aria-label="时间线视图"
+          aria-pressed={view === "timeline"}
+        >
+          <CalendarDays size={15} />
+        </button>
+      </div>
+      {turbineScope ? (
+        <Button variant="secondary" onClick={() => setTurbineScope(null)}>
+          机组 {turbineScope} <X size={12} />
+        </Button>
+      ) : null}
+    </>
+  );
 
   return (
     <AppShell activePath="/missions">
@@ -322,7 +468,7 @@ export function MissionCenterPage() {
           <>
             <Button
               variant={view === "timeline" ? "primary" : "secondary"}
-              onClick={() => setView("timeline")}
+              onClick={() => selectView("timeline")}
               aria-pressed={view === "timeline"}
             >
               <CalendarDays size={15} /> Timeline
@@ -338,6 +484,26 @@ export function MissionCenterPage() {
           </>
         }
       />
+
+      {diagnosisIntent ? (
+        <section className="controlled-entry-note" role="status">
+          <ShieldCheck size={16} />
+          <span>
+            <strong>已打开受控诊断入口</strong>
+            <small>
+              资产范围：{turbineScope ?? "未指定"}。当前没有通用 Mission 写入
+              API；这里只展示现有诊断 Mission，不会假启动 Agent 流程。
+            </small>
+          </span>
+          <Button
+            variant="ghost"
+            onClick={() => setDiagnosisIntent(false)}
+            aria-label="关闭受控入口提示"
+          >
+            <X size={14} />
+          </Button>
+        </section>
+      ) : null}
 
       <section className="mission-summary">
         <div>
@@ -385,82 +551,21 @@ export function MissionCenterPage() {
         </div>
       </section>
 
-      <section className="data-toolbar mission-toolbar">
-        <div className="search-field">
-          <Search size={15} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索 Mission、机组或故障…"
-            aria-label="搜索 Mission"
-          />
-        </div>
-        <div className="agent-filter-tabs">
-          <button className={cn(scope === "active" && "active")} onClick={() => setScope("active")}>
-            Active
-          </button>
-          <button className={cn(scope === "all" && "active")} onClick={() => setScope("all")}>
-            All Missions
-          </button>
-        </div>
-        <label>
-          <span className="sr-only">按严重程度筛选</span>
-          <select
-            className="select-field"
-            value={severity}
-            onChange={(event) => setSeverity(event.target.value as SeverityFilter)}
-          >
-            <option value="all">Severity · All</option>
-            {severityOptions.map((option) => (
-              <option value={option} key={option}>
-                Severity · {option.toUpperCase()}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span className="sr-only">按 Lead Agent 筛选</span>
-          <select
-            className="select-field"
-            value={leadAgentId}
-            onChange={(event) => setLeadAgentId(event.target.value)}
-          >
-            <option value="all">Lead Agent · All</option>
-            {leadOptions.map((agent) => (
-              <option value={agent.id} key={agent.id}>
-                Lead Agent · {agent.shortName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="toolbar-result">{filtered.length} Missions</span>
-        <div className="view-switcher" aria-label="Mission 视图切换">
-          <button
-            className={cn(view === "kanban" && "active")}
-            onClick={() => setView("kanban")}
-            aria-label="看板视图"
-            aria-pressed={view === "kanban"}
-          >
-            <LayoutGrid size={15} />
-          </button>
-          <button
-            className={cn(view === "list" && "active")}
-            onClick={() => setView("list")}
-            aria-label="列表视图"
-            aria-pressed={view === "list"}
-          >
-            <List size={15} />
-          </button>
-          <button
-            className={cn(view === "timeline" && "active")}
-            onClick={() => setView("timeline")}
-            aria-label="时间线视图"
-            aria-pressed={view === "timeline"}
-          >
-            <CalendarDays size={15} />
-          </button>
-        </div>
-      </section>
+      {view === "list" ? null : (
+        <section className="data-toolbar mission-toolbar">
+          <div className="search-field">
+            <Search size={15} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜索 Mission、机组或故障…"
+              aria-label="搜索 Mission"
+            />
+          </div>
+          {missionFilterControls}
+          <span className="toolbar-result">{filtered.length} Missions</span>
+        </section>
+      )}
 
       {view === "kanban" ? (
         <section className="mission-kanban" aria-label="Mission 状态看板">
@@ -492,7 +597,7 @@ export function MissionCenterPage() {
           })}
         </section>
       ) : view === "list" ? (
-        <MissionList items={filtered} />
+        <MissionList items={filteredByControls} filterControls={missionFilterControls} />
       ) : (
         <MissionTimeline items={filtered} />
       )}

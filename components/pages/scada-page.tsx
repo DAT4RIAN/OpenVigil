@@ -376,7 +376,7 @@ export function ScadaPage() {
 
       <section className="scada-layout">
         <div className="scada-chart-stack">
-          <Card className="scada-main-chart">
+          <Card className="scada-main-chart" id="scada-main-chart">
             <CardHeader
               eyebrow={`${selected.metric.toUpperCase()} · ${range}`}
               title={selected.label}
@@ -387,7 +387,15 @@ export function ScadaPage() {
                     value={signalState(selected)}
                     label={signalState(selected) === "normal" ? "NORMAL" : "WARNING"}
                   />
-                  <Button size="icon" variant="ghost" aria-label="全屏">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label="全屏"
+                    title="将主趋势图切换为浏览器全屏"
+                    onClick={() =>
+                      void document.getElementById("scada-main-chart")?.requestFullscreen()
+                    }
+                  >
                     <Maximize2 size={15} />
                   </Button>
                 </div>

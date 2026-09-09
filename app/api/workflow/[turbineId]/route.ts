@@ -1,12 +1,14 @@
 import { mutateServerWorkflow, readServerWorkflow } from "@/db/runtime-store";
 import {
   authorizeServerWorkflowDemoActor,
+  isServerWorkflowAlternativeId,
   isSupportedServerWorkflowTurbineId,
   SERVER_WORKFLOW_TURBINE_ID,
   ServerWorkflowTransitionError,
   type ServerWorkflowAction,
   type ServerWorkflowEnvelope,
   type ServerWorkflowErrorEnvelope,
+  type ServerWorkflowFieldEvidence,
   type ServerWorkflowMeta,
   type ServerWorkflowMutationRequest,
 } from "@/lib/server-workflow-contract";
@@ -75,6 +77,56 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const nonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
+function parseFieldEvidence(
+  value: unknown,
+  verifiedBy: ServerWorkflowMutationRequest["actor"],
+): ServerWorkflowFieldEvidence {
+  if (!isRecord(value) || !isRecord(value.measurement)) {
+    throw new ServerWorkflowTransitionError(
+      "INVALID_FIELD_EVIDENCE",
+      "fieldEvidence requires artifactUri, artifactSha256, measurement, and verifiedBy.",
+      400,
+    );
+  }
+  const artifactUri = nonEmptyString(value.artifactUri) ? value.artifactUri.trim() : "";
+  const artifactSha256 = nonEmptyString(value.artifactSha256)
+    ? value.artifactSha256.trim().toLowerCase()
+    : "";
+  const measurement = value.measurement;
+  const observedAt = nonEmptyString(measurement.observedAt) ? measurement.observedAt.trim() : "";
+  if (
+    value.verificationMode !== "deterministic-fixture" ||
+    !/^fixture:\/\/windops-field-evidence\/\S+$/i.test(artifactUri) ||
+    !/^[a-f0-9]{64}$/.test(artifactSha256) ||
+    !nonEmptyString(measurement.metric) ||
+    typeof measurement.value !== "number" ||
+    !Number.isFinite(measurement.value) ||
+    !nonEmptyString(measurement.unit) ||
+    !observedAt ||
+    Number.isNaN(Date.parse(observedAt)) ||
+    !isRecord(value.verifiedBy) ||
+    !nonEmptyString(value.verifiedBy.id)
+  ) {
+    throw new ServerWorkflowTransitionError(
+      "INVALID_FIELD_EVIDENCE",
+      "Field evidence must contain a durable URI, lowercase/uppercase SHA-256, finite measurement, timestamp, and verifier identity.",
+      400,
+    );
+  }
+  return {
+    verificationMode: "deterministic-fixture",
+    artifactUri,
+    artifactSha256,
+    measurement: {
+      metric: measurement.metric.trim(),
+      value: measurement.value,
+      unit: measurement.unit.trim(),
+      observedAt: new Date(observedAt).toISOString(),
+    },
+    verifiedBy,
+  };
+}
+
 function parseMutation(value: unknown): ServerWorkflowMutationRequest {
   if (!isRecord(value)) {
     throw new ServerWorkflowTransitionError(
@@ -125,13 +177,18 @@ function parseMutation(value: unknown): ServerWorkflowMutationRequest {
 
   const action = value.action as ServerWorkflowAction;
   const actor = authorizeServerWorkflowDemoActor(value.actor.id, action);
-  if (
-    ["approve", "reject", "request-revision", "escalate"].includes(action) &&
-    (!nonEmptyString(value.reason) || !nonEmptyString(value.comment))
-  ) {
+  const isApprovalAction = ["approve", "reject", "request-revision", "escalate"].includes(action);
+  if (isApprovalAction && (!nonEmptyString(value.reason) || !nonEmptyString(value.comment))) {
     throw new ServerWorkflowTransitionError(
       "APPROVAL_CONTEXT_REQUIRED",
       "Approval actions require non-empty reason and comment fields.",
+      400,
+    );
+  }
+  if (isApprovalAction && !isServerWorkflowAlternativeId(value.selectedAlternativeId)) {
+    throw new ServerWorkflowTransitionError(
+      "APPROVAL_ALTERNATIVE_REQUIRED",
+      "Approval actions require selectedAlternativeId to be ALT-0823-A, ALT-0823-B, or ALT-0823-C.",
       400,
     );
   }
@@ -145,6 +202,10 @@ function parseMutation(value: unknown): ServerWorkflowMutationRequest {
       400,
     );
   }
+  const fieldEvidence =
+    action === "set-task-completion" && value.completed === true
+      ? parseFieldEvidence(value.fieldEvidence, actor)
+      : undefined;
 
   return {
     action,
@@ -152,10 +213,14 @@ function parseMutation(value: unknown): ServerWorkflowMutationRequest {
     correlationId: value.correlationId,
     idempotencyKey: value.idempotencyKey,
     expectedRevision: Number(value.expectedRevision),
+    ...(isServerWorkflowAlternativeId(value.selectedAlternativeId)
+      ? { selectedAlternativeId: value.selectedAlternativeId }
+      : {}),
     ...(nonEmptyString(value.reason) ? { reason: value.reason } : {}),
     ...(nonEmptyString(value.comment) ? { comment: value.comment } : {}),
     ...(nonEmptyString(value.taskId) ? { taskId: value.taskId } : {}),
     ...(typeof value.completed === "boolean" ? { completed: value.completed } : {}),
+    ...(fieldEvidence ? { fieldEvidence } : {}),
   };
 }
 

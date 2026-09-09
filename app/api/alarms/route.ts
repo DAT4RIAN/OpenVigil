@@ -1,22 +1,105 @@
 import { alarmArchive, alarms, windFarm } from "@/lib";
+import {
+  mutateAlarmRuntimeState,
+  overlayAlarmRuntimeState,
+  type AlarmMutationAction,
+} from "@/db/alarm-runtime-store";
+import { overlayWorkflowAlarms } from "@/lib/server-workflow-overlays";
+import { getWorkerEnv } from "@/lib/worker-env";
 
-import { collectionResponse, errorResponse } from "../_shared";
+import { collectionResponse, errorResponse, jsonResponse } from "../_shared";
+import { readWorkflowForApi } from "../_workflow";
 
-export function GET(request: Request): Response {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const nonEmpty = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
+
+export async function GET(request: Request): Promise<Response> {
   const requestedScope = new URL(request.url).searchParams.get("scope");
-
   if (requestedScope !== null && requestedScope !== "live" && requestedScope !== "archive") {
     return errorResponse(
       "INVALID_SCOPE",
       'The scope query parameter must be either "live" or "archive".',
     );
   }
-
   const scope = requestedScope ?? "live";
-  const data = scope === "archive" ? alarmArchive : alarms;
-
+  const workflow = await readWorkflowForApi();
+  const base = scope === "archive" ? alarmArchive : alarms;
+  const runtimeOverlay = await overlayAlarmRuntimeState(getWorkerEnv().DB, base);
+  const data = overlayWorkflowAlarms(runtimeOverlay, workflow.snapshot);
   return collectionResponse(data, {
     scope,
-    snapshotAt: windFarm.lastUpdatedAt,
+    snapshotAt: scope === "archive" ? windFarm.lastUpdatedAt : workflow.snapshot.updatedAt,
+    workflowPersistence: workflow.persistence,
+    workflowRevision: workflow.snapshot.revision,
+    alarmMutationPersistence: getWorkerEnv().DB ? "d1" : "unavailable",
   });
+}
+
+export async function POST(request: Request): Promise<Response> {
+  const database = getWorkerEnv().DB;
+  if (!database) {
+    return errorResponse(
+      "PERSISTENCE_UNAVAILABLE",
+      "Alarm mutations require the Cloudflare D1 DB binding; no local-only write was applied.",
+      503,
+    );
+  }
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return errorResponse("INVALID_JSON", "The request body must contain valid JSON.", 400);
+  }
+  if (
+    !isRecord(raw) ||
+    !nonEmpty(raw.alarmId) ||
+    !nonEmpty(raw.action) ||
+    !["acknowledge", "assign"].includes(raw.action) ||
+    !nonEmpty(raw.correlationId) ||
+    !nonEmpty(raw.idempotencyKey)
+  ) {
+    return errorResponse(
+      "INVALID_ALARM_MUTATION",
+      "alarmId, acknowledge|assign action, correlationId, and idempotencyKey are required.",
+      400,
+    );
+  }
+  if (raw.action === "assign" && raw.assignee !== null && !nonEmpty(raw.assignee)) {
+    return errorResponse("INVALID_ASSIGNEE", "assign requires a non-empty assignee or null.", 400);
+  }
+  const alarmId = String(raw.alarmId).toUpperCase();
+  const alarm = alarms.find((candidate) => candidate.id === alarmId);
+  if (!alarm) return errorResponse("ALARM_NOT_FOUND", `Alarm ${raw.alarmId} was not found.`, 404);
+  try {
+    const result = await mutateAlarmRuntimeState(database, alarm, {
+      alarmId: alarm.id,
+      action: raw.action as AlarmMutationAction,
+      ...(raw.action === "assign" ? { assignee: raw.assignee as string | null } : {}),
+      correlationId: raw.correlationId,
+      idempotencyKey: raw.idempotencyKey,
+    });
+    return jsonResponse({
+      data: result.alarm,
+      meta: {
+        persistence: "d1",
+        replayed: result.replayed,
+        audit: result.audit,
+      },
+    });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "ALARM_MUTATION_FAILED";
+    const status =
+      code === "IDEMPOTENCY_KEY_REUSED" ||
+      code === "ALARM_REVISION_CONFLICT" ||
+      /constraint|unique/i.test(code)
+        ? 409
+        : 400;
+    return errorResponse(
+      code,
+      "The alarm mutation was rejected and no local-only state was applied.",
+      status,
+    );
+  }
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   TriangleAlert as AlarmTriangle,
@@ -10,12 +11,9 @@ import {
   Check,
   ChevronDown,
   Clock3,
-  Download,
   FileSearch,
   Filter,
   History,
-  MoreHorizontal,
-  Search,
   ShieldAlert,
   Thermometer,
   UserRound,
@@ -23,9 +21,11 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
+import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button, Card, KeyValue } from "@/components/ui/primitives";
+import { Button, KeyValue } from "@/components/ui/primitives";
 import { StatusBadge, type StatusTone } from "@/components/data-display/status-badge";
 import {
   alarms,
@@ -37,8 +37,12 @@ import {
   windFarm,
 } from "@/lib";
 import type { Alarm, AlarmSeverity } from "@/lib/types";
+import { apiGet, apiPost } from "@/lib/api-client";
 import { useRealtimeChannel } from "@/lib/use-realtime-channel";
 import { cn } from "@/lib/utils";
+import { useDemoWorkflow } from "@/lib/use-demo-workflow";
+import { overlayClientAlarms } from "@/lib/client-workflow-overlays";
+import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
 
 const severityTone: Record<AlarmSeverity, StatusTone> = {
   critical: "critical",
@@ -54,6 +58,109 @@ const severityLabel: Record<AlarmSeverity, string> = {
   warning: "WARNING",
   info: "INFO",
 };
+
+const alarmColumns: readonly LegacyColumnDef<Alarm, unknown>[] = [
+  {
+    accessorKey: "severity",
+    header: "Severity",
+    cell: ({ row }) => (
+      <StatusBadge
+        value={row.original.severity}
+        label={severityLabel[row.original.severity]}
+        tone={severityTone[row.original.severity]}
+        compact
+      />
+    ),
+  },
+  {
+    accessorKey: "turbineId",
+    header: "Wind Turbine",
+    cell: ({ row }) => <strong className="mono">{row.original.turbineId}</strong>,
+  },
+  {
+    accessorKey: "subsystem",
+    header: "Subsystem",
+    cell: ({ row }) => row.original.subsystem.replaceAll("-", " "),
+  },
+  {
+    accessorKey: "code",
+    header: "Alarm Code",
+    cell: ({ row }) => <span className="mono">{row.original.code}</span>,
+  },
+  {
+    accessorKey: "title",
+    header: "Alarm",
+    cell: ({ row }) => (
+      <span className="alarm-title-cell">
+        <strong>{row.original.title}</strong>
+        <small>{row.original.description}</small>
+      </span>
+    ),
+    size: 300,
+  },
+  {
+    accessorKey: "triggeredAt",
+    header: "Triggered At",
+    cell: ({ row }) =>
+      new Date(row.original.triggeredAt).toLocaleString("zh-CN", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }),
+  },
+  {
+    accessorKey: "durationMinutes",
+    header: "Duration",
+    cell: ({ row }) => duration(row.original.durationMinutes),
+  },
+  {
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => <StatusBadge value={row.original.status} compact />,
+  },
+  {
+    accessorKey: "aiStatus",
+    header: "AI Status",
+    cell: ({ row }) => (
+      <span
+        className={cn(
+          "ai-status-cell",
+          row.original.aiStatus === "analyzing" && "ai-status-cell--working",
+        )}
+      >
+        <Bot size={13} /> {row.original.aiStatus}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "assignee",
+    header: "Assignee",
+    cell: ({ row }) => row.original.assignee ?? <span className="muted">未指派</span>,
+  },
+];
+
+const alarmCsvExport = {
+  filename: "windops-alarms.csv",
+  columns: [
+    { label: "Alarm ID", value: (alarm: Alarm) => alarm.id },
+    { label: "Severity", value: (alarm: Alarm) => alarm.severity },
+    { label: "Wind Turbine", value: (alarm: Alarm) => alarm.turbineId },
+    { label: "Subsystem", value: (alarm: Alarm) => alarm.subsystem },
+    { label: "Alarm Code", value: (alarm: Alarm) => alarm.code },
+    { label: "Alarm", value: (alarm: Alarm) => alarm.title },
+    { label: "Triggered At", value: (alarm: Alarm) => alarm.triggeredAt },
+    { label: "Status", value: (alarm: Alarm) => alarm.status },
+    { label: "AI Status", value: (alarm: Alarm) => alarm.aiStatus },
+    { label: "Assignee", value: (alarm: Alarm) => alarm.assignee },
+  ],
+} as const;
+
+const alarmSearchText = (alarm: Alarm): string =>
+  `${alarm.id} ${alarm.code} ${alarm.title} ${alarm.description} ${alarm.turbineId} ${alarm.subsystem} ${alarm.assignee ?? ""}`;
+
+const alarmRowId = (alarm: Alarm): string => alarm.id;
 
 function duration(minutes: number) {
   if (minutes < 60) return `${minutes}m`;
@@ -86,6 +193,7 @@ function AlarmDrawer({
   onAcknowledge: (alarmId: string) => void;
   onToggleAssignment: (alarm: Alarm) => void;
 }) {
+  const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
   const featured = alarm.id === "ALARM-0031" || alarm.turbineId === "WT-023";
   const canAcknowledge = alarm.status === "active";
   const canAssign = alarm.status !== "resolved";
@@ -120,6 +228,8 @@ function AlarmDrawer({
     <>
       <button className="drawer-backdrop" onClick={onClose} aria-label="关闭告警详情" />
       <aside
+        ref={dialogRef}
+        tabIndex={-1}
         className="detail-drawer alarm-drawer"
         role="dialog"
         aria-modal="true"
@@ -539,49 +649,55 @@ function AlarmDrawer({
 }
 
 export function AlarmCenterPage() {
+  const workflow = useDemoWorkflow();
   const [selectedAlarmId, setSelectedAlarmId] = useState<string | null>(null);
   const [severity, setSeverity] = useState<"all" | AlarmSeverity>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | Alarm["status"]>("all");
   const [timeWindowHours, setTimeWindowHours] = useState<0 | 1 | 6 | 24>(0);
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(0);
-  const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
-  const [acknowledgedIds, setAcknowledgedIds] = useState<readonly string[]>([]);
-  const [assignmentOverrides, setAssignmentOverrides] = useState<
-    Readonly<Record<string, string | null>>
-  >({});
+  const [turbineScope, setTurbineScope] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const alarmQuery = useQuery({
+    queryKey: ["alarms", workflow.serverRevision],
+    queryFn: ({ signal }) =>
+      apiGet<{
+        readonly data: readonly Alarm[];
+        readonly meta: { readonly alarmMutationPersistence: string };
+      }>("/api/alarms", signal),
+    initialData: { data: alarms, meta: { alarmMutationPersistence: "unavailable" } },
+  });
   useEffect(() => {
     const parameters = new URLSearchParams(window.location.search);
     const turbineId = parameters.get("turbineId")?.toUpperCase();
     const alarmId = parameters.get("alarm")?.toUpperCase();
     const timer = window.setTimeout(() => {
-      if (turbineId) setQuery(turbineId);
+      if (turbineId) setTurbineScope(turbineId);
       if (alarmId && alarms.some((alarm) => alarm.id === alarmId)) setSelectedAlarmId(alarmId);
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
   const alarmStream = useRealtimeChannel("alarms");
   const visibleAlarms = useMemo(
-    () =>
-      alarms.map((alarm) => {
-        const isLocallyAcknowledged =
-          acknowledgedIds.includes(alarm.id) && alarm.status === "active";
-        const hasAssignmentOverride = Object.prototype.hasOwnProperty.call(
-          assignmentOverrides,
-          alarm.id,
-        );
-        return {
-          ...alarm,
-          ...(isLocallyAcknowledged
-            ? {
-                status: "acknowledged" as const,
-                acknowledgedAt: alarm.acknowledgedAt ?? windFarm.lastUpdatedAt,
-              }
-            : {}),
-          ...(hasAssignmentOverride ? { assignee: assignmentOverrides[alarm.id] ?? null } : {}),
-        };
-      }),
-    [acknowledgedIds, assignmentOverrides],
+    () => overlayClientAlarms(alarmQuery.data.data, workflow),
+    [alarmQuery.data.data, workflow],
+  );
+  const mutateAlarm = useCallback(
+    async (alarm: Alarm, action: "acknowledge" | "assign") => {
+      const operationId = crypto.randomUUID();
+      setMutationError(null);
+      try {
+        await apiPost("/api/alarms", {
+          alarmId: alarm.id,
+          action,
+          ...(action === "assign" ? { assignee: alarm.assignee ? null : "值班工程师" } : {}),
+          correlationId: `alarm-${operationId}`,
+          idempotencyKey: `alarm-${alarm.id}-${operationId}`,
+        });
+        await alarmQuery.refetch();
+      } catch (error) {
+        setMutationError(error instanceof Error ? error.message : "告警持久化失败");
+      }
+    },
+    [alarmQuery],
   );
   const selectedAlarm = visibleAlarms.find((alarm) => alarm.id === selectedAlarmId) ?? null;
   const featuredAlarm =
@@ -590,21 +706,15 @@ export function AlarmCenterPage() {
     () =>
       visibleAlarms.filter(
         (alarm) =>
+          (turbineScope === null || alarm.turbineId === turbineScope) &&
           (severity === "all" || alarm.severity === severity) &&
           (statusFilter === "all" || alarm.status === statusFilter) &&
           (timeWindowHours === 0 ||
             new Date(windFarm.lastUpdatedAt).getTime() - new Date(alarm.triggeredAt).getTime() <=
-              timeWindowHours * 3_600_000) &&
-          `${alarm.id} ${alarm.code} ${alarm.title} ${alarm.turbineId}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
+              timeWindowHours * 3_600_000),
       ),
-    [query, severity, statusFilter, timeWindowHours, visibleAlarms],
+    [severity, statusFilter, timeWindowHours, turbineScope, visibleAlarms],
   );
-  const pageSize = 8;
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const currentPage = Math.min(page, pageCount - 1);
-  const pageRows = filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
   const counts = {
     critical: visibleAlarms.filter((item) => item.severity === "critical").length,
     major: visibleAlarms.filter((item) => item.severity === "major").length,
@@ -619,39 +729,8 @@ export function AlarmCenterPage() {
   ).length;
   const liveAlarmId =
     alarmStream.frame?.event === "alarm-update" ? String(alarmStream.frame.data.id ?? "") : "";
-
-  const toggleSelection = (id: string) =>
-    setSelectedIds((current) =>
-      current.includes(id) ? current.filter((candidate) => candidate !== id) : [...current, id],
-    );
-
-  function exportCsv() {
-    const rows = [
-      "id,severity,turbine,subsystem,code,title,triggered_at,status,ai_status,assignee",
-      ...filtered.map((alarm) =>
-        [
-          alarm.id,
-          alarm.severity,
-          alarm.turbineId,
-          alarm.subsystem,
-          alarm.code,
-          JSON.stringify(alarm.title),
-          alarm.triggeredAt,
-          alarm.status,
-          alarm.aiStatus,
-          JSON.stringify(alarm.assignee ?? ""),
-        ].join(","),
-      ),
-    ];
-    const url = URL.createObjectURL(
-      new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" }),
-    );
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "windops-alarms.csv";
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
+  const hasFilters =
+    turbineScope !== null || severity !== "all" || statusFilter !== "all" || timeWindowHours !== 0;
 
   return (
     <AppShell activePath="/alarms">
@@ -671,34 +750,15 @@ export function AlarmCenterPage() {
             <span className="page-meta-text">
               {unresolvedCount} 个活跃告警 · {analyzingCount} 个正在 AI 分析 ·{" "}
               {alarmStream.status === "connected" ? `WS LIVE ${liveAlarmId}` : "SNAPSHOT"}
+              {mutationError ? ` · 写入失败：${mutationError}` : ""}
             </span>
-          </>
-        }
-        actions={
-          <>
-            <Button variant="secondary" onClick={exportCsv}>
-              <Download size={15} /> 导出
-            </Button>
-            <Button
-              variant="primary"
-              disabled={!selectedIds.length}
-              onClick={() => {
-                setAcknowledgedIds((current) => [...new Set([...current, ...selectedIds])]);
-                setSelectedIds([]);
-              }}
-            >
-              <Check size={15} /> 批量确认 {selectedIds.length || ""}
-            </Button>
           </>
         }
       />
 
       <section className="alarm-summary-grid">
         <button
-          onClick={() => {
-            setSeverity("critical");
-            setPage(0);
-          }}
+          onClick={() => setSeverity("critical")}
           className={cn(severity === "critical" && "active")}
         >
           <span className="summary-icon summary-icon--critical">
@@ -711,10 +771,7 @@ export function AlarmCenterPage() {
           <em>需立即处理</em>
         </button>
         <button
-          onClick={() => {
-            setSeverity("major");
-            setPage(0);
-          }}
+          onClick={() => setSeverity("major")}
           className={cn(severity === "major" && "active")}
         >
           <span className="summary-icon summary-icon--warning">
@@ -727,10 +784,7 @@ export function AlarmCenterPage() {
           <em>重点关注</em>
         </button>
         <button
-          onClick={() => {
-            setSeverity("warning");
-            setPage(0);
-          }}
+          onClick={() => setSeverity("warning")}
           className={cn(severity === "warning" && "active")}
         >
           <span className="summary-icon summary-icon--maintenance">
@@ -742,13 +796,7 @@ export function AlarmCenterPage() {
           </span>
           <em>趋势观察</em>
         </button>
-        <button
-          onClick={() => {
-            setSeverity("all");
-            setPage(0);
-          }}
-          className={cn(severity === "all" && "active")}
-        >
+        <button onClick={() => setSeverity("all")} className={cn(severity === "all" && "active")}>
           <span className="summary-icon summary-icon--info">
             <Bot size={16} />
           </span>
@@ -760,208 +808,86 @@ export function AlarmCenterPage() {
         </button>
       </section>
 
-      <section className="data-toolbar">
-        <div className="search-field">
-          <Search size={15} />
-          <input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setPage(0);
-            }}
-            placeholder="搜索告警、机组或代码…"
-            aria-label="搜索告警"
-          />
-        </div>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            const options: readonly ("all" | Alarm["status"])[] = [
-              "all",
-              "active",
-              "acknowledged",
-              "suppressed",
-              "resolved",
-            ];
-            setStatusFilter(options[(options.indexOf(statusFilter) + 1) % options.length]!);
-            setPage(0);
-          }}
-        >
-          <Filter size={14} /> 状态 {statusFilter === "all" ? "全部" : statusFilter}{" "}
-          <ChevronDown size={12} />
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            const options = [0, 1, 6, 24] as const;
-            setTimeWindowHours(options[(options.indexOf(timeWindowHours) + 1) % options.length]!);
-            setPage(0);
-          }}
-        >
-          <Clock3 size={14} /> 触发时间 {timeWindowHours ? `${timeWindowHours}H` : "全部"}{" "}
-          <ChevronDown size={12} />
-        </Button>
-        <span className="toolbar-result">{filtered.length} 条记录</span>
-        <Button
-          variant="ghost"
-          onClick={() => {
-            setSeverity("all");
-            setStatusFilter("all");
-            setTimeWindowHours(0);
-            setQuery("");
-            setPage(0);
-          }}
-        >
-          清除筛选
-        </Button>
-      </section>
-
-      <Card className="data-table-card alarm-table-card">
-        <div className="table-scroll">
-          <table className="data-table alarm-table">
-            <thead>
-              <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    aria-label="选择当前页所有告警"
-                    checked={
-                      pageRows.length > 0 &&
-                      pageRows.every((alarm) => selectedIds.includes(alarm.id))
-                    }
-                    onChange={(event) => {
-                      const pageIds = pageRows.map((alarm) => alarm.id);
-                      setSelectedIds((current) =>
-                        event.target.checked
-                          ? [...new Set([...current, ...pageIds])]
-                          : current.filter((id) => !pageIds.includes(id)),
-                      );
-                    }}
-                  />
-                </th>
-                <th>Severity</th>
-                <th>Wind Turbine</th>
-                <th>Subsystem</th>
-                <th>Alarm Code</th>
-                <th>Alarm</th>
-                <th>Triggered At</th>
-                <th>Duration</th>
-                <th>Status</th>
-                <th>AI Status</th>
-                <th>Assignee</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((alarm) => (
-                <tr
-                  key={alarm.id}
-                  className={cn(alarm.id === featuredAlarm?.id && "row-featured")}
-                  onClick={() => setSelectedAlarmId(alarm.id)}
-                >
-                  <td onClick={(event) => event.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      aria-label={`选择 ${alarm.id}`}
-                      checked={selectedIds.includes(alarm.id)}
-                      onChange={() => toggleSelection(alarm.id)}
-                    />
-                  </td>
-                  <td>
-                    <StatusBadge
-                      value={alarm.severity}
-                      label={severityLabel[alarm.severity]}
-                      tone={severityTone[alarm.severity]}
-                      compact
-                    />
-                  </td>
-                  <td>
-                    <strong className="mono">{alarm.turbineId}</strong>
-                  </td>
-                  <td>{alarm.subsystem.replaceAll("-", " ")}</td>
-                  <td className="mono">{alarm.code}</td>
-                  <td>
-                    <span className="alarm-title-cell">
-                      <strong>{alarm.title}</strong>
-                      <small>{alarm.description}</small>
-                    </span>
-                  </td>
-                  <td>
-                    {new Date(alarm.triggeredAt).toLocaleString("zh-CN", {
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: false,
-                    })}
-                  </td>
-                  <td>{duration(alarm.durationMinutes)}</td>
-                  <td>
-                    <StatusBadge value={alarm.status} compact />
-                  </td>
-                  <td>
-                    <span
-                      className={cn(
-                        "ai-status-cell",
-                        alarm.aiStatus === "analyzing" && "ai-status-cell--working",
-                      )}
-                    >
-                      <Bot size={13} /> {alarm.aiStatus}
-                    </span>
-                  </td>
-                  <td>{alarm.assignee ?? <span className="muted">未指派</span>}</td>
-                  <td>
-                    <Button size="icon" variant="ghost" aria-label="更多">
-                      <MoreHorizontal size={14} />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="table-pagination">
-          <span>
-            已选择 {selectedIds.length} / {filtered.length} 行
-          </span>
-          <span>
-            第 {currentPage + 1} 页，共 {pageCount} 页
-          </span>
-          <div>
+      <DataTable
+        columns={alarmColumns}
+        csvExport={alarmCsvExport}
+        data={filtered}
+        emptyMessage="没有符合当前筛选条件的告警"
+        getRowId={alarmRowId}
+        initialSorting={[{ id: "triggeredAt", desc: true }]}
+        onRowActivate={(alarm) => setSelectedAlarmId(alarm.id)}
+        pageSize={8}
+        searchPlaceholder="搜索告警、机组或代码…"
+        searchTextForRow={alarmSearchText}
+        selectedRowId={selectedAlarmId ?? featuredAlarm?.id}
+        bulkActions={[
+          {
+            label: "确认所选活跃告警",
+            onActivate: (rows) => {
+              void Promise.all(
+                rows
+                  .filter((alarm) => alarm.status === "active")
+                  .map((alarm) => mutateAlarm(alarm, "acknowledge")),
+              );
+            },
+          },
+        ]}
+        filterControls={
+          <>
             <Button
-              size="sm"
               variant="secondary"
-              disabled={currentPage === 0}
-              onClick={() => setPage(Math.max(0, currentPage - 1))}
+              onClick={() => {
+                const options: readonly ("all" | Alarm["status"])[] = [
+                  "all",
+                  "active",
+                  "acknowledged",
+                  "suppressed",
+                  "resolved",
+                ];
+                setStatusFilter(options[(options.indexOf(statusFilter) + 1) % options.length]!);
+              }}
             >
-              上一页
+              <Filter size={14} /> 状态 {statusFilter === "all" ? "全部" : statusFilter}{" "}
+              <ChevronDown size={12} />
             </Button>
             <Button
-              size="sm"
               variant="secondary"
-              disabled={currentPage >= pageCount - 1}
-              onClick={() => setPage(Math.min(pageCount - 1, currentPage + 1))}
+              onClick={() => {
+                const options = [0, 1, 6, 24] as const;
+                setTimeWindowHours(
+                  options[(options.indexOf(timeWindowHours) + 1) % options.length]!,
+                );
+              }}
             >
-              下一页
+              <Clock3 size={14} /> 触发时间 {timeWindowHours ? `${timeWindowHours}H` : "全部"}{" "}
+              <ChevronDown size={12} />
             </Button>
-          </div>
-        </div>
-      </Card>
+            {turbineScope ? (
+              <Button variant="secondary" onClick={() => setTurbineScope(null)}>
+                机组 {turbineScope} <X size={12} />
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              disabled={!hasFilters}
+              onClick={() => {
+                setSeverity("all");
+                setStatusFilter("all");
+                setTimeWindowHours(0);
+                setTurbineScope(null);
+              }}
+            >
+              清除筛选
+            </Button>
+          </>
+        }
+      />
       {selectedAlarm ? (
         <AlarmDrawer
           alarm={selectedAlarm}
           onClose={() => setSelectedAlarmId(null)}
-          onAcknowledge={(alarmId) =>
-            setAcknowledgedIds((current) =>
-              current.includes(alarmId) ? current : [...current, alarmId],
-            )
-          }
-          onToggleAssignment={(alarm) =>
-            setAssignmentOverrides((current) => ({
-              ...current,
-              [alarm.id]: alarm.assignee ? null : "值班工程师",
-            }))
-          }
+          onAcknowledge={() => void mutateAlarm(selectedAlarm, "acknowledge")}
+          onToggleAssignment={(alarm) => void mutateAlarm(alarm, "assign")}
         />
       ) : null}
     </AppShell>
