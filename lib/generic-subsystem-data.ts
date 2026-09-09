@@ -13,16 +13,16 @@ export interface GenericSubsystemAssessment {
 const subsystemProfiles = [
   { key: "blades", name: "叶片", healthOffset: 3, riskOffset: -3, rulOffset: 48 },
   { key: "hub", name: "轮毂", healthOffset: 1, riskOffset: -1, rulOffset: 34 },
-  { key: "pitch", name: "变桨系统", healthOffset: -2, riskOffset: 2, rulOffset: 12 },
-  { key: "main-bearing", name: "主轴承", healthOffset: -5, riskOffset: 6, rulOffset: -18 },
   { key: "main-shaft", name: "主轴", healthOffset: 0, riskOffset: 1, rulOffset: 21 },
+  { key: "main-bearing", name: "主轴承", healthOffset: -5, riskOffset: 6, rulOffset: -18 },
   { key: "gearbox", name: "齿轮箱", healthOffset: 2, riskOffset: 0, rulOffset: 28 },
   { key: "generator", name: "发电机", healthOffset: 5, riskOffset: -4, rulOffset: 62 },
   { key: "converter", name: "变流器", healthOffset: -3, riskOffset: 4, rulOffset: 6 },
-  { key: "transformer", name: "变压器", healthOffset: 4, riskOffset: -2, rulOffset: 55 },
+  { key: "yaw", name: "偏航系统", healthOffset: -1, riskOffset: 3, rulOffset: 17 },
+  { key: "pitch", name: "变桨系统", healthOffset: -2, riskOffset: 2, rulOffset: 12 },
+  { key: "tower", name: "塔架", healthOffset: 2, riskOffset: -2, rulOffset: 83 },
+  { key: "foundation", name: "基础", healthOffset: 4, riskOffset: -2, rulOffset: 95 },
   { key: "electrical", name: "电气系统", healthOffset: 6, riskOffset: -5, rulOffset: 74 },
-  { key: "yaw-nacelle", name: "偏航与机舱", healthOffset: -1, riskOffset: 3, rulOffset: 17 },
-  { key: "tower-foundation", name: "塔架与基础", healthOffset: 2, riskOffset: -2, rulOffset: 83 },
 ] as const;
 
 const clamp = (value: number, minimum: number, maximum: number): number =>

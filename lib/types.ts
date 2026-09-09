@@ -287,6 +287,7 @@ export interface DecisionAlternative {
 export interface HumanApproval {
   readonly required: boolean;
   readonly action: ApprovalAction | null;
+  readonly selectedAlternativeId?: string | null;
   readonly approver: string | null;
   readonly approverRole: string | null;
   readonly timestamp: ISODateTime | null;

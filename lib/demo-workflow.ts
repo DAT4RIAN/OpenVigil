@@ -1,10 +1,12 @@
 import type { ApprovalAction, DecisionStatus, MissionStatus, WorkOrderStatus } from "./types";
+import type { ServerWorkflowAlternativeId } from "./server-workflow-contract";
 
 export type DemoWorkflowEventKind =
   "replay" | "approval" | "execution" | "verification" | "knowledge";
 
 export interface DemoApprovalRecord {
   readonly action: ApprovalAction;
+  readonly selectedAlternativeId: ServerWorkflowAlternativeId;
   readonly approver: string;
   readonly approverRole: string;
   readonly timestamp: string;
@@ -45,6 +47,7 @@ export type DemoWorkflowAction =
   | {
       readonly type: "submit-approval";
       readonly action: ApprovalAction;
+      readonly selectedAlternativeId: ServerWorkflowAlternativeId;
       readonly approver: string;
       readonly approverRole: string;
       readonly timestamp: string;
@@ -182,6 +185,7 @@ export function transitionDemoWorkflow(
       if (state.decisionStatus !== "under-review") return state;
       const approval: DemoApprovalRecord = {
         action: action.action,
+        selectedAlternativeId: action.selectedAlternativeId,
         approver: action.approver,
         approverRole: action.approverRole,
         timestamp: action.timestamp,
@@ -195,8 +199,8 @@ export function transitionDemoWorkflow(
           kind: "approval",
           timestamp: action.timestamp,
           actor: action.approver,
-          title: `人工审批：${action.action}`,
-          detail: `${action.reason} · ${action.comment}`,
+          title: `人工审批：${action.action} · ${action.selectedAlternativeId}`,
+          detail: `${action.selectedAlternativeId} · ${action.reason} · ${action.comment}`,
         }),
       };
 

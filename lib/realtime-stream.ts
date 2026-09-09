@@ -1,6 +1,12 @@
 import { activityEvents, alarms } from "./operations-data";
 import { scadaSeries } from "./telemetry-data";
 import { windFarm } from "./farm-data";
+import {
+  realtimeAgentActivityData,
+  realtimeAlarmData,
+  selectRealtimeAlarm,
+} from "./realtime-workflow-overlay";
+import type { ServerWorkflowSnapshot } from "./server-workflow-contract";
 
 export const REALTIME_CHANNELS = ["scada", "alarms", "agent-events"] as const;
 export type RealtimeChannel = (typeof REALTIME_CHANNELS)[number];
@@ -34,7 +40,12 @@ const emittedAtFor = (sequence: number): string =>
  * Produce one repeatable public event frame for WebSocket delivery and tests.
  * Frames contain only observable domain facts; no hidden model reasoning is exposed.
  */
-export function buildRealtimeFrame(channel: RealtimeChannel, sequence: number): RealtimeFrame {
+export function buildRealtimeFrame(
+  channel: RealtimeChannel,
+  sequence: number,
+  workflow?: ServerWorkflowSnapshot,
+  alarmItems: readonly (typeof alarms)[number][] = alarms,
+): RealtimeFrame {
   const normalized = normalizedSequence(sequence);
   const emittedAt = emittedAtFor(normalized);
 
@@ -69,7 +80,7 @@ export function buildRealtimeFrame(channel: RealtimeChannel, sequence: number): 
   }
 
   if (channel === "alarms") {
-    const alarm = alarms[normalized % alarms.length]!;
+    const alarm = selectRealtimeAlarm(alarmItems, normalized, workflow);
     return Object.freeze({
       protocol: "windops.realtime.v1" as const,
       channel,
@@ -78,17 +89,7 @@ export function buildRealtimeFrame(channel: RealtimeChannel, sequence: number): 
       emittedAt,
       deterministic: true as const,
       correlationId: `RT-${alarm.id}-${String(normalized).padStart(6, "0")}`,
-      data: Object.freeze({
-        id: alarm.id,
-        turbineId: alarm.turbineId,
-        severity: alarm.severity,
-        status: alarm.status,
-        title: alarm.title,
-        missionId: alarm.missionId,
-        currentValue: alarm.currentValue,
-        threshold: alarm.threshold,
-        unit: alarm.unit,
-      }),
+      data: realtimeAlarmData(alarm),
     });
   }
 
@@ -101,17 +102,7 @@ export function buildRealtimeFrame(channel: RealtimeChannel, sequence: number): 
     emittedAt,
     deterministic: true as const,
     correlationId: `RT-${activity.id}-${String(normalized).padStart(6, "0")}`,
-    data: Object.freeze({
-      id: activity.id,
-      missionId: activity.missionId,
-      agentId: activity.agentId,
-      actorLabel: activity.actorLabel,
-      kind: activity.kind,
-      title: activity.title,
-      detail: activity.detail,
-      outcome: activity.outcome,
-      evidenceIds: activity.evidenceIds,
-    }),
+    data: realtimeAgentActivityData(activity, normalized, workflow),
   });
 }
 

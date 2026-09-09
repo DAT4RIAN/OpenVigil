@@ -32,6 +32,60 @@ export interface ScadaHistorySnapshot {
   };
 }
 
+const hashText = (value: string): number => {
+  let hash = 2_166_136_261;
+  for (const character of value) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return hash >>> 0;
+};
+
+const seededWave = (seed: number, index: number): number =>
+  Math.sin((index + (seed % 37)) * 0.43) * 0.004 + Math.cos((index + (seed % 19)) * 0.17) * 0.002;
+
+/**
+ * Rewrite the complete fixture identity and signal semantics for a generic
+ * asset. Generic turbines intentionally have no WT-023 anomaly or Agent event
+ * provenance; values are deterministic healthy baselines derived per asset.
+ */
+function genericTurbineSeries(series: ScadaSeries, turbineId: string): ScadaSeries {
+  const seed = hashText(`${turbineId}:${series.metric}`);
+  const center = (series.normalRange[0] + series.normalRange[1]) / 2;
+  const baseFactor = 0.91 + (seed % 120) / 1_000;
+  const healthyCenter = series.metric === "anomaly-score" ? 0.18 + (seed % 8) / 100 : center;
+  const points = series.points.map((point, index) => {
+    const sourceRatio = series.currentValue === 0 ? 1 : point.value / series.currentValue;
+    const candidate =
+      series.metric === "wind-direction"
+        ? (point.value + (seed % 53) + 360) % 360
+        : series.metric === "anomaly-score"
+          ? healthyCenter + seededWave(seed, index) * 8
+          : healthyCenter *
+            baseFactor *
+            (0.985 + (sourceRatio - 1) * 0.2 + seededWave(seed, index));
+    const bounded = Math.min(series.normalRange[1], Math.max(series.normalRange[0], candidate));
+    return {
+      ...point,
+      value: Number(bounded.toFixed(series.precision)),
+      quality: "good" as const,
+      isAnomaly: false,
+      aiEvent: null,
+    };
+  });
+  return {
+    ...series,
+    id: `SCADA-${turbineId}-${series.metric}`,
+    turbineId,
+    currentValue: points.at(-1)?.value ?? 0,
+    thresholds: series.thresholds.map((threshold) => ({
+      ...threshold,
+      id: `${turbineId}-${series.metric}-${threshold.severity}`,
+    })),
+    points,
+  };
+}
+
 export function getScadaHistory(
   range: ScadaHistoryRange = "24H",
   turbineId = "WT-023",
@@ -41,21 +95,11 @@ export function getScadaHistory(
   const snapshotMs = new Date(windFarm.lastUpdatedAt).getTime();
   const startMs = snapshotMs - config.durationMinutes * 60_000;
   const turbine = turbines.find((candidate) => candidate.id === normalizedTurbineId);
-  const turbineOrdinal = Number(normalizedTurbineId.slice(3));
-  const valueFactor = 1 + ((turbineOrdinal - 23) % 7) * 0.006;
   const sourceSeries = turbine
     ? scadaSeries.map((series) =>
         normalizedTurbineId === "WT-023"
           ? series
-          : {
-              ...series,
-              turbineId: normalizedTurbineId,
-              currentValue: Number((series.currentValue * valueFactor).toFixed(3)),
-              points: series.points.map((point) => ({
-                ...point,
-                value: Number((point.value * valueFactor).toFixed(3)),
-              })),
-            },
+          : genericTurbineSeries(series, normalizedTurbineId),
       )
     : [];
 

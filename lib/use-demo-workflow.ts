@@ -11,11 +11,12 @@ import {
   type DemoWorkflowEventKind,
   type DemoWorkflowState,
 } from "./demo-workflow";
-import type {
-  ServerWorkflowAuditEvent,
-  ServerWorkflowEnvelope,
-  ServerWorkflowMutationRequest,
-  ServerWorkflowSnapshot,
+import {
+  buildServerWorkflowFieldEvidence,
+  type ServerWorkflowAuditEvent,
+  type ServerWorkflowEnvelope,
+  type ServerWorkflowMutationRequest,
+  type ServerWorkflowSnapshot,
 } from "./server-workflow-contract";
 
 type WorkflowSyncStatus = "idle" | "loading" | "saving" | "synced" | "error";
@@ -62,6 +63,7 @@ function mapApproval(
   if (!approval) return null;
   return {
     action: approval.action,
+    selectedAlternativeId: approval.selectedAlternativeId,
     approver: approval.actor.name,
     approverRole: approval.actor.role ?? "Operator",
     timestamp: approval.timestamp,
@@ -175,6 +177,7 @@ function mutationRequest(
         },
         reason: action.reason,
         comment: action.comment,
+        selectedAlternativeId: action.selectedAlternativeId,
       };
     case "start-work-order":
     case "complete-work-order":
@@ -187,18 +190,24 @@ function mutationRequest(
           role: "maintenance-execution",
         },
       };
-    case "toggle-task":
+    case "toggle-task": {
+      const taskActor = {
+        id: actorId(action.actor),
+        name: action.actor,
+        role: "maintenance-execution",
+      };
+      const completed = !currentState.completedTaskIds.includes(action.taskId);
       return {
         ...common,
         action: "set-task-completion",
-        actor: {
-          id: actorId(action.actor),
-          name: action.actor,
-          role: "maintenance-execution",
-        },
+        actor: taskActor,
         taskId: action.taskId,
-        completed: !currentState.completedTaskIds.includes(action.taskId),
+        completed,
+        ...(completed
+          ? { fieldEvidence: buildServerWorkflowFieldEvidence(action.taskId, taskActor) }
+          : {}),
       };
+    }
     case "replay-approval":
     case "reset-canonical":
       return {
