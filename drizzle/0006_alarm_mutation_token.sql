@@ -1,0 +1,1 @@
+ALTER TABLE `alarm_runtime_state` ADD `mutation_token` text DEFAULT '' NOT NULL;
