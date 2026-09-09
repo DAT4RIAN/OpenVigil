@@ -40,5 +40,12 @@ yarn-error.log*
 /outputs/
 /work/
 
+# Python backend local environment and caches
+/backend/.venv/
+**/__pycache__/
+/.pytest_cache/
+/.ruff_cache/
+/.mypy_cache/
+
 # TypeScript incremental build cache
 *.tsbuildinfo

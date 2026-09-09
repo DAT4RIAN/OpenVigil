@@ -3,5 +3,10 @@ dist
 .vinext
 .wrangler
 node_modules
+backend/.venv
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.mypy_cache
 pnpm-lock.yaml
 public/og.png

@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "windops-backend"
+version = "0.1.0"
+description = "Auditable FastAPI and LangGraph vertical slice for the WindOps WT-023 workflow"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+dependencies = [
+  "alembic>=1.16,<2",
+  "asyncpg>=0.30,<1",
+  "dramatiq[redis]>=1.18,<2",
+  "fastapi>=0.116,<1",
+  "langgraph>=0.6,<1",
+  "litellm>=1.75,<2",
+  "minio>=7.2,<8",
+  "pgvector>=0.4,<1",
+  "pydantic>=2.11,<3",
+  "pydantic-settings>=2.10,<3",
+  "redis>=6,<7",
+  "sqlalchemy[asyncio]>=2.0.42,<3",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[project.optional-dependencies]
+test = [
+  "aiosqlite>=0.21,<1",
+  "httpx>=0.28,<1",
+  "pytest>=8.4,<9",
+  "pytest-asyncio>=1.1,<2",
+]
+dev = [
+  "mypy>=1.17,<2",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+windops-api = "windops_backend.main:run"
+windops-reference-import = "windops_backend.reference_import:main"
+windops-outbox-relay = "windops_backend.workers:run_outbox_relay"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/windops_backend"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/windops_backend/api.py" = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
