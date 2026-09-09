@@ -29,6 +29,13 @@
       "when": 1786592617792,
       "tag": "0003_agent_execution_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1786598160885,
+      "tag": "0004_knowledge_passages",
+      "breakpoints": true
     }
   ]
 }

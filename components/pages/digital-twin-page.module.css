@@ -1,0 +1,492 @@
+.assetSelector {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  padding: 7px 10px;
+}
+
+.errorState {
+  align-items: center;
+  background: var(--critical-soft);
+  border: 1px solid color-mix(in srgb, var(--critical) 20%, var(--border));
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-right: 16px;
+}
+
+.assetSelector span {
+  color: var(--foreground-subtle);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.assetSelector select {
+  background: transparent;
+  border: 0;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 140px;
+  outline: 0;
+}
+
+.kpis {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 10px;
+}
+
+.kpis > article {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 105px;
+  padding: 15px;
+}
+
+.kpis > article > span:first-child {
+  align-items: center;
+  color: var(--foreground-muted);
+  display: flex;
+  font-size: 8px;
+  font-weight: 700;
+  gap: 6px;
+  text-transform: uppercase;
+}
+
+.kpis strong {
+  font-size: 24px;
+  letter-spacing: -0.04em;
+}
+
+.kpis strong small,
+.kpis em {
+  color: var(--foreground-subtle);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.kpis a {
+  align-items: center;
+  color: var(--primary);
+  display: flex;
+  font-size: 8px;
+  gap: 4px;
+}
+
+.workspace {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(380px, 1.35fr) minmax(265px, 0.72fr) minmax(260px, 0.72fr);
+}
+
+.modelPanel,
+.subsystemPanel,
+.inspectorPanel,
+.signalsPanel,
+.contextPanel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.schematic {
+  background:
+    radial-gradient(
+      circle at 50% 36%,
+      color-mix(in srgb, var(--primary) 12%, transparent),
+      transparent 36%
+    ),
+    linear-gradient(180deg, var(--surface-subtle), var(--surface));
+  min-height: 470px;
+  overflow: hidden;
+  position: relative;
+}
+
+.schematicGrid {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--border) 45%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 45%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+  inset: 0;
+  mask-image: linear-gradient(to bottom, black, transparent 88%);
+  opacity: 0.65;
+  position: absolute;
+}
+
+.schematic svg {
+  display: block;
+  height: 450px;
+  margin: 0 auto;
+  max-width: 100%;
+  position: relative;
+  width: 520px;
+}
+
+.sea {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+}
+
+.foundation,
+.tower,
+.nacelle,
+.hub {
+  fill: url("#tower-fill");
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+
+.blades path {
+  fill: color-mix(in srgb, var(--foreground-muted) 70%, var(--surface));
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+
+.rotorAxis {
+  fill: var(--primary);
+  stroke: var(--surface);
+  stroke-width: 3;
+}
+
+.signalArcs path {
+  fill: none;
+  opacity: 0.65;
+  stroke: var(--primary);
+  stroke-dasharray: 4 10;
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.modelTag,
+.modelHealth {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-family: var(--font-geist-mono);
+  position: absolute;
+}
+
+.modelTag {
+  bottom: 14px;
+  color: var(--primary);
+  font-size: 7px;
+  left: 14px;
+  padding: 6px 8px;
+}
+
+.modelHealth {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  right: 14px;
+  top: 14px;
+}
+
+.modelHealth small {
+  color: var(--foreground-subtle);
+  font-size: 6px;
+}
+
+.modelHealth strong {
+  font-size: 20px;
+}
+
+.hotspot {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--foreground-muted);
+  font-size: 7px;
+  font-weight: 700;
+  padding: 4px 7px;
+  position: absolute;
+}
+
+.hotspot::before {
+  background: currentColor;
+  border-radius: 50%;
+  content: "";
+  height: 5px;
+  margin-right: 4px;
+  width: 5px;
+}
+
+.hotspot[data-active="true"] {
+  border-color: var(--warning);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--warning) 28%, transparent);
+  color: var(--warning);
+}
+
+.hotspotRotor {
+  left: 43%;
+  top: 33%;
+}
+.hotspotBlade {
+  left: 18%;
+  top: 15%;
+}
+.hotspotGenerator {
+  right: 14%;
+  top: 37%;
+}
+.hotspotTower {
+  left: 52%;
+  top: 70%;
+}
+
+.subsystemList {
+  max-height: 470px;
+  overflow: auto;
+}
+
+.subsystemList button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.subsystemList button:hover,
+.selectedSubsystem {
+  background: var(--surface-subtle) !important;
+  box-shadow: inset 2px 0 var(--primary);
+}
+
+.subsystemList button > span {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.subsystemList button > span:first-child strong {
+  font-size: 8px;
+}
+
+.subsystemList button > span:first-child small {
+  color: var(--foreground-subtle);
+  font-size: 7px;
+}
+
+.subsystemList button > span:last-child b {
+  font-size: 12px;
+}
+
+.healthFocus {
+  padding: 16px;
+}
+
+.healthFocus > div:first-child {
+  align-items: baseline;
+  display: flex;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.healthFocus > div:first-child strong {
+  font-size: 30px;
+}
+.healthFocus > div:first-child small {
+  color: var(--foreground-subtle);
+  font-size: 7px;
+}
+
+.riskMetrics {
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.riskMetrics span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+}
+
+.riskMetrics span:nth-child(odd) {
+  border-right: 1px solid var(--border);
+}
+.riskMetrics span:nth-child(-n + 2) {
+  border-bottom: 1px solid var(--border);
+}
+.riskMetrics small {
+  color: var(--foreground-subtle);
+  font-size: 7px;
+}
+.riskMetrics strong {
+  font-size: 12px;
+}
+
+.inspectorActions {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: 1fr 1fr;
+  padding: 12px;
+}
+
+.inspectorActions a {
+  align-items: center;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground-muted);
+  display: flex;
+  font-size: 8px;
+  gap: 5px;
+  justify-content: center;
+  padding: 8px;
+}
+
+.lowerGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(330px, 0.75fr);
+  margin-top: 10px;
+}
+
+.signalGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.signalGrid > div {
+  border-right: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px;
+}
+
+.signalGrid > div[data-anomaly="true"] {
+  background: var(--warning-soft);
+}
+.signalGrid span {
+  color: var(--foreground-muted);
+  font-size: 7px;
+}
+.signalGrid strong {
+  font-size: 14px;
+}
+.signalGrid strong small {
+  color: var(--foreground-subtle);
+  font-size: 7px;
+}
+.signalGrid em {
+  color: var(--success);
+  font-size: 6px;
+  font-style: normal;
+}
+
+.contextList > a {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  color: inherit;
+  display: flex;
+  gap: 10px;
+  padding: 11px 13px;
+}
+
+.contextList > a:hover {
+  background: var(--surface-subtle);
+}
+.contextList > a > svg:first-child {
+  color: var(--primary);
+}
+.contextList > a > span {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.contextList small {
+  color: var(--foreground-subtle);
+  font-size: 7px;
+}
+.contextList strong {
+  font-family: var(--font-geist-mono);
+  font-size: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modelNotice {
+  background: var(--info-soft);
+  border-top: 1px solid var(--border);
+  color: var(--foreground-muted);
+  font-size: 7.5px;
+  line-height: 1.6;
+  margin: 0;
+  padding: 12px 13px;
+}
+
+@media (max-width: 1250px) {
+  .workspace {
+    grid-template-columns: minmax(400px, 1.25fr) minmax(260px, 0.75fr);
+  }
+  .inspectorPanel {
+    grid-column: span 2;
+  }
+  .lowerGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 800px) {
+  .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .inspectorPanel {
+    grid-column: auto;
+  }
+  .schematic {
+    min-height: 390px;
+  }
+  .schematic svg {
+    height: 390px;
+  }
+  .signalGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .kpis,
+  .signalGrid {
+    grid-template-columns: 1fr;
+  }
+  .assetSelector {
+    width: 100%;
+  }
+  .assetSelector select {
+    flex: 1;
+  }
+  .hotspotGenerator,
+  .hotspotBlade {
+    display: none;
+  }
+}

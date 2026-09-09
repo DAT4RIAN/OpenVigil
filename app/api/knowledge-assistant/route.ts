@@ -1,7 +1,10 @@
+import { readKnowledgePassageCorpus } from "@/db/knowledge-passage-store";
+import { turbines } from "@/lib/farm-data";
 import { answerKnowledgeQuestion } from "@/lib/knowledge-assistant";
-import { knowledgeDocuments } from "@/lib/knowledge-data";
-import { featuredMission } from "@/lib/operations-data";
-import { overlayWorkflowKnowledge } from "@/lib/server-workflow-overlays";
+import { workflowKnowledgePassage } from "@/lib/knowledge-passages";
+import { missions, featuredMission } from "@/lib/operations-data";
+import { workflowKnowledgeDocument } from "@/lib/server-workflow-overlays";
+import { getWorkerEnv } from "@/lib/worker-env";
 
 import { jsonResponse } from "../_shared";
 import { readWorkflowForApi } from "../_workflow";
@@ -12,7 +15,8 @@ const allowedFields = new Set(["question", "turbineId", "missionId"]);
 const baseMeta = (extra: Readonly<Record<string, unknown>> = {}) => ({
   deterministic: true,
   persisted: false,
-  retrievalMode: "deterministic-keyword-demo",
+  persistence: "fixture",
+  retrievalMode: "fixture-passage-fallback",
   realEmbedding: false,
   snapshotAt: SNAPSHOT_AT,
   ...extra,
@@ -33,6 +37,10 @@ const errorResponse = (
     },
     status,
   );
+
+function normalizedScope(value: unknown, fallback: string): string {
+  return (value ?? fallback).toString().trim().toUpperCase();
+}
 
 export async function POST(request: Request): Promise<Response> {
   let body: unknown;
@@ -81,32 +89,49 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  const turbineId = (input.turbineId ?? featuredMission.turbineId).toString().trim().toUpperCase();
-  const missionId = (input.missionId ?? featuredMission.id).toString().trim().toUpperCase();
-  if (turbineId !== featuredMission.turbineId || missionId !== featuredMission.id) {
+  const turbineId = normalizedScope(input.turbineId, featuredMission.turbineId);
+  const missionId = normalizedScope(input.missionId, featuredMission.id);
+  const turbine = turbines.find((candidate) => candidate.id === turbineId);
+  if (!turbine) {
+    return errorResponse("TURBINE_NOT_FOUND", `Wind turbine ${turbineId} was not found.`, 422, {
+      turbineId,
+    });
+  }
+  const mission = missions.find((candidate) => candidate.id === missionId);
+  if (!mission) {
+    return errorResponse("MISSION_NOT_FOUND", `Mission ${missionId} was not found.`, 422, {
+      missionId,
+    });
+  }
+  if (mission.turbineId !== turbineId) {
     return errorResponse(
-      "UNSUPPORTED_DEMO_SCOPE",
-      "The deterministic knowledge preview currently supports WT-023 / MISSION-2026-0823 only.",
+      "MISSION_TURBINE_MISMATCH",
+      `Mission ${missionId} belongs to ${mission.turbineId}, not ${turbineId}.`,
       422,
-      {
-        turbineId,
-        missionId,
-        supported: {
-          turbineId: featuredMission.turbineId,
-          missionId: featuredMission.id,
-        },
-      },
+      { missionId, turbineId, missionTurbineId: mission.turbineId },
     );
   }
 
   const workflow = await readWorkflowForApi();
-  const documents = overlayWorkflowKnowledge(knowledgeDocuments, workflow.snapshot);
+  const workflowApplies =
+    workflow.snapshot.turbineId === turbineId && workflow.snapshot.mission.id === missionId;
+  const overlayDocument = workflowApplies ? workflowKnowledgeDocument(workflow.snapshot) : null;
+  const overlayPassage = workflowApplies ? workflowKnowledgePassage(workflow.snapshot) : null;
+  const corpus = await readKnowledgePassageCorpus(getWorkerEnv().DB, {
+    turbineId,
+    missionId,
+    overlayDocument,
+    overlayPassage,
+    ...(workflowApplies ? { workflowRevision: workflow.snapshot.revision } : {}),
+  });
   const answer = answerKnowledgeQuestion(question, {
     turbineId,
     missionId,
-    documents,
-    workflowSnapshot: workflow.snapshot,
+    passages: corpus.passages,
+    retrievalMode: corpus.retrievalMode,
+    ...(workflowApplies ? { workflowSnapshot: workflow.snapshot } : {}),
   });
+
   return jsonResponse({
     ok: true,
     data: { answer },
@@ -114,11 +139,13 @@ export async function POST(request: Request): Promise<Response> {
     meta: baseMeta({
       citationCount: answer.citations.length,
       candidateCount: answer.retrieval.candidateCount,
-      persisted: workflow.persistence === "d1",
-      snapshotAt: workflow.snapshot.updatedAt,
+      persisted: corpus.persistence === "d1",
+      persistence: corpus.persistence,
+      retrievalMode: corpus.retrievalMode,
+      snapshotAt: workflowApplies ? workflow.snapshot.updatedAt : SNAPSHOT_AT,
       workflowPersistence: workflow.persistence,
-      workflowRevision: workflow.snapshot.revision,
-      knowledgeCaseId: workflow.snapshot.knowledgeCaseId,
+      workflowRevision: workflowApplies ? workflow.snapshot.revision : null,
+      knowledgeCaseId: workflowApplies ? workflow.snapshot.knowledgeCaseId : null,
     }),
   });
 }

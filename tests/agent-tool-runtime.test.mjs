@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { agents } from "../lib/agent-data.ts";
+import { buildAgentToolPreviewRequest } from "../lib/agent-tool-preview.ts";
+
 const workerUrl = new URL("../dist/server/index.js", import.meta.url);
 workerUrl.searchParams.set("agent-tools-test", `${process.pid}-${Date.now()}`);
 const { default: worker } = await import(workerUrl.href);
@@ -378,4 +381,42 @@ test("deterministic Agent Tool API validates, executes, links, and records every
       );
     },
   );
+});
+
+test("all 22 Agent profiles expose one declared read-only preview that the runtime accepts", async () => {
+  const missionResponse = await worker.fetch(
+    new Request("http://localhost/api/missions", { headers: { accept: "application/json" } }),
+    environment,
+    context,
+  );
+  assert.equal(missionResponse.status, 200);
+  const missionEnvelope = await missionResponse.json();
+  const missionTurbines = new Map(
+    missionEnvelope.data.map((mission) => [mission.id, mission.turbineId]),
+  );
+
+  assert.equal(agents.length, 22);
+  for (const agent of agents) {
+    const turbineId = agent.currentMissionId
+      ? (missionTurbines.get(agent.currentMissionId) ?? null)
+      : null;
+    const preview = buildAgentToolPreviewRequest(agent, turbineId ? { turbineId } : null);
+    assert.ok(preview, `${agent.id} should expose a safe preview`);
+    assert.ok(agent.tools.includes(preview.tool));
+    assert.ok(
+      !["create_decision", "create_work_order", "update_work_order"].includes(preview.tool),
+    );
+
+    const response = await jsonRequest("POST", {
+      ...preview,
+      agentId: agent.id,
+      missionId: agent.currentMissionId ?? undefined,
+      idempotencyKey: `profile-preview-${agent.id}`,
+      persist: false,
+    });
+    assert.equal(response.ok, true, `${agent.id} / ${preview.tool} should execute`);
+    assert.equal(response.data.execution.agentId, agent.id);
+    assert.equal(response.data.execution.request.tool, preview.tool);
+    assert.equal(response.data.execution.result.dryRun, false);
+  }
 });

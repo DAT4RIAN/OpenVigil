@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import { Avatar, Button } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
-import { agents, alarms, missions, turbines, workOrders } from "@/lib";
+import { agents, alarms, missions, turbines, weatherWindows, windFarm, workOrders } from "@/lib";
 import { cn } from "@/lib/utils";
 import { hydrateDemoWorkflow, useDemoWorkflow } from "@/lib/use-demo-workflow";
 
@@ -56,6 +56,24 @@ type NavigationGroup = {
   label: string;
   items: NavigationItem[];
 };
+
+const onlineAgentCount = agents.filter(
+  (agent) => agent.status !== "offline" && agent.status !== "failed",
+).length;
+const activeAgentCount = agents.filter((agent) =>
+  ["thinking", "working", "reviewing"].includes(agent.status),
+).length;
+const visibleAlarmCount = alarms.filter(
+  (alarm) => alarm.status !== "resolved" && alarm.status !== "suppressed",
+).length;
+const snapshotTime = new Date(windFarm.lastUpdatedAt).toLocaleTimeString("zh-CN", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: windFarm.timezone,
+});
+const nextWeatherWindow =
+  weatherWindows.find((window) => window.suitability === "suitable") ?? weatherWindows[0]!;
 
 const navigation: NavigationGroup[] = [
   {
@@ -74,16 +92,31 @@ const navigation: NavigationGroup[] = [
   {
     label: "智能运维",
     items: [
-      { label: "告警中心", href: "/alarms", icon: AlarmTriangle, badge: "17" },
-      { label: "智能诊断", href: "#diagnosis", icon: BrainCircuit, disabled: true },
+      {
+        label: "告警中心",
+        href: "/alarms",
+        icon: AlarmTriangle,
+        badge: String(visibleAlarmCount),
+      },
+      { label: "智能诊断", href: "/diagnosis", icon: BrainCircuit },
       { label: "预测性维护", href: "/predictive-maintenance", icon: CircleGauge },
     ],
   },
   {
     label: "AI Operations",
     items: [
-      { label: "Agent Control", href: "/agents", icon: Bot, badge: "6" },
-      { label: "Mission Center", href: "/missions", icon: GitBranch, badge: "10" },
+      {
+        label: "Agent Control",
+        href: "/agents",
+        icon: Bot,
+        badge: String(activeAgentCount),
+      },
+      {
+        label: "Mission Center",
+        href: "/missions",
+        icon: GitBranch,
+        badge: String(windFarm.activeMissionCount),
+      },
       { label: "Decision Center", href: "/decisions", icon: ShieldCheck, badge: "2" },
     ],
   },
@@ -91,7 +124,7 @@ const navigation: NavigationGroup[] = [
     label: "运维执行",
     items: [
       { label: "工单中心", href: "/work-orders", icon: ClipboardCheck },
-      { label: "维护计划", href: "#maintenance", icon: Wrench, disabled: true },
+      { label: "维护计划", href: "/maintenance", icon: Wrench },
       { label: "运维资源", href: "/resources", icon: PackageSearch },
     ],
   },
@@ -99,16 +132,17 @@ const navigation: NavigationGroup[] = [
     label: "知识与数据",
     items: [
       { label: "知识库", href: "/knowledge", icon: Library },
+      { label: "数字孪生", href: "/digital-twin", icon: Monitor },
       { label: "故障知识图谱", href: "#graph", icon: Boxes, disabled: true },
-      { label: "数据中心", href: "#data", icon: Database, disabled: true },
-      { label: "运维报告", href: "#reports", icon: FileBarChart, disabled: true },
+      { label: "数据中心", href: "/data", icon: Database },
+      { label: "运维报告", href: "/reports", icon: FileBarChart },
     ],
   },
   {
     label: "系统",
     items: [
-      { label: "模型管理", href: "#models", icon: Archive, disabled: true },
-      { label: "系统设置", href: "#settings", icon: Settings2, disabled: true },
+      { label: "模型管理", href: "/models", icon: Archive },
+      { label: "系统设置", href: "/settings", icon: Settings2 },
     ],
   },
 ];
@@ -139,10 +173,28 @@ const primaryCommands = [
     icon: CircleGauge,
   },
   {
+    label: "打开智能诊断",
+    description: "差异诊断 · 证据支持与反证 · Agent 协作",
+    href: "/diagnosis?turbineId=WT-023",
+    icon: BrainCircuit,
+  },
+  {
     label: "查询运维资源",
     description: "备件 · 班组 · 船舶 · 工具 · 天气窗",
     href: "/resources",
     icon: PackageSearch,
+  },
+  {
+    label: "打开维护计划",
+    description: "工单 · 天气窗口 · 班组与资源冲突",
+    href: "/maintenance",
+    icon: Wrench,
+  },
+  {
+    label: "打开运维报告",
+    description: "六类报告 · Preview · PDF · DOCX",
+    href: "/reports",
+    icon: FileBarChart,
   },
   {
     label: "打开知识库",
@@ -150,15 +202,43 @@ const primaryCommands = [
     href: "/knowledge",
     icon: Library,
   },
-  { label: "查看实时 SCADA", description: "17 个在线测点", href: "/scada", icon: Activity },
-  { label: "打开告警中心", description: "17 个活跃告警", href: "/alarms", icon: AlarmTriangle },
   {
-    label: "创建检修工单",
-    description: "基于当前 AI 决策",
-    href: "/work-orders",
+    label: "打开数字孪生",
+    description: "风场拓扑 · 机组状态 · 运维闭环映射",
+    href: "/digital-twin",
+    icon: Monitor,
+  },
+  { label: "查看实时 SCADA", description: "17 个在线测点", href: "/scada", icon: Activity },
+  {
+    label: "打开告警中心",
+    description: `${visibleAlarmCount} 个待处理告警`,
+    href: "/alarms",
+    icon: AlarmTriangle,
+  },
+  {
+    label: "打开检修工单",
+    description: "查看 AI 决策关联的可审计工单",
+    href: "/work-orders?workOrder=WO-20260823-017",
     icon: ClipboardCheck,
   },
-  { label: "查看 Agent Control", description: "6 个 Agent 正在工作", href: "/agents", icon: Bot },
+  {
+    label: "启动诊断工作流",
+    description: "打开 WT-023 诊断 Mission；高风险动作需人工审批",
+    href: "/missions/MISSION-2026-0823",
+    icon: BrainCircuit,
+  },
+  {
+    label: "选择风场",
+    description: "当前可用：华东海上风电场",
+    href: "/wind-farms",
+    icon: Wind,
+  },
+  {
+    label: "查看 Agent Control",
+    description: `${activeAgentCount} 个 Agent 正在工作`,
+    href: "/agents",
+    icon: Bot,
+  },
 ];
 
 const domainCommands = [
@@ -171,7 +251,7 @@ const domainCommands = [
   ...alarms.map((alarm) => ({
     label: alarm.id,
     description: `${alarm.turbineId} · ${alarm.code} · ${alarm.title}`,
-    href: "/alarms",
+    href: `/alarms?alarm=${alarm.id}`,
     icon: AlarmTriangle,
   })),
   ...missions.map((mission) => ({
@@ -183,13 +263,13 @@ const domainCommands = [
   ...workOrders.map((workOrder) => ({
     label: workOrder.id,
     description: `${workOrder.turbineId} · ${workOrder.issue}`,
-    href: "/work-orders",
+    href: `/work-orders?workOrder=${workOrder.id}`,
     icon: ClipboardCheck,
   })),
   ...agents.map((agent) => ({
     label: agent.shortName,
     description: `${agent.name} · ${agent.role}`,
-    href: "/agents",
+    href: `/agents?agent=${agent.id}`,
     icon: Bot,
   })),
 ];
@@ -197,22 +277,24 @@ const domainCommands = [
 const commands = [...primaryCommands, ...domainCommands];
 
 function ThemeControl() {
-  const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
+  const [theme, setTheme] = useState<"light" | "dark" | "system">("light");
 
   useEffect(() => {
     const stored = window.localStorage.getItem("windops-theme");
     const preference =
-      stored === "dark" || stored === "light" || stored === "system" ? stored : "system";
+      stored === "dark" || stored === "light" || stored === "system" ? stored : "light";
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = (value: "light" | "dark" | "system") => {
       document.documentElement.dataset.theme =
+        value === "system" ? (media.matches ? "dark" : "light") : value;
+      document.documentElement.style.colorScheme =
         value === "system" ? (media.matches ? "dark" : "light") : value;
       window.dispatchEvent(new CustomEvent("windops-theme-change"));
     };
     apply(preference);
     const frame = window.requestAnimationFrame(() => setTheme(preference));
     const handleSystemChange = () => {
-      if ((window.localStorage.getItem("windops-theme") ?? "system") === "system") apply("system");
+      if ((window.localStorage.getItem("windops-theme") ?? "light") === "system") apply("system");
     };
     media.addEventListener("change", handleSystemChange);
     return () => {
@@ -231,6 +313,7 @@ function ThemeControl() {
           ? "dark"
           : "light"
         : next;
+    document.documentElement.style.colorScheme = document.documentElement.dataset.theme;
     window.dispatchEvent(new CustomEvent("windops-theme-change"));
   }
 
@@ -364,9 +447,23 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [currentTime, setCurrentTime] = useState("--:--:--");
 
   useEffect(() => {
     hydrateDemoWorkflow();
+
+    const updateClock = () =>
+      setCurrentTime(
+        new Date().toLocaleTimeString("zh-CN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+          timeZone: windFarm.timezone,
+        }),
+      );
+    updateClock();
+    const clockTimer = window.setInterval(updateClock, 1_000);
 
     function handleKeyboard(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -379,7 +476,10 @@ export function AppShell({
       }
     }
     window.addEventListener("keydown", handleKeyboard);
-    return () => window.removeEventListener("keydown", handleKeyboard);
+    return () => {
+      window.clearInterval(clockTimer);
+      window.removeEventListener("keydown", handleKeyboard);
+    };
   }, []);
 
   return (
@@ -413,7 +513,7 @@ export function AppShell({
           </Button>
         </div>
 
-        <div className="farm-switcher">
+        <Link className="farm-switcher" href="/wind-farms" aria-label="选择风场">
           <span className="farm-switcher__icon">
             <TowerControl size={17} />
           </span>
@@ -422,7 +522,7 @@ export function AppShell({
             <strong>华东海上风电场</strong>
           </span>
           <ChevronDown size={14} />
-        </div>
+        </Link>
 
         <nav className="sidebar__nav" aria-label="主导航">
           {navigation.map((group) => (
@@ -471,7 +571,9 @@ export function AppShell({
             </span>
             <span>
               <strong>AI 系统正常</strong>
-              <small>15 / 15 Agents online</small>
+              <small>
+                {onlineAgentCount} / {agents.length} Agents online
+              </small>
             </span>
             <span className="system-health__pulse" />
           </div>
@@ -499,8 +601,11 @@ export function AppShell({
               <Menu size={19} />
             </Button>
             <div className="live-context" aria-live="polite">
-              <StatusBadge value="running" label="LIVE" tone="success" pulse compact />
-              <span>数据更新于 12 秒前</span>
+              <StatusBadge value="running" label="DEMO LIVE" tone="success" pulse compact />
+              <span>SCADA 快照 {snapshotTime}</span>
+              <time dateTime={currentTime === "--:--:--" ? undefined : currentTime}>
+                {currentTime}
+              </time>
               <span
                 title={
                   workflow.lastSyncError ??
@@ -542,8 +647,8 @@ export function AppShell({
             <div className="weather-chip">
               <CloudSun size={17} />
               <span>
-                <strong>9.7 m/s</strong>
-                <small>东南风 · 18°C</small>
+                <strong>{nextWeatherWindow.windSpeedMps} m/s</strong>
+                <small>下一窗口 · {nextWeatherWindow.temperatureC}°C</small>
               </span>
             </div>
             <button className="global-search" onClick={() => setPaletteOpen(true)}>

@@ -325,9 +325,23 @@ export function DashboardPage() {
         <MetricCard
           label="运行机组"
           value={`${operating} / 64`}
-          detail={`${running} 台正常 · ${faulted} 台故障`}
+          detail={`${running} 台正常 · ${turbines.length - operating - offline} 台维护`}
           icon={<TowerControl size={15} />}
           tone="success"
+        />
+        <MetricCard
+          label="离线机组"
+          value={String(offline)}
+          detail="含通信中断机组"
+          icon={<Radio size={15} />}
+          tone={offline > 0 ? "warning" : "success"}
+        />
+        <MetricCard
+          label="故障机组"
+          value={String(faulted)}
+          detail="状态为 CRITICAL"
+          icon={<AlarmTriangle size={15} />}
+          tone={faulted > 0 ? "critical" : "success"}
         />
         <MetricCard
           label="平均健康度"

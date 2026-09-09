@@ -46,6 +46,73 @@ test("server-renders the WindOps command center instead of the starter", async (
   assert.doesNotMatch(html, /react-loading-skeleton|Your site is taking shape|Building your site/i);
 });
 
+test("agent roster covers the three-layer specification and only declares catalog tools", async () => {
+  const [agentResponse, toolResponse] = await Promise.all([
+    fetchJson("/api/agents"),
+    fetchJson("/api/agent-tools?limit=1"),
+  ]);
+  const expectedByLayer = {
+    decision: [
+      "Operations Coordinator Agent",
+      "SCADA Analysis Agent",
+      "Vibration Diagnosis Agent",
+      "Structural Health Agent",
+      "Electrical Diagnosis Agent",
+      "Meteorological Risk Agent",
+      "Failure Diagnosis Agent",
+      "Predictive Maintenance Agent",
+    ],
+    review: [
+      "Safety Review Agent",
+      "Engineering Review Agent",
+      "Economic Review Agent",
+      "Compliance Agent",
+      "Resource Review Agent",
+    ],
+    execution: [
+      "Work Order Agent",
+      "Crew Scheduling Agent",
+      "Spare Parts Agent",
+      "Vessel Scheduling Agent",
+      "Maintenance Execution Agent",
+      "SCADA Control Agent",
+      "Report Agent",
+      "Knowledge Agent",
+    ],
+  };
+  const agents = agentResponse.data;
+  const agentNames = new Set(agents.map((agent) => agent.name));
+  const catalogNames = new Set(toolResponse.data.catalog.map((tool) => tool.name));
+
+  assert.equal(agentResponse.meta.count, 22, "the full 21-role matrix plus one extra role is kept");
+  assert.equal(new Set(agents.map((agent) => agent.id)).size, agents.length);
+  assert.equal(agentNames.size, agents.length);
+  assert.ok(agentNames.has("Maintenance Strategy Agent"), "the existing extra role is preserved");
+
+  for (const [layer, requiredNames] of Object.entries(expectedByLayer)) {
+    for (const name of requiredNames) {
+      const agent = agents.find((candidate) => candidate.name === name);
+      assert.ok(agent, `${name} is missing from the agent roster`);
+      assert.equal(agent.layer, layer, `${name} is assigned to the wrong layer`);
+    }
+  }
+
+  for (const agent of agents) {
+    assert.ok(agent.role.length > 0, `${agent.name} is missing a role`);
+    assert.ok(agent.description.length > 0, `${agent.name} is missing a description`);
+    assert.ok(agent.skills.length > 0, `${agent.name} is missing skills`);
+    assert.ok(agent.tools.length > 0, `${agent.name} is missing tools`);
+    assert.ok(agent.knowledgeSourceIds.length > 0, `${agent.name} is missing knowledge sources`);
+    assert.ok(agent.queueDepth >= 0, `${agent.name} has an invalid queue depth`);
+    if (agent.status !== "idle" && agent.status !== "offline") {
+      assert.ok(agent.currentTask, `${agent.name} must expose its current task`);
+    }
+    for (const tool of agent.tools) {
+      assert.ok(catalogNames.has(tool), `${agent.name} declares unknown tool ${tool}`);
+    }
+  }
+});
+
 test("mock APIs distinguish live and archive fixture counts", async () => {
   const [
     health,

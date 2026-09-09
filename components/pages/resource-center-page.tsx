@@ -314,12 +314,30 @@ function ResourceContent({
             <small>{item.reason}</small>
           </span>
           <span className="resource-weather-metrics">
-            <b>{item.windSpeedMps} m/s</b>
-            <small>风速</small>
-            <b>{item.waveHeightM} m</b>
-            <small>浪高</small>
-            <b>{item.visibilityKm} km</b>
-            <small>能见度</small>
+            <span>
+              <b>{item.windSpeedMps} m/s</b>
+              <small>风速</small>
+            </span>
+            <span>
+              <b>{item.waveHeightM} m</b>
+              <small>浪高</small>
+            </span>
+            <span>
+              <b>{item.visibilityKm} km</b>
+              <small>能见度</small>
+            </span>
+            <span>
+              <b>{item.precipitationMm} mm</b>
+              <small>降雨量</small>
+            </span>
+            <span>
+              <b>{item.lightningRisk.toUpperCase()}</b>
+              <small>雷电风险</small>
+            </span>
+            <span>
+              <b>{item.temperatureC}°C</b>
+              <small>气温</small>
+            </span>
           </span>
         </article>
       ))}

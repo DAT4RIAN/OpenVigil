@@ -500,6 +500,37 @@ export const knowledgeDocumentsTable = sqliteTable("knowledge_documents", {
   ...timestamps,
 });
 
+/**
+ * Retrieval is grounded at passage granularity. Scope columns are intentionally
+ * nullable: null means the passage is generally applicable, while populated
+ * values constrain it to the referenced operational context. Document
+ * provenance remains relational through the required knowledge-document FK.
+ */
+export const knowledgePassagesTable = sqliteTable(
+  "knowledge_passages",
+  {
+    id: text("id").primaryKey(),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => knowledgeDocumentsTable.id),
+    page: integer("page").notNull(),
+    section: text("section").notNull(),
+    body: text("body").notNull(),
+    contentHash: text("content_hash").notNull(),
+    tokenCount: integer("token_count").notNull(),
+    turbineId: text("turbine_id"),
+    missionId: text("mission_id"),
+    ...timestamps,
+  },
+  (table) => [
+    index("knowledge_passages_document_page_idx").on(table.documentId, table.page),
+    index("knowledge_passages_scope_idx").on(table.turbineId, table.missionId),
+    uniqueIndex("knowledge_passages_document_hash_uidx").on(table.documentId, table.contentHash),
+    check("knowledge_passages_page_positive_chk", sql`${table.page} > 0`),
+    check("knowledge_passages_token_count_nonnegative_chk", sql`${table.tokenCount} >= 0`),
+  ],
+);
+
 export const failureCasesTable = sqliteTable("failure_cases", {
   id: text("id").primaryKey(),
   turbineId: text("turbine_id").references(() => windTurbinesTable.id),

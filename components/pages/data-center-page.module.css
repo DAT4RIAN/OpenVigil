@@ -1,0 +1,455 @@
+.kpis {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.kpis > div {
+  align-items: center;
+  display: grid;
+  gap: 3px 11px;
+  grid-template-columns: auto 1fr;
+  padding: 15px;
+}
+
+.kpiIcon {
+  align-items: center;
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  border-radius: 8px;
+  color: var(--primary);
+  display: flex;
+  grid-row: 1 / span 3;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.kpis small,
+.kpis em {
+  color: var(--foreground-subtle);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.07em;
+}
+
+.kpis strong {
+  font-size: 22px;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.topGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(310px, 0.8fr);
+  margin-bottom: 14px;
+}
+
+.assetTree,
+.sensorPanel,
+.catalogPanel {
+  padding: 16px;
+}
+
+.treeRoot,
+.focusTurbine {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+}
+
+.treeRoot {
+  background: var(--surface-subtle);
+  margin-top: 14px;
+}
+
+.treeNodeIcon {
+  align-items: center;
+  background: var(--primary-soft);
+  border-radius: 6px;
+  color: var(--primary);
+  display: flex;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.treeRoot > div,
+.focusTurbine > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.treeRoot strong,
+.focusTurbine strong {
+  font-size: 11px;
+}
+
+.treeRoot small,
+.focusTurbine small {
+  color: var(--foreground-muted);
+  font-size: 8.5px;
+}
+
+.treeRoot > span:last-child {
+  color: var(--foreground-subtle);
+  font-size: 9px;
+  margin-left: auto;
+}
+
+.treeBranch {
+  border-left: 1px solid var(--border-strong);
+  margin-left: 25px;
+  padding: 10px 0 0 15px;
+}
+
+.focusTurbine {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+}
+
+.focusTurbine > svg {
+  color: var(--primary);
+}
+
+.focusTurbine a {
+  color: var(--primary);
+  font-size: 9px;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+.subsystemGrid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+.subsystemGrid button {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 50px;
+  padding: 8px;
+  text-align: left;
+}
+
+.subsystemGrid button:hover,
+.subsystemGrid button[data-selected="true"] {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+
+.subsystemGrid button > span {
+  display: grid;
+  gap: 2px;
+}
+
+.subsystemGrid button > span:last-child {
+  text-align: right;
+}
+
+.subsystemGrid strong {
+  font-size: 9px;
+}
+
+.subsystemGrid b {
+  font-size: 13px;
+}
+
+.subsystemGrid small {
+  color: var(--foreground-muted);
+  font-size: 7px;
+}
+
+.sensorList {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.sensorList > div {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  padding: 9px;
+}
+
+.sensorDot {
+  background: var(--offline);
+  border-radius: 50%;
+  height: 7px;
+  width: 7px;
+}
+
+.sensorDot[data-live="true"] {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+
+.sensorList div > span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sensorList strong {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sensorList small {
+  color: var(--foreground-subtle);
+  font-size: 7px;
+}
+
+.sensorList a {
+  color: var(--primary);
+  display: flex;
+}
+
+.noQuery {
+  color: var(--foreground-subtle);
+}
+
+.boundaryNote {
+  background: var(--warning-soft);
+  border: 1px solid color-mix(in srgb, var(--warning) 24%, var(--border));
+  border-radius: 6px;
+  color: var(--foreground-muted);
+  font-size: 8.5px;
+  line-height: 1.55;
+  margin: 12px 0 0;
+  padding: 9px;
+}
+
+.catalogPanel {
+  overflow: hidden;
+  padding: 0;
+}
+
+.catalogPanel > div:first-child {
+  padding: 16px 16px 10px;
+}
+
+.resultCount {
+  color: var(--foreground-subtle);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.toolbar {
+  align-items: end;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(240px, 1fr) 170px 160px;
+  padding: 0 16px 14px;
+}
+
+.toolbar label {
+  display: grid;
+  gap: 4px;
+}
+
+.toolbar label > span {
+  color: var(--foreground-subtle);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.toolbar input,
+.toolbar select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  font-size: 10px;
+  height: 34px;
+  padding: 0 9px;
+  width: 100%;
+}
+
+.searchField {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex !important;
+  gap: 7px !important;
+  height: 34px;
+  padding: 0 9px;
+}
+
+.searchField svg {
+  color: var(--foreground-subtle);
+}
+
+.searchField input {
+  border: 0;
+  height: 30px;
+  min-width: 0;
+  outline: 0;
+  padding: 0;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.tableWrap table {
+  border-collapse: collapse;
+  font-size: 9px;
+  min-width: 1050px;
+  width: 100%;
+}
+
+.tableWrap th {
+  background: var(--surface-subtle);
+  color: var(--foreground-subtle);
+  font-size: 8px;
+  letter-spacing: 0.07em;
+  padding: 9px 12px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.tableWrap td {
+  border-top: 1px solid var(--border);
+  padding: 11px 12px;
+  vertical-align: middle;
+}
+
+.tableWrap td > strong,
+.tableWrap td > small {
+  display: block;
+}
+
+.tableWrap td > small {
+  color: var(--foreground-muted);
+  font-size: 7.5px;
+  line-height: 1.45;
+  margin-top: 3px;
+  max-width: 220px;
+}
+
+.datasetName {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+  min-width: 235px;
+}
+
+.datasetName > span:first-child {
+  align-items: center;
+  background: var(--primary-soft);
+  border-radius: 5px;
+  color: var(--primary);
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.datasetName > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.datasetName strong {
+  font-size: 9.5px;
+}
+
+.datasetName small {
+  color: var(--foreground-subtle);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 7px;
+}
+
+.datasetName em {
+  color: var(--foreground-muted);
+  font-size: 7.5px;
+  font-style: normal;
+  line-height: 1.4;
+  max-width: 260px;
+}
+
+.badgeStack {
+  align-items: flex-start;
+  display: grid;
+  gap: 5px;
+}
+
+.badgeStack > span:first-child {
+  color: var(--foreground-muted);
+  font-size: 8px;
+}
+
+.monoValue {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 11px;
+}
+
+.queryLink {
+  align-items: center;
+  color: var(--primary);
+  display: inline-flex;
+  font-size: 8.5px;
+  font-weight: 700;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.errorBanner,
+.loadingState {
+  color: var(--foreground-muted);
+  font-size: 9px;
+  padding: 16px;
+  text-align: center;
+}
+
+.errorBanner {
+  background: var(--warning-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--warning) 25%, var(--border));
+  color: var(--warning);
+}
+
+@media (max-width: 1100px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .topGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .kpis,
+  .subsystemGrid,
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .treeBranch {
+    margin-left: 14px;
+    padding-left: 9px;
+  }
+}

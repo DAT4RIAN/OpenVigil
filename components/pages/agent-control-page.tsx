@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -36,9 +36,11 @@ import {
   featuredMission,
   getCurrentWorkflowAuditCycle,
   knowledgeDocuments,
+  missions,
 } from "@/lib";
-import { apiPost } from "@/lib/api-client";
+import { apiGet, apiPost } from "@/lib/api-client";
 import type { AgentToolExecution } from "@/lib/agent-tool-runtime";
+import { buildAgentToolPreviewRequest } from "@/lib/agent-tool-preview";
 import type { DemoWorkflowEvent, DemoWorkflowState } from "@/lib/demo-workflow";
 import type { ActivityEvent, Agent, AgentLayer, AgentStatus } from "@/lib/types";
 import { useRealtimeChannel } from "@/lib/use-realtime-channel";
@@ -191,6 +193,94 @@ function workflowAwareTask(
   return agent.currentTask;
 }
 
+type AgentQueueItem = {
+  readonly id: string;
+  readonly sequence: number;
+  readonly title: string;
+  readonly association: string;
+  readonly status: "working" | "reviewing" | "waiting" | "queued" | "completed";
+  readonly statusLabel: string;
+  readonly href: string;
+};
+
+function currentQueueStatus(agent: Agent): Pick<AgentQueueItem, "status" | "statusLabel"> {
+  if (agent.status === "reviewing") return { status: "reviewing", statusLabel: "审核中" };
+  if (agent.status === "waiting" || agent.status === "idle") {
+    return { status: "waiting", statusLabel: "等待中" };
+  }
+  if (agent.status === "failed" || agent.status === "offline") {
+    return { status: "waiting", statusLabel: "已暂停" };
+  }
+  return { status: "working", statusLabel: "执行中" };
+}
+
+function deriveAgentTaskQueue(
+  agent: Agent,
+  currentTask: string | null,
+  publicEvents: readonly ActivityEvent[],
+): readonly AgentQueueItem[] {
+  const candidates: Omit<AgentQueueItem, "sequence">[] = [];
+  const linkedMissionIds = new Set<string>();
+
+  if (currentTask && agent.currentMissionId) {
+    const currentMission = missions.find((mission) => mission.id === agent.currentMissionId);
+    candidates.push({
+      id: `current-${agent.currentMissionId}`,
+      title: currentTask,
+      association: currentMission
+        ? `${currentMission.id} · ${currentMission.turbineId}`
+        : agent.currentMissionId,
+      ...currentQueueStatus(agent),
+      href: `/missions/${agent.currentMissionId}`,
+    });
+    linkedMissionIds.add(agent.currentMissionId);
+  }
+
+  missions
+    .filter(
+      (mission) =>
+        mission.status !== "completed" &&
+        mission.id !== agent.currentMissionId &&
+        (mission.leadAgentId === agent.id || mission.agentIds.includes(agent.id)),
+    )
+    .sort(
+      (left, right) => Date.parse(left.targetResolutionAt) - Date.parse(right.targetResolutionAt),
+    )
+    .forEach((mission) => {
+      candidates.push({
+        id: `mission-${mission.id}`,
+        title: mission.nextAction,
+        association: `${mission.id} · ${mission.turbineId}`,
+        status: mission.status === "under-review" ? "reviewing" : "queued",
+        statusLabel: mission.status === "under-review" ? "待审核" : "已排队",
+        href: `/missions/${mission.id}`,
+      });
+      linkedMissionIds.add(mission.id);
+    });
+
+  publicEvents
+    .filter((event) => event.agentId === agent.id && !linkedMissionIds.has(event.missionId))
+    .sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp))
+    .forEach((event) => {
+      candidates.push({
+        id: `activity-${event.id}`,
+        title: event.title,
+        association: `${event.missionId} · 最近完成`,
+        status: "completed",
+        statusLabel: "已完成",
+        href: `/missions/${event.missionId}`,
+      });
+      linkedMissionIds.add(event.missionId);
+    });
+
+  return candidates
+    .slice(0, Math.max(agent.queueDepth, currentTask ? 1 : 0))
+    .map((item, index) => ({
+      ...item,
+      sequence: index + 1,
+    }));
+}
+
 function AgentDrawer({
   agent,
   onClose,
@@ -213,15 +303,22 @@ function AgentDrawer({
   const publicActivityHistory = publicEvents
     .filter((event) => event.agentId === agent.id)
     .slice(0, 5);
+  const taskQueue = deriveAgentTaskQueue(agent, currentTask, publicEvents);
+  const safeTool = buildAgentToolPreviewRequest(
+    agent,
+    missions.find((mission) => mission.id === agent.currentMissionId) ?? null,
+  );
   const toolTest = useMutation({
-    mutationFn: () =>
-      apiPost<ToolTestResponse>("/api/agent-tools", {
-        tool: "get_turbine_status",
-        args: { turbineId: "WT-023" },
+    mutationFn: () => {
+      if (!safeTool) throw new Error("该 Agent 没有可安全预览的只读工具。");
+      return apiPost<ToolTestResponse>("/api/agent-tools", {
+        tool: safeTool.tool,
+        args: safeTool.args,
         agentId: agent.id,
         missionId: agent.currentMissionId ?? undefined,
         idempotencyKey: `agent-control-${agent.id}-${Date.now()}`,
-      }),
+      });
+    },
   });
   return (
     <>
@@ -294,6 +391,47 @@ function AgentDrawer({
             </a>
           </section>
         ) : null}
+        <section className="drawer-section">
+          <div className="drawer-section__title">
+            <h3>Task Queue</h3>
+            <strong>{taskQueue.length} 项可追溯任务</strong>
+          </div>
+          {taskQueue.length ? (
+            <ol className="agent-task-queue">
+              {taskQueue.map((task) => (
+                <li key={task.id}>
+                  <span className="agent-task-queue__sequence">
+                    {String(task.sequence).padStart(2, "0")}
+                  </span>
+                  <span className="agent-task-queue__copy">
+                    <strong>{task.title}</strong>
+                    <small>{task.association}</small>
+                  </span>
+                  <StatusBadge
+                    value={task.status}
+                    label={task.statusLabel}
+                    tone={
+                      task.status === "completed"
+                        ? "success"
+                        : task.status === "working"
+                          ? "info"
+                          : task.status === "reviewing" || task.status === "waiting"
+                            ? "warning"
+                            : "neutral"
+                    }
+                    pulse={task.status === "working"}
+                    compact
+                  />
+                  <Link href={task.href} aria-label={`打开 ${task.association}`}>
+                    <ArrowRight size={13} />
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="agent-history-empty">当前没有可追溯任务，Agent 正在等待调度。</p>
+          )}
+        </section>
         <section className="drawer-section">
           <h3>Agent Tools</h3>
           <div className="tool-chip-grid">
@@ -433,10 +571,10 @@ function AgentDrawer({
         ) : null}
         {toolTest.data || toolTest.error ? (
           <section className="drawer-section agent-tool-test-result" aria-live="polite">
-            <h3>Sandbox Tool Test</h3>
+            <h3>Audited Tool Preview</h3>
             {toolTest.data ? (
               <p>
-                <CheckCircle2 size={13} /> get_turbine_status ·{" "}
+                <CheckCircle2 size={13} /> {toolTest.data.data.execution.request.tool} ·{" "}
                 {toolTest.data.data.execution.status} · {toolTest.data.data.execution.latencyMs} ms
                 · {toolTest.data.data.execution.correlationId}
               </p>
@@ -461,8 +599,14 @@ function AgentDrawer({
           <Button variant="secondary" onClick={() => setConfigOpen((value) => !value)}>
             <Cpu size={14} /> 配置
           </Button>
-          <Button variant="primary" loading={toolTest.isPending} onClick={() => toolTest.mutate()}>
-            <Play size={14} /> 运行测试
+          <Button
+            variant="primary"
+            loading={toolTest.isPending}
+            disabled={!safeTool}
+            title={safeTool ? `只读预览 ${safeTool.tool}` : "没有可安全预览的只读工具"}
+            onClick={() => toolTest.mutate()}
+          >
+            <Play size={14} /> {safeTool ? `预览 ${safeTool.tool}` : "无可预览工具"}
           </Button>
         </footer>
       </aside>
@@ -477,15 +621,24 @@ export function AgentControlPage() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Agent | null>(null);
   const agentStream = useRealtimeChannel("agent-events");
+
+  useEffect(() => {
+    const requestedAgentId = new URLSearchParams(window.location.search)
+      .get("agent")
+      ?.trim()
+      .toLowerCase();
+    const requestedAgent = requestedAgentId
+      ? agents.find((agent) => agent.id === requestedAgentId)
+      : undefined;
+    if (!requestedAgent) return;
+
+    const timer = window.setTimeout(() => setSelected(requestedAgent), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const ledgerQuery = useQuery({
     queryKey: ["agent-tool-ledger"],
-    queryFn: async () => {
-      const response = await fetch("/api/agent-tools?limit=100", {
-        headers: { accept: "application/json" },
-      });
-      if (!response.ok) throw new Error(`Agent ledger returned ${response.status}`);
-      return (await response.json()) as AgentLedgerResponse;
-    },
+    queryFn: ({ signal }) => apiGet<AgentLedgerResponse>("/api/agent-tools?limit=100", signal),
     refetchInterval: 15_000,
   });
   const executions = ledgerQuery.data?.data.executionHistory ?? [];
@@ -501,6 +654,9 @@ export function AgentControlPage() {
   );
   const active = agents.filter((agent) =>
     ["working", "thinking", "reviewing"].includes(agent.status),
+  ).length;
+  const online = agents.filter(
+    (agent) => agent.status !== "offline" && agent.status !== "failed",
   ).length;
   const filtered = useMemo(
     () =>
@@ -555,7 +711,7 @@ export function AgentControlPage() {
       <PageHeader
         eyebrow="AI Operations"
         title="Agent Control Center"
-        description="15 个风电运维专业 Agent 的实时状态、任务队列与运行可观测性"
+        description={`${agents.length} 个风电运维专业 Agent 的实时状态、任务队列与运行可观测性`}
         breadcrumb={["AI Operations", "Agent Control"]}
         meta={
           <>
@@ -566,7 +722,10 @@ export function AgentControlPage() {
               pulse={agentStream.status === "connected"}
             />
             <span className="page-meta-text">
-              15 / 15 Online · Ledger {ledgerQuery.data?.meta.persistence ?? "loading"}
+              {online} / {agents.length} Online · Ledger{" "}
+              {ledgerQuery.isError
+                ? "unavailable · snapshot fallback"
+                : (ledgerQuery.data?.meta.persistence ?? "loading")}
             </span>
           </>
         }
@@ -593,7 +752,7 @@ export function AgentControlPage() {
               <Layers3 size={15} /> Organization
             </Button>
             <Button variant="primary" onClick={() => setSelected(agents[0] ?? null)}>
-              <Play size={15} /> Run Agent
+              <Sparkles size={15} /> Inspect Agent
             </Button>
           </>
         }

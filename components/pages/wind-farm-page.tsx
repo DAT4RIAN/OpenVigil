@@ -6,13 +6,13 @@ import {
   Activity,
   ArrowRight,
   Bot,
-  Boxes,
+  CalendarDays,
   Grid2X2,
+  HeartPulse,
   List,
   Map,
   MoreHorizontal,
   Network,
-  Plus,
   Search,
   SlidersHorizontal,
   Thermometer,
@@ -186,21 +186,27 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
         </section>
 
         <footer className="detail-drawer__footer">
-          <a className="button button--secondary button--md" href="/scada">
-            <Activity size={15} /> 历史趋势
-          </a>
-          <a
+          <Link
             className="button button--secondary button--md"
-            href={anomaly ? "/missions/MISSION-2026-0823" : "/agents"}
+            href={`/scada?turbineId=${turbine.id}&metric=main-bearing-vibration-rms`}
           >
-            <Bot size={15} /> 启动 AI 诊断
-          </a>
-          <a className="button button--secondary button--md" href="/work-orders">
-            <Wrench size={15} /> 创建工单
-          </a>
-          <a className="button button--primary button--md" href={`/turbines/${turbine.id}`}>
+            <Activity size={15} /> 查看该机组趋势
+          </Link>
+          <Link
+            className="button button--secondary button--md"
+            href={turbine.currentMissionId ? `/missions/${turbine.currentMissionId}` : "/missions"}
+          >
+            <Bot size={15} /> {turbine.currentMissionId ? "查看关联 Mission" : "查看 Mission 队列"}
+          </Link>
+          <Link
+            className="button button--secondary button--md"
+            href={`/work-orders?turbineId=${turbine.id}`}
+          >
+            <Wrench size={15} /> 查看相关工单
+          </Link>
+          <Link className="button button--primary button--md" href={`/turbines/${turbine.id}`}>
             进入机组详情 <ArrowRight size={15} />
-          </a>
+          </Link>
         </footer>
       </aside>
     </>
@@ -237,12 +243,12 @@ export function WindFarmPage() {
         }
         actions={
           <>
-            <Button variant="secondary">
-              <Boxes size={15} /> 管理视图
-            </Button>
-            <Button variant="primary">
-              <Plus size={15} /> 新建巡检
-            </Button>
+            <Link className="button button--secondary button--md" href="/health">
+              <HeartPulse size={15} /> 设备健康矩阵
+            </Link>
+            <Link className="button button--primary button--md" href="/maintenance">
+              <CalendarDays size={15} /> 查看维护计划
+            </Link>
           </>
         }
       />

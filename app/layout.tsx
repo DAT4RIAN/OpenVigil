@@ -14,6 +14,23 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const themeBootstrap = `(() => {
+  try {
+    const stored = localStorage.getItem("windops-theme");
+    const preference = stored === "dark" || stored === "system" ? stored : "light";
+    const resolved = preference === "system" && matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : preference === "dark"
+        ? "dark"
+        : "light";
+    document.documentElement.dataset.theme = resolved;
+    document.documentElement.style.colorScheme = resolved;
+  } catch {
+    document.documentElement.dataset.theme = "light";
+    document.documentElement.style.colorScheme = "light";
+  }
+})();`;
+
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
   const host =
@@ -61,6 +78,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <QueryProvider>{children}</QueryProvider>
       </body>

@@ -48,7 +48,7 @@ interface AssistantSuccessEnvelope {
   readonly error: null;
   readonly meta: {
     readonly deterministic: true;
-    readonly retrievalMode: "deterministic-keyword-demo";
+    readonly retrievalMode: "deterministic-d1-passage-retrieval" | "fixture-passage-fallback";
     readonly realEmbedding: false;
   };
 }
@@ -339,6 +339,11 @@ export function KnowledgeBasePage() {
         header: "设备 / 范围",
       },
       {
+        accessorKey: "manufacturer",
+        header: "制造商",
+        cell: ({ row }) => row.original.manufacturer || "—",
+      },
+      {
         accessorKey: "version",
         header: "版本",
         cell: ({ row }) => <span className={styles.mono}>{row.original.version}</span>,
@@ -594,7 +599,10 @@ export function KnowledgeBasePage() {
                     <span>{finding.label}</span>
                     <strong>{finding.value}</strong>
                     <p>{finding.interpretation}</p>
-                    <small>{finding.evidenceIds.join(" · ")}</small>
+                    <small>
+                      {[...finding.evidenceIds, ...finding.passageIds].join(" · ") ||
+                        "无可追溯段落"}
+                    </small>
                   </article>
                 ))}
               </div>
@@ -611,7 +619,7 @@ export function KnowledgeBasePage() {
                 </div>
                 {answer.citations.map((citation) => (
                   <CitationButton
-                    key={`${citation.docId}-${citation.page}`}
+                    key={citation.passageId}
                     citation={citation}
                     onOpen={openCitation}
                   />

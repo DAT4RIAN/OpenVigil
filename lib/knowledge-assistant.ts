@@ -1,5 +1,8 @@
+import type {
+  GroundedKnowledgePassage,
+  KnowledgePassageRetrievalMode,
+} from "../db/knowledge-passage-store";
 import { failureCases } from "./archive-data";
-import { knowledgeDocuments } from "./knowledge-data";
 import { evidenceItems, featuredMission } from "./operations-data";
 import type { ServerWorkflowSnapshot } from "./server-workflow-contract";
 import type { FailureCase, KnowledgeDocument } from "./types";
@@ -7,10 +10,16 @@ import type { FailureCase, KnowledgeDocument } from "./types";
 export const DEFAULT_KNOWLEDGE_QUESTION = "WT-023为什么被判断为主轴承退化？";
 
 export interface SourceCitation {
+  readonly passageId: string;
   readonly docId: string;
   readonly title: string;
   readonly page: number;
+  readonly section: string;
+  /** Verbatim excerpt cut from the retrieved passage body. */
+  readonly quote: string;
+  /** Backward-compatible display alias, also grounded in the passage body. */
   readonly summary: string;
+  readonly score: number;
   readonly documentType: KnowledgeDocument["type"];
   readonly href: string;
 }
@@ -20,6 +29,8 @@ export interface KnowledgeFinding {
   readonly value: string;
   readonly interpretation: string;
   readonly evidenceIds: readonly string[];
+  readonly citationIds: readonly string[];
+  readonly passageIds: readonly string[];
 }
 
 export interface KnowledgeAssistantAnswer {
@@ -38,7 +49,7 @@ export interface KnowledgeAssistantAnswer {
   };
   readonly citations: readonly SourceCitation[];
   readonly retrieval: {
-    readonly mode: "deterministic-keyword-demo";
+    readonly mode: KnowledgePassageRetrievalMode;
     readonly queryTerms: readonly string[];
     readonly candidateCount: number;
     readonly retrievedCount: number;
@@ -49,8 +60,8 @@ export interface KnowledgeAssistantAnswer {
   readonly disclaimer: string;
 }
 
-interface RankedDocument {
-  readonly document: KnowledgeDocument;
+export interface RankedPassage {
+  readonly passage: GroundedKnowledgePassage;
   readonly score: number;
 }
 
@@ -64,206 +75,336 @@ const RELATED_EVIDENCE_IDS = [
   "EV-023-MAINT-007",
 ] as const;
 
+const domainPhrases = [
+  "主轴承退化",
+  "历史案例",
+  "润滑脂",
+  "内窥镜",
+  "闭环验证",
+  "健康度",
+  "齿轮箱",
+  "磨粒",
+] as const;
+
 const domainTerms = [
-  "wt-023",
   "主轴承",
   "退化",
   "振动",
   "温度",
   "温升",
-  "bpfo",
   "包络谱",
-  "scada",
-  "历史案例",
+  "基线",
+  "趋势",
   "润滑",
+  "复测",
+  "取样",
+  "检查",
+  "闭环",
+  "验证",
+  "审批",
+  "任务",
+  "健康",
+  "故障",
+  "案例",
+  "齿面",
 ] as const;
 
-const pageByDocumentId: Readonly<Record<string, number>> = {
-  "KB-SCADA-REPORT-023": 12,
-  "KB-CASE-2019-017": 7,
-  "KB-MB-PROC-004": 9,
-  "KB-INSPECTION-023-2026Q2": 18,
-  "KB-GW165-OM-001": 214,
-};
+const diagnosticQueryMarkers = [
+  "为什么",
+  "为何",
+  "判断",
+  "诊断",
+  "退化",
+  "故障",
+  "异常",
+  "根因",
+  "原因",
+  "bpfo",
+  "0.86",
+  "0.91",
+] as const;
 
-const curatedBoostByDocumentId: Readonly<Record<string, number>> = {
-  "KB-SCADA-REPORT-023": 24,
-  "KB-CASE-2019-017": 22,
-  "KB-MB-PROC-004": 18,
-  "KB-INSPECTION-023-2026Q2": 16,
-  "KB-GW165-OM-001": 12,
-};
+const closedLoopQueryMarkers = ["闭环", "验证", "健康", "回写", "案例"] as const;
 
-const normalize = (value: string): string => value.trim().toLocaleLowerCase("zh-CN");
+const cjkStopTerms = new Set([
+  "为什么",
+  "是什么",
+  "有什么",
+  "哪些",
+  "什么",
+  "为何",
+  "如何",
+  "怎么",
+  "请问",
+  "是否",
+  "以及",
+  "当前",
+  "这个",
+]);
+
+const normalize = (value: string): string =>
+  value.normalize("NFKC").trim().toLocaleLowerCase("zh-CN");
+
+function extractCjkNgrams(normalized: string): readonly string[] {
+  const terms: string[] = [];
+  const runs = normalized.match(/\p{Script=Han}{2,}/gu) ?? [];
+  for (const run of runs) {
+    const characters = [...run];
+    if (characters.length <= 4 && !cjkStopTerms.has(run)) terms.push(run);
+    for (let size = 2; size <= Math.min(4, characters.length); size += 1) {
+      for (let offset = 0; offset <= characters.length - size; offset += 1) {
+        const term = characters.slice(offset, offset + size).join("");
+        if (!cjkStopTerms.has(term)) terms.push(term);
+      }
+    }
+  }
+  return [...new Set(terms)].slice(0, 96);
+}
 
 export function extractKnowledgeQueryTerms(question: string): readonly string[] {
   const normalized = normalize(question);
-  const latinTerms = normalized.match(/[a-z]+(?:-[a-z0-9]+)*|\d+(?:\.\d+)?/g) ?? [];
-  const matchedDomainTerms = domainTerms.filter((term) => normalized.includes(term));
-  return [...new Set([...matchedDomainTerms, ...latinTerms])].sort();
+  const latinTerms = normalized.match(/[a-z]+(?:-[a-z0-9]+)*|\d+(?:\.\d+)?(?:%|°c)?/g) ?? [];
+  const phrases = domainPhrases.filter((term) => normalized.includes(term));
+  const matchedTerms = domainTerms.filter((term) => normalized.includes(term));
+  const cjkTerms = extractCjkNgrams(normalized);
+  return [...new Set([...phrases, ...matchedTerms, ...latinTerms, ...cjkTerms])].sort();
 }
 
-export function rankKnowledgeDocuments(
+function countOccurrences(text: string, term: string): number {
+  if (!term) return 0;
+  let count = 0;
+  let offset = 0;
+  while (offset < text.length) {
+    const found = text.indexOf(term, offset);
+    if (found < 0) break;
+    count += 1;
+    offset = found + term.length;
+  }
+  return count;
+}
+
+function isPhrase(term: string): boolean {
+  return domainPhrases.includes(term as (typeof domainPhrases)[number]) || term.includes("-");
+}
+
+/** Passage-body-only scoring; metadata affects neither rank nor citation text. */
+export function rankKnowledgePassages(
   question: string,
-  turbineId = "WT-023",
-  missionId = featuredMission.id,
-  documents: readonly KnowledgeDocument[] = knowledgeDocuments,
-  preferredDocumentId: string | null = null,
-): readonly RankedDocument[] {
+  passages: readonly GroundedKnowledgePassage[],
+): readonly RankedPassage[] {
   const queryTerms = extractKnowledgeQueryTerms(question);
-  const normalizedTurbineId = turbineId.toUpperCase();
+  if (queryTerms.length === 0) return [];
 
-  return documents
-    .map((document) => {
-      const searchable = normalize(
-        [
-          document.id,
-          document.title,
-          document.type,
-          document.equipment,
-          document.manufacturer ?? "",
-          document.summary,
-          ...document.tags,
-        ].join(" "),
-      );
-      const lexicalScore = queryTerms.reduce(
-        (score, term) => score + (searchable.includes(term) ? 4 : 0),
-        0,
-      );
-      const relationScore =
-        (document.relatedTurbineIds.includes(normalizedTurbineId) ? 7 : 0) +
-        (document.relatedMissionIds.includes(missionId) ? 6 : 0);
-      const vectorizedScore = document.vectorized ? 1 : 0;
-      const curatedBoost =
-        (curatedBoostByDocumentId[document.id] ?? 0) +
-        (document.id === preferredDocumentId ? 40 : 0);
-
-      return {
-        document,
-        score: lexicalScore + relationScore + vectorizedScore + curatedBoost,
-      };
+  return passages
+    .map((passage) => {
+      const body = normalize(passage.body);
+      const score = queryTerms.reduce((total, term) => {
+        const occurrences = countOccurrences(body, term);
+        if (occurrences === 0) return total;
+        return total + occurrences * (isPhrase(term) ? 12 : 5);
+      }, 0);
+      return { passage, score };
     })
+    .filter(({ score }) => score > 0)
     .sort(
-      (left, right) =>
-        right.score - left.score || left.document.id.localeCompare(right.document.id),
+      (left, right) => right.score - left.score || left.passage.id.localeCompare(right.passage.id),
     );
 }
 
-const evidenceById = new Map(evidenceItems.map((item) => [item.id, item]));
+function passageQuote(body: string, queryTerms: readonly string[], maximumLength = 220): string {
+  const compact = body.replace(/\s+/g, " ").trim();
+  if (compact.length <= maximumLength) return compact;
+  const normalized = normalize(compact);
+  const firstMatch = queryTerms
+    .map((term) => normalized.indexOf(term))
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right)[0];
+  const start = Math.max(0, (firstMatch ?? 0) - 36);
+  const end = Math.min(compact.length, start + maximumLength);
+  return `${start > 0 ? "…" : ""}${compact.slice(start, end)}${end < compact.length ? "…" : ""}`;
+}
 
-const citationSummaryByDocumentId: Readonly<Record<string, string>> = {
-  "KB-SCADA-REPORT-023":
-    "WT-023 的主轴承振动 RMS 在 24 小时内由 3.79 升至 4.81 mm/s（+27%），温度高于同工况 30 日基线 8.4°C。",
-  "KB-CASE-2019-017":
-    "历史案例同时出现振动、温升和包络谱特征；当前案例与其相似度为 0.91，支持早期滚道退化判断。",
-  "KB-MB-PROC-004":
-    "规程要求把振动复测、温度核验、润滑脂取样和内窥镜检查作为联合取证步骤，不能依据单点越限直接定性。",
-  "KB-INSPECTION-023-2026Q2":
-    "Q2 巡检记录驱动端润滑脂颜色轻微变深，为本次异常提供了先前状态和润滑劣化线索。",
-  "KB-GW165-OM-001": "设备手册给出主轴承振动、温度和停机阈值，可用于校核告警与诊断处置边界。",
-};
-
-function createCitation(document: KnowledgeDocument): SourceCitation {
-  const page = Math.min(pageByDocumentId[document.id] ?? 1, document.pageCount);
+function createCitation(ranked: RankedPassage, queryTerms: readonly string[]): SourceCitation {
+  const quote = passageQuote(ranked.passage.body, queryTerms);
   return {
-    docId: document.id,
-    title: document.title,
-    page,
-    summary: citationSummaryByDocumentId[document.id] ?? document.summary,
-    documentType: document.type,
-    href: `/knowledge?document=${encodeURIComponent(document.id)}&page=${page}`,
+    passageId: ranked.passage.id,
+    docId: ranked.passage.documentId,
+    title: ranked.passage.documentTitle,
+    page: ranked.passage.page,
+    section: ranked.passage.section,
+    quote,
+    summary: quote,
+    score: ranked.score,
+    documentType: ranked.passage.documentType,
+    href: `/knowledge?document=${encodeURIComponent(ranked.passage.documentId)}&page=${ranked.passage.page}&passage=${encodeURIComponent(ranked.passage.id)}`,
   };
 }
 
-function relatedMainBearingFailures(): readonly FailureCase[] {
+const evidenceById = new Map(evidenceItems.map((item) => [item.id, item]));
+const evidenceSummary = (id: (typeof RELATED_EVIDENCE_IDS)[number]): string =>
+  evidenceById.get(id)?.summary ?? "对应证据不可用。";
+
+function relatedMainBearingFailures(turbineId: string): readonly FailureCase[] {
   return failureCases
     .filter((failureCase) => failureCase.subsystem === "main-bearing")
     .sort(
       (left, right) =>
+        Number(right.turbineId === turbineId) - Number(left.turbineId === turbineId) ||
         Date.parse(right.detectedAt) - Date.parse(left.detectedAt) ||
         left.id.localeCompare(right.id),
     );
 }
 
-const evidenceSummary = (id: (typeof RELATED_EVIDENCE_IDS)[number]): string =>
-  evidenceById.get(id)?.summary ?? "对应证据不可用。";
+function citationReferences(
+  citations: readonly SourceCitation[],
+  bodyTerms: readonly string[],
+): Pick<KnowledgeFinding, "citationIds" | "passageIds"> {
+  const matching = citations.filter((citation) => {
+    const quote = normalize(citation.quote);
+    return bodyTerms.some((term) => quote.includes(normalize(term)));
+  });
+  return {
+    citationIds: matching.map((citation) => citation.passageId),
+    passageIds: matching.map((citation) => citation.passageId),
+  };
+}
+
+function genericFindings(citations: readonly SourceCitation[]): readonly KnowledgeFinding[] {
+  return citations.slice(0, 3).map((citation) => ({
+    label: citation.section,
+    value: `${citation.title} · 第 ${citation.page} 页`,
+    interpretation: citation.quote,
+    evidenceIds: [],
+    citationIds: [citation.passageId],
+    passageIds: [citation.passageId],
+  }));
+}
+
+function isFeaturedScope(turbineId: string, missionId: string): boolean {
+  return turbineId === featuredMission.turbineId && missionId === featuredMission.id;
+}
 
 export function answerKnowledgeQuestion(
   question: string,
   options: {
-    readonly turbineId?: string;
-    readonly missionId?: string;
-    readonly documents?: readonly KnowledgeDocument[];
+    readonly turbineId: string;
+    readonly missionId: string;
+    readonly passages: readonly GroundedKnowledgePassage[];
+    readonly retrievalMode: KnowledgePassageRetrievalMode;
     readonly workflowSnapshot?: ServerWorkflowSnapshot;
-  } = {},
+  },
 ): KnowledgeAssistantAnswer {
   const normalizedQuestion = question.trim();
-  const turbineId = (options.turbineId ?? featuredMission.turbineId).toUpperCase();
-  const missionId = options.missionId ?? featuredMission.id;
-  const documents = options.documents ?? knowledgeDocuments;
-  const generatedCaseId = options.workflowSnapshot?.knowledgeCaseId ?? null;
-  const rankedDocuments = rankKnowledgeDocuments(
-    normalizedQuestion,
-    turbineId,
-    missionId,
-    documents,
-    generatedCaseId,
+  const turbineId = options.turbineId.toUpperCase();
+  const missionId = options.missionId.toUpperCase();
+  const queryTerms = extractKnowledgeQueryTerms(normalizedQuestion);
+  const rankedPassages = rankKnowledgePassages(normalizedQuestion, options.passages);
+  const citations = rankedPassages.slice(0, 7).map((ranked) => createCitation(ranked, queryTerms));
+  const featured = isFeaturedScope(turbineId, missionId);
+  const normalizedForIntent = normalize(normalizedQuestion);
+  const diagnosticQuestion = diagnosticQueryMarkers.some((term) =>
+    normalizedForIntent.includes(term),
   );
-  const citations = rankedDocuments.slice(0, 4).map(({ document }) => createCitation(document));
-  const supportingFailures = relatedMainBearingFailures().slice(0, 2);
+  const closedLoopQuestion = closedLoopQueryMarkers.some((term) =>
+    normalizedForIntent.includes(term),
+  );
+
+  const featuredFindings: readonly KnowledgeFinding[] = [
+    {
+      label: "振动趋势",
+      value: "3.79 → 4.81 mm/s · +27%",
+      interpretation: evidenceSummary("EV-023-VIB-001"),
+      evidenceIds: ["EV-023-VIB-001"],
+      ...citationReferences(citations, ["3.79", "4.81", "27%"]),
+    },
+    {
+      label: "温度偏差",
+      value: "+8.4°C vs 30 日基线",
+      interpretation: evidenceSummary("EV-023-TEMP-002"),
+      evidenceIds: ["EV-023-TEMP-002"],
+      ...citationReferences(citations, ["8.4°c", "30 日基线"]),
+    },
+    {
+      label: "故障特征",
+      value: "BPFO 频带能量 +19%",
+      interpretation: evidenceSummary("EV-023-SPECTRUM-005"),
+      evidenceIds: ["EV-023-SPECTRUM-005"],
+      ...citationReferences(citations, ["bpfo", "19%"]),
+    },
+    {
+      label: "交叉验证",
+      value: "异常评分 0.86 · 案例相似度 0.91",
+      interpretation: `${evidenceSummary("EV-023-ANOMALY-004")} ${evidenceSummary("EV-023-HISTORY-006")}`,
+      evidenceIds: ["EV-023-ANOMALY-004", "EV-023-HISTORY-006"],
+      ...citationReferences(citations, ["0.86", "0.91", "案例"]),
+    },
+  ];
+
+  const noEvidence = citations.length === 0;
+  const groundedFeaturedFindings = featuredFindings.filter(
+    (finding) => finding.citationIds.length > 0,
+  );
+  const useFeaturedDiagnosis =
+    featured && diagnosticQuestion && groundedFeaturedFindings.length >= 2;
+  const workflowCaseId = featured ? (options.workflowSnapshot?.knowledgeCaseId ?? null) : null;
+  const generatedCaseId =
+    workflowCaseId &&
+    closedLoopQuestion &&
+    citations.some((citation) => citation.docId === workflowCaseId)
+      ? workflowCaseId
+      : null;
+  const supportingFailures = useFeaturedDiagnosis
+    ? relatedMainBearingFailures(turbineId).slice(0, 2)
+    : [];
+  const findings = noEvidence
+    ? []
+    : useFeaturedDiagnosis
+      ? groundedFeaturedFindings
+      : genericFindings(citations);
+  const confidencePercent = noEvidence
+    ? 0
+    : useFeaturedDiagnosis
+      ? (featuredMission.confidencePercent ?? 87)
+      : Math.min(72, 38 + citations.length * 7);
 
   return {
-    responseId: "RAG-DEMO-WT023-0001",
+    responseId: `KAR-${turbineId}-${missionId}-${queryTerms.join("-") || "NO-EVIDENCE"}`,
     question: normalizedQuestion,
     scope: { turbineId, missionId },
     answer: {
-      headline: generatedCaseId
-        ? "WT-023 主轴承处置已完成闭环验证并沉淀知识案例"
-        : "多源趋势与故障特征共同指向主轴承早期退化",
-      summary:
-        "判断不是由单个阈值触发，而是振动、温升、包络谱、联合异常模型、历史相似案例和既往巡检记录相互印证。",
-      findings: [
-        {
-          label: "振动趋势",
-          value: "3.79 → 4.81 mm/s · +27%",
-          interpretation: evidenceSummary("EV-023-VIB-001"),
-          evidenceIds: ["EV-023-VIB-001"],
-        },
-        {
-          label: "温度偏差",
-          value: "+8.4°C vs 30 日基线",
-          interpretation: evidenceSummary("EV-023-TEMP-002"),
-          evidenceIds: ["EV-023-TEMP-002"],
-        },
-        {
-          label: "故障特征",
-          value: "BPFO 频带能量 +19%",
-          interpretation: evidenceSummary("EV-023-SPECTRUM-005"),
-          evidenceIds: ["EV-023-SPECTRUM-005"],
-        },
-        {
-          label: "交叉验证",
-          value: "异常评分 0.86 · 案例相似度 0.91",
-          interpretation: `${evidenceSummary("EV-023-ANOMALY-004")} ${evidenceSummary("EV-023-HISTORY-006")}`,
-          evidenceIds: ["EV-023-ANOMALY-004", "EV-023-HISTORY-006"],
-        },
-      ],
-      conclusion: generatedCaseId
-        ? `${generatedCaseId} 已记录五项现场任务、复测结果与健康回写；机组健康度为 ${options.workflowSnapshot?.health.turbineScore ?? 82}，主轴承健康度为 ${options.workflowSnapshot?.health.mainBearingScore ?? 78}。`
-        : `${featuredMission.diagnosis ?? "主轴承早期退化"}。综合置信度 ${featuredMission.confidencePercent ?? 87}%；仍需按规程完成润滑脂取样与内窥镜检查后确认根因。`,
-      confidencePercent: featuredMission.confidencePercent ?? 87,
+      headline: noEvidence
+        ? "当前范围内没有可引用的知识段落"
+        : generatedCaseId
+          ? "WT-023 主轴承处置已完成闭环验证并沉淀知识案例"
+          : useFeaturedDiagnosis
+            ? "多源趋势与故障特征共同指向主轴承早期退化"
+            : "已从当前机组与任务范围检索到相关知识段落",
+      summary: noEvidence
+        ? "系统不会在缺少 passage 级证据时生成设备诊断结论。请补充更具体的部件、现象或指标关键词。"
+        : useFeaturedDiagnosis
+          ? "振动、温升、包络谱、异常评分、历史案例和巡检记录在 passage 级证据中相互印证。"
+          : `找到 ${citations.length} 条与问题直接匹配的 passage 级证据，以下内容仅概括这些来源。`,
+      findings,
+      conclusion: noEvidence
+        ? "证据不足，未形成诊断结论。"
+        : generatedCaseId
+          ? `${generatedCaseId} 已记录五项现场任务、复测结果与健康回写；机组健康度为 ${options.workflowSnapshot?.health.turbineScore ?? 82}，主轴承健康度为 ${options.workflowSnapshot?.health.mainBearingScore ?? 78}。`
+          : useFeaturedDiagnosis
+            ? `${featuredMission.diagnosis ?? "主轴承早期退化"}。综合置信度 ${featuredMission.confidencePercent ?? 87}%；仍需按规程完成润滑脂取样与内窥镜检查后确认根因。`
+            : "结论仅限已检索段落；当前实现不外推未被来源正文支持的故障判断。",
+      confidencePercent,
     },
     citations,
     retrieval: {
-      mode: "deterministic-keyword-demo",
-      queryTerms: extractKnowledgeQueryTerms(normalizedQuestion),
-      candidateCount: documents.length + failureCases.length,
+      mode: options.retrievalMode,
+      queryTerms,
+      candidateCount: options.passages.length,
       retrievedCount: citations.length,
-      evidenceIds: RELATED_EVIDENCE_IDS,
+      evidenceIds: useFeaturedDiagnosis ? RELATED_EVIDENCE_IDS : [],
       supportingFailureCaseIds: supportingFailures.map((failureCase) => failureCase.id),
     },
     generatedAt: options.workflowSnapshot?.updatedAt ?? SNAPSHOT_AT,
     disclaimer:
-      "这是基于固定演示数据、关键词打分和人工校准权重的确定性检索预览，不是生产级 embedding、向量数据库或真实大模型生成结果。",
+      "这是 passage 正文上的确定性词项与短语检索，不使用 embedding、向量数据库或大模型隐式推理；引用内容均可回溯到来源段落。",
   };
 }

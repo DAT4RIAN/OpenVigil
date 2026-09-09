@@ -135,7 +135,8 @@ test("default assistant question returns a repeatable structured answer with sou
   assert.equal(first.error, null);
   assert.equal(first.meta.deterministic, true);
   assert.equal(first.meta.realEmbedding, false);
-  assert.equal(first.meta.retrievalMode, "deterministic-keyword-demo");
+  assert.equal(first.meta.retrievalMode, "fixture-passage-fallback");
+  assert.equal(first.meta.persistence, "fixture");
 
   const answer = first.data.answer;
   assert.equal(answer.question, input.question);
@@ -149,13 +150,13 @@ test("default assistant question returns a repeatable structured answer with sou
   assert.match(answer.answer.findings[1].value, /8\.4°C/);
   assert.match(answer.answer.findings[2].value, /BPFO.*19%/);
   assert.match(answer.answer.conclusion, /润滑脂取样与内窥镜检查/);
-  assert.equal(answer.citations.length, 4);
+  assert.ok(answer.citations.length >= 3);
   assert.equal(answer.retrieval.retrievedCount, answer.citations.length);
-  assert.equal(answer.retrieval.candidateCount, 30);
+  assert.equal(answer.retrieval.candidateCount, 11);
   assert.equal(answer.retrieval.supportingFailureCaseIds.length, 2);
   assert.ok(answer.retrieval.evidenceIds.includes("EV-023-VIB-001"));
   assert.ok(answer.retrieval.evidenceIds.includes("EV-023-SPECTRUM-005"));
-  assert.match(answer.disclaimer, /不是生产级 embedding/);
+  assert.match(answer.disclaimer, /passage 正文上的确定性词项与短语检索/);
 
   const knownDocumentIds = new Set([
     "KB-GW165-OM-001",
@@ -174,13 +175,70 @@ test("default assistant question returns a repeatable structured answer with sou
     assert.equal(typeof citation.title, "string");
     assert.ok(citation.title.length > 0);
     assert.ok(Number.isInteger(citation.page) && citation.page > 0);
+    assert.match(citation.passageId, /^KBP-/);
+    assert.equal(typeof citation.section, "string");
+    assert.ok(citation.section.length > 0);
+    assert.equal(typeof citation.quote, "string");
     assert.equal(typeof citation.summary, "string");
     assert.ok(citation.summary.length > 20);
+    assert.equal(citation.summary, citation.quote);
+    assert.ok(citation.score > 0);
     assert.match(citation.href, /^\/knowledge\?document=/);
   }
+  const citedPassages = new Set(answer.citations.map((citation) => citation.passageId));
+  for (const finding of answer.answer.findings) {
+    assert.ok(finding.citationIds.length > 0);
+    assert.deepEqual(finding.citationIds, finding.passageIds);
+    assert.ok(finding.passageIds.every((passageId) => citedPassages.has(passageId)));
+  }
+  assert.doesNotMatch(JSON.stringify(first), /chain.?of.?thought|hidden.?reasoning|\bcot\b/i);
 });
 
-test("assistant API rejects malformed bodies, unknown fields, and unsupported demo scope", async () => {
+test("WT-023 safety questions retrieve Chinese passage text without borrowing the bearing diagnosis", async () => {
+  const response = await postJson({
+    question: "海上登塔和能源隔离条件是什么？",
+    turbineId: "WT-023",
+    missionId: "MISSION-2026-0823",
+  });
+
+  assert.equal(response.ok, true);
+  assert.ok(response.data.answer.retrieval.queryTerms.length > 0);
+  assert.ok(response.data.answer.citations.length > 0);
+  assert.equal(response.data.answer.citations[0].docId, "KB-SAFETY-STD-011");
+  assert.match(response.data.answer.citations[0].quote, /海上登塔.*能源隔离/);
+  assert.ok(
+    response.data.answer.answer.findings.every(
+      (finding) => finding.citationIds.length > 0 && finding.passageIds.length > 0,
+    ),
+  );
+  assert.notEqual(response.data.answer.answer.confidencePercent, 87);
+  assert.deepEqual(response.data.answer.retrieval.evidenceIds, []);
+  assert.deepEqual(response.data.answer.retrieval.supportingFailureCaseIds, []);
+  assert.doesNotMatch(response.data.answer.answer.conclusion, /主轴承早期退化/);
+});
+
+test("maintenance procedure questions do not inherit the WT-023 diagnosis confidence", async () => {
+  const response = await postJson({
+    question: "主轴承润滑脂取样和内窥镜检查要求是什么？",
+    turbineId: "WT-023",
+    missionId: "MISSION-2026-0823",
+  });
+
+  assert.equal(response.ok, true);
+  assert.ok(response.data.answer.citations.length > 0);
+  assert.equal(response.data.answer.citations[0].docId, "KB-MB-PROC-004");
+  assert.notEqual(response.data.answer.answer.confidencePercent, 87);
+  assert.deepEqual(response.data.answer.retrieval.evidenceIds, []);
+  assert.deepEqual(response.data.answer.retrieval.supportingFailureCaseIds, []);
+  assert.doesNotMatch(response.data.answer.answer.conclusion, /主轴承早期退化/);
+  assert.ok(
+    response.data.answer.answer.findings.every(
+      (finding) => finding.citationIds.length > 0 && finding.passageIds.length > 0,
+    ),
+  );
+});
+
+test("assistant API rejects malformed bodies, unknown scope, and mission/turbine mismatch", async () => {
   const invalidJson = await jsonRequest(
     "/api/knowledge-assistant",
     {
@@ -198,7 +256,13 @@ test("assistant API rejects malformed bodies, unknown fields, and unsupported de
     [{ question: "   " }, 400, "INVALID_QUESTION"],
     [{ question: "test", debug: true }, 400, "UNKNOWN_FIELDS"],
     [{ question: "test", turbineId: 23 }, 400, "INVALID_SCOPE"],
-    [{ question: "test", turbineId: "WT-041" }, 422, "UNSUPPORTED_DEMO_SCOPE"],
+    [{ question: "test", turbineId: "WT-999" }, 422, "TURBINE_NOT_FOUND"],
+    [{ question: "test", missionId: "MISSION-2099-9999" }, 422, "MISSION_NOT_FOUND"],
+    [
+      { question: "test", turbineId: "WT-023", missionId: "MISSION-2026-0824" },
+      422,
+      "MISSION_TURBINE_MISMATCH",
+    ],
   ];
   for (const [body, status, code] of cases) {
     const response = await postJson(body, status);
@@ -209,4 +273,28 @@ test("assistant API rejects malformed bodies, unknown fields, and unsupported de
     assert.equal(response.meta.deterministic, true);
     assert.equal(response.meta.realEmbedding, false);
   }
+});
+
+test("assistant supports a second valid scope and returns no invented result without matched body evidence", async () => {
+  const gearbox = await postJson({
+    question: "WT-041 齿轮箱磨粒和齿面点蚀有什么证据？",
+    turbineId: "WT-041",
+    missionId: "MISSION-2026-0824",
+  });
+  assert.equal(gearbox.ok, true);
+  assert.ok(gearbox.data.answer.citations.length > 0);
+  assert.equal(gearbox.data.answer.citations[0].docId, "KB-GEARBOX-CASE-022");
+  assert.match(gearbox.data.answer.citations[0].quote, /WT-041.*磨粒.*齿面点蚀/);
+
+  const noEvidence = await postJson({
+    question: "量子引力与黑洞信息悖论",
+    turbineId: "WT-041",
+    missionId: "MISSION-2026-0824",
+  });
+  assert.equal(noEvidence.ok, true);
+  assert.equal(noEvidence.data.answer.citations.length, 0);
+  assert.equal(noEvidence.data.answer.answer.confidencePercent, 0);
+  assert.equal(noEvidence.data.answer.answer.findings.length, 0);
+  assert.match(noEvidence.data.answer.answer.conclusion, /证据不足/);
+  assert.doesNotMatch(JSON.stringify(noEvidence), /主轴承早期退化/);
 });

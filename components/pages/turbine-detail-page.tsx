@@ -40,6 +40,7 @@ import {
 import type { SubsystemHealth, WindTurbine, WorkOrderStatus } from "@/lib/types";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
+import { buildGenericSubsystemAssessments } from "@/lib/generic-subsystem-data";
 
 const tabs = [
   "Overview",
@@ -516,7 +517,7 @@ function RelatedList({
 function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
   const relatedAlarms = alarms.filter((item) => item.turbineId === turbine.id);
   const relatedWorkOrders = workOrders.filter((item) => item.turbineId === turbine.id);
-  const componentNames = ["叶片", "主轴承", "齿轮箱", "发电机", "塔架", "电气系统"];
+  const assessments = buildGenericSubsystemAssessments(turbine);
 
   return (
     <AppShell activePath={`/turbines/${turbine.id}`}>
@@ -703,25 +704,22 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
           <CardHeader
             eyebrow="COMPONENT HEALTH"
             title="子系统健康状态"
-            description="由整机健康评分派生的演示快照"
+            description="12 个子系统 · 健康 / 告警 / 30 天失效概率 / RUL · 确定性演示估计"
           />
           <div className="subsystem-grid">
-            {componentNames.map((name, index) => {
-              const score = Math.max(
-                45,
-                Math.min(99, turbine.healthScore + [3, -4, 2, 5, 1, 6][index]),
-              );
+            {assessments.map((assessment) => {
+              const { healthScore: score } = assessment;
               return (
-                <div className="subsystem-item" key={name}>
+                <div className="subsystem-item" key={assessment.key}>
                   <div className="subsystem-item__top">
                     <span>
                       <Settings2 size={14} />
-                      <strong>{name}</strong>
+                      <strong>{assessment.name}</strong>
                     </span>
                     <StatusBadge
-                      value={score >= 90 ? "healthy" : score >= 75 ? "watch" : "degraded"}
-                      label={score >= 90 ? "健康" : score >= 75 ? "关注" : "退化"}
-                      tone={score >= 90 ? "success" : score >= 75 ? "warning" : "critical"}
+                      value={assessment.state}
+                      label={stateLabel(assessment.state)}
+                      tone={score >= 90 ? "success" : score >= 78 ? "warning" : "critical"}
                       compact
                     />
                   </div>
@@ -731,10 +729,24 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
                   </div>
                   <Progress
                     value={score}
-                    tone={score >= 90 ? "success" : score >= 75 ? "warning" : "critical"}
+                    tone={score >= 90 ? "success" : score >= 78 ? "warning" : "critical"}
                   />
+                  <div className="subsystem-predictive">
+                    <span>
+                      <small>告警</small>
+                      <strong>{assessment.alertCount}</strong>
+                    </span>
+                    <span>
+                      <small>30D 失效概率</small>
+                      <strong>{assessment.failureProbability30d}%</strong>
+                    </span>
+                    <span>
+                      <small>RUL</small>
+                      <strong>{assessment.rulDays} 天</strong>
+                    </span>
+                  </div>
                   <div className="subsystem-item__footer">
-                    <span>状态已评估</span>
+                    <span>DEMO ESTIMATE</span>
                     <span>{turbine.id}</span>
                   </div>
                 </div>
