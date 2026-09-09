@@ -5,6 +5,9 @@ import test from "node:test";
 const workerUrl = new URL("../dist/server/index.js", import.meta.url);
 workerUrl.searchParams.set("knowledge-passage-test", `${process.pid}-${Date.now()}`);
 const { default: worker } = await import(workerUrl.href);
+const { buildServerWorkflowFieldEvidence } = await import(
+  new URL("../lib/server-workflow-contract.ts", import.meta.url).href
+);
 
 class SQLiteD1Statement {
   constructor(database, sql, bindings = []) {
@@ -179,13 +182,23 @@ const workflowActorIds = {
 };
 
 async function mutateWorkflow(database, snapshot, action, idempotencyKey, extra = {}) {
+  const actorId = workflowActorIds[action];
   const result = await fetchApi(database, "/api/workflow/WT-023", "POST", {
     action,
-    actor: { id: workflowActorIds[action], name: "Ignored caller label" },
+    actor: { id: actorId, name: "Ignored caller label" },
     expectedRevision: snapshot.revision,
     idempotencyKey,
     correlationId: `CORR-${idempotencyKey}`,
     ...extra,
+    ...(action === "set-task-completion" && extra.completed
+      ? {
+          fieldEvidence: buildServerWorkflowFieldEvidence(extra.taskId, {
+            id: actorId,
+            name: "Ignored caller label",
+            role: "maintenance-execution",
+          }),
+        }
+      : {}),
   });
   assert.equal(result.response.status, 200, JSON.stringify(result.body));
   return result.body.data;
@@ -281,6 +294,7 @@ test("reset removes the persisted workflow passage without touching static seeds
   snapshot = await mutateWorkflow(DB, snapshot, "approve", "passage-reset-approve", {
     reason: "Evidence and execution constraints verified",
     comment: "Approve the guarded maintenance path",
+    selectedAlternativeId: "ALT-0823-B",
   });
   snapshot = await mutateWorkflow(DB, snapshot, "start-work-order", "passage-reset-start");
   for (const [index, task] of snapshot.workOrder.tasks.entries()) {

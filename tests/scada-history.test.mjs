@@ -73,6 +73,15 @@ test("SCADA history ranges are distinct, deterministic, and preserve the WT-023 
   assert.equal(otherTurbine.meta.count, 17);
   assert.equal(otherTurbine.meta.pointCount, 17 * 25);
   assert.ok(otherTurbine.data.every((series) => series.turbineId === "WT-041"));
+  assert.ok(otherTurbine.data.every((series) => series.id.startsWith("SCADA-WT-041-")));
+  assert.ok(
+    otherTurbine.data.every((series) =>
+      series.points.every(
+        (point) => point.aiEvent === null && point.isAnomaly === false && point.quality === "good",
+      ),
+    ),
+  );
+  assert.doesNotMatch(JSON.stringify(otherTurbine), /WT-023|Maintenance Strategy Agent/);
   assert.notEqual(
     otherTurbine.data.find((series) => series.metric === "main-bearing-vibration-rms").currentValue,
     4.81,

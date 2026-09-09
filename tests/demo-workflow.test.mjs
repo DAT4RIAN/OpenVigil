@@ -13,6 +13,7 @@ import {
 const approval = {
   type: "submit-approval",
   action: "approve",
+  selectedAlternativeId: "ALT-0823-B",
   approver: "李明远",
   approverRole: "值班总工程师",
   timestamp: "2026-08-13T09:02:00+08:00",
@@ -38,6 +39,7 @@ test("high-risk execution remains locked until a human approval is audited", () 
 
   const approved = transitionDemoWorkflow(review, approval);
   assert.equal(approved.approval?.approver, "李明远");
+  assert.equal(approved.approval?.selectedAlternativeId, "ALT-0823-B");
   assert.equal(approved.approval?.reason, "四类审核通过");
   assert.equal(approved.workOrderStatus, "scheduled");
   assert.equal(approved.auditTrail.at(-1)?.kind, "approval");

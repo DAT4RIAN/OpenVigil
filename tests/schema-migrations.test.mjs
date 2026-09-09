@@ -5,9 +5,9 @@ import test from "node:test";
 
 const drizzleDirectory = new URL("../drizzle/", import.meta.url);
 
-test("all five Drizzle migrations apply in order to the documented 33-table schema", async () => {
+test("all seven Drizzle migrations apply in order to the documented 35-table schema", async () => {
   const migrationFiles = (await readdir(drizzleDirectory))
-    .filter((file) => /^000[0-4]_.+\.sql$/.test(file))
+    .filter((file) => /^000[0-6]_.+\.sql$/.test(file))
     .sort();
 
   assert.deepEqual(migrationFiles, [
@@ -16,6 +16,8 @@ test("all five Drizzle migrations apply in order to the documented 33-table sche
     "0002_server_workflow.sql",
     "0003_agent_execution_indexes.sql",
     "0004_knowledge_passages.sql",
+    "0005_workflow_field_evidence.sql",
+    "0006_alarm_mutation_token.sql",
   ]);
 
   const database = new DatabaseSync(":memory:");
@@ -31,20 +33,34 @@ test("all five Drizzle migrations apply in order to the documented 33-table sche
         "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
       )
       .all();
-    assert.equal(tables.length, 33);
+    assert.equal(tables.length, 35);
     assert.ok(tables.some(({ name }) => name === "knowledge_passages"));
+    assert.ok(tables.some(({ name }) => name === "alarm_runtime_state"));
+    assert.ok(tables.some(({ name }) => name === "alarm_mutation_audit"));
+    assert.ok(
+      database
+        .prepare("PRAGMA table_info(alarm_runtime_state)")
+        .all()
+        .some(({ name }) => name === "mutation_token"),
+    );
+    assert.ok(
+      database
+        .prepare("PRAGMA table_info(workflow_tasks)")
+        .all()
+        .some(({ name }) => name === "field_evidence"),
+    );
     assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     database.close();
   }
 });
 
-test("the Drizzle journal and latest snapshot describe the same five-step chain", async () => {
+test("the Drizzle journal and latest snapshot describe the same seven-step chain", async () => {
   const journal = JSON.parse(
     await readFile(new URL("meta/_journal.json", drizzleDirectory), "utf8"),
   );
   const snapshot = JSON.parse(
-    await readFile(new URL("meta/0004_snapshot.json", drizzleDirectory), "utf8"),
+    await readFile(new URL("meta/0006_snapshot.json", drizzleDirectory), "utf8"),
   );
 
   assert.deepEqual(
@@ -55,8 +71,12 @@ test("the Drizzle journal and latest snapshot describe the same five-step chain"
       { idx: 2, tag: "0002_server_workflow" },
       { idx: 3, tag: "0003_agent_execution_indexes" },
       { idx: 4, tag: "0004_knowledge_passages" },
+      { idx: 5, tag: "0005_workflow_field_evidence" },
+      { idx: 6, tag: "0006_alarm_mutation_token" },
     ],
   );
-  assert.equal(Object.keys(snapshot.tables).length, 33);
+  assert.equal(Object.keys(snapshot.tables).length, 35);
   assert.ok(snapshot.tables.knowledge_passages);
+  assert.ok(snapshot.tables.alarm_runtime_state);
+  assert.ok(snapshot.tables.alarm_mutation_audit);
 });

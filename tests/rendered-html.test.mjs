@@ -113,6 +113,90 @@ test("agent roster covers the three-layer specification and only declares catalo
   }
 });
 
+test("workflow-backed collection APIs share one envelope and one WT-023 assignment graph", async () => {
+  const [missionResponse, decisionResponse, evidenceResponse, alarmResponse, agentResponse] =
+    await Promise.all([
+      fetchJson("/api/missions"),
+      fetchJson("/api/decisions"),
+      fetchJson("/api/evidence"),
+      fetchJson("/api/alarms"),
+      fetchJson("/api/agents"),
+    ]);
+
+  for (const response of [
+    missionResponse,
+    decisionResponse,
+    evidenceResponse,
+    alarmResponse,
+    agentResponse,
+  ]) {
+    assert.equal(response.meta.count, response.data.length);
+    assert.equal(response.meta.total, response.data.length);
+    assert.equal(response.meta.workflowPersistence, "ephemeral");
+    assert.equal(response.meta.workflowRevision, 0);
+    assert.equal(response.meta.snapshotAt, missionResponse.meta.snapshotAt);
+  }
+
+  const mission = missionResponse.data.find(({ id }) => id === "MISSION-2026-0823");
+  const decision = decisionResponse.data.find(({ id }) => id === "DECISION-2026-0823");
+  const relatedEvidence = evidenceResponse.data.filter(({ missionId }) => missionId === mission.id);
+  const relatedAlarms = alarmResponse.data.filter(({ missionId }) => missionId === mission.id);
+  const assignedAgents = agentResponse.data.filter(
+    ({ currentMissionId }) => currentMissionId === mission.id,
+  );
+
+  assert.equal(mission.status, "under-review");
+  assert.match(mission.summary, /等待人工审批/);
+  assert.match(mission.nextAction, /人工审批/);
+  assert.equal(decision.status, "under-review");
+  assert.deepEqual(decision.approval, {
+    required: true,
+    action: null,
+    selectedAlternativeId: null,
+    approver: null,
+    approverRole: null,
+    timestamp: null,
+    reason: null,
+    comment: null,
+  });
+  assert.deepEqual(new Set(relatedEvidence.map(({ id }) => id)), new Set(decision.evidenceIds));
+  assert.deepEqual(new Set(relatedAlarms.map(({ id }) => id)), new Set(mission.alarmIds));
+  assert.ok(relatedAlarms.every(({ status }) => status !== "resolved"));
+
+  assert.deepEqual(
+    new Set(assignedAgents.map(({ id }) => id)),
+    new Set(mission.agentIds),
+    "the featured mission and agent roster must declare the same active participants",
+  );
+  assert.ok(mission.agentIds.includes(mission.leadAgentId));
+  assert.equal(
+    assignedAgents.find(({ id }) => id === mission.leadAgentId)?.currentMissionId,
+    mission.id,
+    "the featured lead must be actively assigned to the featured mission",
+  );
+  assert.ok(
+    assignedAgents.every(
+      ({ layer, status, currentTask }) =>
+        currentTask && (layer === "review" ? status === "reviewing" : status !== "working"),
+    ),
+    "pre-approval roles must expose review or waiting work instead of execution work",
+  );
+
+  const missionsById = new Map(missionResponse.data.map((item) => [item.id, item]));
+  for (const agent of agentResponse.data) {
+    if (!agent.currentMissionId) continue;
+    const currentMission = missionsById.get(agent.currentMissionId);
+    assert.ok(currentMission, `${agent.id} has an unknown current mission`);
+    assert.ok(
+      currentMission.agentIds.includes(agent.id),
+      `${agent.id} is not declared by ${agent.currentMissionId}`,
+    );
+  }
+  for (const item of missionResponse.data) {
+    assert.ok(item.agentIds.includes(item.leadAgentId), `${item.id} omits its lead agent`);
+  }
+});
+
 test("mock APIs distinguish live and archive fixture counts", async () => {
   const [
     health,

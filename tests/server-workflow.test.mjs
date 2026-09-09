@@ -7,6 +7,7 @@ contractUrl.searchParams.set("server-workflow-test", `${process.pid}-${Date.now(
 const {
   applyServerWorkflowMutation,
   authorizeServerWorkflowDemoActor,
+  buildServerWorkflowFieldEvidence,
   initialServerWorkflowSnapshot,
   isSupportedServerWorkflowTurbineId,
   requireServerWorkflowPersistence,
@@ -133,12 +134,15 @@ const actor = {
   role: "Duty Chief Engineer",
 };
 
+const approvalActionNames = new Set(["approve", "reject", "request-revision", "escalate"]);
+
 const mutation = (action, snapshot, idempotencyKey, extra = {}) => ({
   action,
   actor,
   expectedRevision: snapshot.revision,
   idempotencyKey,
   correlationId: `CORR-${idempotencyKey}`,
+  ...(approvalActionNames.has(action) ? { selectedAlternativeId: "ALT-0823-B" } : {}),
   ...extra,
 });
 
@@ -152,7 +156,18 @@ const apiActorIds = {
 const apiMutation = (action, snapshot, idempotencyKey, extra = {}) => ({
   ...mutation(action, snapshot, idempotencyKey, extra),
   actor: { id: apiActorIds[action], name: "Ignored caller label" },
+  ...(action === "set-task-completion" && extra.completed
+    ? {
+        fieldEvidence: buildServerWorkflowFieldEvidence(extra.taskId, {
+          id: "demo-maintenance-team",
+          name: "Ignored caller label",
+          role: "maintenance-execution",
+        }),
+      }
+    : {}),
 });
+
+const fieldEvidence = (taskId) => buildServerWorkflowFieldEvidence(taskId, actor);
 
 const apply = (snapshot, request, minute = snapshot.revision) =>
   applyServerWorkflowMutation(
@@ -184,6 +199,26 @@ test("the explicit no-D1 fallback is readable, immutable, and WT-023-only", asyn
   assert.equal(isSupportedServerWorkflowTurbineId("WT-024"), false);
 });
 
+test("the workflow route only accepts the three declared alternatives for approval review", async (t) => {
+  const database = new SQLiteD1Database();
+  t.after(() => database.close());
+  const snapshot = (await fetchWorkflow(database)).body.data;
+  const base = apiMutation("approve", snapshot, "invalid-alternative", {
+    reason: "Review complete",
+    comment: "Attempt an unknown plan",
+  });
+
+  for (const selectedAlternativeId of [undefined, "ALT-0823-D"]) {
+    const result = await fetchWorkflow(database, "POST", {
+      ...base,
+      selectedAlternativeId,
+      idempotencyKey: `invalid-alternative-${selectedAlternativeId ?? "missing"}`,
+    });
+    assert.equal(result.response.status, 400);
+    assert.equal(result.body.error.code, "APPROVAL_ALTERNATIVE_REQUIRED");
+  }
+});
+
 test("WT-023 high-risk execution stays behind recorded human approval", () => {
   const initial = initialServerWorkflowSnapshot();
   assert.throws(
@@ -202,11 +237,33 @@ test("WT-023 high-risk execution stays behind recorded human approval", () => {
   assert.equal(approved.mission.status, "approved");
   assert.equal(approved.decision.status, "approved");
   assert.equal(approved.decision.approval.action, "approve");
+  assert.equal(approved.decision.approval.selectedAlternativeId, "ALT-0823-B");
+  assert.equal(approved.workOrder.alternativeId, "ALT-0823-B");
   assert.equal(approved.workOrder.status, "scheduled");
 
   const started = apply(approved, mutation("start-work-order", approved, "start"));
   assert.equal(started.mission.status, "executing");
   assert.equal(started.workOrder.status, "in-progress");
+});
+
+test("an explicit alternative selection drives approval audit and the generated work order", () => {
+  const initial = initialServerWorkflowSnapshot();
+  const approved = apply(
+    initial,
+    mutation("approve", initial, "approve-plan-a", {
+      selectedAlternativeId: "ALT-0823-A",
+      reason: "Immediate shutdown has been selected",
+      comment: "Approve plan A",
+    }),
+  );
+
+  assert.equal(approved.decision.selectedAlternativeId, "ALT-0823-A");
+  assert.equal(approved.workOrder.alternativeId, "ALT-0823-A");
+  assert.match(approved.workOrder.tasks[0].title, /立即停机/);
+  assert.equal(approved.auditEvents[0].toState.selectedAlternativeId, "ALT-0823-A");
+  assert.equal(approved.auditEvents[0].toState.workOrderAlternativeId, "ALT-0823-A");
+  assert.match(approved.auditEvents[0].detail, /方案 A/);
+  assert.match(approved.auditEvents[0].detail, /ALT-0823-A/);
 });
 
 test("five explicit task completions gate closure, health feedback, and knowledge capture", () => {
@@ -224,6 +281,17 @@ test("five explicit task completions gate closure, health feedback, and knowledg
     () => apply(snapshot, mutation("complete-work-order", snapshot, "premature")),
     (error) => error.code === "TASK_GATE_BLOCKED" && error.status === 409,
   );
+  assert.throws(
+    () =>
+      apply(
+        snapshot,
+        mutation("set-task-completion", snapshot, "missing-field-evidence", {
+          taskId: snapshot.workOrder.tasks[0].id,
+          completed: true,
+        }),
+      ),
+    (error) => error.code === "FIELD_EVIDENCE_REQUIRED" && error.status === 400,
+  );
 
   for (const [index, task] of snapshot.workOrder.tasks.entries()) {
     snapshot = apply(
@@ -231,9 +299,19 @@ test("five explicit task completions gate closure, health feedback, and knowledg
       mutation("set-task-completion", snapshot, `task-${index + 1}`, {
         taskId: task.id,
         completed: true,
+        fieldEvidence: fieldEvidence(task.id),
       }),
     );
     assert.equal(snapshot.workOrder.completedTaskCount, index + 1);
+    const completedTask = snapshot.workOrder.tasks.find(({ id }) => id === task.id);
+    assert.equal(completedTask.fieldEvidence.verificationMode, "deterministic-fixture");
+    assert.match(completedTask.fieldEvidence.artifactUri, /^fixture:\/\/windops-field-evidence\//);
+    assert.match(completedTask.fieldEvidence.artifactSha256, /^[a-f0-9]{64}$/);
+    assert.equal(completedTask.fieldEvidence.verifiedBy.id, actor.id);
+    assert.equal(
+      snapshot.auditEvents.at(-1).fieldEvidence.artifactUri,
+      completedTask.fieldEvidence.artifactUri,
+    );
   }
 
   const closed = apply(snapshot, mutation("complete-work-order", snapshot, "complete-after-five"));
@@ -291,6 +369,7 @@ test("reset restores the review baseline while retaining append-only audit histo
     mutation("set-task-completion", snapshot, "reset-task", {
       taskId: serverWorkflowTaskDefinitions[0].id,
       completed: true,
+      fieldEvidence: fieldEvidence(serverWorkflowTaskDefinitions[0].id),
     }),
   );
 
@@ -350,12 +429,16 @@ test("D1 storage serializes a consistent snapshot, rejects a stale CAS writer, a
     database,
     "POST",
     apiMutation("approve", snapshot, "store-approve", {
+      selectedAlternativeId: "ALT-0823-A",
       reason: "Evidence is complete",
       comment: "Approved for durable execution",
     }),
   );
   assert.equal(result.response.status, 200);
   snapshot = result.body.data;
+  assert.equal(snapshot.decision.approval.selectedAlternativeId, "ALT-0823-A");
+  assert.equal(snapshot.workOrder.alternativeId, "ALT-0823-A");
+  assert.match(snapshot.workOrder.tasks[0].title, /立即停机/);
   result = await fetchWorkflow(
     database,
     "POST",
@@ -381,6 +464,9 @@ test("D1 storage serializes a consistent snapshot, rejects a stale CAS writer, a
 
   snapshot = (await fetchWorkflow(database)).body.data;
   assert.equal(snapshot.revision, 3);
+  assert.equal(snapshot.decision.approval.selectedAlternativeId, "ALT-0823-A");
+  assert.equal(snapshot.workOrder.alternativeId, "ALT-0823-A");
+  assert.match(snapshot.workOrder.tasks[0].title, /立即停机/);
   assert.equal(snapshot.workOrder.completedTaskCount, 1);
   const completedIds = snapshot.workOrder.tasks
     .filter((task) => task.completed)
@@ -445,6 +531,25 @@ test("closed WT-023 state is shared by predictive, knowledge, and audited Agent 
     assert.equal(result.response.status, 200, JSON.stringify(result.body));
     snapshot = result.body.data;
   }
+  const [approvedMissions, approvedDecisions, approvedAgents] = await Promise.all([
+    fetchApi(database, "/api/missions"),
+    fetchApi(database, "/api/decisions"),
+    fetchApi(database, "/api/agents"),
+  ]);
+  const approvedMission = approvedMissions.body.data.find(({ id }) => id === "MISSION-2026-0823");
+  const approvedDecision = approvedDecisions.body.data.find(
+    ({ id }) => id === "DECISION-2026-0823",
+  );
+  assert.match(approvedMission.summary, /人工批准/);
+  assert.match(approvedMission.nextAction, /WO-20260823-017/);
+  assert.equal(approvedDecision.status, "approved");
+  assert.equal(approvedDecision.approval.approver, "李明远");
+  assert.ok(
+    approvedAgents.body.data
+      .filter(({ currentMissionId }) => currentMissionId === approvedMission.id)
+      .every(({ currentTask }) => currentTask?.includes("已批准")),
+  );
+
   let result = await fetchWorkflow(
     database,
     "POST",
@@ -452,6 +557,10 @@ test("closed WT-023 state is shared by predictive, knowledge, and audited Agent 
   );
   assert.equal(result.response.status, 200, JSON.stringify(result.body));
   snapshot = result.body.data;
+  const executingMissions = await fetchApi(database, "/api/missions");
+  const executingMission = executingMissions.body.data.find(({ id }) => id === "MISSION-2026-0823");
+  assert.match(executingMission.summary, /正在执行/);
+  assert.match(executingMission.nextAction, /现场任务/);
   for (const [index, task] of snapshot.workOrder.tasks.entries()) {
     result = await fetchWorkflow(
       database,
@@ -472,6 +581,73 @@ test("closed WT-023 state is shared by predictive, knowledge, and audited Agent 
   assert.equal(result.response.status, 200, JSON.stringify(result.body));
   snapshot = result.body.data;
   assert.equal(snapshot.revision, 8);
+
+  const [
+    missionCollection,
+    decisionCollection,
+    evidenceCollection,
+    alarmCollection,
+    agentCollection,
+  ] = await Promise.all([
+    fetchApi(database, "/api/missions"),
+    fetchApi(database, "/api/decisions"),
+    fetchApi(database, "/api/evidence"),
+    fetchApi(database, "/api/alarms"),
+    fetchApi(database, "/api/agents"),
+  ]);
+  for (const collection of [
+    missionCollection,
+    decisionCollection,
+    evidenceCollection,
+    alarmCollection,
+    agentCollection,
+  ]) {
+    assert.equal(collection.response.status, 200, JSON.stringify(collection.body));
+    assert.equal(collection.body.meta.workflowPersistence, "d1");
+    assert.equal(collection.body.meta.workflowRevision, snapshot.revision);
+    assert.equal(collection.body.meta.snapshotAt, snapshot.updatedAt);
+  }
+
+  const mission = missionCollection.body.data.find(({ id }) => id === "MISSION-2026-0823");
+  const decision = decisionCollection.body.data.find(({ id }) => id === "DECISION-2026-0823");
+  const relatedEvidence = evidenceCollection.body.data.filter(
+    ({ missionId }) => missionId === mission.id,
+  );
+  const relatedAlarms = alarmCollection.body.data.filter(
+    ({ missionId }) => missionId === mission.id,
+  );
+  const relatedAgents = agentCollection.body.data.filter(
+    ({ currentMissionId }) => currentMissionId === mission.id,
+  );
+
+  assert.equal(mission.status, "completed");
+  assert.match(mission.summary, /完成现场检查与复测/);
+  assert.match(mission.nextAction, /KB-CASE-2026-WT023-CLOSED/);
+  assert.equal(decision.status, "approved");
+  assert.deepEqual(decision.approval, {
+    required: true,
+    action: "approve",
+    selectedAlternativeId: "ALT-0823-B",
+    approver: "李明远",
+    approverRole: "duty-chief-engineer",
+    timestamp: snapshot.decision.approval.timestamp,
+    reason: "Evidence, resources, and weather window verified",
+    comment: "Approve alternative B",
+  });
+  assert.deepEqual(new Set(relatedEvidence.map(({ id }) => id)), new Set(decision.evidenceIds));
+  assert.deepEqual(new Set(relatedAlarms.map(({ id }) => id)), new Set(mission.alarmIds));
+  assert.ok(
+    relatedAlarms.every(
+      ({ status, resolvedAt }) => status === "resolved" && resolvedAt === snapshot.updatedAt,
+    ),
+  );
+  assert.deepEqual(new Set(relatedAgents.map(({ id }) => id)), new Set(mission.agentIds));
+  assert.ok(relatedAgents.every(({ status, currentTask }) => status === "idle" && !currentTask));
+  assert.equal(
+    database.database.prepare("SELECT COUNT(*) AS count FROM workflow_audit_events").get().count,
+    9,
+    "read overlays must not delete or rewrite append-only workflow audit history",
+  );
 
   const predictive = await fetchApi(database, "/api/predictive-assessments?turbineId=WT-023");
   assert.equal(predictive.response.status, 200);
