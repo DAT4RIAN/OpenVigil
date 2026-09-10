@@ -176,8 +176,8 @@ export const validateDomainData = (): readonly string[] => {
     if (assessment.healthScore < 0 || assessment.healthScore > 100) {
       errors.push(`${assessment.id}: health score is outside 0..100`);
     }
-    if (assessment.failureProbability30d < 0 || assessment.failureProbability30d > 100) {
-      errors.push(`${assessment.id}: failure probability is outside 0..100`);
+    if (assessment.anomalyScore < 0 || assessment.anomalyScore > 1) {
+      errors.push(`${assessment.id}: anomaly score is outside 0..1`);
     }
   }
 

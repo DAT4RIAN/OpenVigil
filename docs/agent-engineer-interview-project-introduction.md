@@ -1,20 +1,20 @@
-# Agent 工程师面试项目介绍：WindOps 风电智能运维多智能体平台
+# Agent 工程师面试项目介绍：OpenVigil 风电智能运维多智能体平台
 
 > 本文用于 Agent 工程师岗位的项目介绍、面试话术和追问准备。默认采用“候选人主导项目”的第一人称表达；如果项目由团队协作完成，请把“我负责”调整为自己的真实职责，避免扩大个人贡献。
 
 ## 一句话介绍
 
-WindOps 是一个面向风电运维场景的 AI-Native 多智能体平台候选实现。它不是简单的聊天界面，而是把 SCADA 数据、工业告警、故障诊断、Agent 协作、人工审批、工单执行和知识反馈组织成一条可追踪、可恢复、可审计的业务闭环。
+OpenVigil 是一个面向风电运维场景的 AI-Native 多智能体平台候选实现。它不是简单的聊天界面，而是把 SCADA 数据、工业告警、故障诊断、Agent 协作、人工审批、工单执行和知识反馈组织成一条可追踪、可恢复、可审计的业务闭环。
 
 ## 30 秒介绍
 
-我做的项目叫 WindOps，是一个风电智能运维多智能体平台。它解决的核心问题是：当风机出现异常时，如何让多个专业 Agent 基于真实工具和结构化证据协作完成诊断、方案评审和工单执行，同时确保高风险动作必须经过人工批准。
+我做的项目叫 OpenVigil，是一个风电智能运维多智能体平台。它解决的核心问题是：当风机出现异常时，如何让多个专业 Agent 基于真实工具和结构化证据协作完成诊断、方案评审和工单执行，同时确保高风险动作必须经过人工批准。
 
 项目采用 React/Cloudflare Worker 前端网关和 Python FastAPI 后端，Agent 编排使用 LangGraph，工具访问 PostgreSQL、TimescaleDB、pgvector、MinIO 等生产形态组件。系统特别强调状态机、幂等、权限、证据链和离线评估，而不是只展示模型生成的一段文本。
 
 ## 2 分钟介绍
 
-WindOps 的业务主线是风机异常处置。例如 SCADA 检测到主轴承振动和温度异常后，系统会创建 Alarm 和 Mission，通过 transactional outbox 把任务可靠地交给 Agent 工作流。不同角色分别完成 SCADA 分析、振动诊断、相似案例检索、健康度计算和维护方案生成。
+OpenVigil 的业务主线是风机异常处置。例如 SCADA 检测到主轴承振动和温度异常后，系统会创建 Alarm 和 Mission，通过 transactional outbox 把任务可靠地交给 Agent 工作流。不同角色分别完成 SCADA 分析、振动诊断、相似案例检索、健康度计算和维护方案生成。
 
 Agent 不直接自由操作数据库或现场设备，而是只能调用经过 Schema 校验和权限控制的工具。诊断结果会形成结构化 Evidence 和三个候选 Decision，之后进入工程、安全、资源等评审以及 Human-in-the-loop 审批。只有审批通过，系统才能创建工单和预留资源；现场任务还必须按顺序提交带 URI、SHA-256 和 measurement 的证据，全部满足门禁后才能关闭告警、回写健康度并生成知识案例。
 
@@ -38,7 +38,7 @@ Agent 不直接自由操作数据库或现场设备，而是只能调用经过 S
 - Agent 失败、重试或并发运行时，容易产生重复任务、重复工单和状态不一致。
 - 离线模型指标与在线业务告警之间缺少可追溯的发布门禁。
 
-WindOps 的目标不是“让多个 Agent 聊天”，而是建立一套可执行的 Agent 工程框架：
+OpenVigil 的目标不是“让多个 Agent 聊天”，而是建立一套可执行的 Agent 工程框架：
 
 ```text
 感知数据 → 结构化异常 → Mission → Agent 工具调用 → Evidence
@@ -78,7 +78,7 @@ flowchart TB
 项目刻意区分两套运行边界：
 
 - `demo`：Worker/D1 上的确定性产品演示，包含 64 台模拟资产、WT-023 闭环、17 个确定性工具和本地 passage 检索，适合 UI 演示和稳定回归。
-- `production`：Sites Worker 作为每用户身份网关，访问独立部署的 Python API/worker；生产模式禁止 fixture 回退，并校验后端 release ID 和镜像摘要。
+- `production`：Sites Worker 作为每用户身份网关，访问独立部署的 Python API/worker；生产模式禁止 fixture 回退，并校验后端 release ID、完整 commit SHA 和镜像摘要。
 
 这两套运行时不能混为一谈。Demo 工具执行不能被描述成真实生产 Agent 调用，Sites 发布成功也不能代表 Python 后端和现场依赖已经上线。
 

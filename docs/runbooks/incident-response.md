@@ -1,4 +1,4 @@
-# WindOps SLO 事件响应
+# OpenVigil SLO 事件响应
 
 Prometheus 规则位于 `backend/ops/prometheus-alerts.yaml`，目标值由应用运行时指标 `windops_slo_target` 提供。值班人员不得通过临时放宽 SLO 来消除告警；阈值变更必须经过配置 revision 审批。
 

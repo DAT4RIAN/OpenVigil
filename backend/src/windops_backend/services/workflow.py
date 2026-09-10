@@ -5,7 +5,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from windops_backend.agents.graph import WindOpsWorkflowGraph
+from windops_backend.agents.graph import OpenVigilWorkflowGraph
 from windops_backend.agents.reasoning import build_reasoning_provider
 from windops_backend.agents.state import PublicWorkflowState
 from windops_backend.agents.tools import SQLToolAdapter
@@ -85,7 +85,7 @@ async def advance_mission_to_review(
         ),
         "evidence": [],
     }
-    graph = WindOpsWorkflowGraph(
+    graph = OpenVigilWorkflowGraph(
         session,
         SQLToolAdapter(
             session,
@@ -192,7 +192,7 @@ async def record_approval(
                 "resume_from": "workorder",
             },
         )
-        graph = WindOpsWorkflowGraph(
+        graph = OpenVigilWorkflowGraph(
             session,
             SQLToolAdapter(
                 session,

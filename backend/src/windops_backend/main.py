@@ -28,6 +28,7 @@ from windops_backend.observability import (
     metrics_token_matches,
     refresh_business_metrics,
 )
+from windops_backend.read_audit import DatabaseReadAuditSink, RedisReadAuditSink
 from windops_backend.security import (
     ApiSecurityHeadersMiddleware,
     RedisRateLimitMiddleware,
@@ -79,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             if runtime_settings.environment.value == "test":
                 app.state.artifact_verifier = InMemoryArtifactVerifier()
+                app.state.read_audit_sink = DatabaseReadAuditSink(session_factory)
             else:
                 public_minio = urlparse(runtime_settings.minio_public_base)
                 internal_minio = Minio(
@@ -92,6 +94,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     runtime_settings.redis_url,
                     socket_connect_timeout=3,
                     socket_timeout=3,
+                )
+                app.state.read_audit_sink = RedisReadAuditSink(
+                    app.state.redis_client, runtime_settings
                 )
                 app.state.artifact_verifier = MinioArtifactVerifier(
                     internal_minio,
@@ -135,7 +140,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.observability.shutdown()
 
     app = FastAPI(
-        title="WindOps Backend",
+        title="OpenVigil Backend",
         version="0.1.0",
         description=(
             "Auditable wind-operations telemetry, multi-agent review, human approval, "

@@ -6,18 +6,28 @@ import os
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
+from pydantic import SecretStr
 from sqlalchemy import func, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from starlette.requests import Request
 
+from test_care_anomaly import (
+    _evaluation_artifact,
+    _manager_headers,
+    _model_request,
+    _online_runtime,
+    _persist_authoritative_activation_evidence,
+)
 from windops_backend.api.deps import _consume_delegated_write_nonce
-from windops_backend.config import Settings
+from windops_backend.config import ModelInferenceTarget, Settings
 from windops_backend.enums import ApprovalAction, Environment
 from windops_backend.errors import ConflictError, InvalidTransitionError
+from windops_backend.main import create_app
 from windops_backend.models import (
     Alarm,
     Approval,
@@ -30,6 +40,7 @@ from windops_backend.models import (
     DomainEvent,
     IngestReceipt,
     Mission,
+    ModelDeployment,
     RegisteredModel,
     Turbine,
     WindFarm,
@@ -53,7 +64,7 @@ from windops_backend.services.benchmark_metadata import (
 )
 from windops_backend.services.idempotency import execute_idempotent_command
 from windops_backend.services.workflow import record_approval
-from windops_backend.storage import OutboxEvent
+from windops_backend.storage import InMemoryArtifactVerifier, OutboxEvent
 
 pytestmark = [
     pytest.mark.external_release,
@@ -73,6 +84,129 @@ def _database_url() -> str:
     if not value:
         raise RuntimeError("WINDOPS_POSTGRES_TEST_URL is required")
     return make_url(value).render_as_string(hide_password=False)
+
+
+@pytest.mark.asyncio
+async def test_anomaly_http_activation_serializes_and_rolls_back_on_postgres() -> None:
+    settings = Settings(
+        environment=Environment.TEST,
+        database_url=_database_url(),
+        schema_bootstrap=False,
+        demo_seed=True,
+        agent_mode="deterministic",
+        test_auth_bypass_enabled=True,
+        outbox_inline_drain=True,
+        knowledge_graph_backend="memory",
+    )
+    settings.model_inference_targets["anomaly-primary"] = ModelInferenceTarget(
+        endpoint_url="http://anomaly.test/v1/predict",
+        api_token=SecretStr("postgres-anomaly-token"),
+    )
+    app = create_app(settings)
+    async with app.router.lifespan_context(app):
+        verifier = app.state.artifact_verifier
+        assert isinstance(verifier, InMemoryArtifactVerifier)
+        package = b"postgres CARE anomaly package"
+        package_sha = hashlib.sha256(package).hexdigest()
+        model_payload = _model_request()
+        model_payload["artifact_sha256"] = package_sha
+        model_uri = str(model_payload["artifact_uri"])
+        verifier.register_object(model_uri, package, "application/onnx")
+        artifact, threshold = _evaluation_artifact()
+        runtime = _online_runtime(
+            model_artifact_uri=model_uri,
+            evaluation_run_id="eval-final-1",
+            threshold=threshold,
+        )
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            registered = await client.post(
+                "/api/v1/models",
+                headers=_manager_headers("postgres-anomaly-register-1"),
+                json=model_payload,
+            )
+            assert registered.status_code == 201, registered.text
+            staged = await client.post(
+                "/api/v1/models/ANOM-CARE-001/deployments",
+                headers=_manager_headers("postgres-anomaly-stage-1"),
+                json={
+                    "target_id": "anomaly-primary",
+                    "stage": "production",
+                    "evaluation_gate": {"care_online_runtime": runtime},
+                },
+            )
+            assert staged.status_code == 201, staged.text
+            deployment_id = str(staged.json()["deployment_id"])
+            await _persist_authoritative_activation_evidence(
+                app,
+                artifact,
+                threshold,
+                model_artifact_uri=model_uri,
+                model_artifact_sha256=package_sha,
+            )
+
+            async def activate(key: str) -> httpx.Response:
+                return await client.post(
+                    f"/api/v1/models/deployments/{deployment_id}/activate",
+                    headers=_manager_headers(key),
+                    json={
+                        "traffic_percent": 100,
+                        "reason": "serialize the governed PostgreSQL activation",
+                    },
+                )
+
+            first, second = await asyncio.wait_for(
+                asyncio.gather(
+                    activate("postgres-anomaly-concurrent-1"),
+                    activate("postgres-anomaly-concurrent-2"),
+                ),
+                timeout=10,
+            )
+            assert sorted((first.status_code, second.status_code)) == [200, 409]
+            rejected = second if second.status_code == 409 else first
+            assert rejected.json()["error"]["code"] == "ANOMALY_ACTIVATION_CONCURRENT_CHANGE"
+
+            replacement = await client.post(
+                "/api/v1/models/ANOM-CARE-001/deployments",
+                headers=_manager_headers("postgres-anomaly-stage-2"),
+                json={
+                    "target_id": "anomaly-primary",
+                    "stage": "production",
+                    "evaluation_gate": {"care_online_runtime": runtime},
+                },
+            )
+            assert replacement.status_code == 201, replacement.text
+            replacement_id = str(replacement.json()["deployment_id"])
+            replacement_activation = await client.post(
+                f"/api/v1/models/deployments/{replacement_id}/activate",
+                headers=_manager_headers("postgres-anomaly-activate-2"),
+                json={"traffic_percent": 100, "reason": "activate replacement"},
+            )
+            assert replacement_activation.status_code == 200, replacement_activation.text
+            rollback = await client.post(
+                "/api/v1/models/ANOM-CARE-001/rollback",
+                headers=_manager_headers("postgres-anomaly-rollback-1"),
+                json={
+                    "target_deployment_id": deployment_id,
+                    "reason": "rollback through the governed public endpoint",
+                },
+            )
+            assert rollback.status_code == 200, rollback.text
+            assert rollback.json()["rollback_from_id"] == replacement_id
+
+        async with app.state.session_factory() as session:
+            active = list(
+                (
+                    await session.scalars(
+                        select(ModelDeployment).where(
+                            ModelDeployment.stage == "production",
+                            ModelDeployment.status == "active",
+                            ModelDeployment.model_id == "ANOM-CARE-001",
+                        )
+                    )
+                ).all()
+            )
+            assert [(row.id, row.traffic_percent) for row in active] == [(deployment_id, 100)]
 
 
 @pytest.mark.asyncio

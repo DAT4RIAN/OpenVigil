@@ -35,20 +35,20 @@
 .demoNotice strong {
   display: block;
   color: var(--foreground);
-  font-size: 11px;
+  font-size: var(--font-secondary);
 }
 
 .demoNotice p {
   margin: 2px 0 0;
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   line-height: 1.45;
 }
 
 .demoNotice > span {
   color: var(--foreground-muted);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   white-space: nowrap;
 }
 
@@ -93,7 +93,7 @@
 .metricGrid small {
   overflow: hidden;
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.045em;
   text-overflow: ellipsis;
@@ -128,7 +128,7 @@
   min-width: 0;
   gap: 4px;
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.045em;
 }
@@ -146,7 +146,7 @@
   min-width: 0;
   padding: 0 7px;
   outline: 0;
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .toolbar label > select:focus-visible,
@@ -175,7 +175,7 @@
   outline: 0;
   background: transparent;
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .searchBox input::placeholder {
@@ -194,7 +194,7 @@
   background: var(--surface);
   color: var(--foreground-muted);
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 650;
   white-space: nowrap;
 }
@@ -266,7 +266,7 @@
 .detailEyebrow {
   color: var(--primary);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 7px;
+  font-size: var(--font-metadata);
   font-weight: 800;
   letter-spacing: 0.09em;
 }
@@ -281,7 +281,7 @@
 .panelHeader > small {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .calendarScroll,
@@ -319,13 +319,13 @@
 
 .dayColumn > header strong {
   color: var(--foreground);
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .dayColumn > header span {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .dayColumn > div {
@@ -379,13 +379,13 @@
 
 .cardHeader > strong {
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .cardTitle {
   min-height: 28px;
   overflow: hidden;
-  font-size: 10px;
+  font-size: var(--font-secondary);
   font-weight: 650;
   line-height: 1.42;
   text-overflow: ellipsis;
@@ -395,7 +395,7 @@
   gap: 4px;
   color: var(--foreground-muted);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .cardMeta {
@@ -410,7 +410,7 @@
   border-radius: 3px;
   background: var(--surface-strong);
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -425,7 +425,7 @@
   align-items: center;
   gap: 3px;
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .cardFooter > span[data-alert="true"] {
@@ -461,7 +461,7 @@
   border-bottom: 1px solid var(--border);
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   letter-spacing: 0.04em;
   text-align: left;
 }
@@ -470,7 +470,7 @@
   padding: 9px 11px;
   border-bottom: 1px solid var(--border);
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .tableScroll tbody tr:hover,
@@ -501,13 +501,13 @@
 
 .tableScroll td strong {
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .tableScroll td small {
   margin-top: 2px;
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .conflictCount {
@@ -548,7 +548,7 @@
 .detailHeader p {
   margin: 0;
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   line-height: 1.4;
 }
 
@@ -570,7 +570,7 @@
 .detailSchedule small,
 .readinessBlock small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.055em;
   text-transform: uppercase;
@@ -579,7 +579,7 @@
 .detailSchedule strong {
   color: var(--foreground);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-secondary);
 }
 
 .readinessBlock {
@@ -604,7 +604,7 @@
 .readinessBlock p {
   margin: 0;
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   line-height: 1.4;
 }
 
@@ -645,7 +645,7 @@
 .conflictSection > header > span,
 .resourceSection > header {
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 700;
 }
 
@@ -675,18 +675,18 @@
 .weatherMetrics strong {
   color: var(--foreground);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .weatherMetrics small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .weatherBlock p {
   margin: 7px 0 0;
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   line-height: 1.45;
 }
 
@@ -732,19 +732,19 @@
 
 .resourceSection li strong {
   color: var(--foreground);
-  font-size: 8px;
+  font-size: var(--font-secondary);
 }
 
 .resourceSection li small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   line-height: 1.4;
 }
 
 .resourceSection > p {
   margin: 0;
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .conflictSection > header {
@@ -758,7 +758,7 @@
 .conflictSection > header > strong {
   color: var(--foreground-muted);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .conflictSection li {
@@ -789,13 +789,13 @@
 .conflictSection li strong {
   color: var(--foreground-muted);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 7px;
+  font-size: var(--font-secondary);
 }
 
 .conflictSection li p {
   margin: 2px 0 0;
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   line-height: 1.4;
 }
 
@@ -805,7 +805,7 @@
   gap: 6px;
   margin: 0;
   color: var(--success);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .detailLinks {
@@ -824,7 +824,7 @@
   padding: 11px;
   background: var(--surface);
   color: var(--primary);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 650;
 }
 

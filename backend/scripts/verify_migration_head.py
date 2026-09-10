@@ -5,7 +5,7 @@ from pathlib import Path
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
-EXPECTED_HEAD = "0026_schema_contract_alignment"
+EXPECTED_HEAD = "0028_read_audit_pipeline"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = REPOSITORY_ROOT / "backend"
 DECLARATION_FILES = (

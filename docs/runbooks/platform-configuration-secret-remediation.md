@@ -20,12 +20,12 @@ historical `platform_configuration_revisions` or `ingest_sources.credential_secr
 
 1. Stop configuration writes and preserve database audit logs. Do not copy the suspect JSON into a
    ticket, terminal transcript, chat, or application log.
-2. Apply Alembic through `0026_schema_contract_alignment` and start one API instance. Confirm
+2. Apply Alembic through `0028_read_audit_pipeline` and start one API instance. Confirm
    the redacted status reports `attention_required` without returning a value.
 3. As a globally authorized operations manager, read `/api/v1/platform/configurations` and record
    only the security audit ID, configuration key, revision, finding categories, and fingerprint.
 4. In the owning external Secret Manager, revoke the suspected credential, create a replacement,
-   and update every dependent system. The replacement value must never enter WindOps JSON.
+   and update every dependent system. The replacement value must never enter OpenVigil JSON.
 5. Confirm the rotation through the authenticated production Worker gateway using
    `POST /api/backend/platform/configuration-security-audits/{audit_id}/rotation-confirmation`
    (or the data-source equivalent

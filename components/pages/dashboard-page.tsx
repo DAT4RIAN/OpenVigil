@@ -13,15 +13,20 @@ import {
   Radio,
   ShieldCheck,
   TowerControl,
-  Wind,
   Zap,
 } from "lucide-react";
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import Link from "next/link";
-import { Card, CardHeader, Progress, Button } from "@/components/ui/primitives";
+import { Card, CardHeader, EmptyState, Progress, Button } from "@/components/ui/primitives";
+import {
+  PartialFailureNotice,
+  QueryStateNotice,
+  RuntimeHealthBadge,
+  type PartialQueryFailure,
+} from "@/components/ui/query-state";
 import { MetricCard } from "@/components/data-display/metric-card";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { TimeSeriesChart, type TimeSeriesPoint } from "@/components/charts/time-series-chart";
@@ -50,7 +55,8 @@ import {
 import { agentDisplayName } from "@/lib/agent-control-meta";
 import { localizedMissionTitle, localizedSeverityLabel } from "@/lib/ui-localization";
 import { apiGet } from "@/lib/api-client";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
+import { deriveQueryViewState, mergeRuntimeHealth, queryRuntimeHealth } from "@/lib/query-state";
 
 const missionLabels: Record<Mission["status"], string> = {
   detected: "已发现",
@@ -166,6 +172,81 @@ function formatTime(timestamp: string) {
   });
 }
 
+function formatDurationMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `${hours} 小时 ${remainder} 分钟` : `${hours} 小时`;
+}
+
+type DashboardIncidentStripProps = {
+  readonly stable: boolean;
+  readonly priority: "P1" | "P2" | "稳定";
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly context: string;
+  readonly aiStatus: string;
+  readonly healthValue: string;
+  readonly anomalyValue: string;
+  readonly freshness: string;
+  readonly actionHref: string;
+  readonly actionLabel: string;
+};
+
+function DashboardIncidentStrip({
+  stable,
+  priority,
+  eyebrow,
+  title,
+  context,
+  aiStatus,
+  healthValue,
+  anomalyValue,
+  freshness,
+  actionHref,
+  actionLabel,
+}: DashboardIncidentStripProps) {
+  return (
+    <section
+      className={`command-strip${stable ? " command-strip--stable" : ""}`}
+      aria-label={stable ? "当前稳定状态" : "当前最高优先级事件"}
+      aria-live="polite"
+    >
+      <span className="incident-index" data-stable={stable || undefined}>
+        {stable ? <CheckCircle2 size={18} aria-hidden="true" /> : priority}
+      </span>
+      <span className="incident-copy">
+        <small>{eyebrow}</small>
+        <a className="incident-title-link" href={actionHref}>
+          {title}
+        </a>
+        <span>{context}</span>
+      </span>
+      <dl className="incident-signals">
+        <div>
+          <dt>公开 AI 状态</dt>
+          <dd>{aiStatus}</dd>
+        </div>
+        <div>
+          <dt>健康值</dt>
+          <dd>{healthValue}</dd>
+        </div>
+        <div>
+          <dt>异常强度</dt>
+          <dd>{anomalyValue}</dd>
+        </div>
+        <div>
+          <dt>数据时间</dt>
+          <dd>{freshness}</dd>
+        </div>
+      </dl>
+      <a className="incident-link" href={actionHref}>
+        {actionLabel} <ArrowRight size={15} aria-hidden="true" />
+      </a>
+    </section>
+  );
+}
+
 type ProductionDashboardEnvelope = {
   readonly data: {
     readonly snapshot_at: string;
@@ -249,10 +330,81 @@ function ProductionDashboardPage() {
     queryFn: ({ signal }) => apiGet<ProductionDashboardEnvelope>("/api/backend/dashboard", signal),
     refetchInterval: 15_000,
     retry: false,
+    staleTime: 45_000,
   });
   const snapshot = dashboardQuery.data?.data;
-  const fleet = snapshot?.fleet;
-  const statusCounts = fleet?.status_counts ?? {};
+  const dashboardState = deriveQueryViewState({
+    data: snapshot,
+    dataUpdatedAt: dashboardQuery.dataUpdatedAt,
+    error: dashboardQuery.error,
+    isError: dashboardQuery.isError,
+    isFetching: dashboardQuery.isFetching,
+    isPending: dashboardQuery.isPending,
+    isStale: dashboardQuery.isStale,
+    isEmpty: (data) =>
+      data.farm === null &&
+      data.fleet.asset_count === 0 &&
+      data.power_trend.length === 0 &&
+      data.alarms.length === 0 &&
+      data.missions.length === 0 &&
+      data.activity.length === 0,
+    sourceUpdatedAt: snapshot ? Date.parse(snapshot.snapshot_at) : null,
+    staleAfterMs: 60_000,
+  });
+  const partialFailures: readonly PartialQueryFailure[] =
+    snapshot && dashboardState.lifecycle === "success-data" && snapshot.fleet.asset_count > 0
+      ? [
+          snapshot.fleet.average_health_score === null
+            ? {
+                module: "资产健康",
+                code: "HEALTH_SCORE_UNAVAILABLE",
+                detail: "当前快照没有可计算的平均健康度",
+                lastSuccessAt: Date.parse(snapshot.snapshot_at),
+              }
+            : null,
+          snapshot.fleet.average_availability_percent === null
+            ? {
+                module: "可利用率遥测",
+                code: "AVAILABILITY_UNAVAILABLE",
+                detail: "当前快照没有良好质量的可利用率测点",
+                lastSuccessAt: snapshot.fleet.latest_telemetry_at
+                  ? Date.parse(snapshot.fleet.latest_telemetry_at)
+                  : null,
+              }
+            : null,
+          snapshot.fleet.energy_24h_gwh === null
+            ? {
+                module: "24 小时电量",
+                code: "ENERGY_WINDOW_INCOMPLETE",
+                detail: "有效功率时间桶不足，无法形成 24 小时电量结论",
+                lastSuccessAt: snapshot.fleet.latest_telemetry_at
+                  ? Date.parse(snapshot.fleet.latest_telemetry_at)
+                  : null,
+              }
+            : null,
+          snapshot.power_trend.length === 0
+            ? {
+                module: "功率趋势",
+                code: "POWER_TREND_UNAVAILABLE",
+                detail: "当前窗口没有可绘制的良好质量功率遥测",
+                lastSuccessAt: snapshot.fleet.latest_telemetry_at
+                  ? Date.parse(snapshot.fleet.latest_telemetry_at)
+                  : null,
+              }
+            : null,
+        ].filter((failure): failure is PartialQueryFailure => failure !== null)
+      : [];
+  const pageHealth = mergeRuntimeHealth(
+    queryRuntimeHealth(dashboardState, "运营快照"),
+    partialFailures.length > 0
+      ? {
+          status: "degraded",
+          label: "Degraded",
+          detail: `${partialFailures.map((failure) => failure.module).join("、")}数据不可用`,
+          lastSuccessAt: dashboardState.lastSuccessAt,
+        }
+      : null,
+  );
   const powerChartData = useMemo<TimeSeriesPoint[]>(
     () =>
       (snapshot?.power_trend ?? []).map((point) => ({
@@ -265,32 +417,95 @@ function ProductionDashboardPage() {
       })),
     [snapshot?.power_trend],
   );
-  const assetCount = fleet?.asset_count ?? 0;
+  const farmName = snapshot?.farm?.name ?? "生产风场";
+
+  if (!snapshot) {
+    return (
+      <AppShell runtimeMode="production" activePath="/" pageHealth={pageHealth}>
+        <PageHeader
+          eyebrow="实时运行态势"
+          title="运营指挥中心"
+          description="Production · PostgreSQL/TimescaleDB 权威运营快照"
+          meta={
+            <>
+              <RuntimeHealthBadge health={pageHealth} />
+              <span className="page-meta-text">等待首个可验证快照</span>
+            </>
+          }
+        />
+        <QueryStateNotice
+          state={dashboardState}
+          target="运营指挥数据"
+          impact="功率、机组状态、告警、Mission 与 Agent 活动"
+          onRetry={() => void dashboardQuery.refetch()}
+        />
+      </AppShell>
+    );
+  }
+
+  if (dashboardState.lifecycle === "success-empty") {
+    return (
+      <AppShell runtimeMode="production" activePath="/" pageHealth={pageHealth}>
+        <PageHeader
+          eyebrow="实时运行态势"
+          title="运营指挥中心"
+          description="Production · PostgreSQL/TimescaleDB 权威运营快照"
+          meta={
+            <>
+              <RuntimeHealthBadge health={pageHealth} />
+              <span className="page-meta-text">
+                快照 {new Date(snapshot.snapshot_at).toLocaleString("zh-CN")}
+              </span>
+            </>
+          }
+        />
+        <EmptyState
+          icon={<Activity size={22} />}
+          title="当前范围内没有运营数据"
+          description="权威运营快照已成功返回空结果；这不是加载或服务错误。"
+        />
+      </AppShell>
+    );
+  }
+
+  const fleet = snapshot.fleet;
+  const statusCounts = fleet.status_counts;
+  const assetCount = fleet.asset_count;
   const runningCount = statusCounts.running ?? 0;
   const offlineCount = (statusCounts.offline ?? 0) + (statusCounts["communication-lost"] ?? 0);
   const criticalCount = statusCounts.critical ?? 0;
-  const availability = fleet?.average_availability_percent;
-  const farmName = snapshot?.farm?.name ?? "生产风场";
+  const availability = fleet.average_availability_percent;
+  const highestPriorityAlarm = snapshot.alarms.find((alarm) =>
+    ["critical", "major", "high"].includes(alarm.severity),
+  );
+  const incidentMission = highestPriorityAlarm
+    ? snapshot.missions.find((mission) => mission.turbine_id === highestPriorityAlarm.turbine_id)
+    : undefined;
+  const incidentAgeMinutes = highestPriorityAlarm
+    ? Math.max(
+        1,
+        Math.floor(
+          (Date.parse(snapshot.snapshot_at) - Date.parse(highestPriorityAlarm.triggered_at)) /
+            60_000,
+        ),
+      )
+    : 0;
 
   return (
-    <AppShell runtimeMode="production" activePath="/">
+    <AppShell runtimeMode="production" activePath="/" pageHealth={pageHealth}>
       <PageHeader
         eyebrow="实时运行态势"
         title="运营指挥中心"
-        description={`${farmName} · PostgreSQL/TimescaleDB 权威运营快照`}
+        description={`${farmName} · ${assetCount} 台资产 · PostgreSQL/TimescaleDB 权威运营快照`}
         meta={
           <>
-            <StatusBadge
-              value={dashboardQuery.isError ? "degraded" : "running"}
-              label={dashboardQuery.isError ? "生产快照不可用" : "生产数据已连接"}
-              tone={dashboardQuery.isError ? "critical" : "success"}
-              pulse={!dashboardQuery.isError}
-            />
+            <RuntimeHealthBadge health={pageHealth} />
             <span className="page-meta-text">
-              {snapshot
-                ? `快照 ${new Date(snapshot.snapshot_at).toLocaleString("zh-CN")}`
-                : "正在读取权威运营快照"}
+              快照 {new Date(snapshot.snapshot_at).toLocaleString("zh-CN")}
             </span>
+            <Link className="page-meta-text" href="/wind-farms">
+              查看风场
+            </Link>
           </>
         }
         actions={
@@ -305,80 +520,97 @@ function ProductionDashboardPage() {
         }
       />
 
-      {dashboardQuery.isError ? (
-        <Card className="view-empty-state" role="alert">
-          生产首页已失败关闭，不会显示演示风场、固定告警或 WT-023 故事数据。
-        </Card>
-      ) : null}
+      <QueryStateNotice
+        state={dashboardState}
+        target="运营指挥数据"
+        impact="功率、机组状态、告警、Mission 与 Agent 活动"
+        onRetry={() => void dashboardQuery.refetch()}
+      />
+
+      <PartialFailureNotice
+        target="运营快照"
+        failures={partialFailures}
+        onRetry={() => void dashboardQuery.refetch()}
+      />
+
+      <DashboardIncidentStrip
+        stable={!highestPriorityAlarm}
+        priority={highestPriorityAlarm?.severity === "critical" ? "P1" : "P2"}
+        eyebrow={highestPriorityAlarm ? "最高优先级 · 需要处置" : "当前稳定 · 无高优事件"}
+        title={highestPriorityAlarm?.title ?? "当前没有需要立即处置的事件"}
+        context={
+          highestPriorityAlarm
+            ? `${highestPriorityAlarm.turbine_id} · ${highestPriorityAlarm.code} · 已持续 ${formatDurationMinutes(incidentAgeMinutes)}`
+            : `截至 ${new Date(snapshot.snapshot_at).toLocaleString("zh-CN")}，权威快照未返回高优先级告警`
+        }
+        aiStatus={
+          incidentMission ? productionMissionLabel(incidentMission.status) : "尚未关联 Mission"
+        }
+        healthValue="—"
+        anomalyValue="—"
+        freshness={new Date(snapshot.snapshot_at).toLocaleTimeString("zh-CN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        })}
+        actionHref={incidentMission ? `/missions/${incidentMission.id}` : "/alarms"}
+        actionLabel={incidentMission ? "进入 Mission" : "查看全部告警"}
+      />
 
       <section className="metrics-grid" aria-label="生产运行指标">
         <MetricCard
           label="当前功率"
-          value={fleet ? fleet.current_power_mw.toFixed(1) : "—"}
-          unit={fleet ? "MW" : undefined}
-          detail={`遥测覆盖 ${fleet?.telemetry_asset_count ?? 0}/${assetCount} 台`}
+          value={fleet.current_power_mw.toFixed(1)}
+          unit="MW"
+          detail={`遥测覆盖 ${fleet.telemetry_asset_count}/${assetCount} 台`}
           icon={<Zap size={15} />}
           tone="info"
         />
         <MetricCard
           label="近 24 小时电量"
-          value={fleet?.energy_24h_gwh == null ? "—" : fleet.energy_24h_gwh.toFixed(3)}
-          unit={fleet?.energy_24h_gwh == null ? undefined : "GWh"}
-          detail={`时间桶覆盖 ${fleet?.energy_coverage_percent ?? 0}%`}
+          value={fleet.energy_24h_gwh == null ? "—" : fleet.energy_24h_gwh.toFixed(3)}
+          unit={fleet.energy_24h_gwh == null ? undefined : "GWh"}
+          detail={
+            fleet.energy_24h_gwh == null
+              ? "有效功率时间桶不足，未用零值替代"
+              : `时间桶覆盖 ${fleet.energy_coverage_percent}%`
+          }
           icon={<Activity size={15} />}
         />
         <MetricCard
           label="运行机组"
-          value={`${fleet?.operating_count ?? 0} / ${assetCount}`}
+          value={`${fleet.operating_count} / ${assetCount}`}
           detail={`${runningCount} 台正常运行`}
           icon={<TowerControl size={15} />}
           tone="success"
         />
         <MetricCard
-          label="离线机组"
-          value={String(offlineCount)}
-          detail="含通信中断资产"
-          icon={<Radio size={15} />}
-          tone={offlineCount ? "warning" : "success"}
-        />
-        <MetricCard
-          label="故障机组"
-          value={String(criticalCount)}
-          detail="状态为 CRITICAL"
-          icon={<AlarmTriangle size={15} />}
-          tone={criticalCount ? "critical" : "success"}
-        />
-        <MetricCard
           label="平均健康度"
-          value={fleet?.average_health_score == null ? "—" : fleet.average_health_score.toFixed(1)}
-          unit={fleet?.average_health_score == null ? undefined : "%"}
-          detail="来自资产健康台账"
+          value={fleet.average_health_score == null ? "—" : fleet.average_health_score.toFixed(1)}
+          unit={fleet.average_health_score == null ? undefined : "%"}
+          detail={
+            fleet.average_health_score == null ? "健康模块未返回可计算值" : "来自资产健康台账"
+          }
           icon={<CircleGauge size={15} />}
         />
         <MetricCard
           label="活跃告警"
-          value={String(fleet?.open_alarm_count ?? 0)}
-          detail={`${fleet?.high_priority_alarm_count ?? 0} 条高优先级`}
+          value={String(fleet.open_alarm_count)}
+          detail={`${fleet.high_priority_alarm_count} 条高优先级`}
           icon={<AlarmTriangle size={15} />}
-          tone={(fleet?.high_priority_alarm_count ?? 0) ? "critical" : "success"}
+          tone={fleet.high_priority_alarm_count ? "critical" : "success"}
         />
         <MetricCard
-          label="AI Mission"
-          value={String(fleet?.active_mission_count ?? 0)}
-          detail={`${snapshot?.agents.active_definition_count ?? 0} 个受治理 Agent 启用`}
+          label="活跃 Missions"
+          value={String(fleet.active_mission_count)}
+          detail={`${snapshot.agents.active_definition_count} 个受治理 Agent 启用`}
           icon={<Bot size={15} />}
           tone="info"
         />
-        <MetricCard
-          label="总装机容量"
-          value={snapshot?.farm ? snapshot.farm.capacity_mw.toFixed(1) : "—"}
-          unit={snapshot?.farm ? "MW" : undefined}
-          detail={snapshot?.farm?.id ?? "场站未配置"}
-          icon={<Wind size={15} />}
-        />
       </section>
 
-      <section className="dashboard-grid">
+      <section className="dashboard-main-grid">
         <Card className="panel panel--power">
           <CardHeader
             eyebrow="SCADA · 24H"
@@ -397,31 +629,10 @@ function ProductionDashboardPage() {
           )}
         </Card>
 
-        <Card className="panel panel--fleet">
-          <CardHeader
-            eyebrow="全场健康"
-            title="机组状态分布"
-            description="来自资产主数据当前状态"
-          />
-          <div className="fleet-summary">
-            {Object.entries(statusCounts).map(([status, count]) => (
-              <div key={status}>
-                <span>{status}</span>
-                <strong>{count}</strong>
-              </div>
-            ))}
-          </div>
-          <div className="fleet-foot">
-            <span>平均可利用率</span>
-            <strong>{availability == null ? "未接入" : `${availability.toFixed(1)}%`}</strong>
-            {availability == null ? null : <Progress value={availability} tone="success" />}
-          </div>
-        </Card>
-
-        <Card className="panel panel--alerts">
+        <Card className="panel panel--priority">
           <CardHeader
             eyebrow="需要关注"
-            title="高优先级告警"
+            title="优先处置队列"
             description="按严重性和触发时间排序"
             action={
               <Link className="text-link" href="/alarms">
@@ -430,7 +641,7 @@ function ProductionDashboardPage() {
             }
           />
           <div className="compact-list">
-            {(snapshot?.alarms ?? []).map((alarm) => (
+            {snapshot.alarms.map((alarm) => (
               <Link className="compact-row alarm-row" href="/alarms" key={alarm.id}>
                 <span className={`severity-rail severity-rail--${alarm.severity}`} />
                 <span className="compact-row__main">
@@ -438,19 +649,43 @@ function ProductionDashboardPage() {
                   <small>
                     <span className="mono">{alarm.turbine_id}</span> · {alarm.code}
                   </small>
+                  <small>
+                    负责人：
+                    {snapshot.missions.some((mission) => mission.turbine_id === alarm.turbine_id)
+                      ? "关联 Mission 团队"
+                      : "值班调度"}
+                  </small>
                 </span>
                 <span className="compact-row__meta">
                   <StatusBadge value={alarm.severity} compact />
-                  <small>{formatTime(alarm.triggered_at)}</small>
+                  <small>
+                    {formatDurationMinutes(
+                      Math.max(
+                        1,
+                        Math.floor(
+                          (Date.parse(snapshot.snapshot_at) - Date.parse(alarm.triggered_at)) /
+                            60_000,
+                        ),
+                      ),
+                    )}
+                  </small>
                 </span>
               </Link>
             ))}
-            {!snapshot?.alarms.length ? (
+            {!snapshot.alarms.length ? (
               <div className="view-empty-state">没有未关闭告警。</div>
             ) : null}
           </div>
+          <div className="priority-fleet-context">
+            <span>
+              运行 {runningCount} · 离线 {offlineCount} · 故障 {criticalCount}
+            </span>
+            <span>可利用率 {availability == null ? "—" : `${availability.toFixed(1)}%`}</span>
+          </div>
         </Card>
+      </section>
 
+      <section className="dashboard-lower-grid">
         <Card className="panel panel--missions">
           <CardHeader
             eyebrow="多 Agent 协作"
@@ -463,9 +698,12 @@ function ProductionDashboardPage() {
             }
           />
           <div className="mission-list">
-            {(snapshot?.missions ?? []).map((mission) => (
+            {snapshot.missions.map((mission) => (
               <Link className="mission-list-row" href={`/missions/${mission.id}`} key={mission.id}>
-                <span>
+                <span className="mission-priority" data-risk="high">
+                  M
+                </span>
+                <span className="mission-list-row__copy">
                   <strong>{mission.title}</strong>
                   <small>
                     {mission.turbine_id} · REV {mission.revision}
@@ -478,7 +716,7 @@ function ProductionDashboardPage() {
                 />
               </Link>
             ))}
-            {!snapshot?.missions.length ? (
+            {!snapshot.missions.length ? (
               <div className="view-empty-state">没有活跃 Mission。</div>
             ) : null}
           </div>
@@ -490,13 +728,13 @@ function ProductionDashboardPage() {
             title="最近领域事件"
             description="使用持久化 sequence 作为可重放游标"
           />
-          <div className="activity-timeline">
-            {(snapshot?.activity ?? []).map((event) => (
-              <div className="activity-item" key={event.sequence}>
-                <span className="activity-dot activity-dot--system">
+          <div className="activity-stream">
+            {snapshot.activity.map((event) => (
+              <div className="activity-event" key={event.sequence}>
+                <span className="activity-event__icon">
                   <Bot size={12} />
                 </span>
-                <span>
+                <span className="activity-event__copy">
                   <strong>{event.event_type}</strong>
                   <small>
                     {event.aggregate_type} · {event.aggregate_id} · {event.summary}
@@ -505,7 +743,7 @@ function ProductionDashboardPage() {
                 <time>{formatTime(event.occurred_at)}</time>
               </div>
             ))}
-            {!snapshot?.activity.length ? (
+            {!snapshot.activity.length ? (
               <div className="view-empty-state">尚无领域事件。</div>
             ) : null}
           </div>
@@ -513,18 +751,12 @@ function ProductionDashboardPage() {
 
         <Card className="panel panel--window">
           <CardHeader
-            eyebrow="Agent 运行"
-            title="近 24 小时执行"
-            description="持久化 AgentExecution 账本"
+            eyebrow="海上作业窗口"
+            title="下一可用作业窗口"
+            description="生产运营快照的天气与资源边界"
           />
-          <div className="resource-check">
-            <ShieldCheck size={14} />
-            <span>
-              <strong>{snapshot?.agents.execution_count_24h ?? 0} 次执行</strong>
-              <small>
-                成功 {snapshot?.agents.succeeded_24h ?? 0} · 失败 {snapshot?.agents.failed_24h ?? 0}
-              </small>
-            </span>
+          <div className="view-empty-state">
+            当前运营快照未提供作业窗口；请进入运行日历核对权威天气与资源结果。
           </div>
         </Card>
       </section>
@@ -554,7 +786,17 @@ function DemoDashboardPage() {
   const faulted = displayTurbines.filter((turbine) => turbine.status === "critical").length;
   const activeAgents = workflowKpis.activeAgentCount;
   const criticalAlarms = displayAlarms
-    .filter((alarm) => alarm.severity === "critical" || alarm.severity === "major")
+    .filter(
+      (alarm) =>
+        alarm.status !== "resolved" &&
+        (alarm.severity === "critical" || alarm.severity === "major"),
+    )
+    .sort(
+      (left, right) =>
+        (left.severity === "critical" ? 0 : 1) - (right.severity === "critical" ? 0 : 1) ||
+        right.durationMinutes - left.durationMinutes ||
+        left.id.localeCompare(right.id),
+    )
     .slice(0, 4);
   const activeMissions = displayMissions
     .filter((mission) => mission.status !== "completed")
@@ -585,11 +827,18 @@ function DemoDashboardPage() {
     },
     { label: "离线", value: offline, tone: "offline" },
   ];
+  const highestPriorityAlarm = criticalAlarms[0];
+  const incidentTurbine = highestPriorityAlarm
+    ? displayTurbines.find((turbine) => turbine.id === highestPriorityAlarm.turbineId)
+    : undefined;
+  const incidentMission = highestPriorityAlarm?.missionId
+    ? displayMissions.find((mission) => mission.id === highestPriorityAlarm.missionId)
+    : undefined;
 
   const downloadDailyReport = () => {
     const unresolvedAlarms = displayAlarms.filter((alarm) => alarm.status !== "resolved").length;
     const reportRows = [
-      ["WindOps 华东海上风电场运行日报", "2026-08-13", "白班"],
+      ["OpenVigil 华东海上风电场运行日报", "2026-08-13", "白班"],
       ["指标", "数值", "单位"],
       ["当前功率", windFarm.currentPowerMW.toFixed(1), "MW"],
       ["今日发电量", windFarm.todayGenerationGWh.toFixed(2), "GWh"],
@@ -605,7 +854,7 @@ function DemoDashboardPage() {
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = "windops-daily-report-2026-08-13.csv";
+    link.download = "openvigil-daily-report-2026-08-13.csv";
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -620,6 +869,9 @@ function DemoDashboardPage() {
           <>
             <StatusBadge value="running" label="全场数据正常" tone="success" pulse />
             <span className="page-meta-text">2026年8月13日 星期四 · 白班</span>
+            <Link className="page-meta-text" href="/wind-farms">
+              查看风场
+            </Link>
           </>
         }
         actions={
@@ -639,50 +891,27 @@ function DemoDashboardPage() {
         }
       />
 
-      <section className="command-strip" aria-label="当前重点事件">
-        <div className="command-strip__status">
-          <span className="command-strip__status-icon">
-            <Wind size={20} />
-          </span>
-          <span>
-            <small>全场状态</small>
-            <strong>全场运行总体稳定</strong>
-          </span>
-          <span className="command-strip__reading">
-            <strong>{operating} / 64</strong>
-            <small>机组并网运行</small>
-          </span>
-        </div>
-        <div className="command-strip__incident">
-          <span className="incident-index">P1</span>
-          <span className="incident-copy">
-            <small>
-              {workflow.missionStatus === "completed"
-                ? "闭环已完成 · 结果已验证"
-                : "AI 正在处理 · 02:14 触发"}
-            </small>
-            <strong>WT-023 主轴承振动异常</strong>
-            <span>
-              {workflow.missionStatus === "completed"
-                ? `健康度 ${workflow.mainBearingHealthScore} · ${workflow.knowledgeCaseId} 已沉淀`
-                : "振动 +27% · 温度 +8.4°C · 退化概率 87%"}
-            </span>
-          </span>
-          <span className="incident-progress">
-            <span>
-              <small>{missionLabels[workflow.missionStatus]}</small>
-              <strong>{workflow.missionProgress}%</strong>
-            </span>
-            <Progress
-              value={workflow.missionProgress}
-              tone={workflow.missionStatus === "completed" ? "success" : "warning"}
-            />
-          </span>
-          <a className="incident-link" href={`/missions/${featuredMission.id}`}>
-            进入 Mission <ArrowRight size={14} />
-          </a>
-        </div>
-      </section>
+      <DashboardIncidentStrip
+        stable={!highestPriorityAlarm}
+        priority={highestPriorityAlarm?.severity === "critical" ? "P1" : "P2"}
+        eyebrow={highestPriorityAlarm ? "最高优先级 · 需要处置" : "当前稳定 · 无高优事件"}
+        title={highestPriorityAlarm?.title ?? "当前没有需要立即处置的事件"}
+        context={
+          highestPriorityAlarm
+            ? `${highestPriorityAlarm.turbineId} · ${highestPriorityAlarm.code} · 已持续 ${formatDurationMinutes(Math.max(1, Math.round(highestPriorityAlarm.durationMinutes)))}`
+            : `截至 ${new Date(windFarm.lastUpdatedAt).toLocaleString("zh-CN")}，当前范围没有高优先级告警`
+        }
+        aiStatus={incidentMission ? missionLabels[incidentMission.status] : "尚未关联 Mission"}
+        healthValue={incidentTurbine ? `${incidentTurbine.healthScore.toFixed(1)}%` : "—"}
+        anomalyValue={
+          highestPriorityAlarm?.currentValue != null && highestPriorityAlarm.unit
+            ? `${highestPriorityAlarm.currentValue.toFixed(2)} ${highestPriorityAlarm.unit}`
+            : "—"
+        }
+        freshness={formatTime(windFarm.lastUpdatedAt)}
+        actionHref={incidentMission ? `/missions/${incidentMission.id}` : "/alarms"}
+        actionLabel={incidentMission ? "进入 Mission" : "查看全部告警"}
+      />
 
       <section className="metrics-grid" aria-label="关键运行指标">
         <MetricCard
@@ -695,7 +924,7 @@ function DemoDashboardPage() {
           tone="info"
         />
         <MetricCard
-          label="今日发电量"
+          label="24h 电量"
           value={windFarm.todayGenerationGWh.toFixed(2)}
           unit="GWh"
           change={2.1}
@@ -708,20 +937,6 @@ function DemoDashboardPage() {
           detail={`${running} 台正常 · ${displayTurbines.length - operating - offline} 台维护`}
           icon={<TowerControl size={15} />}
           tone="success"
-        />
-        <MetricCard
-          label="离线机组"
-          value={String(offline)}
-          detail="含通信中断机组"
-          icon={<Radio size={15} />}
-          tone={offline > 0 ? "warning" : "success"}
-        />
-        <MetricCard
-          label="故障机组"
-          value={String(faulted)}
-          detail="状态为 CRITICAL"
-          icon={<AlarmTriangle size={15} />}
-          tone={faulted > 0 ? "critical" : "success"}
         />
         <MetricCard
           label="平均健康度"
@@ -740,22 +955,15 @@ function DemoDashboardPage() {
           tone="critical"
         />
         <MetricCard
-          label="AI Mission"
+          label="活跃 Missions"
           value={String(workflowKpis.activeMissionCount)}
           detail={`${activeAgents} 个 Agent 活跃`}
           icon={<Bot size={15} />}
           tone="info"
         />
-        <MetricCard
-          label="总装机容量"
-          value={String(windFarm.totalCapacityMW)}
-          unit="MW"
-          detail="GW165-6.0MW · 64 台"
-          icon={<Wind size={15} />}
-        />
       </section>
 
-      <section className="dashboard-grid">
+      <section className="dashboard-main-grid">
         <Card className="panel panel--power">
           <CardHeader
             eyebrow={`SCADA · ${powerRange}`}
@@ -805,50 +1013,10 @@ function DemoDashboardPage() {
           />
         </Card>
 
-        <Card className="panel panel--fleet">
-          <CardHeader
-            eyebrow="全场健康"
-            title="机组状态分布"
-            description="基于当前在线快照"
-            action={
-              <a className="text-link" href="/wind-farms">
-                查看全部 <ArrowRight size={12} />
-              </a>
-            }
-          />
-          <div className="fleet-donut-wrap">
-            <div
-              className="fleet-donut"
-              style={{ "--running": `${(running / 64) * 360}deg` } as CSSProperties}
-            >
-              <span>
-                <strong>{running}</strong>
-                <small>运行机组</small>
-              </span>
-            </div>
-            <div className="fleet-summary">
-              {statusSummary.map((item) => (
-                <div key={item.label}>
-                  <span>
-                    <i className={`summary-dot summary-dot--${item.tone}`} />
-                    {item.label}
-                  </span>
-                  <strong>{item.value}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="fleet-foot">
-            <span>场站可利用率</span>
-            <strong>96.8%</strong>
-            <Progress value={96.8} tone="success" />
-          </div>
-        </Card>
-
-        <Card className="panel panel--alerts">
+        <Card className="panel panel--priority">
           <CardHeader
             eyebrow="需要关注"
-            title="高优先级告警"
+            title="优先处置队列"
             description="按风险与持续时间排序"
             action={
               <a className="text-link" href="/alarms">
@@ -865,6 +1033,9 @@ function DemoDashboardPage() {
                   <small>
                     <span className="mono">{alarm.turbineId}</span> · {alarm.code}
                   </small>
+                  <small>
+                    负责人：{alarm.assignee ?? (alarm.missionId ? "关联 Mission 团队" : "值班调度")}
+                  </small>
                 </span>
                 <span className="compact-row__meta">
                   <StatusBadge value={alarm.severity} compact />
@@ -873,8 +1044,14 @@ function DemoDashboardPage() {
               </a>
             ))}
           </div>
+          <div className="priority-fleet-context">
+            <span>{statusSummary.map((item) => `${item.label} ${item.value}`).join(" · ")}</span>
+            <span>可利用率 96.8%</span>
+          </div>
         </Card>
+      </section>
 
+      <section className="dashboard-lower-grid">
         <Card className="panel panel--missions">
           <CardHeader
             eyebrow="多 Agent 协作"
@@ -1024,6 +1201,6 @@ function DemoDashboardPage() {
   );
 }
 
-export function DashboardPage({ runtimeMode }: { readonly runtimeMode: WindOpsRuntimeMode }) {
+export function DashboardPage({ runtimeMode }: { readonly runtimeMode: OpenVigilRuntimeMode }) {
   return runtimeMode === "production" ? <ProductionDashboardPage /> : <DemoDashboardPage />;
 }

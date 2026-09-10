@@ -25,10 +25,10 @@ const makeAgent = (definition: AgentDefinition): Agent => ({
   model:
     definition.model ??
     (definition.layer === "review"
-      ? "WindOps-Review-14B"
+      ? "OpenVigil-Review-14B"
       : definition.layer === "execution"
-        ? "WindOps-Executor-14B"
-        : "WindOps-Reasoner-32B"),
+        ? "OpenVigil-Executor-14B"
+        : "OpenVigil-Reasoner-32B"),
   promptVersion: definition.promptVersion ?? "2026.08.3",
   lastActiveAt: definition.lastActiveAt ?? "2026-08-13T10:29:42+08:00",
 });
@@ -181,14 +181,14 @@ export const agents: readonly Agent[] = [
     name: "Predictive Maintenance Agent",
     shortName: "Predictive Maintenance",
     layer: "decision",
-    role: "健康评分、失效概率与 RUL 预测",
-    description: "运行健康退化模型并给出未来 30 天风险和剩余寿命区间。",
+    role: "健康、异常与维护优先级评估",
+    description: "汇总健康评分、异常趋势、告警和维护上下文，给出可追溯的处置优先级。",
     status: "working",
-    currentTask: "更新 WT-023 主轴承 RUL",
+    currentTask: "更新 WT-023 主轴承状态证据",
     currentMissionId: "MISSION-2026-0823",
     queueDepth: 5,
-    skills: ["survival analysis", "RUL estimation", "health scoring"],
-    tools: ["predict_rul", "calculate_health_score", "query_maintenance_history"],
+    skills: ["condition assessment", "evidence ranking", "health scoring"],
+    tools: ["calculate_health_score", "query_alarm_history", "query_maintenance_history"],
     knowledgeSourceIds: ["KB-MB-PROC-004", "KB-SCADA-REPORT-023"],
     metrics: {
       successRate: 93.9,

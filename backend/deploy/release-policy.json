@@ -9,15 +9,32 @@
     "windops-api",
     "windops-worker",
     "windops-outbox-relay",
+    "windops-read-audit-worker",
     "windops-migrate-release",
-    "windops-backup"
+    "windops-backup",
+    "windops-read-audit-maintenance",
+    "windops-care-full-scale"
   ],
   "required_entrypoints": [
     "windops-api",
     "dramatiq",
     "windops-outbox-relay",
+    "windops-read-audit-worker",
+    "windops-read-audit-maintenance",
     "alembic",
     "windops-backup",
-    "windops-restore"
+    "windops-restore",
+    "windops-care-contract",
+    "windops-care-quality",
+    "windops-care-score",
+    "windops-care-replay-contract",
+    "windops-care-anomaly-contract",
+    "windops-care-pipeline",
+    "windops-care-minimal-import",
+    "windops-care-offline-evaluate",
+    "windops-care-full-scale",
+    "windops-care-dependency-closure",
+    "windops-care-workload-smoke",
+    "windops-care-fullscale-acceptance"
   ]
 }

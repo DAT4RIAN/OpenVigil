@@ -60,8 +60,8 @@ export function TimeSeriesChart({
 
   useEffect(() => {
     const handleTheme = () => setThemeRevision((value) => value + 1);
-    window.addEventListener("windops-theme-change", handleTheme);
-    return () => window.removeEventListener("windops-theme-change", handleTheme);
+    window.addEventListener("openvigil-theme-change", handleTheme);
+    return () => window.removeEventListener("openvigil-theme-change", handleTheme);
   }, []);
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export function TimeSeriesChart({
               data: [primaryName, secondaryName ?? "对比值"],
               right: 10,
               top: 5,
-              textStyle: { color: text, fontSize: 9 },
+              textStyle: { color: text, fontSize: 12 },
               itemWidth: 12,
               itemHeight: 3,
             },
@@ -105,7 +105,7 @@ export function TimeSeriesChart({
             borderColor: css("--border", "#dfe4e7"),
             borderWidth: 1,
             padding: 10,
-            textStyle: { color: css("--foreground", "#182025"), fontSize: 10 },
+            textStyle: { color: css("--foreground", "#182025"), fontSize: 12 },
             valueFormatter: (value: unknown) => `${Number(value).toFixed(1)} ${unit}`,
           },
       xAxis: {
@@ -114,7 +114,7 @@ export function TimeSeriesChart({
         data: data.map((point) => point.timestamp),
         axisLine: { lineStyle: { color: grid } },
         axisTick: { show: false },
-        axisLabel: compact ? { show: false } : { color: text, fontSize: 9, margin: 10 },
+        axisLabel: compact ? { show: false } : { color: text, fontSize: 11, margin: 10 },
       },
       yAxis: {
         type: "value",
@@ -122,7 +122,7 @@ export function TimeSeriesChart({
         splitNumber: compact ? 2 : 4,
         axisLabel: compact
           ? { show: false }
-          : { color: text, fontSize: 9, formatter: `{value} ${unit}` },
+          : { color: text, fontSize: 11, formatter: `{value} ${unit}` },
         splitLine: { lineStyle: { color: grid, type: "dashed" } },
       },
       dataZoom: compact
@@ -156,7 +156,7 @@ export function TimeSeriesChart({
                     : {
                         formatter: `阈值 ${threshold} ${unit}`,
                         color: warning,
-                        fontSize: 9,
+                        fontSize: 11,
                         position: "insideEndTop",
                       },
                   lineStyle: { color: warning, type: "dashed", width: 1 },

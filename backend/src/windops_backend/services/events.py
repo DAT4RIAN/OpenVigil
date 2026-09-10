@@ -48,7 +48,7 @@ class EventCursorCodec:
 
     def decode(self, cursor: str) -> int:
         if not cursor.startswith("v1."):
-            raise ValueError("event cursor is not an opaque WindOps cursor")
+            raise ValueError("event cursor is not an opaque OpenVigil cursor")
         encoded = cursor[3:]
         try:
             raw = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))

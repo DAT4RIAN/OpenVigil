@@ -1,8 +1,10 @@
-# WindOps production deployment baseline
+# OpenVigil production deployment baseline
 
 This directory is a vendor-neutral Kubernetes baseline for the FastAPI API,
-Dramatiq workers, durable outbox relay, one-time Alembic migration, disruption
-budget, autoscaling, default-deny network policy, and scheduled verified backup.
+Dramatiq workers, durable outbox relay, read-audit batch/retention workers,
+one-time Alembic migration, disruption
+budget, autoscaling, default-deny network policy, scheduled verified backup, and
+a suspended, isolated CARE full-scale batch workload.
 It does not deploy PostgreSQL, Redis, MinIO, Neo4j, LiteLLM, the model serving
 platform, ingress, TLS certificates, or a secret manager; those must be managed
 production services.
@@ -14,8 +16,13 @@ digest is deliberately all zeroes and cannot build. Supply an approved,
 vulnerability-scanned `python:3.12.11-slim-trixie@sha256:<digest>` through the
 `PYTHON_BASE_IMAGE` build argument. Runtime dependencies come from the
 hash-locked `requirements.container.txt`, generated from `uv.lock`; regenerate
-and review it whenever the lock changes. The image runs as UID/GID 10001 and
-includes no test or development dependencies. `pg_dump`, `pg_restore`, and
+and review it whenever the lock changes. The exporter includes both the
+`connectors` and `benchmark` production extras. During the image build,
+`windops-care-dependency-closure` imports the complete PyArrow/scikit-learn
+runtime and executes every CARE CLI help path, then stores the verified lock
+identity in `/app/care-benchmark-dependency-closure.json`. The release image
+verifier repeats that probe and rejects any build/runtime drift. The image runs
+as UID/GID 10001 and includes no test or development dependencies. `pg_dump`, `pg_restore`, and
 `psql` are copied from the exact digest-bound PostgreSQL 16 TimescaleDB image
 and must match the production server major; a merely newer client is rejected
 because it can emit settings unknown to the older restore target. The exact
@@ -44,6 +51,23 @@ metrics token. The same immutable release ID, full Git commit SHA and approved
 image digest must be configured in the backend and recorded in the release
 evidence manifest.
 
+Keep the read-audit defaults unless an approved capacity review changes them:
+100,000 durable Redis entries, 500-row database batches, 30 hot days, 365 total
+days and three future monthly partitions. Run both `windops-read-audit-worker`
+and `windops-read-audit-maintenance`; the API deliberately fails business reads
+closed if the durable stream is unavailable or full. See
+`../../docs/runbooks/read-audit-retention.md` for outage and restore checks.
+
+Provision a second external Secret named `windops-care-runtime` for the CARE
+CronJob only. It contains exactly `WINDOPS_CARE_DATABASE_URL`,
+`WINDOPS_CARE_MINIO_ENDPOINT`, `WINDOPS_CARE_MINIO_ACCESS_KEY`,
+`WINDOPS_CARE_MINIO_SECRET_KEY`, `WINDOPS_CARE_MINIO_SECURE=true`,
+`WINDOPS_CARE_MINIO_BUCKET=windops-care-benchmarks`, and
+`WINDOPS_CARE_FORBIDDEN_BUCKETS` listing the field-evidence, knowledge, model,
+and twin buckets. The database URL must use `postgresql+asyncpg`, TLS, and a
+database role limited to CARE metadata registration. Do not copy the general
+`windops-runtime` Secret into this Secret.
+
 ### CARE benchmark object storage
 
 Provision `WINDOPS_MINIO_CARE_BUCKET` as a private, versioned bucket separate
@@ -54,6 +78,14 @@ from production field evidence. Keep the five configured prefixes under
 dedicated benchmark worker; if the bucket name is overridden, render that
 resource ARN to the exact configured bucket before applying it. Do not attach
 the policy to browser or general frontend identities.
+
+`windops-care-full-scale` uses its own ServiceAccount, Secret, read-only source
+PVC, writable encrypted workspace PVC, and egress policy. It is suspended by
+default, serialized at one Job, limited to one pod with three total attempts,
+and has a 72,000-second Job deadline. Only DNS, PostgreSQL, and MinIO egress is
+allowed. Populate `windops-care-source` with the independently approved
+`manifest.json`, `quality-contract.json`, dataset directory, and source ZIP
+before creating a release-specific Job from the CronJob template.
 
 `care-minio-cleanup-policy.json` is a separate, normally unattached break-glass
 policy for the governed cleanup worker. It cannot list, read, or delete the
@@ -85,6 +117,13 @@ or egress gateways. Label both their namespace and destination pods with:
 
 ```text
 windops.openai.com/runtime-dependency-access=true
+```
+
+The dedicated CARE PostgreSQL and MinIO endpoints instead require this label
+on both their namespace and pods:
+
+```text
+windops.openai.com/care-dependency-access=true
 ```
 
 The egress policy allows only kube-dns plus those explicitly labelled targets
@@ -128,19 +167,26 @@ The required rollout order is:
 
 1. verified backup and approved change window;
 2. `windops-runtime` secret revision and exact image digest;
-3. migration Job completion at Alembic head `0026_schema_contract_alignment`;
+3. migration Job completion at Alembic head `0028_read_audit_pipeline`;
 4. API, worker and relay rollout with all probes healthy;
-5. external release test with no skip;
-6. Sites configuration/publish and post-deploy verification;
-7. DAST, SLO alert exercise and evidence retention.
+5. built-image CARE checkpoint/resume smoke and a protected full-scale CARE Job;
+6. external release test with no skip;
+7. Sites configuration/publish and post-deploy verification;
+8. DAST, SLO alert exercise and evidence retention.
 
 The protected GitHub `release-candidate` workflow performs the build, registry
 push, GitHub provenance attestation, keyless signing, Trivy blocking scan, SPDX
-SBOM attestation, image structure/entrypoint/lock verification, hardened
-migration and health/readiness smoke, exact-digest manifest render, non-skipped
-isolated dependency acceptance and verified backup subset. It uploads the
-commit-to-image-to-manifest-to-environment chain as a retained artifact. Missing
-protected configuration, prior CI checks, scan/signature evidence or any skipped
+SBOM attestation, image structure/entrypoint/lock verification, production-mode
+migration and PostgreSQL/Redis/MinIO/Neo4j readiness from the built image,
+exact-digest manifest render, non-skipped isolated dependency acceptance and
+verified backup subset. The same built image also executes the CARE Parquet
+checkpoint/resume/idempotency smoke; an independently reviewed full-scale CARE
+evidence document must bind the 95-event/36-fold run and scoped-storage denial
+proofs to that exact digest. It combines those reports with the independently reviewed
+migration rollback, DR, DAST, accessibility/visual, SLO and Sites post-deploy
+bundle only after checking the protected archive digest. Missing
+protected configuration, any of the six required prior CI checks (including the
+main-only `care-postgres-contract`), scan/signature evidence or any skipped
 external test fails the workflow; repository placeholders are never release
 inputs.
 
@@ -150,7 +196,9 @@ Collect every report under one evidence directory and create
 go/no-go check is:
 
 ```text
-windops-release-gate --evidence-dir <release-evidence-directory>
+windops-release-gate \
+  --evidence-dir <release-evidence-directory> \
+  --qualification-output <release-evidence-directory>/release-qualification.json
 ```
 
 It fails if any of the image scan, SBOM, signature, rendered deployment policy,
@@ -160,13 +208,19 @@ to the exact release identity, cover all gate-specific `REQUIRED_GATE_CHECKS`, a
 reference non-empty SHA-256-addressed raw artifacts under the same evidence
 directory. The verifier also rejects duplicate gates/checks/artifacts, undeclared
 references, path traversal, symlinks, empty/tampered evidence and the non-deployable
-image digest placeholder. Direct tool output such as `deployment-policy.json` is a
+image digest placeholder, cross-candidate `evidence_set_id`, stale reports and
+evidence spanning more than the fixed release window. Direct tool output such as
+`deployment-policy.json` is a
 raw artifact; wrap it in the standardized gate summary instead of listing it as
-the manifest report itself.
+the manifest report itself. `windops-release-evidence record` and `assemble`
+create the v2 gate reports and manifest but never a qualified conclusion; only the
+final verifier can create `release-qualification.json`, and it refuses to overwrite
+an existing result.
 
-Before Sites promotion, configure `WINDOPS_BACKEND_EXPECTED_RELEASE_ID` and
-`WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST` to the values exposed by the approved
-backend deployment. The Worker verifies `/readyz` and every proxied response;
+Before Sites promotion, configure `WINDOPS_BACKEND_EXPECTED_RELEASE_ID`,
+`WINDOPS_BACKEND_EXPECTED_COMMIT_SHA`, and `WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST`
+to the values exposed by the approved backend deployment. The Worker verifies the
+complete release/commit/image identity tuple on `/readyz` and every proxied response;
 missing or mismatched release identity fails closed with HTTP 503.
 
 The API has three baseline replicas, zero-unavailable rolling updates, a

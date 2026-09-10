@@ -37,7 +37,7 @@ import {
   type DiagnosisStatus,
 } from "@/lib/diagnosis-data";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 import type { RiskLevel } from "@/lib/types";
 
 import styles from "./diagnosis-center-page.module.css";
@@ -230,7 +230,7 @@ const sourceLabels: Readonly<Record<string, string>> = {
 
 const initialRecords = sortDiagnosisRecords(diagnosisRecords, "priority-desc");
 
-export function DiagnosisCenterPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMode }) {
+export function DiagnosisCenterPage({ runtimeMode }: { runtimeMode: OpenVigilRuntimeMode }) {
   const workflow = useDemoWorkflow();
   const isProduction = runtimeMode === "production";
   const [selectedId, setSelectedId] = useState("WT-023");
@@ -806,7 +806,7 @@ export function DiagnosisCenterPage({ runtimeMode }: { runtimeMode: WindOpsRunti
                 </div>
                 <h3>{selected.headline}</h3>
                 <p>
-                  主候选：{topCandidate.faultMode} · 概率 {topCandidate.probabilityPercent}% ·
+                  主候选：{topCandidate.faultMode} · 证据支持 {topCandidate.supportScorePercent}% ·
                   结论置信度 {selected.overallConfidencePercent}%
                 </p>
               </div>
@@ -952,12 +952,12 @@ export function DiagnosisCenterPage({ runtimeMode }: { runtimeMode: WindOpsRunti
                           <span>{candidate.subsystem}</span>
                         </div>
                         <div className={styles.probability}>
-                          <strong>{candidate.probabilityPercent}%</strong>
+                          <strong>{candidate.supportScorePercent}%</strong>
                           <small>置信 {candidate.confidencePercent}%</small>
                         </div>
                       </div>
                       <div className={styles.probabilityBar} aria-hidden="true">
-                        <i style={{ width: `${candidate.probabilityPercent}%` }} />
+                        <i style={{ width: `${candidate.supportScorePercent}%` }} />
                       </div>
                       <div className={styles.evidenceColumns}>
                         <div>

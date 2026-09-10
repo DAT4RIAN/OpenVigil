@@ -595,7 +595,10 @@ class AssetTwinProfile(Base):
 
 class ReadAccessAudit(Base):
     __tablename__ = "read_access_audits"
-    __table_args__ = (Index("ix_read_access_subject_accessed", "subject", "accessed_at"),)
+    __table_args__ = (
+        Index("ix_read_access_subject_accessed", "subject", "accessed_at"),
+        Index("ix_read_access_endpoint_accessed", "endpoint", "accessed_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     subject: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -603,7 +606,32 @@ class ReadAccessAudit(Base):
     method: Mapped[str] = mapped_column(String(16), nullable=False)
     endpoint: Mapped[str] = mapped_column(String(320), nullable=False)
     query: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, default=dict)
-    accessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    accessed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), primary_key=True, default=utcnow
+    )
+
+
+class ReadAccessAuditArchive(Base):
+    """Compressed immutable audit batches retained after hot partitions age out."""
+
+    __tablename__ = "read_access_audit_archives"
+    __table_args__ = (
+        CheckConstraint("row_count > 0", name="ck_read_access_archive_row_count"),
+        CheckConstraint("period_end >= period_start", name="ck_read_access_archive_period"),
+        CheckConstraint("expires_at > period_end", name="ck_read_access_archive_expiry"),
+        Index("ix_read_access_archive_period", "period_start", "period_end"),
+        Index("ix_read_access_archive_expires", "expires_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    schema: Mapped[str] = mapped_column(String(64), nullable=False)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload_gzip: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class Approval(Base):
@@ -694,7 +722,7 @@ class WorkOrder(Base):
 
 
 class ExternalWorkOrderLink(Base):
-    """Idempotent mapping between an authoritative WindOps work order and EAM."""
+    """Idempotent mapping between an authoritative OpenVigil work order and EAM."""
 
     __tablename__ = "external_work_order_links"
     __table_args__ = (
@@ -1113,12 +1141,44 @@ class BenchmarkQualityReport(Base):
     )
     quality_rule_version: Mapped[str] = mapped_column(String(64), nullable=False)
     feature_set_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    canonical_content_sha256: Mapped[str | None] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(24), nullable=False)
     artifact_uri: Mapped[str] = mapped_column(String(1024), nullable=False)
     artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     mask_uri: Mapped[str] = mapped_column(String(1024), nullable=False)
     mask_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     summary: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class BenchmarkQualityArtifact(Base):
+    __tablename__ = "benchmark_quality_artifacts"
+    __table_args__ = (
+        UniqueConstraint("identity_sha256", name="uq_benchmark_quality_artifact_identity"),
+        Index(
+            "ix_benchmark_quality_artifacts_report_created",
+            "quality_report_id",
+            "created_at",
+        ),
+        Index(
+            "ix_benchmark_quality_artifacts_stage_created",
+            "artifact_stage",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    quality_report_id: Mapped[str] = mapped_column(
+        ForeignKey("benchmark_quality_reports.id"), nullable=False, index=True
+    )
+    artifact_stage: Mapped[str] = mapped_column(String(64), nullable=False)
+    identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    artifact_uri: Mapped[str] = mapped_column(String(1024), nullable=False)
+    artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    mask_uri: Mapped[str] = mapped_column(String(1024), nullable=False)
+    mask_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON_VALUE, nullable=False, default=dict)
+    audit_subject: Mapped[str] = mapped_column(String(160), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

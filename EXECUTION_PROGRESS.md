@@ -2,13 +2,348 @@
 
 # Long-running Execution Progress
 
-## 当前活动运行：CARE v6 数据集接入与验证
+## 当前活动运行：2026-09-04 技术与 UI 审计整改
+
+本节是当前执行状态的唯一 Source of Truth。任务来自 2026-09-04 `AUDIT_REPORT.md` 与 2026-09-03 `UI_AUDIT_REPORT.md`；后文所有旧轮次的 `COMPLETED`、`PASS` 或 `2 / 2` 仅作为历史证据，不能覆盖本轮状态。
+
+### Metadata
+
+- Project：`OpenVigil / wind-agent`
+- Requirements：`PRODUCT_REQUIREMENTS.md`、`UI_UX_SPEC.md`
+- Architecture：`ARCHITECTURE.md`
+- Active Issues：`AUDIT_REPORT.md` 16 项 + `UI_AUDIT_REPORT.md` 8 项
+- Execution Rules：`EXECUTION_GOAL.md` + `AGENTS.md`
+- Started：`2026-09-04 09:48 +08:00`
+- Last Updated：`2026-09-04 22:29 +08:00`
+
+### Overall Status
+
+- Current Phase：`COMPLETED`
+- Current Issue：`NONE`
+- Next Issue：`NONE`
+- Final State：`COMPLETED`
+
+### Statistics
+
+| State | Count |
+|---|---:|
+| Total | 24 |
+| TODO | 0 |
+| IN_PROGRESS | 0 |
+| DONE | 24 |
+| BLOCKED | 0 |
+| NOT_APPLICABLE | 0 |
+
+### Severity Remaining
+
+| Severity | Count |
+|---|---:|
+| Critical | 0 |
+| High | 0 |
+| Medium | 0 |
+| Low | 0 |
+
+### Active Issue Register
+
+| ID | Severity | Status | Dependencies / shared root | Evidence / Next action |
+|---|---|---|---|---|
+| CARE-C001 | Critical | DONE | — | Ed25519 独立签名根绑定 source/truth/mapping/quality/archive；导入、评估、模型与数据库记录传播并 fail-closed；真实 101 CSV/95 事件/5,242,948 行重建一致 |
+| CARE-C003 | Critical | DONE | C001 | canonical 状态序列跨 batch 保持、缺口/split/event 重置；训练/预测真实应用，raw Parquet verifier 复算；官方 B/C 4,046,201 行分支实证 |
+| CARE-C005 | Critical | DONE | C001,C003 | 权威 HTTP 激活/回滚、稳定拒绝审计、原子切流与 Sites 最小 allowlist；本地 17/17、网关 20/20，并在隔离 PostgreSQL 16.15 + TimescaleDB 2.29.2 + pgvector 0.8.6 完整迁移后通过真实并发激活/替换/回滚测试 |
+| CARE-H006 | High | DONE | C003 | A/B/C full-scale 模型统一冻结 `apply`；训练 moments 排除 mask、预测按 fold mean 插补，model/fold/prediction 绑定完整 lineage 与计数，raw verifier 复算；官方 5,242,948 行重训重评记录 64,459,679 个训练特征值与 3,548,610 个预测特征值受影响 |
+| CARE-H007 | High | DONE | C001,H006 | `0027` 分离 canonical parent 与 append-only stage artifact；同一新 PostgreSQL 库 minimal→offline→vertical→full-scale 真实通过，legacy 回填、冷/热并发幂等、97 条 stage 历史与 vertical 业务记录均验证保留 |
+| CARE-H008 | High | DONE | H006 | backend/postgres required CI 改用 frozen uv lock 安装 benchmark；生产 container lock/image build/release verifier 共用 closure，clean wheel 验证 9 模块/9 CLI/6 包并记录双 lock hash |
+| CARE-H009 | High | DONE | H007,H008; H011 performance gate | main-only self-hosted required job 显式运行三 CARE PostgreSQL 文件；evidence verifier 强制 4 tests/0 skip、同库阶段、性能、JUnit/root/commit/image/lock/head 同身份；本地三新库 4/4 |
+| CARE-H010 | High | DONE | — | 官方 `v0.6.2/a338…` 映射为 immutable submodule；URL/commit/tree/MIT/source/docs/golden vectors 失败关闭并生成跨 checkout 相同证据根，干净递归克隆 19/19 |
+| CARE-H011 | High | DONE | H007,H009 | PostgreSQL accepted batch 收据/stream lock/flush 有界化，边缘语义 fallback；3 次最终代码独立新库 replay 为 1062.266/524.165/529.685 rows/s，目录最大 p95 为 13.595/15.664/14.831 ms，SQL profile 进入 release verifier |
+| TECH-H001 | High | DONE | shared: UI-H-002,UI-H-003 | 六态 query lifecycle + 权威 freshness + correlation/idempotency 恢复；四页生产状态矩阵浏览器通过 |
+| TECH-H002 | High | DONE | — | v2 同身份证据集、11 类精确报告、受保护独立证据包和唯一 verifier qualification；生产镜像真实配置 boot 门禁 |
+| TECH-H003 | High | DONE | H008,H009 | 同一 digest 镜像内独立 CARE CronJob/SA/Secret/PVC/egress；单并发/3 attempts/72,000s、断点重放 smoke 与受保护全量验收 |
+| UI-H-001 | High | DONE | — | Demo/Production 共用事件决策区；6 KPI、7/5 主区、4/4/4 下层；1440/1280 与稳定/单一/多事件真实截图、键盘激活均通过 |
+| UI-H-002 | High | DONE | shared: TECH-H001 | Production 仅表示模式；Shell/页面共用 Ready/Degraded/Stale/Offline，Dashboard 全错/局部错证据通过 |
+| UI-H-003 | High | DONE | shared: TECH-H001 | 核心页 loading/refreshing/empty/filtered/error/partial/conflict/stale 及预测 long-running/result-unknown 已验证 |
+| UI-H-004 | High | DONE | — | 核心流程移除未验证 RUL/失效概率；Demo/Production、外部模型和非 RUL 提前量边界就地可读；22 路由与生产 Agent 回归通过 |
+| UI-H-005 | High | DONE | — | 13/12/11px 语义字号与行高 token；22 路由计算样式、图表字号、1440/1280/390 和 200% reflow 截图通过 |
+| UI-H-006 | High | DONE | — | 1023px overlay drawer、焦点约束/Esc/返回焦点、laptop 折叠记忆、全路由移动 44px 目标与 200% reflow 均通过 |
+| TECH-M002 | Medium | DONE | — | Sites release 记录、Worker 配置与 ready/代理 mismatch 均强制 release/commit/image 三元组；错 commit 失败关闭 |
+| TECH-M003 | Medium | DONE | shared: UI-M-002 | 22 route×4 viewport 风险矩阵、5 页状态矩阵、4 角色 capability、关键页 axe/键盘/200%/reduced-motion、稳定基线与 fail-on-skip required 门禁 |
+| TECH-M004 | Medium | DONE | — | Redis 有界队列、批量/幂等、分区/归档/保留和性能合同通过；两轮复查修复 Alembic drift/ORM 约束，并以数据库 advisory transaction lock 串行化手工/重试维护实例，真实 PostgreSQL 并发回归通过 |
+| TECH-M005 | Medium | DONE | — | 7,852 个 / 334,332,149 bytes `.codex_tmp` 与新 `tmp/` scratch 均退出候选树；完整隔离候选 574 blobs / 23,611,578 bytes 通过，精确例外外的强制 `tmp` 注入失败关闭，真实索引 hash 不变 |
+| UI-M-001 | Medium | DONE | — | Mission/风机详情统一 route ownership；当前侧栏 aria-current；可聚焦返回面包屑与键盘往返通过 |
+| UI-M-002 | Medium | DONE | shared: TECH-M003 | 1440/1280/390 全页基线、900 tablet、22 路由语义/溢出 smoke、关键页 20 次 axe、6 页 200% 与完整状态闭环通过 |
+
+### Stage / Convergence
+
+- Critical：`COMPLETE`
+- High：`COMPLETE`
+- Medium：`COMPLETE`
+- First Full Recheck：`PASS`
+- Adversarial Review：`PASS`
+- Final Global Validation：`PASS`
+- Final Audit Pass：`2 / 2`
+- Completion Gates：`MET`
+
+### Completion Gate Review
+
+| Gate | Result | Evidence |
+|---|---|---|
+| A — Coverage | PASS | technical `16/16 DONE`、UI `8/8 DONE`、Progress `24/24 DONE`，集合精确相等且无未登记活动问题 |
+| B — Critical / High | PASS | 3 Critical、15 High 全部 `DONE`；remaining 均为 0 |
+| C — Medium | PASS | 6 Medium 全部 `DONE`；Pass #2 发现的 TECH-M005 同根缺口已修复并完成正/负候选索引验证 |
+| D — Evidence | PASS | 每项 DONE 均有实现、定向测试及可复验日志；最终 JUnit、coverage、CARE evidence 与 UI screenshots 均保留 |
+| E — Recheck | PASS | First Full Recheck 与 Adversarial Review 均完成；发现项均先重开、修复、验证后关闭 |
+| F — Global Validation | PASS | frontend required gates、425-test backend global suite、fresh PostgreSQL 23/23、真实跨层 E2E 1/1、Playwright 29/29 均通过 |
+| G — Convergence | PASS | 两轮独立 Final Audit 均未发现新的 Critical/High，计数 `2 / 2` |
+| H — Persistent State | PASS | 本节 Metadata、统计、Issue register、阶段、Gate 表与最终状态已同步为当前真实树 |
+
+### Execution Log
+
+#### Initialization / CARE-C001 Investigation Start (2026-09-04 09:48 +08:00)
+
+- 已完整读取 `AGENTS.md`、`PRODUCT_REQUIREMENTS.md`、`UI_UX_SPEC.md`、`ARCHITECTURE.md`、两份 Audit、`EXECUTION_GOAL.md`、本文件全部历史内容，以及 `docs/ui/reference/` 的 README、生成提示和原始 `dashboard-desktop.png`。
+- Git 起始状态不是 clean：`AUDIT_REPORT.md` 已修改，`ARCHITECTURE.md`、`PRODUCT_REQUIREMENTS.md`、`UI_AUDIT_REPORT.md`、`UI_UX_SPEC.md` 与 `docs/ui/` 未跟踪；这些均视为用户资产，不覆盖、不清理。
+- 最新 Audit 证伪了旧 CARE `COMPLETED`：当前为 3 Critical、15 High、6 Medium；同根 `TECH-H001/UI-H-002/UI-H-003` 和 `TECH-M003/UI-M-002` 只实施一次、分别保留逐项验收证据。
+- 当前先按 Critical 顺序调查 `CARE-C001`；尚未修改业务代码或将任何 Issue 标记为 DONE。
+
+#### CARE-C001 Completed / CARE-C003 Start (2026-09-04 10:26 +08:00)
+
+- 新增打包进 wheel 的 `care-v6-approved-root.json` 与只读公钥信任锚；批准根以 Ed25519 签名覆盖 canonical source、101 CSV 清单、95 条真值、A/B/C 映射、质量策略和 Zenodo 源压缩包身份，生产代码不包含私钥。
+- minimal/full-scale import 在任何输出写入前从只读数据集和压缩包重建 source + quality contract；导入、预测、评估套件、模型包、顶层 manifest 及数据库 dataset/model/evaluation 记录均传播并复验同一批准根。自行重算 manifest/quality hash 的错误真值、错误零值策略、缺失映射或替换源压缩包仍被签名根拒绝。
+- 官方真实源独立重建通过：101 CSV、95 事件、5,242,948 行；source manifest `33a11962...5c206`、quality `2241d0f2...c33b`、approved root `b08ba910...f446`、archive `ca61379e...194f1` 完全匹配。
+- 验证通过：CARE 专项完整测试退出 0（仅显示 4 个默认关闭的真实外部环境用例）；full-scale 专项 9/9；Ruff 定向检查；mypy strict 5 个变更源文件；wheel 构建并确认批准根 JSON 被收录。pytest 缓存 ACL 警告仅影响缓存写入，不影响测试断言。
+- `CARE-C001` 标记 `DONE`；开始 `CARE-C003`，先核对最新审计给出的 B/C 评分连续段、来源佐证和 verifier 复算缺口。
+
+#### CARE-C003 Completed / CARE-C005 Start (2026-09-04 10:51 +08:00)
+
+- 新增 canonical `StatusSequenceState`：run scope 固定为 dataset/farm/event/split/status，跨 record batch 保持状态，非连续 source row、split 与事件边界确定性重置；B/C 佐证只使用批准 Avg 集中的匿名缩放功率信号，规则与列集写入模型和 prediction 制品。
+- full-scale 训练不再只做静态 `status in allowlist`：trusted、短/未佐证保留、持续佐证屏蔽均进入实际 moments，并按总量/held-out asset 写入 fold profile；prediction 每点保存 run length、佐证信号总数/finite 数/zero-or-invalid 数、rule ID、判定与 criticality。
+- full-scale verifier 重新读取不可变 Parquet 的原始 row ID/split/status/批准信号，逐点复算 prediction 字段，并重算全局与每 fold 训练计数；调用方篡改佐证计数并重算 prediction 自哈希仍以 raw mismatch fail closed。prediction schema 升至 v2，full-scale 模型 schema/v6 实现与模型版本 `1.1.0` 避免旧制品冒充新语义。
+- 固定 full-scale fixture 真实走 import→Parquet→training→prediction→verifier：短段 `[1,2]` 保留、持续段 `[1,2,3]` 的第三点屏蔽，训练侧 `2 retained / 1 masked`；跨 batch、缺口、split、事件边界有独立测试。
+- 官方只读源全量逐行探针扫描 B/C `4,046,201` 行：`421,788` 条短/未佐证分歧保留，`9,064` 条持续佐证分歧屏蔽（train `9,022`、prediction `42`），覆盖 `67` 个事件，最大连续长度 `8,352`，证明生产分支不再停留在默认值。
+- 验证通过：quality/scoring/offline/full-scale 定向套件退出 0；完整 CARE 选择套件退出 0（4 个默认关闭的外部环境用例）；Ruff lint/format、mypy strict、compileall、`git diff --check`。`CARE-C003` 标记 `DONE`，开始最后一个 Critical `CARE-C005`。
+
+#### CARE-C005 Implementation Complete / PostgreSQL Gate Pending (2026-09-04 11:13 +08:00)
+
+- 公开 activate/rollback endpoint 不再无授权调用 service：同一数据库事务先锁定 deployment/model/evaluation，校验 CARE online runtime、model package 三方绑定、完成且未失效的 evaluation、每条权威 metric 的制品 hash/方向/阈值/pass 状态，并从 CARE 专用 bucket/prefix 按数据库 SHA-256 读取 JSON evaluation artifact；model/evaluation/artifact 的 Ed25519 批准根 lineage 必须完全一致。
+- 服务端由权威数据库 metric 重建 snapshot 和 activation policy，生成技术审批与 evidence-audited 事件，调用 gate 签发不可伪造授权并在同一事务立即消费；切流、授权证据、批准根和 activate/rollback 事件原子提交。制品漂移、评估失效、绑定漂移与并发重入分别返回稳定错误码并写 `model.activation.denied`，失败测试确认 deployment 保持 `staged / 0% / activated_at=null`。
+- Sites 生产 gateway 仅新增两个精确资源 ID 路径：anomaly prediction run 与 alert evaluation；均只允许 POST 和 8–128 字符幂等键，prediction run 另强制 JSON，仍受 2 MiB 全局 body 上限、委托身份和 release identity 校验。编码斜线、过短 ID、GET/DELETE、缺 JSON/幂等键均 fail closed。
+- 本地验证通过：anomaly + model-runtime HTTP 回归 `17/17`；覆盖公开激活成功、批准根传播、同部署第二次并发拒绝、替换部署、公开 rollback、制品漂移、invalidated evaluation、binding drift、拒绝审计和无部分切流；全后端 Ruff 与 strict mypy 通过。Sites production-runtime `20/20`、ESLint、Prettier 通过。
+- 已把真实 PostgreSQL 并发 activate/rollback HTTP 测试加入既有 `tests/external/test_postgres_concurrency.py`，不直接构造或注入 `AnomalyActivationAuthorization`。当前机器未设置 PostgreSQL 测试 URL，项目 Docker Engine pipe 不存在，且无本地 PostgreSQL 服务/客户端；按安全边界未启动系统级 Docker 或触碰其他容器。因此本项仍保持 `IN_PROGRESS`，不能用 SQLite 或历史证据冒充本轮真实 PostgreSQL 通过。
+
+#### CARE-C005 Completed / CARE-H006 Start (2026-09-04 11:38 +08:00)
+
+- 在仓库内 `tmp/c005-postgres` 建立完全隔离、仅绑定 `127.0.0.1:55432` 的 PostgreSQL 16.15；没有创建 Windows 服务、修改全局 PATH、启动 Docker Desktop 或触碰其他项目容器。迁移最初依次真实暴露 TimescaleDB 与 pgvector 缺失，两次均在 PostgreSQL transactional DDL 内回滚，没有将环境失败误记为产品通过。
+- 从官方 release 安装 TimescaleDB 2.29.2；pgvector 官方不发布普通 Windows DLL且本机无 MSVC，因此从官方仓库 tag `v0.8.6`（commit `8ee86c96`）源码用现有 MSYS2 GCC 构建。首个 DLL 真实暴露 32 位 pseudo-relocation 越界并由 PostgreSQL 自动恢复；改用 64 位 large code model 后成功加载。未执行检索到的第三方预编译 DLL。
+- Alembic 从空库完整升级 `0001_wt023 -> 0026_schema_contract_alignment` 退出 0，TimescaleDB 与 vector 均由真实迁移创建。新增 PostgreSQL HTTP 合同测试退出 0：两个不同幂等键并发激活严格得到 `200 + 409 / ANOMALY_ACTIVATION_CONCURRENT_CHANGE`，随后替换部署激活、公开 rollback，并由数据库断言仅原 deployment 为 production active 100%。唯一告警仍是既有 pytest cache ACL，测试断言全部通过。
+- `CARE-C005` 具备本地功能/负向/网关静态门禁与真实 PostgreSQL 事务并发证据，现标记 `DONE`；Critical 三项全部完成，进入 High 阶段并按依赖先开始 `CARE-H006`。
+
+#### CARE-H006 Completed / CARE-H007 Start (2026-09-04 14:04 +08:00)
+
+- A/B/C full-scale 模型统一冻结内容寻址的 `care-v6-model-quality-mask-apply-v1`：训练只用 `finite & ~quality_mask` 特征值计算 fold moments，预测对 mask 与 non-finite 值分别计数并用该 fold 的训练均值插补；同一 mask-trained profile 另计算仅预测时忽略 mask 的显式反事实，但不冒充完整旧模型重训。
+- model package 绑定每个事件的 mask file/document/source-quality/source-event hash、range count 与 lineage hash；fold 绑定实际 profile、训练 mask 计数和 prediction mask 引用；prediction 绑定逐点 mask/imputation/反事实分数与总体计数。最终 verifier 重新读取 raw Parquet 和不可变 mask，精确复算训练 moments、逐点分数、二元判定、fold profile、impact 与所有引用；篡改 mask 计数并重签自哈希的测试仍 fail closed。
+- 官方只读源重新完成 full import 与 full evaluation：95 事件、5,242,948 行、7,386,831 条 mask 区间；导入首次尝试即完成，资源策略通过，manifest file SHA-256 `69f6b33b...a241fc`。重训重评生成 3 个 farm model package、36 个 LOAO fold、95 个 prediction artifact、281,249 个预测点，最终 verifier 通过，manifest file SHA-256 `c771a7e9...20536`。
+- 官方 impact 显示训练排除 64,459,679 个 masked feature values、影响 3,800,046 行；预测插补 3,548,610 个 masked values、影响 230,450 点；128,479 个分数及 86,026 个二元判定变化，最大/平均绝对分数差 `84.326869 / 3.542124`。36 个实际 fold 指标全部来自 mask-applied 分数；制品中的 counterfactual scope 明确限制为“同一 mask-trained profile，仅预测时忽略 mask”，因此对指标变化的解释可审计且没有夸大因果范围。
+- 验证通过：官方 import/evaluate 两个 CLI 均退出 0、state=`completed`/attempt=1/无 resource violation；CARE 非外部完整选择回归退出 0；Ruff lint/format、mypy strict 与 `git diff --check` 均通过。最初一次导入在读取本轮临时质量 JSON 时因末尾字面 `\\n` 立即失败、未写派生数据；保留原语义并移除该封装字符后 JSON 自哈希不变，随后完成上述全量运行。
+- `CARE-H006` 标记 `DONE`；开始 `CARE-H007`，先复现同一权威数据库 minimal → offline → vertical → full-scale 的 identity 冲突，再设计 canonical 内容身份与阶段制品身份的兼容迁移。
+
+#### CARE-H007 Completed / CARE-H008 Start (2026-09-04 15:00 +08:00)
+
+- 新增 `0027_quality_artifact_stages`：`benchmark_quality_reports` 增加可兼容 legacy 的 canonical 内容 hash，另建 append-only `benchmark_quality_artifacts` 保存阶段、wrapper/mask 身份与独立审计主体；迁移将所有旧 quality row 回填为 `legacy-migrated-v1` artifact，不删除或覆盖旧证据。注册服务按 event/rule/feature canonical scope 加事务 advisory lock，legacy 首次可信绑定、canonical 不一致失败关闭、阶段 artifact 精确幂等。
+- minimal 与 full-scale registrar 统一传播签名根内的 `source_quality_report_sha256`，分别写 `minimal-import` / `full-scale-import`。父 quality row 保留最初 minimal wrapper；full-scale 只追加新 stage artifact/domain event。SQLite 正向、冲突、parent 不覆盖与 replay 单测 `4/4` 通过；真实 `0026→0027` legacy 回填与完整 migration suite `6/6`、0 skip，通过 JUnit SHA-256 `6D0608A2...F9218`。
+- 从 template0 新建 `windops_h007_final` 并完整迁移 `0001→0027`；同一库先执行真实 minimal→offline→vertical（378 samples、7 predictions、1 Alarm/1 Mission/1 Decision），再追加 H006 官方 95-event/5,242,948-row full-scale。最终为 95/95 canonical parent、97 stage artifact/domain event（2 minimal + 95 full-scale），vertical 的 Alarm/Mission/Decision 均仍为 1，没有清理历史。
+- 冷并发对首个 full-scale quality stage 精确得到 `created + replayed`，full-scale 总注册随后为 `1484 created / 87 replayed`；热并发为双 replay，历史总量不增长。阶段升级 JUnit `2 tests / 0 failures / 0 errors / 0 skips`、252.892 s，SHA-256 `5078AC49...92F424`。此前一次四重官方 verifier 实验已通过所有数据库/并发计数，最终仅因新增测试误把顶层 `farm` 当事件字段而失败；修正测试自身后改为一次官方全量 verifier + 数据库 service 冷/热并发，避免 required CI 重复扫描 9.27 GB。
+- 权威 head/README/release 声明同步至 `0027`，完整 offline SQL render、Ruff lint/format、strict mypy 93 source files 与 `git diff --check` 均通过。`CARE-H007` 标记 `DONE`；开始 `CARE-H008`，核对 required CI 与生产镜像实际安装的锁定 benchmark closure。
+
+#### CARE-H008 Completed / CARE-H009 Start (2026-09-04 15:12 +08:00)
+
+- container requirements exporter 从只含 `connectors` 改为同时导出生产 `benchmark` extra，重新生成的 hash-locked closure 明确包含 PyArrow `23.0.1`、scikit-learn `1.9.0`、NumPy `2.5.2`、SciPy `1.18.1`、joblib `1.5.3` 与 threadpoolctl `3.6.0`；`uv.lock` SHA-256 为 `7366F9D5...3B08A`，`requirements.container.txt` 为 `90D01869...19E39`。
+- 新增 `windops-care-dependency-closure`：逐包核对已安装版本与 container lock、导入 9 个 CARE production module、逐一执行 9 个 CARE CLI `--help`，输出含双 lock SHA-256 的确定性 JSON；缺包、版本漂移或 CLI 缺失均有负向测试并失败关闭。backend/postgres required jobs 改用 `uv sync --frozen` 安装 benchmark closure，并各自产出/上传报告。
+- 标准 Dockerfile 在 runtime wheel/锁安装后强制生成 `/app/care-benchmark-dependency-closure.json`；release policy 把完整 CARE entrypoint 纳入镜像合同，container artifact verifier 在只读、non-root runtime 内再次运行 closure 并与 build-time JSON 精确比较，防止 build/runtime 漂移。发布镜像仍不包含 test/dev 依赖。
+- 独立新 `uv venv` 从 `requirements.container.txt --require-hashes` 安装 125 个依赖，再从本轮 wheel 安装项目；验证 wheel 包含 closure 模块和 21 个 OpenVigil console scripts，9 模块/9 CARE CLI/6 包全部通过，`uv pip check` 对 126 packages 为兼容。首次用绝对路径启动 verifier 时未把 venv `Scripts` 加入 PATH，导致子进程误报 CLI 缺失；确认 wheel 元数据/脚本存在并按真实激活环境修正 PATH 后通过，分类为验证调用错误而非产品失败。
+- 定向 deployment/release/CARE closure 回归 `55/55`，关联 trust/anomaly/import/metadata 回归 `21/21`；Ruff 全 197 files、strict mypy 94 source files、Bandit 0 finding、Prettier/TOML/YAML parse、lock reproducibility、wheel metadata 与 `git diff --check` 通过。本机 Docker Engine pipe 不存在，未启动系统服务或伪报本机 image build；实际 Docker build/release verification 已由同一失败关闭脚本写入 required workflow。
+- `CARE-H008` 标记 `DONE`；开始 `CARE-H009`，把三个 CARE PostgreSQL 验收文件与同库阶段序列、测试数量、0 skip、JUnit 和 artifact/release identity 纳入 required CI。
+
+#### CARE-H009 Completed / CARE-H011 Start (2026-09-04 15:36 +08:00)
+
+- 新增 `windops-care-postgres-evidence` 与正/负向合同：读取三个指定 JUnit 并要求测试名集合严格为 offline `1`、full-scale `1`、vertical/stage-upgrade `2`，总计 `4` 且 failures/errors/skips 均为 0；缺测、skip、非有限性能值、阈值失败、root 不一致、placeholder image、commit/head/lock 漂移均拒绝。
+- verifier 跨三个 JUnit 绑定 source manifest、quality contract、minimal import、offline evaluation、full import/evaluation 与 Ed25519 approved root 身份；同时绑定完整 Git commit、固定 TimescaleDB image digest、唯一 `0027` head、uv/container lock，并把各 JUnit SHA-256、所有属性与 canonical evidence root 写入原子报告。offline/full-scale/stage tests 已补齐这些属性，不依赖 workflow 自行声称成功。
+- `.github/workflows/ci.yml` 新增 main-only `care-postgres-contract` required job；fork PR 永不进入 self-hosted runner。受控 `windops-care-v6` runner 必须提供两处只读 official artifact root，缺失即失败；三个独立新库逐一迁移至 head，显式运行三个审核指定文件，最后才由 evidence verifier 聚合。`verify_release_checks.py` 已将该 job 加入同 commit required checks；workflow/action 固定、结构和失败关闭合同 `36/36` 通过。
+- 本地在 portable PostgreSQL 16.15 + TimescaleDB 2.29.2 + pgvector 0.8.6 上创建三套独立新库，按 required job 顺序得到 offline/full-scale/vertical `1 + 1 + 2 = 4` tests、0 skip/failure/error。JUnit SHA-256 分别 `2B17AFB8...B6BC33`、`EC39F242...CBA9B9`、`52501F6F...EDF3D3`；source root 三方均为 `33a11962...5c206`、approved root 三方均为 `b08ba910...ff446`，stage 为 95 parent/97 artifact、冷/热并发均精确。
+- 本地不是容器，未把 workflow 的 TimescaleDB digest 伪写进本地 aggregate；image-bound canonical report 只允许 fixed-digest required job 生成。实际本地性能属性为目录最大 p95 `235.591 ms`、replay write `206.229 rows/s`，已进入下一项 H011 的 trial 1。`CARE-H009` 标记 `DONE`，按依赖立即开始 `CARE-H011` 的另外两次独立新库验证与 SQL/事务 profile。
+
+#### CARE-H011 Completed / CARE-H010 Start (2026-09-04 16:20 +08:00)
+
+- 根因画像确认目录服务已使用分页批量 SQL，主要不稳定源是 SCADA replay 的 54 点请求逐点执行 savepoint、receipt/stream 查询和 flush；慢资源下数据库往返被放大。新增 PostgreSQL accepted-batch 路径：一次 receipt `ON CONFLICT`、一次按稳定顺序的 stream-state 行锁、一次 flush；重复 receipt、批内重复 ID、quarantine 候选与直接告警样本先回滚 savepoint，再走原通用逐点路径，未改变幂等冲突、顺序、水位、隔离或告警/outbox 语义。
+- 外部门禁现在对 7 个固定 `54` 点 replay 事务同时记录端到端时间、SQL 次数和数据库时间，并强制每批 SQL `<=40`；full-scale 在官方 `95` 事件、`36` evaluation、`1,285` mapping、`270` metric 上对 5 条路径各预热一次、测量 20 次，同时强制请求 SQL `<=12`、p95 `<=500 ms`、响应 `<=512 KiB`。显式 scoped evaluation metric 查询跳过全局 loader criteria 重编译，但仍由已经 scope-bounded 的 evaluation IDs 限制。
+- 最终代码三套独立 fresh PostgreSQL 数据库的 replay 吞吐为 `1062.266 / 524.165 / 529.685 rows/s`，每轮 SQL 形状精确为首批 `14`、后六批 `13` 条；数据库总 SQL 时间为 `0.107085 / 0.106602 / 0.109597 s`。对应 JUnit SHA-256：`9B3818F5...D8EB21`、`5F689A90...10A78`、`01B03749...D2674`。
+- 三套独立 fresh full-scale 数据库的最大目录端到端 p95 为 `13.595 / 15.664 / 14.831 ms`，SQL p95 为 `5.838 / 6.673 / 6.389 ms`，每次请求最多 `10` 条 SQL、最大响应 `125,313 bytes`；JUnit SHA-256：`12391847...64E2`、`EBE6B68A...FF14`、`DEB065EF...E6B0C`。六库均保持 migration head `0027` 与精确领域计数。
+- 另在 fresh `windops_h011_release` 运行完整 vertical + stage-upgrade `2/2`、0 failure/error/skip；replay `738.588 rows/s`、最大 `14` SQL，最终 `95` canonical quality parents / `97` stage artifacts，JUnit SHA-256 `A85C1893...82E3`。release evidence verifier 现要求并复核上述 SQL profile 的测量数、有限值、聚合一致性和结构门槛；缺失或超限失败关闭。定向 ingest/catalog/access/transaction 回归 `58/58`，verifier `2/2`，Ruff、mypy strict、Bandit、compileall、diff check 全部通过。
+- `CARE-H011` 标记 `DONE`。开始 `CARE-H010`，先调查审计所指无映射 gitlink 与当前 `docs/ui/reference/` 来源/许可/内容身份，建立不依赖本机目录的 clean-clone 复验链。
+
+#### CARE-H010 Completed / TECH-H001 Start (2026-09-04 16:39 +08:00)
+
+- 将原 gitlink 正式映射为 `.gitmodules` 中的官方 `https://github.com/AEFDI/EnergyFaultDetector.git` 子模块，并由 Gitlink 固定 `v0.6.2` commit `a338b6ef...2f63e` / tree `43c64cbe...45c912`；required backend job 使用递归 checkout，生产 runtime 不导入官方包。README、第三方声明、架构和 release runbook 明确该边界与 MIT 许可。
+- 新增 `verify_care_reference.py` 失败关闭门禁：逐项绑定 upstream URL、tag、commit、tree、MIT license 原始 SHA-256、两份官方评分源码原始 SHA-256、五份 source-of-truth 的 UTF-8/LF 规范化 SHA-256，并动态运行官方 earliness/criticality 后与 OpenVigil golden vectors 比较。跨平台文档换行差异在复查中被发现并修正，官方源码与许可证仍为 byte-exact。
+- backend `reference` extra 和 frozen `uv.lock` 提供复验所需 pandas；更新后 `uv.lock` SHA-256 `4D741E7D...D4E38D0`，生产 container requirements 仍为 `90D01869...19E39` 且 exporter check 通过，不把参考实现引入生产依赖闭包。
+- 使用 alternate index/临时 ref 构造当前 prospective tree，真实 `git clone --recurse-submodules` 经 HTTPS 取得官方 submodule；新 clone 从 frozen lock 创建 161-package 环境并执行 verifier + scoring 合同 `19/19`。工作区与干净 clone 得到完全相同 evidence root `66497e8b...c7c4`、report SHA-256 `7AEC50EC...D3E54`；clean JUnit SHA-256 `A5EEB77E...ACC90`。真实 Git index 保持 0 staged，临时 ref 已删除。
+- 本地定向复验同为 `19/19`，Ruff、`uv lock --check`、container requirement exporter 与 `git diff --check` 全部通过。`CARE-H010` 标记 `DONE`；开始共享根因 `TECH-H001 / UI-H-002 / UI-H-003`，一次建立权威 query lifecycle/freshness 状态并分别保留验收证据。
+
+#### TECH-H001 + UI-H-002 + UI-H-003 Completed / TECH-H002 Start (2026-09-04 17:31 +08:00)
+
+- 新增共享 `initial-loading | refreshing | success-empty | success-data | error-stale | error-no-data` 状态机，服务端数据时间优先于浏览器收包时间；错误分类保留 HTTP/code/correlation，Production 健康统一映射为 `Ready / Degraded / Stale / Offline`。App Shell 的 `Production`/`Demo` 标签改为中性模式标识，页面依赖与 `/api/runtime` 使用同一健康语义，生产侧栏、顶栏与页面不再固定显示成功。
+- Dashboard 首次加载或全错只保留真实 Shell、页头和可重试状态，不渲染 KPI/空面板；权威空快照使用独立 Empty。非空快照的健康度、可利用率、电量和功率趋势缺失会逐模块列出 code、原因与各自最后时间，健康模块继续显示，Shell 降级为 Degraded；缺失数值使用 `—` 与原因而非伪零值。
+- Mission、工单和预测页接入同一状态机，刷新保留旧记录并禁用依赖实时 revision 的动作；真实 Empty 与 Filtered Empty 分离，通用 DataTable 增加可键盘操作的“清除表格搜索”。全局 `loading.tsx` 使用真实 AppShell 与 6-KPI/主内容布局骨架，不再伪造独立 Shell。
+- GET 403/409/5xx/network 均提供影响范围、上次成功、错误码、关联 ID 和就地重试；访问故障与恢复按 API scope 配对，其他健康请求不会误清除当前故障。预测在线评估进一步提供同步长运行时长、明确“无独立心跳/取消能力”，两次丢失响应后进入 `COMMAND_RESULT_UNKNOWN`，保留原幂等键核验且恢复成功后清除同 scope 全局故障，禁止新键重复提交。
+- 新增 Chromium 状态矩阵：Dashboard/Mission/工单/预测逐页覆盖 pending、success-empty、403、409、500、network、stale refresh、刷新失败、同页恢复；另覆盖 Dashboard partial failure、三页 filtered-empty/clear 与预测 long-running/result-unknown/same-key reconciliation，共 `7/7`。保存并人工检查五张 stale/partial 全页截图及 `predictive-result-unknown.png`，未见假数据回退、空态闪烁或 Shell 健康矛盾。
+- 验证通过：`pnpm typecheck`；`pnpm test` 的 build、bundle budget 与 Node `151/151`；完整 Playwright `13 passed / 1 skipped`，唯一 skip 为需显式真实后端环境的既有 `real-cross-layer` opt-in；ESLint/Prettier 定向检查和 `git diff --check` 通过。`TECH-H001`、`UI-H-002`、`UI-H-003` 分别标记 `DONE`；开始 `TECH-H002`，核对 release workflow 是否真正由唯一 verifier 生成 qualified。
+
+#### TECH-H002 Completed / TECH-H003 Start (2026-09-04 17:58 +08:00)
+
+- 新增 `windops-release-evidence`，以 release ID、完整 commit、镜像 digest 的规范化 SHA-256 生成 `evidence_set_id`；每类 gate 报告必须是 v2、检查集合精确完整、原始制品非空且内容寻址。assembler 只接受 11 类同身份证据并生成 manifest/digest，不生成发布结论；final verifier 拒绝跨候选、缺失、重复、篡改、路径逃逸、符号链接、单报告超 24h、证据跨度超 72h 和 assembly 延迟超 15 分钟的 bundle。
+- `release.yml` 删除自行构造的 `release-chain.json status:qualified`。镜像扫描/SBOM/签名/部署策略/外部依赖五类报告由当前运行标准化；迁移回滚、DR、DAST、WCAG/视觉、SLO、Sites post-deploy 六类必须从受保护 HTTPS 下载、以预登记 ZIP SHA-256 验证，并由有界安全解包器拒绝缺项、覆盖、链接、逃逸和压缩炸弹。只有 `windops-release-gate --qualification-output` 在 11 类全部通过后创建 `release-qualification.json`，且拒绝覆盖已有结果。
+- built-image smoke 不再写死 `WINDOPS_ENVIRONMENT=development` 或开发依赖。workflow 先加载不能覆盖 candidate identity 的受保护 production 配置，再以同一个 env-file 从已构建 digest 镜像执行 Alembic、启动 API，并要求 ready 响应精确返回当前 release/commit/image 及 PostgreSQL、Redis、MinIO、Neo4j 全部 ready；生产 trusted Host 同时用于 HTTP smoke 和 Docker healthcheck。
+- 对抗性测试覆盖缺门禁、错检查、错 evidence-set、旧报告、篡改、路径逃逸、unsafe ZIP、缺独立 gate、development env、candidate identity override 和重复 qualification。发布专项 `46/46`，扩展 release/CARE 专项全通过；完整 backend 单测完成且零 failure（外部测试显式 skip）；Ruff 全后端、strict mypy `96` source files、frozen uv lock、workflow YAML/Prettier 和 `git diff --check` 通过。由于本机没有 Docker Engine 和受保护外部证据服务，本轮没有伪报真实镜像/外部门禁运行，但 workflow 对这些输入严格 fail closed。
+- `TECH-H002` 标记 `DONE`；按 High 顺序开始 `TECH-H003`，建立 CARE 独立镜像、队列、资源、checkpoint/storage 权限与实际 workload smoke。
+
+#### TECH-H003 Completed / UI-H-001 Start (2026-09-04 18:24 +08:00)
+
+- 新增同一 digest 生产镜像中的 `windops-care-full-scale` suspended CronJob：专用 `windops-care-worker` ServiceAccount、外部 `windops-care-runtime` Secret、只读 40 GiB source PVC、独立 80 GiB workspace PVC；队列固定 `care-v6-offline`，`parallelism/completions=1`、`backoffLimit=2`（共 3 次）、72,000 秒 deadline。工作流按同 job/state 路径依次执行 dependency closure、95-event full import、36-fold evaluation、事务 registration，再重放三阶段验证幂等。
+- CARE pod 不再继承 general runtime egress/Secret：独立 NetworkPolicy 只开放 DNS、PostgreSQL 5432 和 MinIO 9000 到双重 `care-dependency-access` 标签目标；专用 Pydantic runtime 只读取 `WINDOPS_CARE_DATABASE_URL` 与 MinIO 凭据，强制 PostgreSQL/MinIO TLS、强凭据、CARE bucket 与四个运维 bucket denial list。现有最小 MinIO policy 无 DeleteObject，storage policy hash 进入验收。
+- 新增 built-image `windops-care-workload-smoke`，在 non-root/read-only 容器内真实执行小型 Parquet：首次在 durable checkpoint 停止、同 state 恢复、再次同 ID 重放并要求相同内容 hash。release workflow 对 exact image digest 执行该 smoke；没有用假 full-scale 数据替代 5,242,948 行验收。
+- 受保护独立证据增加 `windops-care-fullscale-acceptance`：绑定当前 release/commit/image，解析并内容校验 dependency、import/evaluation manifest、两份 completed state、两份 replay、初次/重放注册、storage denial 共 10 个精确角色原始制品；强制 95 events、36 folds、资源通过、cross-farm disabled、transactional replay 与运维 bucket 全拒绝。`external_release` 的检查集合现同时要求 image smoke 和该 protected full-scale acceptance，缺项不能组装或 qualification。
+- 客观验证通过：新 CARE execution/acceptance、full-scale、container、deployment、release gate/pipeline 相关 `77/77`；Ruff、strict mypy、frozen lock、Prettier、`git diff --check`；`kubectl kustomize` 渲染 19 resources/6 workloads 并由 deployment policy 通过；wheel 构建确认包含 runtime、smoke fixture、smoke/acceptance verifier。当前机器仍无 Docker Engine 和受保护外部证据服务，因此没有伪报当前 digest 的镜像/全量外部运行，发布流程对此严格失败关闭。
+- `TECH-H003` 标记 `DONE`；High 技术项结束，开始 `UI-H-001`，按参考图重构 Dashboard 并执行桌面/移动截图循环。
+
+#### UI-H-001 Completed / UI-H-004 Start (2026-09-04 18:40 +08:00)
+
+- Demo 与 Production 首页现共用事件决策条：按严重度与持续时间稳定选取最高事件，展示公开 AI 状态、健康值、异常强度和权威数据时间；无高优事件使用独立绿色稳定态并跳转告警中心，不把未知值渲染为零。
+- 两种运行模式均精确收敛为 6 个核心 KPI（当前功率、24h 电量、运行机组、平均健康度、活跃告警、活跃 Missions），桌面主区固定 7/5 功率趋势与优先队列，下层为 4/4/4 Mission、Agent 活动、作业窗口；窄屏顺序为事件、队列、趋势、Mission、Agent、天气，1280 下 KPI 精确为 3×2。
+- 新增 Chromium E2E 覆盖 Demo 1440×900、Demo 1280×800、Production 稳定/单一 P1/多条高优事件，以及真实焦点和 Enter 触发的键盘链接激活；`3/3` 通过。五张全页截图已逐张人工复核，生产下方面板语义结构和文本布局在第二轮修正后通过。
+- 验证通过：Prettier、TypeScript、ESLint、production build；真实截图位于 `.artifacts/playwright/test-results/dashboard-incident-layout-*`。`UI-H-001` 标记 `DONE`，开始 `UI-H-004` 全仓术语/数据来源扫描和 22 路由业务边界整改。
+
+#### UI-H-004 Completed / UI-H-005 Start (2026-09-04 19:05 +08:00)
+
+- 核心业务数据、类型、排序、风险矩阵、活动流、Mission 证据、报告、资产健康、风机详情、数字孪生、诊断与预测性维护均移除合成 RUL / 30 天失效概率；改由异常分数、健康评分、告警事实、证据等级与运营后果驱动。Production adapter 会丢弃后端遗留的寿命/概率字段后重新计算证据等级，Demo 模型明确为隔离的状态证据演示，不参与生产决策。
+- 前端 Agent catalog 删除 `predict_rul`；后端生产 Agent 同根替换为 `assess_condition_evidence`，只返回原始异常/趋势输入、状态与证据等级，不再计算预计天数或失效概率。外部模型登记仍可描述独立验证过的预测合同，但合同旁就地说明 CARE 不验证、Demo 不生成或展示此类结论；诊断提前量明确为来源行偏移而非 RUL。
+- 验证通过：Node 全量 `155/155`，随后受影响前端定向 `17/17 + 8/8`、边界测试 `5/5`；后端 domain/vertical 与 Agent governance/reasoning 套件全部通过，Ruff、strict mypy、TypeScript、ESLint、production build 和 `git diff --check` 通过。全仓精确结论扫描为零，核心源仅保留上述显式边界。
+- Chromium 真实遍历 Demo 22 路由 `1/1`，并对 `/health`、`/predictive-maintenance`、`/digital-twin`、`/turbines/WT-023` 生成和人工检查 1440×900 全页截图；页面以异常、健康、告警和证据等级表达，没有未标注的精确寿命/失效概率。`UI-H-004` 标记 `DONE`，开始 `UI-H-005` 字号 token、全站可见文本与 200% reflow 整改。
+
+#### UI-H-005 Completed / UI-H-006 Start (2026-09-04 19:25 +08:00)
+
+- 在全局设计系统建立 `13px Body/Table`、`12px Secondary`、`11px Metadata` 及对应行高 token；626 处原 5.5–10.5px 声明按语义迁移，`small` 与 `strong` 重置分别守住元信息和关键值下限，状态 Badge、导航、分段控件、关键数值、操作标签及 DataTable 表头/正文使用正确层级。时间序列与知识图谱 canvas 标签也提升至不低于 11px。
+- 新增静态 typography contract：扫描 `app/components` 全部 CSS，禁止任何 literal px 小于 11，并验证共享 token、Body、Button、StatusBadge、DataTable 和 canvas 配置；`4/4` 通过。新增 Chromium computed-style 审计真实遍历 22 路由，断言全部可见文本 ≥11px、关键/可操作文本 ≥12px、表格 cell 基线 13px，`1/1` 通过。
+- 生成并人工对照 reference 检查 Dashboard 的 1440×900、1280×800、390×844 全页截图：首屏风险、六项 KPI、7/5 主区与 4/4/4 下层层级保留，字号和状态/单位/时间来源可读；未以裁剪必要信息换取密度。以 720 CSS px 验证 1440 视口 200% zoom 等效 reflow，对 Dashboard、Mission 详情、模型和数据页断言无页面级横向溢出、标题/按钮/状态/页面说明无裁切，并人工检查三张全页截图。
+- 验证通过：Typography Chromium `3/3`、TypeScript、ESLint、production build、Prettier 与 `git diff --check`。`UI-H-005` 标记 `DONE`；开始最后一个 High `UI-H-006`，修复 tablet drawer、laptop 折叠记忆、移动触控目标与焦点约束。
+
+#### UI-H-006 Completed / TECH-M002 Start (2026-09-04 19:39 +08:00)
+
+- App Shell 的 overlay drawer 断点统一到 `1023px`：抽屉带遮罩、背景 inert、ARIA modal、首焦点、正反向 Tab 约束、Escape/关闭按钮关闭和菜单触发器焦点返回；打开时锁定 body 滚动，离开 overlay 断点自动清理状态。`1024–1439px` 默认折叠并用本地偏好记忆人工展开/收起，折叠只影响桌面侧栏，不会让平板抽屉丢失标签。
+- `767px` 及以下将主要按钮、图标按钮、导航、表单控件、summary 和可点击业务行的两个维度统一守到至少 `44px`；焦点工具会过滤 CSS 隐藏、inert 和无布局框元素，避免把不可见的桌面控件纳入移动抽屉焦点环。
+- Chromium 专项真实覆盖 900px drawer 与 720px（1440 视口 200% 等效）键盘路径、1024/1280px 侧栏默认/偏好持久化及主内容宽度，并以 390px 遍历 22 条路由全页交互目标、表格内滚动和 document overflow，另抽查 320/360/430px Dashboard；最终 `3/3`。人工检查更新后的 900/1024/1280 全页截图，首屏位置、抽屉遮罩、内容层级及桌面展开态均正确。
+- 初次全路由触控审计真实发现 7 条路由存在 29–36px 控件，修正通用规则后才通过；没有弱化断言。最终 TypeScript、ESLint、production build、响应式/字号静态合同 `6/6` 与 `git diff --check` 通过。`UI-H-006` 标记 `DONE`，High 阶段全部完成；进入 Medium 并开始 `TECH-M002` release commit identity 校验。
+
+#### TECH-M002 Completed / TECH-M003 Start (2026-09-04 19:43 +08:00)
+
+- Sites Worker 的 production config 新增强制 `WINDOPS_BACKEND_EXPECTED_COMMIT_SHA`，只接受非全零的 40/64 位小写完整 SHA；生产缺失、占位或格式错误均在读取配置时失败关闭。`releaseMismatch()` 现精确比较 release ID、commit SHA 与 image digest 三元组，因此 `/readyz` 探针和每个代理业务响应不会再把 commit 仅解析后透传。
+- `release-candidate` 的 `sites-release-bindings.env` 现把 `${GITHUB_SHA}` 与同候选的 `${RELEASE_ID}`、`${IMAGE_DIGEST}` 一起记录；Worker env、生产 E2E server、标准启动隔离变量、示例配置及发布 runbook 同步该字段。流水线测试精确断言三条发布绑定，避免以后静默删回 commit。
+- 新增缺 commit、全零 commit、ready 错 commit、代理响应错 commit 的负向断言；Node production runtime `20/20`、backend release pipeline `31/31`、TypeScript、ESLint、production build、Ruff 与 `git diff --check` 全部通过。`TECH-M002` 标记 `DONE`；开始与 `UI-M-002` 共根的 `TECH-M003` UI 自动化验收矩阵建设。
+
+#### UI-M-001 Completed inside TECH-M003 Matrix (2026-09-04 20:01 +08:00)
+
+- 新验收矩阵首先复现详情 route 严格相等导致导航归属丢失。新增单一 route ownership：`/missions/:id` 归属 `/missions`；Demo 风机详情归属“风机”，Production 风机详情归属资产目录“风场”；查询参数/fragment 不影响归属。所有当前侧栏链接仅对唯一 owner 设置 `aria-current="page"`。
+- `PageHeader` breadcrumb 向后兼容字符串并支持真实链接；Mission 详情的“Mission 中心”及风机详情的“风场”成为有明确返回名称的原生链接，不依赖浏览器后退。Mission 列表链接进入详情、读屏当前项、聚焦返回链接、Enter 返回列表的 Chromium 路径通过；route mapping 单元合同 `2/2`。
+- axe 首轮同时发现 Progress 只有 `aria-label` 而无语义角色，现统一为带 min/max/now 的 `progressbar`；Mission 纵向时间线和移动横向阶段栏成为有名称的键盘可滚动区域。`UI-M-001` 标记 `DONE`；继续完成 `TECH-M003/UI-M-002` 共根矩阵。
+
+#### TECH-M003 / UI-M-002 Completed / TECH-M004 Start (2026-09-04 20:17 +08:00)
+
+- 新增单一 `routeAcceptanceMatrix`：22 个工作区按 critical/standard 分层，覆盖 1440×900、1280×800、900×900、390×844 四视口；每个组合验证主区、唯一 H1、唯一且正确的 `aria-current` 导航归属、致命错误、route fallback 与页面横向溢出，共 88 个 route×viewport 组合。Dashboard 三份稳定全页基线已纳入版本控制并逐张人工检查。
+- 所有 10 个关键路由在 desktop/mobile 共 20 次 axe serious/critical 扫描通过；Mission 全键盘往返与 reduced-motion 通过；200% 等效验证扩展到 Dashboard、Mission 详情、Decision、Work Order、Models、Data。扫描首次发现的真实颜色对比度、Progress 语义、搜索名称、时间线/阶段栏键盘滚动和预测风险矩阵触点问题均已修复，没有 exclusion 或弱化断言。
+- Decision Center 补齐 `initial-loading / refreshing / success-empty / permission / conflict / service / network / stale / disabled`：错误不再伪装为空队列，失败刷新保留旧数据但锁住审批；approve/reject/request-revision/escalate 分别绑定后端 capability。Manager/Approver/Reviewer/Field 四角色真实生产浏览器断言逐动作启禁。
+- Playwright 默认排除只应在真实后端 job 运行的跨层 spec，browser 与 real-cross-layer 两个 required job 都启用自定义 fail-on-skip reporter；静态合同固定 22 route、4 viewport、4 role、生命周期、三份 baseline 与 CI 证据保留。回归还发现 Dashboard 任务入口的框架链接键盘 Enter 不导航，已改为原生锚点并保留严格键盘断言。
+- 验证通过：TypeScript、ESLint、production build；UI 合同 Node `7/7`；四份核心 Playwright spec 最终 `22/22`、0 skip（含状态、角色、200%、WCAG、视觉基线）。`TECH-M003` 与同根 `UI-M-002` 同时标记 `DONE`；开始 `TECH-M004`。
+
+#### TECH-M004 Completed / TECH-M005 Start (2026-09-04 20:40 +08:00)
+
+- 所有业务 GET 在业务查询前把 `windops.read-access.v2` 最小化事件写入有界 Redis Stream；保留服务端 subject/role/method/endpoint/UTC 与 canonical query/scope SHA-256，仅保留参数和授权范围计数，不保留查询、租户、风场、风机或 data-scope 原值。Redis 超时/故障与队列满分别稳定返回 `READ_AUDIT_UNAVAILABLE` / `READ_AUDIT_BACKPRESSURE` 的 503，业务读不会执行。
+- 独立 worker 以 consumer group 批量写 PostgreSQL，提交后才 XACK+XDEL；失败批次保持未确认并可 reclaim，重复投递由 `(accessed_at,id)` 幂等。`0028_read_audit_pipeline` 已把热表迁为月 RANGE 分区并创建默认/前月/本月/未来三月分区；日常维护把 30 天前完整最小化记录原子转为确定性 gzip JSONL，SHA-256 校验并保留至最后事件后 365 天。备份、Kubernetes worker/CronJob、release policy、配置和运维手册均已接通。
+- 隔离 PostgreSQL 16.15 + TimescaleDB 2.29.2 + pgvector 0.8.6 的新库从 `0001` 全量升级至唯一 head `0028`；真实 1,000 条写入只产生 2 个 500 条事务，写放大 `0.0020`，批事务 p95 `47.298ms`，6 个分区与 3 条过期热记录的原子归档/解压/hash/删除全部通过。CI 的 `postgres-contract` 已纳入同一外部合同且 fail-on-skip。
+- 定向 Ruff、mypy strict 5 个源文件、读审计/权限/部署/发布/备份回归 `88/88`、真实 PostgreSQL 合同 `1/1`、唯一 migration head、offline SQL 和 whitespace 检查通过；pytest 唯一告警仍是项目缓存目录 ACL。`TECH-M004` 标记 `DONE`；开始最后一个活动问题 `TECH-M005`。
+
+#### TECH-M005 Completed / First Full Recheck Start (2026-09-04 20:43 +08:00)
+
+- 从 Git 索引精确移除 `.codex_tmp` 的 7,852 个文件、334,332,149 bytes，其中 7,792 个是嵌套 `node_modules`、56 个是 `.dll/.node/.wasm` 原生或二进制制品；使用 `git rm --cached`，本地 scratch 未删除。根 `.gitignore` 已排除该目录，复验 tracked count 为 0 且 `git check-ignore` 命中。
+- 新增版本化 artifact policy 和 `pnpm check:repository-artifacts`：直接审计 Git index，拒绝 `.codex_tmp`、构建缓存、嵌套依赖目录；任一超过 10 MiB 的受控例外必须同时登记稳定 source URI、license、内容 SHA-256 和 content-addressed scan evidence。当前剩余 519 个 tracked blob、20,485,844 bytes，无单文件超过 10 MiB，因此 allowlist 保持空，不伪造“必须保留”大制品证据。
+- 主 frontend required CI 在安装依赖前运行该门禁；脚本、ESLint、Prettier、policy 输出和 whitespace 检查通过。`TECH-M005` 标记 `DONE`，本轮 24/24 Issue 首次全部完成；依照目标不结束，进入 First Full Recheck。
+
+#### First Full Recheck — TECH-M004 Reopened (2026-09-04 21:12 +08:00)
+
+- 第一轮完整前端门禁修复 3 个格式漂移后通过：artifact policy、TypeScript、ESLint、Prettier、production build、bundle budget、167 个 Node 测试、75.10% 后端覆盖率（397 passed / 27 外部环境 skip / 0 failed）、Ruff、Bandit、strict mypy 100 源文件、官方参考等价、lock/容器依赖和 startup smoke 均成立；Chromium 全矩阵 `29/29`、0 skip。
+- 安全复查发现 `pypdf 6.16.0` 的 CVE-2026-84310/84311，已把最低版本提升至 6.16.1、实际锁定/容器清单更新为 6.17.0，重跑 `pip-audit` 为零已知漏洞；同时移除 CARE runtime 过期 `type: ignore`，全量 mypy 恢复通过。
+- 真实 PostgreSQL required contract 首轮 21 项中 20 项通过、1 项失败：`alembic check` 把 `0028` 的物理月分区子表识别为 ORM 应删除对象，同时发现 archive ORM 漏声明迁移中的 3 个 check constraint。该失败属于当前修改而非环境问题，故 `TECH-M004` 立即重开为 `IN_PROGRESS`，修复并重跑前不得恢复 DONE。
+
+#### First Full Recheck — TECH-M004 Revalidated (2026-09-04 21:32 +08:00)
+
+- Alembic 环境现在只忽略由 `read_access_audit` 声明式分区产生的物理 child tables/objects，仍对 canonical parent、archive 表及普通 schema drift 失败；archive ORM 补齐 `row_count > 0`、period ordering、expiry 三个迁移约束。Ruff、strict mypy、精确迁移回归与 `alembic check` 均通过，输出 `No new upgrade operations detected.`。
+- 在第二个 fresh PostgreSQL 库从 `0001` 升级至 `0028` 后，required contract `22/22`、0 skip、0 fail，含 6 个读审计分区；1,000 条真实写入 2 个事务，写放大 `0.0020`，批事务 p95 `271.687ms < 500ms`。一次复用旧本地 DB 的固定证据 ID 冲突被判定为无效 harness reuse，随后完整 fresh-DB job 排除了产品失败。
+- CARE release 三个独立 fresh DB job 同样在最终迁移头通过：offline `1/1`、full-scale `1/1`、vertical `2/2`、全部 0 skip；release evidence verifier `4/4`，目录 overall p95 `16.832ms`、SQL p95 `8.766ms`，replay `940.168 rows/s`，full-scale 1,571 imports / 404 evaluations / 270 metrics。`TECH-M004` 恢复 `DONE`，活动问题为 0；继续跨报告验收扫描，尚未提前宣告 First Full Recheck PASS。
+
+#### First Full Recheck Completed / Adversarial Review Start (2026-09-04 21:40 +08:00)
+
+- 从两份报告重新解析出精确 `16 technical + 8 UI = 24` 个唯一 Issue，并与当前 Progress 登记逐项比较：`24/24 DONE`、0 missing、0 extra、Critical/High/Medium remaining 均为 0。逐项复读全部 Required Change / Acceptance Criteria 与 Suggested Validation，确认同根 `TECH-H001/UI-H-002/UI-H-003`、`TECH-M003/UI-M-002` 的实现和证据没有重复分叉。
+- 当前产品源码、测试、迁移、脚本和 workflow 扫描无 TODO/FIXME/HACK/XXX；变更测试没有新增 skip/xfail/only、空断言或 coverage 弱化。命中的 `placeholder` 均为表单属性或对不可部署占位身份的失败关闭合同；外部 PostgreSQL 文件只保留显式 environment skipif，required jobs 和本轮 fresh-DB runs 均以 fail-on-skip 得到 0 skip。
+- 补跑审计基线曾缺失的真实跨层链路：fresh PostgreSQL `0001→0028`、真实 FastAPI HTTPS、真实 Worker delegated JWT 与 Chromium；待轮换审计先使 `/readyz` 返回 503，经授权、幂等 Worker POST 确认后恢复 200 ready，Playwright `1/1`、0 skip。隔离 DB 已精确删除，证据保留于 ignored `.artifacts`。
+- 两份 Audit 的 Issue index 已只更新最终状态：technical `16/16 DONE`，UI `8/8 DONE`；原 Problem、Impact、Required Change 和 Acceptance Criteria 保持不变，最终接受仍明确受后续三阶段约束。First Full Recheck 判定 `PASS`，不增加 Final Audit 计数；现在进入 Adversarial Review。
+
+#### Adversarial Review — TECH-M004 Reopened and Fixed (2026-09-04 21:48 +08:00)
+
+- 恢复/并发审查发现 read-audit retention 在事务外先读取待归档行；CronJob `concurrencyPolicy: Forbid` 不能约束手工启动、重试或第二调度器。首次无延迟并发探针偶然通过，未据此忽略；加入只作用于 fresh 测试库的 archive-insert delay 后，4 个并发实例稳定复现相同 SHA-256 archive 主键冲突，证明是产品竞态而非理论风险。
+- `maintain_read_audit_retention()` 现对 PostgreSQL 在读取任何 live row 前取得 transaction-scoped advisory lock，并在同一事务内完成选择、确定性 gzip、archive insert、live delete 和 expiry purge；正常 K8s 调度约束保留为第一层。新增真实 PostgreSQL `4` 并发回归严格要求结果为 `[0,0,0,25]`、单一 archive、零 live row。
+- 修复后真实 PostgreSQL 并发回归 + 本地 read-audit 套件 `9/9` 通过，Ruff lint、strict mypy 和 whitespace 检查通过；此前 deliberate pre-fix probe 的唯一约束失败已保存为根因证据。`TECH-M004` 再次恢复 `DONE`，Final Audit 仍为 `0 / 2`，继续其他 adversarial 类别。
+
+#### Adversarial Review Completed / Final Global Validation Start (2026-09-04 21:50 +08:00)
+
+- `invalid input / empty / repeated action / network / API / permission / stale / concurrency / restart / partial failure / production configuration` 全部按现有产品边界重验。后端 98 个定向合同、前端 64 个状态/身份/幂等合同、Chromium 18 个状态矩阵/角色/网络/响应式场景均 0 failure、0 skip；read-audit 的新 PostgreSQL 竞态是本阶段唯一新增真实发现，已修复并回归。
+- repository artifact 门禁通过独立临时 Git index 注入一个 retained `.codex_tmp` 文件，稳定退出 1 并指出 forbidden cache path；真实 Git index SHA-256 前后相同。正常门禁仍为 519 blobs / 20,485,844 bytes / 0 governed large artifacts。CI/release 的外部 action 全部固定 40 位 commit，`continue-on-error/allow_failure=0`，只有 final verifier 能写 qualification。
+- 高置信 credential scan 仅命中一个明确的 test fixture，非测试候选为 0；Git 跟踪的 CSV/Parquet/ZIP 原始 CARE 数据为 0；无产品 TODO/FIXME/HACK/XXX、无新 skip/xfail/only 或断言弱化。测试端口和临时 DB 已清理。
+- Sites hosting 约束已核对：本任务只授权仓库整改/验证，没有授权保存版本或部署到外部 Site，因此不执行外部发布；后续最终验证仍会检查 `dist/server/index.js` 与 hosting metadata 的生产构建边界。Adversarial Review 判定 `PASS`，未发现新的 Critical/High；Final Audit 计数保持 `0 / 2`，进入当前最终代码状态的全局验证。
+
+#### Final Global Validation Completed / Final Audit Pass #1 Start (2026-09-04 22:14 +08:00)
+
+- Frontend required 门禁全部从当前树重跑：artifact policy、TypeScript、ESLint、Prettier、production build、standard start smoke、bundle budget 与 167 个 Node 测试通过；覆盖率为 lines `90.34% >= 89%`、branches `51.56% >= 49%`、functions `33.37% >= 32%`，90 chunks / 2,617,225 bytes，最大 chunk 645,003 bytes。
+- Backend current-tree global suite JUnit：`425 tests / 397 passed / 28 external-environment skipped / 0 failures / 0 errors`，930.854s；全局覆盖率 `75.09% >= 68%`。28 个 skip 精确属于专用 PostgreSQL/CARE 外部 jobs，不作为通过证据；本阶段另在 fresh PostgreSQL 对主 contract `23/23`、0 skip、0 failure、99.875s，并验证唯一 `0028` head 与 `alembic check: No new upgrade operations detected.`。
+- 当前树后端 Ruff 212 files、strict mypy 100 source files、Bandit、`pip-audit`（零已知漏洞）、frozen uv/container lock、CARE dependency closure、官方 reference equivalence 与 Alembic offline SQL 全部通过。最终 Chromium `29/29`、0 skip；另以当前代码 fresh DB 再跑真实 Worker→FastAPI→PostgreSQL HTTPS 为 `1/1`、0 skip。
+- production `dist/server/index.js`、`dist/.openai/hosting.json`、`dist/.openai/drizzle` 均存在；未执行未授权外部发布。所有验证 DB/端口已清理，报告保存于 ignored `.artifacts/final-global`，`git diff --check` 退出 0。Final Global Validation 判定 `PASS`；进入独立 Final Audit Pass #1，计数暂保持 `0 / 2`。
+
+#### Final Audit Pass #1 Completed (2026-09-04 22:18 +08:00)
+
+- 控制面/覆盖审计重新解析 technical index `16/16 DONE`、UI index `8/8 DONE`、Progress current register `24/24 DONE`，集合精确相等；Critical/High/Medium remaining 均为 0。`AGENTS.md`、`PRODUCT_REQUIREMENTS.md`、`UI_UX_SPEC.md`、`ARCHITECTURE.md` 的 SHA-256 与本轮读取基线完全一致，证明未改动禁止修改的三份需求/架构文档。
+- 当前三份 Dashboard 基线与最终 JUnit/coverage/CARE closure/reference evidence 全部存在并重新哈希；对照原始 reference 与 1440 基线，验证 incident-first 首条、6 KPI、7/5 trend/queue 和 4/4/4 下层结构保持，主题/具体数据差异不影响信息层级，也没有像素复制或伪数据耦合。根报告/进度/retention runbook 的 Prettier check 通过。
+- 首个状态 parser 因未容忍 UI Markdown 表格的对齐空格而报 topology mismatch；修正只读 regex 后得到精确 `16+8`。随后一次保护文档比较因人工抄写 SHA-256 少一位而失败；从实际文件和先前 CARE source-of-truth evidence 双向核对后纠正常量，文件本身未变化。两项均为审计 harness 输入错误，不是产品失败，也未弱化最终断言。
+- Pass #1 未发现新的 Critical 或 High，`Final Audit Pass` 增至 `1 / 2`。进入独立 Pass #2；在其通过前 Final State 仍为 `OPEN`。
+
+#### Final Audit Pass #2 — TECH-M005 Reopened (2026-09-04 22:21 +08:00)
+
+- 以真实索引副本和隔离 `GIT_INDEX_FILE` 执行全候选 `git add -A` 时，发现本轮验证生成的 `tmp/c005-postgres` 便携数据库会进入候选索引；继续盘点确认 `tmp/` 下还有官方数据工作副本、clean clone、wheel 与临时索引等多组未忽略 scratch。模拟在写入真实索引前已中止；真实索引中 `tmp/c005-postgres` 跟踪数仍为 0。
+- 该发现属于 TECH-M005 同一仓库制品治理根因，按规则重新标为 `IN_PROGRESS`，Final Audit 计数保持 `1 / 2`。修复目标是默认忽略新的 `tmp/` 内容，并在 index policy 中禁止强制加入 `tmp/`，仅为既有受控 CARE PDF/render fixture 保留精确路径例外；完成候选索引正/负验证后才能恢复 `DONE` 并重跑 Pass #2。
+- `.gitignore` 现默认排除新的 `tmp/*`；index policy 禁止整个 `tmp/`，仅放行 5 个既有 CARE PDF/render 文件和迁移中的旧 verifier 精确路径，submodule gitlink继续单独受固定 commit/tree 供应链门禁治理。真实索引门禁为 519 blobs / 20,485,844 bytes `PASS`。
+- 隔离候选重新执行全量 `git add -A` 后只有 6 个既有 `tmp` 路径（固定 gitlink + 5 个受控参考文件），574 blobs / 23,611,578 bytes，门禁 `PASS`；再以现有 blob 强制注入非例外 `tmp/pdfs/forced-artifact.txt`，门禁按预期退出 1 并精确报告 forbidden path。真实 `.git/index` 前后 SHA-256 均为 `52904237...6E39`，候选索引已清理。TECH-M005 在修复与正/负验证后恢复 `DONE`，进入 Pass #2 全轮复核。
+
+#### Final Audit Pass #2 — PASS / Completion (2026-09-04 22:29 +08:00)
+
+- 重新解析技术、UI 与 Progress 活动索引，得到 `16/16 + 8/8 = 24/24 DONE` 且集合精确相等；Critical/High/Medium remaining 均为 0。保护文档 hash 仍为 AGENTS `25B10F39...AE06D`、PRD `319BF135...FEC02`、UI spec `9DC4C01A...AACB`、Architecture `498A332F...F955`，三份禁止修改的需求/架构文件没有漂移。
+- 当前代码定向回归：后端 release/deployment/container/CARE closure/reference/read-audit `47/47`、前端 query/navigation/responsive/type/UI-matrix/lifetime-boundary `21/21`，均 0 skip；Final Global Validation 的 backend `425 tests / 397 passed / 28 dedicated external skips / 0 failed`、fresh PostgreSQL `23/23`、真实跨层 `1/1`、Chromium `29/29` 证据继续有效。
+- 供应链/安全：36 个 workflow action 全部固定 40 位 commit，0 个 `continue-on-error`；CARE reference 仍是 mode `160000`、commit `a338b6e...` 的 gitlink；除 `test_platform_configuration_security.py` 的 4 条刻意假密钥 fixture 外无候选，0 个 TODO/FIXME/HACK/XXX，`.codex_tmp` tracked 0。首轮 secret regex 把 `task-...` URI 误识别为 `sk-`，收紧前置词边界并保留显式测试 fixture 例外后通过；这属于只读 harness 假阳性，产品文件未改变。
+- hosting build 三个生产边界存在；reference 与 1440/1280/390 基线均存在并重哈希；工作区与 cached diff whitespace 检查通过。Pass #2 未发现新的 Critical/High；TECH-M005 的 Medium 发现已在本轮完整修复并复验，连续收敛计数达到 `2 / 2`，Gate A–H 全部 `PASS`，Final State 更新为 `COMPLETED`。
+
+---
+
+## 历史活动运行：CARE v6 数据集接入与验证（截至 2026-08-29）
 
 本节是当前执行状态的唯一 Source of Truth。下方“历史执行记录”保留 2026-08-21 已完成审计的证据，不得用其中的 `COMPLETED` 或 `2 / 2` 覆盖本次 CARE 任务状态。
 
 ### Metadata
 
-- Project：`WindOps / wind-agent`
+- Project：`OpenVigil / wind-agent`
 - Requirement：`docs/care-v6-integration-development-plan.md`
 - Active Issues：`AUDIT_REPORT.md` 顶部 `CARE-*` 登记
 - Execution Rules：`EXECUTION_GOAL.md` 顶部 CARE 覆盖层 + 通用 Runbook
@@ -523,7 +858,7 @@
 ## Historical Metadata
 
 Project:  
-`WindOps / wind-agent`
+`OpenVigil / wind-agent`
 
 Audit Source:  
 `AUDIT_REPORT.md`
@@ -862,7 +1197,7 @@ Convergence: `2 / 2`
 - 直接重查 H-001 的递归 deep-size/运行时 tracemalloc/Reservation 双遍/Neo4j 有界交接、H-002 的关联边界/orjson/真实 HTTP 指标、M-001 的 undefined env 归一化/图片 503/标准启动 CI，以及 M-002 的行锁后二次 receipt、savepoint/唯一冲突和六个 coverage floor；关键防线仍在当前源码且对应合同通过。
 - 候选镜像当前 content ID 仍为 `sha256:4980e6e4fb7df3fe024a77a4f5437a17ab5ef1b55d70c7e04382297e052b3dc0`；linux/amd64、UID/GID `10001:10001`、默认 `windops-api`、healthcheck、release/commit/source/固定 base 标签均未漂移。保留本地候选供复核，未伪报 registry push/signature。
 - Alembic 唯一 head 与声明均为 `0022_diagnosis_priority_indexes`；`git diff --check` 通过，相关源码 TODO/FIXME/HACK/XXX 为 0。高置信 secret 扫描只命中 `test_platform_configuration_security.py` 中两处明确的无效私钥拒绝 fixture；五个 external `skipif` 均由专用 fail-on-skip 门禁约束，唯一 `|| true` 是真实 E2E finally 的 PID 清理。
-- Docker 精确标签及名称扫描均确认 WindOps 容器/网络为 0；仓库 Node/Python runtime 进程为 0；端口 `3000/4179/8000/8443/18002/55438` listener 为 0。端口 `5432` 当前属于另一仓库 `ai-hybrid-tower-inspection` 的 `aihti_h005_prod-postgres-1`，端口 `9000` 属于系统 `LemonadeServer.exe`，按工作边界未操作。
+- Docker 精确标签及名称扫描均确认 OpenVigil 容器/网络为 0；仓库 Node/Python runtime 进程为 0；端口 `3000/4179/8000/8443/18002/55438` listener 为 0。端口 `5432` 当前属于另一仓库 `ai-hybrid-tower-inspection` 的 `aihti_h005_prod-postgres-1`，端口 `9000` 属于系统 `LemonadeServer.exe`，按工作边界未操作。
 - 审计脚本有三次已纠正的只读调用错误：coverage 路径键使用 Windows 反斜杠、Docker Go template 假定可选 Entrypoint 键存在、从 backend 目录误写 workflow 相对路径；均在查看实际格式后用规范化/完整 JSON/正确路径重跑原硬断言通过，没有修改证据或掩盖产品失败。
 - 本轮没有发现新的 Critical 或 High，连续两轮 Final Audit 收敛成立，计数增至 `2 / 2`。
 
@@ -882,7 +1217,7 @@ Status: `COMPLETED`
 | H — Persistent State | PASS | 本文件活动 Metadata、Statistics、Issue 表、Convergence、Gate 表、Next 和 Final State 已同步为真实最终状态。 |
 
 - Gate A-G 先由形式化脚本精确解析 `AUDIT_REPORT.md`、本文件活动区、当前实现和最终证据后全部通过；Gate H 随本次原子进度更新成立。
-- 最终紧邻写入快照：`git diff --check` PASS；项目标签容器、项目网络、WindOps 名称容器、仓库 Node/Python runtime 进程及端口 `3000/4179/8000/8443/18002/55438` listener 全部为 `0`。
+- 最终紧邻写入快照：`git diff --check` PASS；项目标签容器、项目网络、OpenVigil 名称容器、仓库 Node/Python runtime 进程及端口 `3000/4179/8000/8443/18002/55438` listener 全部为 `0`。
 - 当前没有 blocker 或剩余审核任务。候选镜像仅作为停止状态下的本地制品保留，不是运行服务；其他仓库/系统服务未操作。
 
 ## 3G. Final Global Validation (2026-08-20 13:27 +08:00)
@@ -900,7 +1235,7 @@ Status: `PASS`
 - 实际 release image smoke 通过：镜像内 Alembic、read-only rootfs、non-root、cap-drop、no-new-privileges、API health/readiness、Docker health 与 release identity 注入均成功；临时固定摘要 Neo4j、API 容器和专用网络已精确清理。
 - `kubectl kustomize v5.8.1` 真实渲染后 deployment policy 通过：`14` resources、`5` workloads/jobs、`9` 项策略检查；全部绑定同一 content digest/release/commit，清单 SHA-256 `5faf493332269ff2a5be4fe0c65cc00a88726a51d6e34fe8bf90d0831dc2a7e5`。
 - `git diff --check` 退出 `0`，仅既有 LF/CRLF 提示。相关源码/测试无未完成 TODO/FIXME/HACK；CI 唯一 `|| true` 是 finally 清理，外部测试 `skipif` 受专用 job 的 `WINDOPS_FAIL_ON_SKIPPED=1` 约束；高置信 secret 扫描只命中两个明确的无效 `fixture` 私钥头字符串。
-- 最终 PostgreSQL 在核对 `windops.project=wind-agent`、`windops.audit.issue=FINAL`、`--rm` 与端口 `55438` 后停止并确认删除；本轮 TLS 私钥/证书已删除。WindOps 无运行中容器、专用网络或仓库 Node/Python 进程。公共端口扫描中的 `5432` 属于另一仓库 `ai-hybrid-tower-inspection`，`9000` 属于系统 `LemonadeServer.exe`，按项目边界未操作。
+- 最终 PostgreSQL 在核对 `windops.project=wind-agent`、`windops.audit.issue=FINAL`、`--rm` 与端口 `55438` 后停止并确认删除；本轮 TLS 私钥/证书已删除。OpenVigil 无运行中容器、专用网络或仓库 Node/Python 进程。公共端口扫描中的 `5432` 属于另一仓库 `ai-hybrid-tower-inspection`，`9000` 属于系统 `LemonadeServer.exe`，按项目边界未操作。
 - Remaining：`NONE`（进入两轮连续 Final Audit 收敛检查）。
 
 ## 3F. Adversarial Review (2026-08-20 13:10 +08:00)
@@ -2129,3 +2464,30 @@ The active register and current sections `3K` through `3Q` supersede the histori
 - Status: `DONE`
 - Current final state: `COMPLETED`
 - Source of truth: regenerated `AUDIT_REPORT.md`
+
+---
+
+# 13. OpenVigil Brand Migration (2026-09-05)
+
+Status: `VALIDATED`
+Brand Audit Pass: `2 / 2`
+Second Pass: `PASS`
+
+Scope completed:
+
+- 用户可见品牌、页面元数据、错误/权限文案、类型与组件命名、导出文件名、README 与规范/审核文档统一为 `OpenVigil`。
+- 品牌含义按 `Open + Vigil` 写入 README；保留开放架构/接口/模型生态/数据接入与持续守望异常信号的产品语义。
+- `openvigil-theme` 与 `openvigil-sidebar-collapsed` 成为新浏览器键，并保留一次性读取旧键的兼容迁移。
+- README 截图、设计概念图、OG 图、桌面视觉参考、真实浏览器基线及 10 页项目介绍演示稿完成视觉品牌替换。
+- `windops_backend`、`WINDOPS_*`、`x-windops-*`、Drizzle/Neo4j 对象、bucket/指标/告警规则与实时协议保留为兼容命名空间，未引入破坏性迁移。
+
+Validation completed:
+
+- `pnpm test`: `167 / 167` passed.
+- `uv run pytest`: `397 passed, 28 skipped`；skip 均为显式外部环境测试。
+- `pnpm test:e2e`: `29 / 29` passed；含 22 路由、响应式、WCAG、200% 放大和真实截图基线。
+- `pnpm run typecheck`, `pnpm run lint`, `pnpm run format:check`, Ruff 与 strict mypy 全部通过。
+- `pnpm run test:start-smoke`: demo 启动与非法 production 配置 fail-closed 通过。
+- 演示稿 10 页完整导入，package integrity、字体、模板覆盖率和版式 validator 通过；最终文件中旧展示品牌命中为 0。
+- Brand Audit Pass #1：用户可见旧品牌 0、旧可见资产名 0、非白名单技术改名 0、缺失 OpenVigil 交付物 0。
+- Brand Audit Pass #2：在进度持久化后重新执行同一审计，结果保持 0 / 0 / 0 / 0，旧名演示稿不存在。

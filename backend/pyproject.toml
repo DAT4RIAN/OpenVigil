@@ -12,6 +12,7 @@ license = { text = "MIT" }
 dependencies = [
   "alembic>=1.16,<2",
   "asyncpg>=0.30,<1",
+  "cryptography>=50,<51",
   "dramatiq[redis]>=1.18,<2",
   "fastapi>=0.116,<1",
   "httpx>=0.28,<1",
@@ -21,7 +22,7 @@ dependencies = [
   "minio>=7.2,<8",
   "neo4j>=5.28,<7",
   "pgvector>=0.4,<1",
-  "pypdf>=6.14.2,<7",
+  "pypdf>=6.16.1,<7",
   "pyyaml>=6,<7",
   "PyJWT>=2.13,<3",
   "pydantic>=2.11,<3",
@@ -48,6 +49,9 @@ benchmark = [
   "pyarrow>=23.0.1,<24",
   "scikit-learn>=1.7,<2",
 ]
+reference = [
+  "pandas>=2.0,<3",
+]
 test = [
   "aiosqlite>=0.21,<1",
   "pytest>=9.0.3,<10",
@@ -63,14 +67,19 @@ dev = [
 windops-api = "windops_backend.main:run"
 windops-reference-import = "windops_backend.reference_import:main"
 windops-outbox-relay = "windops_backend.workers:run_outbox_relay"
+windops-read-audit-worker = "windops_backend.read_audit:run_read_audit_worker"
+windops-read-audit-maintenance = "windops_backend.read_audit:run_read_audit_maintenance"
 windops-telemetry-connector = "windops_backend.connectors:main"
 windops-backup = "windops_backend.operations.backups:backup_main"
 windops-restore = "windops_backend.operations.backups:restore_main"
 windops-dr-drill = "windops_backend.operations.dr_drill:main"
+windops-release-evidence = "windops_backend.operations.release_evidence:main"
 windops-release-gate = "windops_backend.operations.release_gate:main"
 windops-deployment-policy = "windops_backend.operations.deployment_policy:main"
 windops-container-artifact = "windops_backend.operations.container_artifact:main"
 windops-release-smoke = "windops_backend.operations.release_smoke:main"
+windops-care-workload-smoke = "windops_backend.operations.care_execution_plane:main"
+windops-care-fullscale-acceptance = "windops_backend.operations.care_fullscale_acceptance:main"
 windops-care-contract = "windops_backend.benchmarks.care.contract:main"
 windops-care-quality = "windops_backend.benchmarks.care.quality:main"
 windops-care-score = "windops_backend.benchmarks.care.scoring:main"
@@ -80,6 +89,8 @@ windops-care-pipeline = "windops_backend.benchmarks.care.pipeline:main"
 windops-care-minimal-import = "windops_backend.benchmarks.care.importer:main"
 windops-care-offline-evaluate = "windops_backend.benchmarks.care.evaluation:main"
 windops-care-full-scale = "windops_backend.benchmarks.care.fullscale:main"
+windops-care-dependency-closure = "windops_backend.benchmarks.care.dependency_closure:main"
+windops-care-postgres-evidence = "windops_backend.operations.care_postgres_evidence:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/windops_backend"]

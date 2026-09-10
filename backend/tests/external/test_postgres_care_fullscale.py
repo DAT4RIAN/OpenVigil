@@ -4,13 +4,17 @@ import json
 import math
 import os
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from windops_backend.benchmarks.care.fullscale import (
     register_full_scale_evaluation,
@@ -44,6 +48,48 @@ TENANT_ID = "tenant-east-china"
 SUBJECT = "care-full-scale-integration"
 MAX_RESPONSE_BYTES = 512 * 1024
 MAX_QUERY_P95_SECONDS = 0.5
+MAX_QUERY_SQL_STATEMENTS = 12
+
+
+@dataclass
+class _SqlProfile:
+    statement_count: int = 0
+    elapsed_seconds: float = 0.0
+
+
+@contextmanager
+def _capture_sql_profile(engine: AsyncEngine) -> Iterator[_SqlProfile]:
+    profile = _SqlProfile()
+
+    def before_cursor_execute(
+        _connection: Any,
+        _cursor: Any,
+        _statement: Any,
+        _parameters: Any,
+        context: Any,
+        _executemany: Any,
+    ) -> None:
+        context._windops_profile_started = time.perf_counter()
+
+    def after_cursor_execute(
+        _connection: Any,
+        _cursor: Any,
+        _statement: Any,
+        _parameters: Any,
+        context: Any,
+        _executemany: Any,
+    ) -> None:
+        profile.statement_count += 1
+        profile.elapsed_seconds += time.perf_counter() - context._windops_profile_started
+
+    sync_engine = engine.sync_engine
+    event.listen(sync_engine, "before_cursor_execute", before_cursor_execute)
+    event.listen(sync_engine, "after_cursor_execute", after_cursor_execute)
+    try:
+        yield profile
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", before_cursor_execute)
+        event.remove(sync_engine, "after_cursor_execute", after_cursor_execute)
 
 
 def _database_url() -> str:
@@ -217,13 +263,18 @@ async def test_real_postgres_full_scale_registration_catalog_and_query_budget(
                 assert len(warm.content) <= MAX_RESPONSE_BYTES
 
             timings_by_path: dict[str, list[float]] = {path: [] for path in paths}
+            sql_counts_by_path: dict[str, list[int]] = {path: [] for path in paths}
+            sql_timings_by_path: dict[str, list[float]] = {path: [] for path in paths}
             responses: dict[str, httpx.Response] = {}
             max_response_bytes = 0
             for _ in range(20):
                 for path in paths:
-                    started = time.perf_counter()
-                    response = await client.get(path, headers=benchmark_headers)
+                    with _capture_sql_profile(app.state.engine) as sql_profile:
+                        started = time.perf_counter()
+                        response = await client.get(path, headers=benchmark_headers)
                     timings_by_path[path].append(time.perf_counter() - started)
+                    sql_counts_by_path[path].append(sql_profile.statement_count)
+                    sql_timings_by_path[path].append(sql_profile.elapsed_seconds)
                     assert response.status_code == 200, response.text
                     assert len(response.content) <= MAX_RESPONSE_BYTES
                     max_response_bytes = max(max_response_bytes, len(response.content))
@@ -233,15 +284,38 @@ async def test_real_postgres_full_scale_registration_catalog_and_query_budget(
                 for path, timings in timings_by_path.items()
             }
             p95_seconds = max(p95_by_path.values())
+            sql_p95_by_path = {
+                path: sorted(timings)[math.ceil(len(timings) * 0.95) - 1]
+                for path, timings in sql_timings_by_path.items()
+            }
             for index, path in enumerate(paths):
                 record_testsuite_property(
                     f"care.full_scale.query_{index}_p95_ms",
                     f"{p95_by_path[path] * 1000:.3f}",
                 )
                 record_testsuite_property(f"care.full_scale.query_{index}_path", path)
+                record_testsuite_property(
+                    f"care.full_scale.query_{index}_sql_count_max",
+                    str(max(sql_counts_by_path[path])),
+                )
+                record_testsuite_property(
+                    f"care.full_scale.query_{index}_sql_p95_ms",
+                    f"{sql_p95_by_path[path] * 1000:.3f}",
+                )
             record_testsuite_property("care.full_scale.query_p95_ms", f"{p95_seconds * 1000:.3f}")
             record_testsuite_property(
+                "care.full_scale.query_sql_count_max",
+                str(max(max(counts) for counts in sql_counts_by_path.values())),
+            )
+            record_testsuite_property(
+                "care.full_scale.query_sql_p95_ms",
+                f"{max(sql_p95_by_path.values()) * 1000:.3f}",
+            )
+            record_testsuite_property(
                 "care.full_scale.measured_max_response_bytes", str(max_response_bytes)
+            )
+            assert all(
+                max(counts) <= MAX_QUERY_SQL_STATEMENTS for counts in sql_counts_by_path.values()
             )
             assert p95_seconds <= MAX_QUERY_P95_SECONDS
 
@@ -307,3 +381,21 @@ async def test_real_postgres_full_scale_registration_catalog_and_query_budget(
     record_testsuite_property("care.full_scale.metric_count", str(metric_count))
     record_testsuite_property("care.full_scale.max_response_bytes", str(MAX_RESPONSE_BYTES))
     record_testsuite_property("care.full_scale.timescale_signal_rows", "0")
+    record_testsuite_property(
+        "care.full_scale.source_manifest_sha256", source_manifest["manifest_sha256"]
+    )
+    record_testsuite_property(
+        "care.full_scale.quality_contract_sha256",
+        quality_contract["quality_contract_sha256"],
+    )
+    record_testsuite_property(
+        "care.full_scale.import_manifest_sha256", import_manifest["manifest_sha256"]
+    )
+    record_testsuite_property(
+        "care.full_scale.evaluation_manifest_sha256",
+        evaluation_manifest["manifest_sha256"],
+    )
+    record_testsuite_property(
+        "care.full_scale.approved_root_sha256",
+        evaluation_manifest["care_approval"]["approved_root_sha256"],
+    )

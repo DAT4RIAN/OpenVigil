@@ -12,6 +12,7 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import func, select
 
+from care_trust import make_test_trust_anchor
 from windops_backend.benchmarks.care import fullscale as fullscale_module
 from windops_backend.benchmarks.care.contract import (
     CareDatasetExpectations,
@@ -43,6 +44,7 @@ from windops_backend.benchmarks.care.resources import (
     peak_process_resident_bytes,
     trim_process_resident_memory,
 )
+from windops_backend.benchmarks.care.trust import CareTrustAnchor
 from windops_backend.models import (
     BenchmarkDatasetVersion,
     BenchmarkEvaluationRun,
@@ -64,7 +66,9 @@ def _write_csv(path: Path, header: list[str], rows: list[list[object]]) -> None:
         writer.writerows(rows)
 
 
-def _fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, Any], dict[str, Any]]:
+def _fixture(
+    tmp_path: Path,
+) -> tuple[Path, Path, dict[str, Any], dict[str, Any], CareTrustAnchor]:
     root = tmp_path / "CARE_To_Compare"
     archive = tmp_path / "CARE_To_Compare.zip"
     archive.write_bytes(b"care-v6-full-scale-fixture")
@@ -78,14 +82,43 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, Any], dict[str, Any]
                 asset,
                 event_id,
                 label,
-                "t2",
-                2,
-                "t3",
-                3,
+                "t8",
+                8,
+                "t10",
+                10,
                 "fixture fault" if label == "anomaly" else "",
             ]
         )
         offset = float(event_id * 10)
+        train_statuses = {
+            3: [0, 0, 0, 0, 0, 9, 9, 9],
+            5: [9, 9, 9, 9, 9, 9, 0, 0],
+        }.get(event_id, [0, 0, 0, 0, 0, 0, 0, 0])
+        prediction_statuses = {
+            2: [9, 9, 0],
+            3: [9, 9, 9],
+            4: [9, 9, 9],
+            5: [9, 0, 9],
+        }.get(event_id, [0, 0, 0])
+        rows: list[list[object]] = []
+        for row_id, (split, status) in enumerate(
+            [
+                *(("train", status) for status in train_statuses),
+                *(("prediction", status) for status in prediction_statuses),
+            ]
+        ):
+            signal = 0.0 if status == 9 else offset + row_id
+            rows.append(
+                [
+                    f"2024-01-01 {row_id // 6:02d}:{(row_id % 6) * 10:02d}:00",
+                    asset,
+                    row_id,
+                    split,
+                    status,
+                    signal,
+                    signal + 1,
+                ]
+            )
         _write_csv(
             root / f"Wind Farm {farm}" / "datasets" / f"{event_id}.csv",
             [
@@ -97,28 +130,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, Any], dict[str, Any]
                 "sensor_0_avg",
                 "sensor_0_max",
             ],
-            [
-                ["2024-01-01 00:00:00", asset, 0, "train", 0, offset, offset + 1],
-                ["2024-01-01 00:10:00", asset, 1, "train", 0, offset + 1, offset + 2],
-                [
-                    "2024-01-01 00:20:00",
-                    asset,
-                    2,
-                    "prediction",
-                    0,
-                    offset + 2,
-                    offset + 3,
-                ],
-                [
-                    "2024-01-01 00:30:00",
-                    asset,
-                    3,
-                    "prediction",
-                    0,
-                    offset + 3,
-                    offset + 4,
-                ],
-            ],
+            rows,
         )
     for farm in ("A", "B", "C"):
         farm_root = root / f"Wind Farm {farm}"
@@ -132,7 +144,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, Any], dict[str, Any]
                 "is_angle",
                 "is_counter",
             ],
-            [["sensor_0", "average,maximum", "Temperature", "Celsius", "False", "False"]],
+            [["sensor_0", "average,maximum", "Active power", "kW", "False", "False"]],
         )
         _write_csv(
             farm_root / "event_info.csv",
@@ -167,7 +179,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, Any], dict[str, Any]
         dependency_lock_sha256="b" * 64,
     )
     quality = build_quality_contract(manifest)
-    return root, archive, manifest, quality
+    return root, archive, manifest, quality, make_test_trust_anchor(manifest, quality)
 
 
 EXPECTED = FullScaleExpectedCounts(
@@ -177,7 +189,7 @@ EXPECTED = FullScaleExpectedCounts(
     asset_count=6,
     anomaly_count=3,
     normal_count=3,
-    row_count=24,
+    row_count=66,
 )
 
 LIMITS = FullScaleResourceLimits(
@@ -189,7 +201,7 @@ LIMITS = FullScaleResourceLimits(
     max_import_storage_bytes=1024 * 1024 * 1024,
     max_evaluation_storage_bytes=1024 * 1024 * 1024,
     min_import_rows_per_second=0.001,
-    max_prediction_points=12,
+    max_prediction_points=18,
 )
 
 
@@ -211,7 +223,7 @@ def test_full_scale_plan_and_import_are_ordered_recoverable_and_fully_licensed(
 ) -> None:
     assert peak_process_resident_bytes() > 0
     assert trim_process_resident_memory() is True
-    root, archive, manifest, quality = _fixture(tmp_path)
+    root, archive, manifest, quality, trust_anchor = _fixture(tmp_path)
     output = tmp_path / "derived"
     store = LocalImmutableArtifactStore(tmp_path / "objects")
     plan = build_full_scale_plan(manifest, quality, expected_counts=EXPECTED)
@@ -235,6 +247,7 @@ def test_full_scale_plan_and_import_are_ordered_recoverable_and_fully_licensed(
             stop_after_events=1,
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
     cancelled_state = json.loads(
         (output / ".state" / "fixture-full-import-cancelled.json").read_text(encoding="utf-8")
@@ -252,6 +265,7 @@ def test_full_scale_plan_and_import_are_ordered_recoverable_and_fully_licensed(
         job_id="fixture-full-import-resumed",
         expected_counts=EXPECTED,
         resource_limits=LIMITS,
+        trust_anchor=trust_anchor,
     )
     assert completed.replayed is False
     assert [event["farm"] for event in completed.manifest["events"]] == [
@@ -284,6 +298,7 @@ def test_full_scale_plan_and_import_are_ordered_recoverable_and_fully_licensed(
         job_id="ignored-after-completion",
         expected_counts=EXPECTED,
         resource_limits=LIMITS,
+        trust_anchor=trust_anchor,
     )
     assert replay.replayed is True
     assert replay.manifest_file_sha256 == completed.manifest_file_sha256
@@ -394,7 +409,7 @@ def test_full_scale_cli_can_use_only_the_configured_care_minio_bucket(
 def test_full_scale_evaluation_freezes_predictions_before_truth_and_accounts_every_fold(
     tmp_path: Path,
 ) -> None:
-    root, archive, manifest, quality = _fixture(tmp_path)
+    root, archive, manifest, quality, trust_anchor = _fixture(tmp_path)
     output = tmp_path / "derived"
     store = LocalImmutableArtifactStore(tmp_path / "objects")
     imported = build_full_scale_import(
@@ -407,6 +422,7 @@ def test_full_scale_evaluation_freezes_predictions_before_truth_and_accounts_eve
         job_id="fixture-full-import",
         expected_counts=EXPECTED,
         resource_limits=LIMITS,
+        trust_anchor=trust_anchor,
     )
     with pytest.raises(BenchmarkJobCancelled):
         build_full_scale_evaluation(
@@ -417,6 +433,7 @@ def test_full_scale_evaluation_freezes_predictions_before_truth_and_accounts_eve
             stop_after_predictions=1,
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
     completed = build_full_scale_evaluation(
         imported.manifest,
@@ -425,10 +442,11 @@ def test_full_scale_evaluation_freezes_predictions_before_truth_and_accounts_eve
         job_id="fixture-full-evaluation-resumed",
         expected_counts=EXPECTED,
         resource_limits=LIMITS,
+        trust_anchor=trust_anchor,
     )
     assert completed.manifest["farm_namespaced_fold_count"] == 6
     assert completed.manifest["summary"]["prediction_event_count"] == 6
-    assert completed.manifest["summary"]["prediction_point_count"] == 12
+    assert completed.manifest["summary"]["prediction_point_count"] == 18
     assert completed.manifest["summary"]["all_events_accounted_for"] is True
     assert completed.manifest["truth_boundary"] == {
         "prediction_freeze_completed_before_truth_read": True,
@@ -457,6 +475,126 @@ def test_full_scale_evaluation_freezes_predictions_before_truth_and_accounts_eve
         completed.manifest["operational_policy"]["fault_recovery"]["resume_mechanism"]
         == "new-job-id-reuses-verified-event-checkpoints"
     )
+    freeze_reference = completed.manifest["prediction_freeze"]
+    freeze = json.loads(
+        (output / freeze_reference["local_relative_path"]).read_text(encoding="utf-8")
+    )
+    short_prediction = json.loads(
+        (output / freeze["prediction_artifacts"]["2"]["local_relative_path"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    sustained_prediction = json.loads(
+        (output / freeze["prediction_artifacts"]["3"]["local_relative_path"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert [point["disagreement_run_length"] for point in short_prediction["points"]] == [
+        1,
+        2,
+        1,
+    ]
+    assert [point["valid_point_mask"] for point in short_prediction["points"]] == [
+        True,
+        True,
+        True,
+    ]
+    assert [point["disagreement_run_length"] for point in sustained_prediction["points"]] == [
+        1,
+        2,
+        3,
+    ]
+    assert [point["corroborated_by_signal"] for point in sustained_prediction["points"]] == [
+        True,
+        True,
+        True,
+    ]
+    assert [point["valid_point_mask"] for point in sustained_prediction["points"]] == [
+        True,
+        True,
+        False,
+    ]
+
+    b_model_reference = completed.manifest["model_packages"]["B"]
+    b_model = json.loads(
+        (output / b_model_reference["local_relative_path"]).read_text(encoding="utf-8")
+    )
+    held_out_14 = next(
+        profile for profile in b_model["fold_profiles"] if profile["held_out_asset_id"] == "14"
+    )
+    assert held_out_14["status_usable_train_row_count"] == 4
+    assert held_out_14["trusted_train_row_count"] == 2
+    assert held_out_14["retained_disagreement_train_row_count"] == 2
+    assert held_out_14["masked_status_train_row_count"] == 4
+    assert held_out_14["quality_masked_train_row_count"] == 2
+    assert held_out_14["quality_masked_train_feature_value_count"] == 2
+    assert held_out_14["quality_masked_train_feature_counts"] == [2]
+    assert b_model["quality_mask_policy"]["decision"] == "apply"
+
+    assert [point["quality_masked_feature_count"] for point in sustained_prediction["points"]] == [
+        1,
+        1,
+        1,
+    ]
+    assert sustained_prediction["quality_masked_prediction_feature_value_count"] == 3
+    assert sustained_prediction["quality_masked_prediction_point_count"] == 3
+    assert sustained_prediction["quality_mask_score_changed_prediction_point_count"] == 3
+    assert completed.manifest["quality_mask_impact"]["decision"] == "apply"
+    assert completed.manifest["quality_mask_impact"]["quality_masked_train_row_count"] > 0
+    assert (
+        completed.manifest["quality_mask_impact"][
+            "quality_mask_score_changed_prediction_point_count"
+        ]
+        > 0
+    )
+
+    tampered = copy.deepcopy(sustained_prediction)
+    tampered["points"][0]["corroboration_finite_signal_count"] = 0
+    unsigned_tampered = {
+        key: item for key, item in tampered.items() if key != "prediction_artifact_sha256"
+    }
+    tampered["prediction_artifact_sha256"] = fullscale_module._canonical_hash(unsigned_tampered)
+    with pytest.raises(CareFullScaleError, match="differs from raw status and signals"):
+        fullscale_module.verify_full_scale_prediction_status_evidence(
+            tampered,
+            output_root=output,
+            event=next(event for event in imported.manifest["events"] if event["event_id"] == 3),
+            status_signal_columns=tuple(
+                sustained_prediction["status_evidence_policy"]["corroboration_signal_columns"]
+            ),
+        )
+
+    mask_ignored = copy.deepcopy(sustained_prediction)
+    for point in mask_ignored["points"]:
+        point["quality_masked_feature_count"] = 0
+    mask_ignored["quality_masked_prediction_feature_value_count"] = 0
+    mask_ignored["quality_masked_prediction_point_count"] = 0
+    mask_ignored_unsigned = {
+        key: item for key, item in mask_ignored.items() if key != "prediction_artifact_sha256"
+    }
+    mask_ignored["prediction_artifact_sha256"] = fullscale_module._canonical_hash(
+        mask_ignored_unsigned
+    )
+    event_3 = next(event for event in imported.manifest["events"] if event["event_id"] == 3)
+    c_model = json.loads(
+        (output / completed.manifest["model_packages"]["C"]["local_relative_path"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    c_profile = next(
+        profile for profile in c_model["fold_profiles"] if profile["held_out_asset_id"] == "13"
+    )
+    with pytest.raises(CareFullScaleError, match="quality mask|raw values"):
+        fullscale_module.verify_full_scale_prediction_model_inputs(
+            mask_ignored,
+            output_root=output,
+            event=event_3,
+            features=tuple(c_model["feature_columns"]),
+            status_signal_columns=tuple(
+                sustained_prediction["status_evidence_policy"]["corroboration_signal_columns"]
+            ),
+            profile=c_profile,
+        )
     replay = build_full_scale_evaluation(
         imported.manifest,
         output,
@@ -464,6 +602,7 @@ def test_full_scale_evaluation_freezes_predictions_before_truth_and_accounts_eve
         job_id="ignored-after-evaluation-completion",
         expected_counts=EXPECTED,
         resource_limits=LIMITS,
+        trust_anchor=trust_anchor,
     )
     assert replay.replayed is True
     assert replay.manifest_file_sha256 == completed.manifest_file_sha256
@@ -473,7 +612,7 @@ def test_full_scale_evaluation_freezes_predictions_before_truth_and_accounts_eve
 async def test_full_scale_registration_is_complete_idempotent_and_preserves_score_scope(
     app: FastAPI, tmp_path: Path
 ) -> None:
-    root, archive, manifest, quality = _fixture(tmp_path)
+    root, archive, manifest, quality, trust_anchor = _fixture(tmp_path)
     output = tmp_path / "registered-derived"
     imported = build_full_scale_import(
         manifest,
@@ -484,6 +623,7 @@ async def test_full_scale_registration_is_complete_idempotent_and_preserves_scor
         job_id="fixture-registered-import",
         expected_counts=EXPECTED,
         resource_limits=LIMITS,
+        trust_anchor=trust_anchor,
     )
     evaluated = build_full_scale_evaluation(
         imported.manifest,
@@ -491,6 +631,7 @@ async def test_full_scale_registration_is_complete_idempotent_and_preserves_scor
         job_id="fixture-registered-evaluation",
         expected_counts=EXPECTED,
         resource_limits=LIMITS,
+        trust_anchor=trust_anchor,
     )
 
     async with app.state.session_factory() as session, session.begin():
@@ -504,6 +645,7 @@ async def test_full_scale_registration_is_complete_idempotent_and_preserves_scor
             subject="care-worker",
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
         evaluated_first = await register_full_scale_evaluation(
             session,
@@ -513,6 +655,7 @@ async def test_full_scale_registration_is_complete_idempotent_and_preserves_scor
             subject="care-worker",
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
     assert imported_first.created_count == 25
     assert imported_first.replayed_count == 0
@@ -530,6 +673,7 @@ async def test_full_scale_registration_is_complete_idempotent_and_preserves_scor
             subject="care-worker",
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
         evaluated_replay = await register_full_scale_evaluation(
             session,
@@ -539,6 +683,7 @@ async def test_full_scale_registration_is_complete_idempotent_and_preserves_scor
             subject="care-worker",
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
     assert imported_replay.created_count == 0
     assert imported_replay.replayed_count == 25
@@ -581,7 +726,7 @@ def test_full_scale_verifiers_reject_corruption_partial_coverage_and_cross_farm_
             ).encode()
         ).hexdigest()
 
-    root, archive, manifest, quality = _fixture(tmp_path)
+    root, archive, manifest, quality, trust_anchor = _fixture(tmp_path)
     output = tmp_path / "derived"
     imported = build_full_scale_import(
         manifest,
@@ -592,6 +737,7 @@ def test_full_scale_verifiers_reject_corruption_partial_coverage_and_cross_farm_
         job_id="fixture-verify-import",
         expected_counts=EXPECTED,
         resource_limits=LIMITS,
+        trust_anchor=trust_anchor,
     )
     bad_import = copy.deepcopy(imported.manifest)
     bad_import["events"] = bad_import["events"][:-1]
@@ -604,6 +750,7 @@ def test_full_scale_verifiers_reject_corruption_partial_coverage_and_cross_farm_
             quality_contract=quality,
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
 
     raised_policy = copy.deepcopy(imported.manifest)
@@ -617,6 +764,7 @@ def test_full_scale_verifiers_reject_corruption_partial_coverage_and_cross_farm_
             quality_contract=quality,
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
 
     understated_wall_clock = copy.deepcopy(imported.manifest)
@@ -630,6 +778,7 @@ def test_full_scale_verifiers_reject_corruption_partial_coverage_and_cross_farm_
             quality_contract=quality,
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
 
     changed_archive = copy.deepcopy(imported.manifest)
@@ -643,6 +792,7 @@ def test_full_scale_verifiers_reject_corruption_partial_coverage_and_cross_farm_
             quality_contract=quality,
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
 
     evaluated = build_full_scale_evaluation(
@@ -651,6 +801,7 @@ def test_full_scale_verifiers_reject_corruption_partial_coverage_and_cross_farm_
         job_id="fixture-verify-evaluation",
         expected_counts=EXPECTED,
         resource_limits=LIMITS,
+        trust_anchor=trust_anchor,
     )
     bad_evaluation = copy.deepcopy(evaluated.manifest)
     bad_evaluation["cross_farm_protocol"] = {
@@ -665,6 +816,7 @@ def test_full_scale_verifiers_reject_corruption_partial_coverage_and_cross_farm_
             import_manifest=imported.manifest,
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
 
     raised_evaluation_policy = copy.deepcopy(evaluated.manifest)
@@ -677,6 +829,7 @@ def test_full_scale_verifiers_reject_corruption_partial_coverage_and_cross_farm_
             import_manifest=imported.manifest,
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
 
     weakened_operational_policy = copy.deepcopy(evaluated.manifest)
@@ -704,6 +857,7 @@ def test_full_scale_verifiers_reject_corruption_partial_coverage_and_cross_farm_
             import_manifest=imported.manifest,
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
 
     understated_evaluation_storage = copy.deepcopy(evaluated.manifest)
@@ -716,13 +870,14 @@ def test_full_scale_verifiers_reject_corruption_partial_coverage_and_cross_farm_
             import_manifest=imported.manifest,
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
 
 
 def test_full_scale_import_exposes_storage_failure_and_recovers_without_partial_publish(
     tmp_path: Path,
 ) -> None:
-    root, archive, manifest, quality = _fixture(tmp_path)
+    root, archive, manifest, quality, trust_anchor = _fixture(tmp_path)
     output = tmp_path / "storage-failure-derived"
     state_path = output / ".state" / "fixture-storage-recovery.json"
 
@@ -737,6 +892,7 @@ def test_full_scale_import_exposes_storage_failure_and_recovers_without_partial_
             job_id="fixture-storage-recovery",
             expected_counts=EXPECTED,
             resource_limits=LIMITS,
+            trust_anchor=trust_anchor,
         )
 
     failed_state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -755,6 +911,7 @@ def test_full_scale_import_exposes_storage_failure_and_recovers_without_partial_
         job_id="fixture-storage-recovery",
         expected_counts=EXPECTED,
         resource_limits=LIMITS,
+        trust_anchor=trust_anchor,
     )
     recovered_state = json.loads(state_path.read_text(encoding="utf-8"))
     assert completed.manifest["summary"] == EXPECTED.to_document()
@@ -765,7 +922,7 @@ def test_full_scale_import_exposes_storage_failure_and_recovers_without_partial_
 def test_full_scale_resource_violation_is_terminal_and_new_job_can_recover(
     tmp_path: Path,
 ) -> None:
-    root, archive, manifest, quality = _fixture(tmp_path)
+    root, archive, manifest, quality, trust_anchor = _fixture(tmp_path)
     output = tmp_path / "resource-failure-derived"
     strict_limits = FullScaleResourceLimits(
         max_import_runtime_seconds=600,
@@ -776,7 +933,7 @@ def test_full_scale_resource_violation_is_terminal_and_new_job_can_recover(
         max_import_storage_bytes=1,
         max_evaluation_storage_bytes=1024 * 1024 * 1024,
         min_import_rows_per_second=0.001,
-        max_prediction_points=12,
+        max_prediction_points=18,
     )
 
     with pytest.raises(CareFullScaleError, match="max_import_storage_bytes"):
@@ -789,6 +946,7 @@ def test_full_scale_resource_violation_is_terminal_and_new_job_can_recover(
             job_id="fixture-resource-limit",
             expected_counts=EXPECTED,
             resource_limits=strict_limits,
+            trust_anchor=trust_anchor,
         )
 
     state = json.loads(
@@ -807,5 +965,6 @@ def test_full_scale_resource_violation_is_terminal_and_new_job_can_recover(
         job_id="fixture-resource-limit-recovery",
         expected_counts=EXPECTED,
         resource_limits=LIMITS,
+        trust_anchor=trust_anchor,
     )
     assert completed.manifest["resource_actual"]["limits_passed"] is True

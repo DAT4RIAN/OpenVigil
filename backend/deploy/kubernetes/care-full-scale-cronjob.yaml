@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: windops-care-worker
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: windops-care-source
+spec:
+  accessModes: ["ReadOnlyMany"]
+  storageClassName: windops-encrypted-care-source
+  resources:
+    requests:
+      storage: 40Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: windops-care-workspace
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: windops-encrypted-care-workspace
+  resources:
+    requests:
+      storage: 80Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: windops-care-full-scale
+spec:
+  schedule: "0 2 1 1 *"
+  timeZone: Etc/UTC
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      parallelism: 1
+      completions: 1
+      backoffLimit: 2
+      activeDeadlineSeconds: 72000
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: windops-care-full-scale
+            app.kubernetes.io/component: care-worker
+        spec:
+          serviceAccountName: windops-care-worker
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 120
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: care-full-scale
+              image: registry.invalid/windops-backend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  umask 077
+                  job_id="care-v6-${WINDOPS_RELEASE_ID}"
+                  output=/care/work/output
+                  import_manifest="${output}/care/v6/reports/full-import/manifest.json"
+                  evaluation_manifest="${output}/care/v6/reports/full-evaluation/manifest.json"
+                  windops-care-dependency-closure --requirements-lock /app/requirements.container.txt --report /care/work/dependency-closure.json
+                  windops-care-full-scale import --manifest /care/source/manifest.json --quality-contract /care/source/quality-contract.json --dataset-root /care/source/dataset --archive /care/source/CARE_To_Compare.zip --output-root "${output}" --use-care-worker-runtime --job-id "${job_id}-import" --state-path /care/work/state/import.json
+                  windops-care-full-scale evaluate --import-manifest "${import_manifest}" --output-root "${output}" --use-care-worker-runtime --job-id "${job_id}-evaluate" --state-path /care/work/state/evaluate.json
+                  windops-care-full-scale register --source-manifest /care/source/manifest.json --quality-contract /care/source/quality-contract.json --import-manifest "${import_manifest}" --evaluation-manifest "${evaluation_manifest}" --artifact-root "${output}" --tenant-id tenant-east-china --subject care-full-scale-worker --use-care-worker-runtime
+                  windops-care-full-scale import --manifest /care/source/manifest.json --quality-contract /care/source/quality-contract.json --dataset-root /care/source/dataset --archive /care/source/CARE_To_Compare.zip --output-root "${output}" --use-care-worker-runtime --job-id "${job_id}-import" --state-path /care/work/state/import.json > /care/work/import-replay.json
+                  windops-care-full-scale evaluate --import-manifest "${import_manifest}" --output-root "${output}" --use-care-worker-runtime --job-id "${job_id}-evaluate" --state-path /care/work/state/evaluate.json > /care/work/evaluation-replay.json
+                  windops-care-full-scale register --source-manifest /care/source/manifest.json --quality-contract /care/source/quality-contract.json --import-manifest "${import_manifest}" --evaluation-manifest "${evaluation_manifest}" --artifact-root "${output}" --tenant-id tenant-east-china --subject care-full-scale-worker --use-care-worker-runtime > /care/work/registration-replay.json
+              envFrom:
+                - secretRef:
+                    name: windops-care-runtime
+              env:
+                - name: WINDOPS_CARE_QUEUE
+                  value: care-v6-offline
+                - name: WINDOPS_CARE_MAX_CONCURRENCY
+                  value: "1"
+                - name: WINDOPS_CARE_MAX_ATTEMPTS
+                  value: "3"
+              resources:
+                requests:
+                  cpu: "2"
+                  memory: 1Gi
+                  ephemeral-storage: 512Mi
+                limits:
+                  cpu: "4"
+                  memory: 2Gi
+                  ephemeral-storage: 2Gi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: care-source
+                  mountPath: /care/source
+                  readOnly: true
+                - name: care-workspace
+                  mountPath: /care/work
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: care-source
+              persistentVolumeClaim:
+                claimName: windops-care-source
+                readOnly: true
+            - name: care-workspace
+              persistentVolumeClaim:
+                claimName: windops-care-workspace
+            - name: tmp
+              emptyDir:
+                sizeLimit: 512Mi

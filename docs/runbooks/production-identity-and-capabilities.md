@@ -45,9 +45,10 @@ Correct the identity mapping or backend availability, then use the visible retry
 
 ## Storage and validation
 
-`windops-theme` is the only application preference in local storage. Production event cursors may
-use session storage for SSE resume; they contain only opaque/numeric cursors. Roles, capabilities,
-delegation JWTs, API tokens, and secrets must never be written to either store.
+`openvigil-theme` is the only application preference in local storage. During the brand migration,
+the client reads the legacy `windops-theme` key once and copies its valid value forward. Production
+event cursors may use session storage for SSE resume; they contain only opaque/numeric cursors.
+Roles, capabilities, delegation JWTs, API tokens, and secrets must never be written to either store.
 
 Run the browser contract with `pnpm test:e2e`. It covers anonymous and machine denial, all four
 human roles, desktop/mobile navigation, refresh, sign-out, client capability spoofing through the

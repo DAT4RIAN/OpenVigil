@@ -37,7 +37,7 @@
 .metrics small,
 .metrics em {
   color: var(--foreground-subtle);
-  font-size: 10px;
+  font-size: var(--font-secondary);
   font-style: normal;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -97,7 +97,7 @@
 .drawerHeader span,
 .previewPage > span {
   color: var(--primary);
-  font-size: 10px;
+  font-size: var(--font-secondary);
   font-weight: 750;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -128,7 +128,7 @@
   align-items: center;
   width: max-content;
   border-radius: 999px;
-  font-size: 10px !important;
+  font-size: var(--font-secondary) !important;
   font-weight: 700;
   letter-spacing: 0.02em !important;
   text-transform: uppercase;
@@ -246,7 +246,7 @@
 .sources small {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .typeChip {
@@ -254,7 +254,7 @@
   padding: 4px 7px;
   border-radius: 5px;
   color: var(--info);
-  font-size: 10px;
+  font-size: var(--font-secondary);
   font-weight: 700;
   background: var(--info-soft);
   white-space: nowrap;
@@ -418,7 +418,7 @@
 
 .answerSummary > div small {
   color: var(--foreground-subtle);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   line-height: 1.3;
 }
 
@@ -440,7 +440,7 @@
 
 .findings span {
   color: var(--foreground-subtle);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -455,7 +455,7 @@
 .findings p {
   margin: 0;
   color: var(--foreground-muted);
-  font-size: 10px;
+  font-size: var(--font-secondary);
   line-height: 1.5;
 }
 
@@ -463,7 +463,7 @@
   overflow: hidden;
   color: var(--primary);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -479,7 +479,7 @@
   display: block;
   margin-bottom: 3px;
   color: var(--foreground);
-  font-size: 11px;
+  font-size: var(--font-secondary);
 }
 
 .sources {
@@ -521,19 +521,19 @@
   align-items: center;
   color: var(--primary);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-style: normal;
 }
 
 .citation strong {
   color: var(--foreground);
-  font-size: 11px;
+  font-size: var(--font-secondary);
 }
 
 .citation small {
   color: var(--foreground-muted);
   font-family: inherit;
-  font-size: 10px;
+  font-size: var(--font-secondary);
   line-height: 1.45;
 }
 
@@ -646,7 +646,7 @@
   padding: 4px 6px;
   border-radius: 4px;
   color: var(--primary);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 700;
   background: var(--primary-soft);
 }
@@ -688,7 +688,7 @@
 .drawerSection dt {
   margin-bottom: 3px;
   color: var(--foreground-subtle);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   text-transform: uppercase;
 }
 
@@ -713,7 +713,7 @@
   border-radius: 6px;
   color: var(--primary);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 10px;
+  font-size: var(--font-secondary);
   text-decoration: none;
 }
 

@@ -23,7 +23,8 @@ import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Avatar, Button, Card, Progress } from "@/components/ui/primitives";
+import { Avatar, Button, Card, EmptyState, Progress } from "@/components/ui/primitives";
+import { QueryStateNotice, RuntimeHealthBadge } from "@/components/ui/query-state";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { agents, getFeaturedMissionNarrative, missions } from "@/lib";
 import type { Mission, MissionStatus } from "@/lib/types";
@@ -34,6 +35,12 @@ import { agentDisplayName } from "@/lib/agent-control-meta";
 import { apiGet, apiPostCommand } from "@/lib/api-client";
 import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
 import type { Alarm } from "@/lib/types";
+import {
+  deriveQueryViewState,
+  latestValidTimestamp,
+  mergeRuntimeHealth,
+  queryRuntimeHealth,
+} from "@/lib/query-state";
 
 const columns: { status: MissionStatus; label: string; description: string }[] = [
   { status: "detected", label: "已发现", description: "新发现事件" },
@@ -207,7 +214,7 @@ const missionListColumns: readonly LegacyColumnDef<Mission, unknown>[] = [
 ];
 
 const missionCsvExport = {
-  filename: "windops-missions.csv",
+  filename: "openvigil-missions.csv",
   columns: [
     { label: "Mission ID", value: (mission: Mission) => mission.id },
     { label: "标题", value: (mission: Mission) => localizedMissionTitle(mission.title) },
@@ -522,13 +529,48 @@ export function MissionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "prod
     queryKey: ["missions", workflow.serverRevision, runtimeMode],
     queryFn: ({ signal }) => apiGet<{ readonly data: readonly Mission[] }>("/api/missions", signal),
     initialData: runtimeMode === "demo" ? { data: missions } : undefined,
+    retry: false,
+    staleTime: 60_000,
   });
   const alarmQuery = useQuery({
     queryKey: ["mission-create-alarms", runtimeMode],
     queryFn: ({ signal }) => apiGet<{ readonly data: readonly Alarm[] }>("/api/alarms", signal),
     initialData: runtimeMode === "demo" ? { data: [] } : undefined,
     enabled: runtimeMode === "production",
+    retry: false,
+    staleTime: 60_000,
   });
+  const missionState = deriveQueryViewState({
+    data: missionQuery.data?.data,
+    dataUpdatedAt: missionQuery.dataUpdatedAt,
+    error: missionQuery.error,
+    isError: missionQuery.isError,
+    isFetching: missionQuery.isFetching,
+    isPending: missionQuery.isPending,
+    isStale: missionQuery.isStale,
+    isEmpty: (data) => data.length === 0,
+    sourceUpdatedAt:
+      runtimeMode === "production"
+        ? latestValidTimestamp(missionQuery.data?.data.map((mission) => mission.updatedAt) ?? [])
+        : null,
+    staleAfterMs: 60_000,
+  });
+  const alarmState = deriveQueryViewState({
+    data: alarmQuery.data?.data,
+    dataUpdatedAt: alarmQuery.dataUpdatedAt,
+    error: alarmQuery.error,
+    isError: alarmQuery.isError,
+    isFetching: alarmQuery.isFetching,
+    isPending: alarmQuery.isPending,
+    isStale: alarmQuery.isStale,
+    isEmpty: (data) => data.length === 0,
+  });
+  const pageHealth = mergeRuntimeHealth(
+    queryRuntimeHealth(missionState, "Mission 台账"),
+    runtimeMode === "production"
+      ? queryRuntimeHealth(alarmState, "告警选择器", { partial: true })
+      : null,
+  );
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search)
       .get("turbineId")
@@ -700,9 +742,18 @@ export function MissionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "prod
       ) : null}
     </>
   );
+  const queryBlocked =
+    missionState.lifecycle === "initial-loading" || missionState.lifecycle === "error-no-data";
+  const resetMissionFilters = () => {
+    setQuery("");
+    setScope("all");
+    setSeverity("all");
+    setLeadAgentId("all");
+    setTurbineScope(null);
+  };
 
   return (
-    <AppShell runtimeMode={runtimeMode} activePath="/missions">
+    <AppShell runtimeMode={runtimeMode} activePath="/missions" pageHealth={pageHealth}>
       <PageHeader
         eyebrow="AI 运营"
         title="Mission 中心"
@@ -710,14 +761,11 @@ export function MissionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "prod
         breadcrumb={["AI 运营", "Mission 中心"]}
         meta={
           <>
-            <StatusBadge
-              value="working"
-              label={`${activeCount} 个活跃 Mission`}
-              tone="info"
-              pulse
-            />
+            <RuntimeHealthBadge health={pageHealth} />
             <span className="page-meta-text">
-              {reviewCount} 待审核 · {executionCount} 执行中 · {completedCount} 今日完成
+              {missionState.hasData
+                ? `${activeCount} 活跃 · ${reviewCount} 待审核 · ${executionCount} 执行中 · ${completedCount} 已完成`
+                : "等待 Mission 权威台账"}
             </span>
           </>
         }
@@ -739,7 +787,11 @@ export function MissionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "prod
             >
               <Button
                 variant="primary"
-                disabled={runtimeMode !== "production"}
+                disabled={
+                  runtimeMode !== "production" ||
+                  missionState.health !== "ready" ||
+                  alarmState.health !== "ready"
+                }
                 aria-describedby="create-mission-help"
                 onClick={() => setCreateOpen(true)}
               >
@@ -755,146 +807,192 @@ export function MissionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "prod
         }
       />
 
-      {diagnosisIntent ? (
-        <section className="controlled-entry-note" role="status">
-          <ShieldCheck size={16} />
-          <span>
-            <strong>已打开受控诊断入口</strong>
-            <small>
-              资产范围：{turbineScope ?? "未指定"}。
-              {runtimeMode === "production"
-                ? "可从未关联告警创建持久化 Mission，并启动受控 Agent 分析。"
-                : "演示模式只展示现有诊断 Mission，不会假启动 Agent 流程。"}
-            </small>
-          </span>
-          <Button
-            variant="ghost"
-            onClick={() => setDiagnosisIntent(false)}
-            aria-label="关闭受控入口提示"
-          >
-            <X size={14} />
-          </Button>
-        </section>
-      ) : null}
-
-      <section className="mission-summary">
-        <div>
-          <span className="mission-summary__icon mission-summary__icon--info">
-            <GitBranch size={16} />
-          </span>
-          <span>
-            <small>活跃</small>
-            <strong>{activeCount}</strong>
-          </span>
-        </div>
-        <div>
-          <span className="mission-summary__icon mission-summary__icon--warning">
-            <ShieldCheck size={16} />
-          </span>
-          <span>
-            <small>等待审核</small>
-            <strong>{reviewCount}</strong>
-          </span>
-        </div>
-        <div>
-          <span className="mission-summary__icon mission-summary__icon--maintenance">
-            <Bot size={16} />
-          </span>
-          <span>
-            <small>参与 AGENT</small>
-            <strong>{participatingAgentCount}</strong>
-          </span>
-        </div>
-        <div>
-          <span className="mission-summary__icon mission-summary__icon--success">
-            <CheckCircle2 size={16} />
-          </span>
-          <span>
-            <small>今日完成</small>
-            <strong>{completedCount}</strong>
-          </span>
-        </div>
-        <div className="mission-throughput">
-          <span>
-            <small>平均解决时长</small>
-            <strong>
-              {runtimeMode === "production"
-                ? averageResolutionMinutes === null
-                  ? "—"
-                  : formatResolutionDuration(averageResolutionMinutes)
-                : "4h 18m"}
-            </strong>
-          </span>
-          <em>
-            {runtimeMode === "production"
-              ? averageResolutionMinutes === null
-                ? "暂无已闭环 Mission，无法计算"
-                : `基于 ${resolutionMinutes.length} 个已闭环 Mission 计算`
-              : "较 7 日均值下降 12%"}
-          </em>
-        </div>
-      </section>
-
-      {view === "list" ? null : (
-        <section className="data-toolbar mission-toolbar">
-          <div className="search-field">
-            <Search size={15} />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索 Mission、机组或故障…"
-              aria-label="搜索 Mission"
-            />
-          </div>
-          {missionFilterControls}
-          <span className="toolbar-result">{filtered.length} 个 Mission</span>
-        </section>
-      )}
-
-      {view === "kanban" ? (
-        <section className="mission-kanban" aria-label="Mission 状态看板">
-          {columns.map((column) => {
-            const columnMissions = filtered.filter((mission) => mission.status === column.status);
-            return (
-              <div className="kanban-column" key={column.status}>
-                <header>
-                  <span>
-                    <i className={`kanban-status-dot kanban-status-dot--${column.status}`} />
-                    <strong>{column.label}</strong>
-                    <em>{columnMissions.length}</em>
-                  </span>
-                  <small>{column.description}</small>
-                </header>
-                <div className="kanban-column__body">
-                  {columnMissions.map((mission) => (
-                    <MissionCard key={mission.id} mission={mission} />
-                  ))}
-                  {columnMissions.length === 0 ? (
-                    <div className="kanban-empty">
-                      <CircleDot size={15} />
-                      <span>暂无 Mission</span>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </section>
-      ) : view === "list" ? (
-        <MissionList items={filteredByControls} filterControls={missionFilterControls} />
-      ) : (
-        <MissionTimeline items={filtered} />
-      )}
-      {createOpen ? (
-        <CreateMissionDrawer
-          alarms={alarmQuery.data?.data ?? []}
-          preferredTurbineId={turbineScope}
-          onClose={() => setCreateOpen(false)}
-          onCreated={async () => {
-            await Promise.all([missionQuery.refetch(), alarmQuery.refetch()]);
-          }}
+      {queryBlocked ? (
+        <QueryStateNotice
+          state={missionState}
+          target="Mission 台账"
+          impact="Mission 数量、阶段、筛选结果与创建入口"
+          onRetry={() => void missionQuery.refetch()}
         />
-      ) : null}
+      ) : (
+        <>
+          <QueryStateNotice
+            state={missionState}
+            target="Mission 台账"
+            impact="现有 Mission 内容"
+            onRetry={() => void missionQuery.refetch()}
+          />
+          {runtimeMode === "production" ? (
+            <QueryStateNotice
+              state={alarmState}
+              target="Mission 创建所需的告警数据"
+              impact="创建入口"
+              onRetry={() => void alarmQuery.refetch()}
+              partial
+            />
+          ) : null}
+
+          {diagnosisIntent ? (
+            <section className="controlled-entry-note" role="status">
+              <ShieldCheck size={16} />
+              <span>
+                <strong>已打开受控诊断入口</strong>
+                <small>
+                  资产范围：{turbineScope ?? "未指定"}。
+                  {runtimeMode === "production"
+                    ? "可从未关联告警创建持久化 Mission，并启动受控 Agent 分析。"
+                    : "演示模式只展示现有诊断 Mission，不会假启动 Agent 流程。"}
+                </small>
+              </span>
+              <Button
+                variant="ghost"
+                onClick={() => setDiagnosisIntent(false)}
+                aria-label="关闭受控入口提示"
+              >
+                <X size={14} />
+              </Button>
+            </section>
+          ) : null}
+
+          <section className="mission-summary">
+            <div>
+              <span className="mission-summary__icon mission-summary__icon--info">
+                <GitBranch size={16} />
+              </span>
+              <span>
+                <small>活跃</small>
+                <strong>{activeCount}</strong>
+              </span>
+            </div>
+            <div>
+              <span className="mission-summary__icon mission-summary__icon--warning">
+                <ShieldCheck size={16} />
+              </span>
+              <span>
+                <small>等待审核</small>
+                <strong>{reviewCount}</strong>
+              </span>
+            </div>
+            <div>
+              <span className="mission-summary__icon mission-summary__icon--maintenance">
+                <Bot size={16} />
+              </span>
+              <span>
+                <small>参与 AGENT</small>
+                <strong>{participatingAgentCount}</strong>
+              </span>
+            </div>
+            <div>
+              <span className="mission-summary__icon mission-summary__icon--success">
+                <CheckCircle2 size={16} />
+              </span>
+              <span>
+                <small>今日完成</small>
+                <strong>{completedCount}</strong>
+              </span>
+            </div>
+            <div className="mission-throughput">
+              <span>
+                <small>平均解决时长</small>
+                <strong>
+                  {runtimeMode === "production"
+                    ? averageResolutionMinutes === null
+                      ? "—"
+                      : formatResolutionDuration(averageResolutionMinutes)
+                    : "4h 18m"}
+                </strong>
+              </span>
+              <em>
+                {runtimeMode === "production"
+                  ? averageResolutionMinutes === null
+                    ? "暂无已闭环 Mission，无法计算"
+                    : `基于 ${resolutionMinutes.length} 个已闭环 Mission 计算`
+                  : "较 7 日均值下降 12%"}
+              </em>
+            </div>
+          </section>
+
+          {view === "list" ? null : (
+            <section className="data-toolbar mission-toolbar">
+              <div className="search-field">
+                <Search size={15} />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="搜索 Mission、机组或故障…"
+                  aria-label="搜索 Mission"
+                />
+              </div>
+              {missionFilterControls}
+              <span className="toolbar-result">{filtered.length} 个 Mission</span>
+            </section>
+          )}
+
+          {displayMissions.length === 0 ? (
+            <EmptyState
+              icon={<GitBranch size={22} />}
+              title="当前范围内没有 Mission"
+              description="权威 Mission 台账已成功返回空结果；这不是加载或服务错误。"
+            />
+          ) : filtered.length === 0 && view !== "list" ? (
+            <EmptyState
+              icon={<Search size={22} />}
+              title="筛选结果为空"
+              description="Mission 台账中存在记录，但当前搜索或筛选条件没有匹配项。"
+              action={
+                <Button variant="secondary" onClick={resetMissionFilters}>
+                  清除筛选
+                </Button>
+              }
+            />
+          ) : view === "kanban" ? (
+            <section className="mission-kanban" aria-label="Mission 状态看板">
+              {columns.map((column) => {
+                const columnMissions = filtered.filter(
+                  (mission) => mission.status === column.status,
+                );
+                return (
+                  <div className="kanban-column" key={column.status}>
+                    <header>
+                      <span>
+                        <i className={`kanban-status-dot kanban-status-dot--${column.status}`} />
+                        <strong>{column.label}</strong>
+                        <em>{columnMissions.length}</em>
+                      </span>
+                      <small>{column.description}</small>
+                    </header>
+                    <div className="kanban-column__body">
+                      {columnMissions.map((mission) => (
+                        <MissionCard key={mission.id} mission={mission} />
+                      ))}
+                      {columnMissions.length === 0 ? (
+                        <div className="kanban-empty">
+                          <CircleDot size={15} />
+                          <span>暂无 Mission</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </section>
+          ) : view === "list" ? (
+            <MissionList items={filteredByControls} filterControls={missionFilterControls} />
+          ) : (
+            <MissionTimeline items={filtered} />
+          )}
+          {createOpen ? (
+            <CreateMissionDrawer
+              alarms={alarmQuery.data?.data ?? []}
+              preferredTurbineId={turbineScope}
+              onClose={() => setCreateOpen(false)}
+              onCreated={async () => {
+                await Promise.all([missionQuery.refetch(), alarmQuery.refetch()]);
+              }}
+            />
+          ) : null}
+        </>
+      )}
     </AppShell>
   );
 }

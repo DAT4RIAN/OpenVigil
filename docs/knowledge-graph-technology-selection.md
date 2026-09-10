@@ -1,8 +1,8 @@
-# WindOps 知识图谱技术选型建议
+# OpenVigil 知识图谱技术选型建议
 
 ## 结论
 
-结合 WindOps 现有的 PostgreSQL、TimescaleDB 和 pgvector 技术栈，推荐采用以下方案：
+结合 OpenVigil 现有的 PostgreSQL、TimescaleDB 和 pgvector 技术栈，推荐采用以下方案：
 
 > 使用 Neo4j 作为派生知识图谱查询库，PostgreSQL 继续作为权威业务数据库，pgvector 继续负责文档向量检索。
 
@@ -47,7 +47,7 @@ FastAPI 对外提供统一的 `/api/v1/knowledge-graph/**` 接口，前端不直
 
 ### 为什么选择 Neo4j
 
-WindOps 的核心关系属于典型属性图：
+OpenVigil 的核心关系属于典型属性图：
 
 - 风机 → 子系统 → 传感器；
 - 告警 → 异常特征 → 候选故障模式；
@@ -55,7 +55,7 @@ WindOps 的核心关系属于典型属性图：
 - 工单 → 维护措施 → 备件 → 班组；
 - 文档 Passage → 支撑诊断 → 关联设备。
 
-Neo4j 的 Cypher 对多跳路径、影响范围、最短路径和可解释关系查询较为自然，也提供节点/关系约束、全文索引和向量索引。当前版本的向量索引可以用于节点或关系，并支持 Cypher `SEARCH`。不过 WindOps 已经使用 pgvector，第一阶段没有必要在 Neo4j 中重复存储 embedding。
+Neo4j 的 Cypher 对多跳路径、影响范围、最短路径和可解释关系查询较为自然，也提供节点/关系约束、全文索引和向量索引。当前版本的向量索引可以用于节点或关系，并支持 Cypher `SEARCH`。不过 OpenVigil 已经使用 pgvector，第一阶段没有必要在 Neo4j 中重复存储 embedding。
 
 参考资料：
 
@@ -177,7 +177,7 @@ PostgreSQL 支持递归遍历、深度或广度排序以及循环检测，适合
 
 ### RDF、SPARQL 与 SHACL
 
-只有在明确需要 RDF 互操作、行业本体、形式化语义约束或跨组织数据交换时，才建议采用 RDF 图数据库、SPARQL 和 SHACL。其建模和运维成本高于当前 WindOps 所需的属性图方案。
+只有在明确需要 RDF 互操作、行业本体、形式化语义约束或跨组织数据交换时，才建议采用 RDF 图数据库、SPARQL 和 SHACL。其建模和运维成本高于当前 OpenVigil 所需的属性图方案。
 
 参考资料：
 
@@ -267,5 +267,5 @@ uvicorn windops_backend.main:app --host 0.0.0.0 --port 8000
 
 ```text
 WINDOPS_BACKEND_BASE_URL=http://127.0.0.1:8000
-WINDOPS_BACKEND_API_TOKEN=<已配置的 WindOps 角色令牌>
+WINDOPS_BACKEND_API_TOKEN=<已配置的 OpenVigil 角色令牌>
 ```

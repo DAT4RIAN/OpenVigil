@@ -41,11 +41,19 @@ test("predictive API returns a deterministic risk-ranked 64 turbine fixture", as
   assert.equal(first.meta.total, 64);
   assert.equal(first.meta.filteredTotal, 64);
   assert.equal(first.meta.count, 64);
-  assert.equal(first.meta.model.mode, "deterministic-fixture");
+  assert.equal(first.meta.model.mode, "deterministic-evidence-fixture");
   assert.equal(first.meta.model.deterministic, true);
   assert.equal(first.meta.model.readOnly, true);
   assert.equal(first.meta.model.performsRealInference, false);
   assert.equal(new Set(first.data.map((item) => item.turbineId)).size, 64);
+  assert.ok(
+    first.data.every(
+      (item) =>
+        !Object.hasOwn(item, "failureProbability30d") &&
+        !Object.hasOwn(item, "remainingUsefulLifeDays") &&
+        !Object.hasOwn(item, "probabilityBand"),
+    ),
+  );
 
   for (let index = 1; index < first.data.length; index += 1) {
     assert.ok(
@@ -58,21 +66,19 @@ test("predictive API returns a deterministic risk-ranked 64 turbine fixture", as
   assert.ok(featured);
   assert.equal(featured.component, "主轴承");
   assert.equal(featured.componentHealth, 63);
-  assert.equal(featured.failureProbability30d, 34);
-  assert.equal(featured.remainingUsefulLifeDays, 47);
   assert.equal(featured.anomalyScore, 0.86);
-  assert.equal(featured.probabilityBand, 4);
+  assert.equal(featured.evidenceBand, 4);
   assert.equal(featured.consequenceBand, 4);
   assert.equal(featured.matrixRisk, "high");
 });
 
 test("predictive API supports exact turbine, risk, trend, query, sort, and pagination filters", async () => {
-  const [featured, high, declining, queried, lowestRul, pageEnd] = await Promise.all([
+  const [featured, high, declining, queried, highestAnomaly, pageEnd] = await Promise.all([
     fetchJson("/api/predictive-assessments?turbineId=wt-023"),
     fetchJson("/api/predictive-assessments?risk=high"),
     fetchJson("/api/predictive-assessments?trend=declining"),
     fetchJson(`/api/predictive-assessments?q=${encodeURIComponent("主轴承")}`),
-    fetchJson("/api/predictive-assessments?sort=rul-asc&limit=8"),
+    fetchJson("/api/predictive-assessments?sort=anomaly-desc&limit=8"),
     fetchJson("/api/predictive-assessments?offset=64&limit=8"),
   ]);
 
@@ -83,11 +89,10 @@ test("predictive API supports exact turbine, risk, trend, query, sort, and pagin
   assert.ok(declining.data.length > 0);
   assert.ok(declining.data.every((item) => item.trend === "declining"));
   assert.ok(queried.data.some((item) => item.turbineId === "WT-023"));
-  assert.equal(lowestRul.meta.count, 8);
+  assert.equal(highestAnomaly.meta.count, 8);
   assert.ok(
-    lowestRul.data.every(
-      (item, index, data) =>
-        index === 0 || data[index - 1].remainingUsefulLifeDays <= item.remainingUsefulLifeDays,
+    highestAnomaly.data.every(
+      (item, index, data) => index === 0 || data[index - 1].anomalyScore >= item.anomalyScore,
     ),
   );
   assert.equal(pageEnd.meta.count, 0);
@@ -116,8 +121,8 @@ test("predictive maintenance page renders the WT-023 model story", async () => {
   const html = await response.text();
   assert.match(html, /预测性维护/);
   assert.match(html, /WT-023/);
-  assert.match(html, /失效概率/);
-  assert.match(html, /概率 × 后果/);
-  assert.match(html, /演示模型/);
-  assert.match(html, /无真实推理/);
+  assert.match(html, /异常分数/);
+  assert.match(html, /证据 × 后果/);
+  assert.match(html, /隔离演示/);
+  assert.doesNotMatch(html, /预计剩余寿命|30 天失效概率|最短 RUL/);
 });

@@ -1,4 +1,4 @@
-# WindOps 发布验收清单
+# OpenVigil 发布验收清单
 
 > 适用范围：生产候选版本。仓库内单元测试通过不能替代本清单中的外部验收。
 
@@ -8,7 +8,7 @@
 - 执行前端 `format:check`、`typecheck`、`lint`、完整构建与测试。
 - 执行后端 Ruff、MyPy、完整 Pytest、Bandit、pip-audit 和 `pnpm audit --prod`。
 - 确认 Alembic 从 `0015_alarm_command_state` 升级到唯一 head
-  `0026_schema_contract_alignment`，并保留离线 SQL 审阅结果。
+  `0028_read_audit_pipeline`，并保留离线 SQL 审阅结果。
 - 核心集合的 10 万行查询计划、延迟与响应预算遵循
   [collection-performance.md](collection-performance.md)，并保留 JUnit 指标证据。
 - 检查 `/api/v1/platform/configuration-status` 的
@@ -31,12 +31,28 @@ windops-deployment-policy `
 可用性策略缺失以及未批准的备份存储类。
 
 受保护的 `release-candidate` workflow 只能从 `main` 的同一 commit 构建，并要求
-`frontend`、`backend` 和 `postgres-contract` 三个 prior check 已成功。基础镜像来自
+`frontend`、`backend`、`postgres-contract`、`care-postgres-contract`、`browser-e2e` 与
+`real-cross-layer-e2e` 六个 prior check 已成功。基础镜像来自
 `backend/deploy/release-policy.json` 中固定的 Python 3.12.11/Trixie digest；所有 GitHub
 Action 也固定到完整 commit。流水线必须保留 GitHub provenance、Cosign 签名、Trivy
 CRITICAL/HIGH 零发现报告、SPDX SBOM 及其 attestation、制品结构检查、镜像迁移与
-health/ready smoke、精确 digest 清单、真实外部验收 JUnit、备份摘要和 release chain。
+production health/ready smoke、精确 digest 清单、真实外部验收 JUnit、备份摘要、十一类
+标准报告、manifest 和最终 verifier qualification。
 任何缺失、skip 或保护环境配置缺失都会失败，不得以手工 tag 或仓库占位摘要继续。
+
+同一候选镜像还必须执行 `windops-care-workload-smoke`，真实覆盖 Parquet 断点、恢复和
+幂等重放。独立证据 ZIP 必须包含
+`artifacts/care/care-full-scale-release-evidence.json` 及其引用的十个精确角色原始制品；
+`windops-care-fullscale-acceptance` 会核对当前 release/commit/image、95 个事件、36 个
+fold、资源限制、只读源、事务重放、专用 CARE bucket 和四个运维 bucket 的拒绝访问证明。
+小型镜像 smoke 或受保护全量验收任一缺失，`external_release` 报告的精确检查集合即不完整。
+
+流水线本身直接生成镜像扫描、SBOM、签名、部署策略和生产镜像联合依赖五类标准报告。
+迁移回滚、DR、DAST、WCAG/视觉、SLO 与 Sites 发布后六类报告来自隔离的独立验收运行，
+通过受保护的 HTTPS 制品地址和预先登记的 ZIP SHA-256 进入候选流水线；安全解包器只允许
+`reports/` 与 `artifacts/`，拒绝路径逃逸、符号链接、覆盖、缺项和超限制品。独立报告同样
+必须使用当前 schema，且必须在 72 小时证据窗口内绑定本候选的 release ID、commit、镜像
+digest 和 `evidence_set_id`，因此不能复用上一轮候选的报告。
 
 任一检查失败、跳过或使用旧制品时，候选版本不得发布。
 
@@ -58,6 +74,22 @@ WCAG/视觉、SLO 演练和 Sites 发布后验证十一类报告全部存在且�
 同一证据目录内并记录 SHA-256。摘要时间必须与 manifest 一致，任何制品缺失、摘要
 不符、未声明引用、重复检查或旧版本证据复用都会被拒绝。
 
+`evidence_set_id` 是 release ID、完整 commit SHA 和镜像 digest 的规范化 SHA-256；报告
+格式与 manifest 格式当前均为 v2。使用 `windops-release-evidence record` 只会从已经存在、
+非空的原始制品生成单门禁标准报告，且要求该门禁的检查集合精确完整；`assemble` 只接受
+十一类同身份证据并生成 manifest 及摘要，不会产生发布结论。唯一允许生成
+`release-qualification.json` 的命令是：
+
+```powershell
+windops-release-gate `
+  --evidence-dir <release-evidence-directory> `
+  --qualification-output <release-evidence-directory>/release-qualification.json
+```
+
+verifier 在完整校验通过前不会创建该文件；已有 qualification 文件也不会被覆盖。流水线
+上传的是 verifier 生成且再次核对 release/commit/image/evidence-set/11-gate 身份的结果，
+不再自行写入 `qualified`。
+
 ## 2. 隔离环境迁移与真实依赖联合验收
 
 候选环境必须使用真实的 PostgreSQL/TimescaleDB/pgvector、Redis、四个 MinIO
@@ -78,6 +110,24 @@ PR 的 `postgres-contract` 必须在固定 digest 的 PostgreSQL 16 + TimescaleD
 以 `WINDOPS_FAIL_ON_SKIPPED=1` 执行空库、上一受支持 revision、故障回滚/重试、advisory lock、
 关键事务、Outbox claim 与唯一约束测试。失败处置严格遵循
 `postgresql-migration-recovery.md`，不得用 SQLite 或 `alembic stamp` 替代。
+
+`main` 的 `care-postgres-contract` 只在标记为 `windops-care-v6` 的受控 Linux self-hosted
+runner 上执行，绝不运行 fork PR 代码。runner 的仓库变量
+`WINDOPS_CARE_REAL_ARTIFACT_ROOT` 与 `WINDOPS_CARE_FULL_SCALE_ROOT` 必须指向只读、已由
+CARE 签名根和逐文件 SHA-256 验证的 official minimal/offline/full-scale 制品；缺失即失败，
+不得 skip。job 在三个隔离新库中显式运行 offline、full-scale、vertical/stage-upgrade 三个
+文件，并由 `windops-care-postgres-evidence` 要求精确 4 tests、0 skip/failure/error，交叉绑定
+commit、TimescaleDB image digest、Alembic head、双依赖锁、所有 CARE 根身份及性能属性；
+性能证据还必须包含 7 个固定 replay 批次的 SQL 次数/数据库时间，以及 5 条目录路径各 20 次
+测量的 SQL p95/最大语句数。replay 每批最多 40 条 SQL、目录请求最多 12 条 SQL，缺失、聚合
+不一致或超限均由 verifier 失败关闭，不能只凭端到端时间偶然通过。
+
+backend required job 必须以 `submodules: true` 从 `.gitmodules` 取得官方
+EnergyFaultDetector v0.6.2 gitlink，并运行 `scripts/verify_care_reference.py`。该门禁核对 upstream
+URL、tag、commit、Git tree、MIT license/source hashes、官方 CARE earliness/criticality 输出、
+OpenVigil golden vectors，以及产品/架构/技术和 UI 审计 source-of-truth 文档的 UTF-8/LF 规范化
+摘要。缺少 submodule、
+本机残留目录、未提交的 source-of-truth 或任一身份/算法漂移都不能产生 passed evidence。
 
 验收证据必须包含：依赖就绪探针、受保护指标、MinIO 写入/摘要回读、真实 embedding、
 有证据引用的 LiteLLM 诊断，以及活动模型的在线推理结果。测试跳过即视为失败。
@@ -127,8 +177,9 @@ windops-dr-drill --output-dir <approved-evidence-directory> `
   `demo`（fail-open），漏配不会校验失败，而是静默以演示模式对外服务。
 - Sites 必须配置生产模式、外部 HTTPS 后端、`sites_delegation` 和由密钥管理系统提供的
   48 字符以上委托密钥；后端必须配置相同活动密钥和角色映射。Sites 还必须配置
-  `WINDOPS_BACKEND_EXPECTED_RELEASE_ID` 与 `WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST`，
-  且与候选后端的不可变发布身份完全一致。
+  `WINDOPS_BACKEND_EXPECTED_RELEASE_ID`、`WINDOPS_BACKEND_EXPECTED_COMMIT_SHA` 与
+  `WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST`，且与候选后端的不可变发布身份三元组完全一致；
+  任一字段缺失、格式无效或错配时 `/readyz` 探针与业务代理都必须失败关闭。
 - 后端必须为每个 Sites 人员主体配置
   `WINDOPS_IDENTITY_SCOPE_MAPPINGS`，至少包含租户或风场范围，并按职责声明
   `data_scopes`；没有映射的生产主体只能得到 `GRAPH_SCOPE_REQUIRED`，不能读取知识图谱。

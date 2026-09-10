@@ -176,6 +176,20 @@ class Settings(BaseSettings):
     # Tests must opt into synchronous draining. Non-test runtimes always dispatch
     # durable outbox events through Dramatiq/Redis.
     outbox_inline_drain: bool = False
+    # Business reads append a minimized event to this durable Redis stream before
+    # executing. A separate worker commits bounded batches to monthly PostgreSQL
+    # partitions; maintenance compresses hot rows before final retention expiry.
+    read_audit_stream_key: str = "windops:read-audit:v2"
+    read_audit_consumer_group: str = "windops-read-audit-writers-v2"
+    read_audit_stream_max_pending: int = Field(default=100_000, ge=1_000, le=10_000_000)
+    read_audit_enqueue_timeout_ms: int = Field(default=250, ge=25, le=2_000)
+    read_audit_batch_size: int = Field(default=500, ge=10, le=5_000)
+    read_audit_worker_block_ms: int = Field(default=2_000, ge=100, le=30_000)
+    read_audit_reclaim_idle_ms: int = Field(default=60_000, ge=5_000, le=3_600_000)
+    read_audit_archive_after_days: int = Field(default=30, ge=1, le=365)
+    read_audit_retention_days: int = Field(default=365, ge=30, le=3_650)
+    read_audit_maintenance_batch_size: int = Field(default=10_000, ge=100, le=100_000)
+    read_audit_partition_months_ahead: int = Field(default=3, ge=1, le=24)
     api_prefix: str = "/api/v1"
     bind_host: str = "127.0.0.1"
     release_id: str = "development"
@@ -254,6 +268,13 @@ class Settings(BaseSettings):
             raise ValueError("the test authentication bypass is test-only")
         if self.outbox_inline_drain and self.environment is not Environment.TEST:
             raise ValueError("inline outbox draining is test-only")
+        if self.read_audit_archive_after_days >= self.read_audit_retention_days:
+            raise ValueError("read audit archive age must be below final retention")
+        if self.read_audit_stream_max_pending < self.read_audit_batch_size * 2:
+            raise ValueError("read audit stream capacity must hold at least two worker batches")
+        for value in (self.read_audit_stream_key, self.read_audit_consumer_group):
+            if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:._-]{2,127}", value) is None:
+                raise ValueError("read audit Redis names must be bounded safe identifiers")
         if self.knowledge_graph_backend == "memory" and self.environment is not Environment.TEST:
             raise ValueError("the in-memory knowledge graph is test-only")
         if self.environment is Environment.PRODUCTION:

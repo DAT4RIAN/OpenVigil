@@ -48,6 +48,8 @@ DATABASE_INVARIANT_TABLES = (
     ("knowledge_documents", "knowledge_documents"),
     ("registered_models", "registered_models"),
     ("domain_events", "domain_events"),
+    ("read_access_audits", "read_access_audits"),
+    ("read_access_audit_archives", "read_access_audit_archives"),
     ("benchmark_dataset_versions", "benchmark_dataset_versions"),
     ("benchmark_files", "benchmark_files"),
     ("benchmark_events", "benchmark_events"),
@@ -72,6 +74,8 @@ SELECT json_build_object(
     'knowledge_documents', (SELECT count(*) FROM knowledge_documents),
     'registered_models', (SELECT count(*) FROM registered_models),
     'domain_events', (SELECT count(*) FROM domain_events),
+    'read_access_audits', (SELECT count(*) FROM read_access_audits),
+    'read_access_audit_archives', (SELECT count(*) FROM read_access_audit_archives),
     'benchmark_dataset_versions', (SELECT count(*) FROM benchmark_dataset_versions),
     'benchmark_files', (SELECT count(*) FROM benchmark_files),
     'benchmark_events', (SELECT count(*) FROM benchmark_events),
@@ -675,7 +679,7 @@ def restore_backup(
 
 
 def backup_main() -> None:
-    parser = argparse.ArgumentParser(description="Create a verified WindOps recovery bundle")
+    parser = argparse.ArgumentParser(description="Create a verified OpenVigil recovery bundle")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     backup_path = create_backup(get_settings(), args.output_dir)
@@ -683,7 +687,7 @@ def backup_main() -> None:
 
 
 def restore_main() -> None:
-    parser = argparse.ArgumentParser(description="Restore a verified WindOps recovery bundle")
+    parser = argparse.ArgumentParser(description="Restore a verified OpenVigil recovery bundle")
     parser.add_argument("--bundle", type=Path, required=True)
     parser.add_argument("--confirm-target", required=True)
     parser.add_argument("--allow-object-overwrite", action="store_true")

@@ -16,6 +16,7 @@ const runtimeKeys = [
   "WINDOPS_BACKEND_DELEGATION_SECRET",
   "WINDOPS_BACKEND_REQUEST_TIMEOUT_MS",
   "WINDOPS_BACKEND_EXPECTED_RELEASE_ID",
+  "WINDOPS_BACKEND_EXPECTED_COMMIT_SHA",
   "WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST",
 ];
 
@@ -119,7 +120,7 @@ async function demoSmoke() {
     const rootResponse = await fetch(`${origin}/`, { signal: AbortSignal.timeout(10_000) });
     assert.equal(rootResponse.status, 200);
     assert.match(rootResponse.headers.get("content-type") ?? "", /^text\/html/);
-    assert.match(await rootResponse.text(), /WindOps/);
+    assert.match(await rootResponse.text(), /OpenVigil/);
   } finally {
     await stopServer(server);
   }

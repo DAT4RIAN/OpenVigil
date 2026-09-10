@@ -13,10 +13,15 @@ const stateForScore = (score: number, status: string): HealthState => {
   return "healthy";
 };
 
-const riskFor = (failureProbability: number, status: string): RiskLevel => {
-  if (status === "critical" || failureProbability >= 45) return "critical";
-  if (failureProbability >= 25) return "high";
-  if (failureProbability >= 12) return "medium";
+const riskFor = (
+  healthScore: number,
+  anomalyScore: number,
+  activeAlarmCount: number,
+  status: string,
+): RiskLevel => {
+  if (status === "critical" || healthScore < 60 || anomalyScore >= 0.9) return "critical";
+  if (healthScore < 75 || anomalyScore >= 0.65 || activeAlarmCount >= 3) return "high";
+  if (healthScore < 90 || anomalyScore >= 0.4 || activeAlarmCount > 0) return "medium";
   return "low";
 };
 
@@ -35,12 +40,14 @@ export const healthAssessments: readonly HealthAssessment[] = Object.freeze(
   turbines.map((turbine) => {
     const number = Number(turbine.id.slice(3));
     const isFeatured = turbine.id === "WT-023";
-    const failureProbability30d = isFeatured
-      ? 34
-      : clamp(
-          Math.round((100 - turbine.healthScore) * 1.25 + turbine.activeAlarmCount * 2.8),
-          2,
-          58,
+    const anomalyScore = isFeatured
+      ? 0.86
+      : Number(
+          clamp(
+            0.08 + (100 - turbine.healthScore) / 110 + turbine.activeAlarmCount * 0.035,
+            0.05,
+            0.94,
+          ).toFixed(2),
         );
     const trend: TrendDirection = isFeatured
       ? "declining"
@@ -56,24 +63,13 @@ export const healthAssessments: readonly HealthAssessment[] = Object.freeze(
       healthScore: turbine.healthScore,
       state: stateForScore(turbine.healthScore, turbine.status),
       trend,
-      riskLevel: riskFor(failureProbability30d, turbine.status),
-      failureProbability30d,
-      remainingUsefulLifeDays: isFeatured
-        ? 47
-        : clamp(
-            Math.round(turbine.healthScore * 9.5 - failureProbability30d * 1.8 + number),
-            45,
-            980,
-          ),
-      anomalyScore: isFeatured
-        ? 0.86
-        : Number(
-            clamp(
-              0.08 + (100 - turbine.healthScore) / 110 + turbine.activeAlarmCount * 0.035,
-              0.05,
-              0.94,
-            ).toFixed(2),
-          ),
+      riskLevel: riskFor(
+        turbine.healthScore,
+        anomalyScore,
+        turbine.activeAlarmCount,
+        turbine.status,
+      ),
+      anomalyScore,
       primaryFinding: findingFor(number, turbine.status),
       assessedAt: windFarm.lastUpdatedAt,
     });

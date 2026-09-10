@@ -5,14 +5,22 @@ import copy
 import json
 import os
 import re
+import zipfile
 from pathlib import Path
 
 import pytest
 import yaml
 from scripts.load_release_environment import main as load_release_environment
 from scripts.run_real_release_smoke_server import _gateway_delegation_secret
+from scripts.stage_independent_release_evidence import (
+    INDEPENDENT_GATES,
+    stage_independent_evidence,
+)
 from scripts.verify_migration_head import DECLARATION_FILES, EXPECTED_HEAD
 from scripts.verify_release_checks import REQUIRED_CHECKS, verify_release_checks
+
+from windops_backend.operations.container_artifact import ContainerArtifactError
+from windops_backend.operations.release_smoke import _validate_production_environment_file
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "release.yml"
@@ -116,12 +124,24 @@ def test_release_workflow_is_protected_pinned_and_complete() -> None:
     assert "test_release_environment.py" in source
     assert 'WINDOPS_FAIL_ON_SKIPPED: "1"' in source
     assert "windops-backup" in source
-    assert "release-chain.json" in source
+    assert "release-qualification.json" in source
+    assert "windops-release-evidence" in source
+    assert "windops-release-gate" in source
+    assert "stage_independent_release_evidence.py" in source
+    assert "WINDOPS_INDEPENDENT_EVIDENCE_SHA256" in source
+    assert '--environment-file "${RUNNER_TEMP}/windops-release.env"' in source
+    assert "--qualification-output release-evidence/release-qualification.json" in source
+    assert 'status:"qualified"' not in source
+    assert "status: qualified" not in source
     assert "sites-release-bindings.env" in source
+    assert '"WINDOPS_BACKEND_EXPECTED_RELEASE_ID=${RELEASE_ID}"' in source
+    assert '"WINDOPS_BACKEND_EXPECTED_COMMIT_SHA=${GITHUB_SHA}"' in source
+    assert '"WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST=${IMAGE_DIGEST}"' in source
     assert REQUIRED_CHECKS == {
         "frontend",
         "backend",
         "postgres-contract",
+        "care-postgres-contract",
         "browser-e2e",
         "real-cross-layer-e2e",
     }
@@ -130,6 +150,74 @@ def test_release_workflow_is_protected_pinned_and_complete() -> None:
     assert uses
     assert all(re.fullmatch(r"[^@]+@[0-9a-f]{40}", action) for action in uses)
     assert not re.search(r"uses:\s*[^\s]+@(main|master|v\d+)(?:\s|$)", source)
+
+
+def test_release_image_smoke_requires_exact_production_identity_and_dependencies(
+    tmp_path: Path,
+) -> None:
+    environment = tmp_path / "release.env"
+    release_id = "windops-2026.09.04-rc1"
+    commit_sha = "a" * 40
+    image_digest = "sha256:" + "b" * 64
+    values = {
+        "WINDOPS_ENVIRONMENT": "production",
+        "WINDOPS_RELEASE_ID": release_id,
+        "WINDOPS_RELEASE_COMMIT_SHA": commit_sha,
+        "WINDOPS_RELEASE_IMAGE_DIGEST": image_digest,
+        "WINDOPS_DATABASE_URL": "postgresql+asyncpg://release@db/windops?ssl=require",
+        "WINDOPS_REDIS_URL": "rediss://redis/0",
+        "WINDOPS_MINIO_ENDPOINT": "minio.internal:9000",
+        "WINDOPS_NEO4J_URI": "neo4j+s://neo4j.internal:7687",
+        "WINDOPS_TRUSTED_HOSTS": '["release-api.internal"]',
+    }
+    environment.write_text(
+        "".join(f"{name}={value}\n" for name, value in values.items()), encoding="utf-8"
+    )
+    assert (
+        _validate_production_environment_file(
+            environment,
+            release_id=release_id,
+            commit_sha=commit_sha,
+            image_digest=image_digest,
+        )
+        == "release-api.internal"
+    )
+
+    development = tmp_path / "development.env"
+    development.write_text(
+        environment.read_text(encoding="utf-8").replace(
+            "WINDOPS_ENVIRONMENT=production", "WINDOPS_ENVIRONMENT=development"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ContainerArtifactError, match="wrong WINDOPS_ENVIRONMENT"):
+        _validate_production_environment_file(
+            development,
+            release_id=release_id,
+            commit_sha=commit_sha,
+            image_digest=image_digest,
+        )
+
+
+def test_independent_release_evidence_staging_is_bounded_and_requires_every_gate(
+    tmp_path: Path,
+) -> None:
+    archive = tmp_path / "independent.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        for gate in INDEPENDENT_GATES:
+            bundle.writestr(f"reports/{gate}.json", '{"status":"passed"}')
+            bundle.writestr(f"artifacts/{gate}/raw.json", '{"result":"passed"}')
+    destination = tmp_path / "release-evidence"
+    stage_independent_evidence(archive, destination)
+    assert {path.stem for path in (destination / "reports").glob("*.json")} == set(
+        INDEPENDENT_GATES
+    )
+
+    unsafe = tmp_path / "unsafe.zip"
+    with zipfile.ZipFile(unsafe, "w") as bundle:
+        bundle.writestr("../outside.json", "{}")
+    with pytest.raises(ValueError, match="unsafe path"):
+        stage_independent_evidence(unsafe, tmp_path / "unsafe-output")
 
 
 @pytest.mark.parametrize(
@@ -268,6 +356,20 @@ def test_ci_workflow_enforces_immutable_quality_and_postgres_gates() -> None:
     assert "tests/external/test_postgres_concurrency.py" in source
     assert "tests/external/test_postgres_service_resilience.py" in source
     assert "tests/external/test_postgres_prediction_lock.py" in source
+    care_job = workflow["jobs"]["care-postgres-contract"]
+    assert care_job["if"] == "github.event_name != 'pull_request'"
+    assert care_job["runs-on"] == ["self-hosted", "linux", "x64", "windops-care-v6"]
+    care_commands = "\n".join(
+        str(step.get("run", "")) for step in care_job["steps"] if isinstance(step, dict)
+    )
+    assert "test_postgres_care_offline_evaluation.py" in care_commands
+    assert "test_postgres_care_fullscale.py" in care_commands
+    assert "test_postgres_care_vertical_slice.py" in care_commands
+    assert "windops-care-postgres-evidence" in care_commands
+    assert "0028_read_audit_pipeline" in care_commands
+    assert "WINDOPS_CARE_REAL_ARTIFACT_ROOT" in care_commands
+    assert "WINDOPS_CARE_FULL_SCALE_ROOT" in care_commands
+    assert "care-postgres-evidence/vertical-junit.xml" in care_commands
 
 
 def test_real_cross_layer_job_builds_worker_artifact_before_startup() -> None:
@@ -425,6 +527,30 @@ def test_protected_release_environment_loader_rejects_incomplete_or_unsafe_input
         load_release_environment()
 
 
+def test_protected_release_environment_cannot_override_candidate_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    values = {
+        "WINDOPS_ENVIRONMENT": "production",
+        "WINDOPS_DATABASE_URL": "postgresql+asyncpg://release@db/windops",
+        "WINDOPS_REDIS_URL": "rediss://redis/0",
+        "WINDOPS_MINIO_ENDPOINT": "minio.internal:9000",
+        "WINDOPS_NEO4J_URI": "neo4j+s://neo4j.internal:7687",
+        "WINDOPS_LITELLM_MODEL": "openai/release-model",
+        "WINDOPS_EMBEDDING_MODEL": "release-embedding",
+        "WINDOPS_RELEASE_ID": "wrong-candidate",
+    }
+    payload = "".join(f"{name}={value}\n" for name, value in values.items())
+    monkeypatch.setenv(
+        "WINDOPS_ISOLATED_RELEASE_ENV_B64", base64.b64encode(payload.encode()).decode()
+    )
+    monkeypatch.setenv("GITHUB_ENV", str(tmp_path / "github-env"))
+    monkeypatch.setenv("WINDOPS_RELEASE_ENV_PATH", str(tmp_path / "release.env"))
+    with pytest.raises(SystemExit, match="cannot override candidate identity"):
+        load_release_environment()
+
+
 def test_release_policy_has_only_reviewed_fields() -> None:
     policy = json.loads(
         (REPOSITORY_ROOT / "backend" / "deploy" / "release-policy.json").read_text(encoding="utf-8")
@@ -442,6 +568,9 @@ def test_release_policy_has_only_reviewed_fields() -> None:
         "windops-api",
         "windops-worker",
         "windops-outbox-relay",
+        "windops-read-audit-worker",
         "windops-migrate-release",
         "windops-backup",
+        "windops-read-audit-maintenance",
+        "windops-care-full-scale",
     }

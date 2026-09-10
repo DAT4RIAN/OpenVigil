@@ -21,7 +21,11 @@ from windops_backend.benchmarks.care.anomaly import (
     canonical_anomaly_input_schema,
     canonical_anomaly_output_schema,
 )
-from windops_backend.benchmarks.care.contract import DATASET_ID, DATASET_VERSION
+from windops_backend.benchmarks.care.contract import (
+    DATASET_ID,
+    DATASET_VERSION,
+    CareContractError,
+)
 from windops_backend.benchmarks.care.importer import verify_minimal_import_manifest
 from windops_backend.benchmarks.care.licensing import (
     build_care_artifact_license,
@@ -34,6 +38,9 @@ from windops_backend.benchmarks.care.pipeline import (
 from windops_backend.benchmarks.care.quality import (
     FEATURE_SET_VERSION,
     QUALITY_RULE_VERSION,
+    StatusPointEvidence,
+    StatusSequenceState,
+    evaluate_status_point,
     verify_quality_contract,
 )
 from windops_backend.benchmarks.care.scoring import (
@@ -52,6 +59,10 @@ from windops_backend.benchmarks.care.scoring import (
     fixed_threshold_policy,
     verify_prediction_artifact,
     verify_score_protocol,
+)
+from windops_backend.benchmarks.care.trust import (
+    CareTrustAnchor,
+    verify_embedded_care_approval,
 )
 from windops_backend.schemas import (
     BenchmarkEvaluationRunCreateRequest,
@@ -209,6 +220,7 @@ class _LoadedEvent:
     source_timestamps: tuple[str, ...]
     split: np.ndarray[Any, Any]
     status_ids: tuple[str, ...]
+    status_evidence: tuple[StatusPointEvidence, ...]
     values: np.ndarray[Any, Any]
 
 
@@ -315,6 +327,22 @@ def _load_event(
             for column in feature_columns
         ]
     )
+    status_ids = tuple(_normalise_status(value) for value in table["status_type_id"].to_pylist())
+    status_state = StatusSequenceState("A", TRAIN_TRUSTED_STATUS_IDS)
+    status_evidence = tuple(
+        status_state.observe(
+            source_row_id=int(source_row_id),
+            split=str(split_value),
+            status_id=status_id,
+            corroboration_signal_values=(),
+        )
+        for source_row_id, split_value, status_id in zip(
+            source_row_ids,
+            split,
+            status_ids,
+            strict=True,
+        )
+    )
     return _LoadedEvent(
         event_id=int(event["event_id"]),
         source_asset_id=str(event["source_asset_id"]),
@@ -324,7 +352,8 @@ def _load_event(
             _timestamp_text(value) for value in table["time_stamp"].to_pylist()
         ),
         split=split,
-        status_ids=tuple(_normalise_status(value) for value in table["status_type_id"].to_pylist()),
+        status_ids=status_ids,
+        status_evidence=status_evidence,
         values=values,
     )
 
@@ -350,8 +379,26 @@ def _fit_event_model(
     algorithm: str,
     projection_matrix: np.ndarray[Any, Any] | None,
 ) -> _EventModelOutput:
-    statuses = np.asarray(event.status_ids, dtype=object)
-    train_mask = (event.split == "train") & np.isin(statuses, TRAIN_TRUSTED_STATUS_IDS)
+    train_mask = np.asarray(
+        [
+            str(split) == "train"
+            and evaluate_status_point(
+                farm="A",
+                split=str(split),
+                status_id=status_id,
+                trusted_status_ids=TRAIN_TRUSTED_STATUS_IDS,
+                disagreement_run_length=evidence.disagreement_run_length,
+                corroborated_by_signal=evidence.corroborated_by_signal,
+            ).model_usable
+            for split, status_id, evidence in zip(
+                event.split,
+                event.status_ids,
+                event.status_evidence,
+                strict=True,
+            )
+        ],
+        dtype=bool,
+    )
     prediction_mask = event.split == "prediction"
     if not train_mask.any() or not prediction_mask.any():
         raise CareOfflineEvaluationError("event has no trusted train or prediction rows")
@@ -435,6 +482,7 @@ def build_evaluation_suite_artifact(
     license_metadata: Mapping[str, Any],
     protocol: Mapping[str, Any] | None = None,
     failures: Sequence[EvaluationFailure] = (),
+    approval_lineage: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     protocol_value = dict(protocol or build_score_protocol())
     verify_score_protocol(protocol_value)
@@ -481,6 +529,7 @@ def build_evaluation_suite_artifact(
             "source_dataset_sha256": source_dataset_sha256,
             "source_import_manifest_sha256": source_import_manifest_sha256,
             "prediction_truth_read_after_predictions_completed": True,
+            "care_approval": dict(approval_lineage) if approval_lineage is not None else None,
         },
         "predictions": ordered_predictions,
         "failures": [
@@ -604,6 +653,11 @@ def verify_evaluation_suite_artifact(artifact: Mapping[str, Any]) -> None:
         license_metadata=license_metadata,
         protocol=protocol,
         failures=failures,
+        approval_lineage=(
+            provenance.get("care_approval")
+            if isinstance(provenance.get("care_approval"), Mapping)
+            else None
+        ),
     )
     if _canonical_bytes(rebuilt) != _canonical_bytes(artifact):
         raise CareOfflineEvaluationError("evaluation suite cannot be reproduced")
@@ -977,6 +1031,7 @@ def verify_offline_evaluation_manifest(
     manifest: Mapping[str, Any],
     *,
     output_root: Path | None = None,
+    trust_anchor: CareTrustAnchor | None = None,
 ) -> None:
     actual = manifest.get("manifest_sha256")
     unsigned = {key: value for key, value in manifest.items() if key != "manifest_sha256"}
@@ -992,6 +1047,13 @@ def verify_offline_evaluation_manifest(
         or manifest.get("prediction_truth_available_to_training_or_calibration") is not False
     ):
         raise CareOfflineEvaluationError("offline evaluation manifest identity is invalid")
+    approval = manifest.get("care_approval")
+    if not isinstance(approval, Mapping):
+        raise CareOfflineEvaluationError("offline evaluation is missing CARE approved-root lineage")
+    try:
+        verify_embedded_care_approval(approval, trust_anchor=trust_anchor)
+    except CareContractError as exc:
+        raise CareOfflineEvaluationError(str(exc)) from exc
     identity = manifest.get("identity")
     models = manifest.get("models")
     artifacts = manifest.get("artifacts")
@@ -1082,6 +1144,7 @@ def _validate_existing_manifest(
     *,
     output_root: Path,
     evaluation_identity_sha256: str,
+    trust_anchor: CareTrustAnchor | None,
 ) -> dict[str, Any] | None:
     if not path.exists():
         return None
@@ -1097,7 +1160,11 @@ def _validate_existing_manifest(
         or raw.get("evaluation_identity_sha256") != evaluation_identity_sha256
     ):
         raise CareOfflineEvaluationError("offline evaluation manifest identity mismatch")
-    verify_offline_evaluation_manifest(raw, output_root=output_root)
+    verify_offline_evaluation_manifest(
+        raw,
+        output_root=output_root,
+        trust_anchor=trust_anchor,
+    )
     return dict(raw)
 
 
@@ -1110,15 +1177,25 @@ def build_offline_evaluations(
     created_at: str,
     random_seed: int = DEFAULT_RANDOM_SEED,
     artifact_store: ImmutableArtifactStore | None = None,
+    trust_anchor: CareTrustAnchor | None = None,
 ) -> OfflineEvaluationResult:
     verify_minimal_import_manifest(import_manifest)
     verify_quality_contract(quality_contract)
+    approval = import_manifest.get("care_approval")
+    if not isinstance(approval, Mapping):
+        raise CareOfflineEvaluationError("source import is missing CARE approved-root lineage")
+    try:
+        verify_embedded_care_approval(approval, trust_anchor=trust_anchor)
+    except CareContractError as exc:
+        raise CareOfflineEvaluationError(str(exc)) from exc
     if (
         import_manifest.get("quality_contract_sha256")
         != quality_contract.get("quality_contract_sha256")
         or import_manifest.get("feature_set_version") != FEATURE_SET_VERSION
         or import_manifest.get("quality_rule_version") != QUALITY_RULE_VERSION
         or tuple(import_manifest.get("event_ids", [])) != (0, 24)
+        or approval.get("quality_contract_sha256")
+        != quality_contract.get("quality_contract_sha256")
     ):
         raise CareOfflineEvaluationError("offline evaluation controls do not match H003")
     if isinstance(random_seed, bool) or not 0 <= random_seed <= 2_147_483_647:
@@ -1137,6 +1214,7 @@ def build_offline_evaluations(
         "source_import_manifest_sha256": import_manifest["manifest_sha256"],
         "source_dataset_sha256": import_manifest["source_dataset_sha256"],
         "quality_contract_sha256": quality_contract["quality_contract_sha256"],
+        "care_approved_root_sha256": approval["approved_root_sha256"],
         "feature_set_sha256": quality_contract["feature_set_sha256"],
         "score_protocol_sha256": build_score_protocol()["score_protocol_sha256"],
         "event_ids": [0, 24],
@@ -1158,6 +1236,7 @@ def build_offline_evaluations(
         manifest_path,
         output_root=output_root,
         evaluation_identity_sha256=evaluation_identity_sha256,
+        trust_anchor=trust_anchor,
     )
     if existing is not None:
         return OfflineEvaluationResult(manifest_path, existing, _file_hash(manifest_path), True)
@@ -1265,6 +1344,7 @@ def build_offline_evaluations(
             "feature_set_sha256": quality_contract["feature_set_sha256"],
             "quality_rule_version": QUALITY_RULE_VERSION,
             "quality_contract_sha256": quality_contract["quality_contract_sha256"],
+            "care_approval": dict(approval),
             "training_split": "train",
             "trusted_train_status_ids": list(TRAIN_TRUSTED_STATUS_IDS),
             "prediction_truth_used": False,
@@ -1325,6 +1405,23 @@ def build_offline_evaluations(
                         anonymous_time=event.source_timestamps[index],
                         anomaly_score=float(score),
                         status_id=event.status_ids[index],
+                        disagreement_run_length=(
+                            event.status_evidence[index].disagreement_run_length
+                        ),
+                        corroborated_by_signal=(
+                            event.status_evidence[index].corroborated_by_signal
+                        ),
+                        corroboration_signal_count=(
+                            event.status_evidence[index].corroboration_signal_count
+                        ),
+                        corroboration_finite_signal_count=(
+                            event.status_evidence[index].corroboration_finite_signal_count
+                        ),
+                        corroboration_inactive_or_invalid_signal_count=(
+                            event.status_evidence[
+                                index
+                            ].corroboration_inactive_or_invalid_signal_count
+                        ),
                     )
                     for index, score in zip(indexes, scores, strict=True)
                 ),
@@ -1342,6 +1439,7 @@ def build_offline_evaluations(
                 threshold_policy,
                 trusted_status_ids=TRAIN_TRUSTED_STATUS_IDS,
                 license_metadata=prediction_license,
+                approval_lineage=approval,
             )
             verify_prediction_artifact(prediction)
             prediction_path = output_root / (
@@ -1408,6 +1506,7 @@ def build_offline_evaluations(
             source_dataset_sha256=source_dataset_sha256,
             source_import_manifest_sha256=source_import_sha256,
             license_metadata=evaluation_license,
+            approval_lineage=approval,
         )
         verify_evaluation_suite_artifact(evaluation)
         evaluation_path = output_root / (
@@ -1453,6 +1552,7 @@ def build_offline_evaluations(
                 "metrics": _metric_snapshots(evaluation["summary"]),
                 "event_results": evaluation["event_results"],
                 "summary": evaluation["summary"],
+                "care_approval": dict(approval),
                 "resource_stats": {
                     "elapsed_seconds": model_elapsed,
                     "peak_tracemalloc_bytes": peak_bytes,
@@ -1480,6 +1580,7 @@ def build_offline_evaluations(
         "feature_set_sha256": quality_contract["feature_set_sha256"],
         "quality_rule_version": QUALITY_RULE_VERSION,
         "quality_contract_sha256": quality_contract["quality_contract_sha256"],
+        "care_approval": dict(approval),
         "prediction_truth_available_to_training_or_calibration": False,
         "models": models,
         "artifacts": artifacts,
@@ -1505,7 +1606,11 @@ def build_offline_evaluations(
         ),
     }
     manifest = {**manifest_payload, "manifest_sha256": _canonical_hash(manifest_payload)}
-    verify_offline_evaluation_manifest(manifest, output_root=output_root)
+    verify_offline_evaluation_manifest(
+        manifest,
+        output_root=output_root,
+        trust_anchor=trust_anchor,
+    )
     _write_immutable_json(manifest_path, manifest)
     return OfflineEvaluationResult(manifest_path, manifest, _file_hash(manifest_path), False)
 
@@ -1516,8 +1621,13 @@ async def register_offline_evaluations(
     *,
     artifact_root: Path,
     subject: str,
+    trust_anchor: CareTrustAnchor | None = None,
 ) -> OfflineEvaluationRegistration:
-    verify_offline_evaluation_manifest(manifest, output_root=artifact_root)
+    verify_offline_evaluation_manifest(
+        manifest,
+        output_root=artifact_root,
+        trust_anchor=trust_anchor,
+    )
     created = replayed = 0
     model_ids: list[str] = []
     evaluation_run_ids: list[str] = []
@@ -1555,6 +1665,7 @@ async def register_offline_evaluations(
                     "quality_rule_version": manifest["quality_rule_version"],
                     "training_run_id": model_record["training_run_id"],
                     "model_package_sha256": package["document_sha256"],
+                    "care_approval": dict(manifest["care_approval"]),
                 },
             ),
             content_size_bytes=int(package["size_bytes"]),
@@ -1592,6 +1703,7 @@ async def register_offline_evaluations(
                     "evaluation_artifact": model_record["evaluation_artifact"],
                     "model_package": package,
                     "prediction_truth_used": False,
+                    "care_approval": dict(manifest["care_approval"]),
                 },
             ),
             subject=subject,

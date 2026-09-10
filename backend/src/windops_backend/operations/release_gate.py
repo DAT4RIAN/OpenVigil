@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -11,6 +13,7 @@ from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
 MANIFEST_NAME = "release-evidence.json"
 MANIFEST_DIGEST_NAME = "release-evidence.sha256"
+QUALIFICATION_NAME = "release-qualification.json"
 REQUIRED_RELEASE_GATES = frozenset(
     {
         "image_scan",
@@ -27,7 +30,11 @@ REQUIRED_RELEASE_GATES = frozenset(
     }
 )
 
-REPORT_FORMAT_VERSION = 1
+REPORT_FORMAT_VERSION = 2
+MANIFEST_FORMAT_VERSION = 2
+MAX_REPORT_DURATION_SECONDS = 24 * 60 * 60
+MAX_EVIDENCE_SPAN_SECONDS = 72 * 60 * 60
+MAX_ASSEMBLY_DELAY_SECONDS = 15 * 60
 REQUIRED_GATE_CHECKS: dict[str, frozenset[str]] = {
     "image_scan": frozenset(
         {"immutable_digest_scanned", "critical_findings_zero", "high_findings_zero"}
@@ -62,6 +69,8 @@ REQUIRED_GATE_CHECKS: dict[str, frozenset[str]] = {
             "embedding_provider",
             "reasoning_provider",
             "active_model_inference",
+            "care_execution_plane_smoke",
+            "care_full_scale_acceptance",
         }
     ),
     "dr_drill": frozenset(
@@ -140,6 +149,7 @@ GATE_REPORT_SCHEMA: dict[str, Any] = {
         "completed_at",
         "target",
         "tool",
+        "approval",
         "checks",
         "artifacts",
     ],
@@ -150,11 +160,12 @@ GATE_REPORT_SCHEMA: dict[str, Any] = {
         "release": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["release_id", "commit_sha", "image_digest"],
+            "required": ["release_id", "commit_sha", "image_digest", "evidence_set_id"],
             "properties": {
                 "release_id": {"type": "string", "minLength": 3, "maxLength": 128},
                 "commit_sha": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
                 "image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                "evidence_set_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
             },
         },
         "started_at": {"type": "string", "format": "date-time"},
@@ -167,6 +178,15 @@ GATE_REPORT_SCHEMA: dict[str, Any] = {
             "properties": {
                 "name": {"type": "string", "minLength": 1, "maxLength": 160},
                 "version": {"type": "string", "minLength": 1, "maxLength": 160},
+            },
+        },
+        "approval": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["approved_by", "approval_reference"],
+            "properties": {
+                "approved_by": {"type": "string", "minLength": 2, "maxLength": 160},
+                "approval_reference": {"type": "string", "minLength": 3, "maxLength": 512},
             },
         },
         "checks": {
@@ -215,14 +235,16 @@ RELEASE_EVIDENCE_SCHEMA: dict[str, Any] = {
         "release_id",
         "commit_sha",
         "image_digest",
+        "evidence_set_id",
         "created_at",
         "evidence",
     ],
     "properties": {
-        "format_version": {"const": 1},
+        "format_version": {"const": MANIFEST_FORMAT_VERSION},
         "release_id": {"type": "string", "minLength": 3, "maxLength": 128},
         "commit_sha": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
         "image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "evidence_set_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "created_at": {"type": "string", "format": "date-time"},
         "evidence": {
             "type": "array",
@@ -309,7 +331,7 @@ def _verify_gate_report(
     if report["gate"] != gate:
         raise ValueError(f"{gate} gate report declares a different gate")
     release = cast(dict[str, Any], report["release"])
-    for field in ("release_id", "commit_sha", "image_digest"):
+    for field in ("release_id", "commit_sha", "image_digest", "evidence_set_id"):
         if release[field] != manifest[field]:
             raise ValueError(f"{gate} gate report is not bound to manifest {field}")
 
@@ -320,6 +342,8 @@ def _verify_gate_report(
     )
     if completed_at < started_at:
         raise ValueError(f"{gate} gate report completed before it started")
+    if (completed_at - started_at).total_seconds() > MAX_REPORT_DURATION_SECONDS:
+        raise ValueError(f"{gate} gate report duration exceeds the release evidence limit")
     if completed_at != manifest_completed_at:
         raise ValueError(f"{gate} gate report completion time does not match the manifest")
 
@@ -354,6 +378,16 @@ def _verify_gate_report(
         raise ValueError(
             f"{gate} gate report is missing required checks: {', '.join(sorted(missing_checks))}"
         )
+    unexpected_checks = observed_checks - REQUIRED_GATE_CHECKS[gate]
+    if unexpected_checks:
+        raise ValueError(
+            f"{gate} gate report has unexpected checks: {', '.join(sorted(unexpected_checks))}"
+        )
+    approval = cast(dict[str, Any], report["approval"])
+    if approval["approved_by"] != evidence_item["approved_by"]:
+        raise ValueError(f"{gate} gate report approver does not match the manifest")
+    if approval["approval_reference"] != evidence_item["approval_reference"]:
+        raise ValueError(f"{gate} gate report approval reference does not match the manifest")
 
 
 def verify_release_evidence(evidence_dir: Path) -> dict[str, Any]:
@@ -376,10 +410,17 @@ def verify_release_evidence(evidence_dir: Path) -> dict[str, Any]:
     manifest = cast(dict[str, Any], loaded)
     if manifest["image_digest"] == "sha256:" + "0" * 64:
         raise ValueError("release image digest is still the non-deployable placeholder")
-    _aware_datetime(manifest["created_at"], "created_at")
+    identity_payload = (
+        f"{manifest['release_id']}\n{manifest['commit_sha']}\n{manifest['image_digest']}\n"
+    ).encode()
+    expected_evidence_set_id = f"sha256:{hashlib.sha256(identity_payload).hexdigest()}"
+    if manifest["evidence_set_id"] != expected_evidence_set_id:
+        raise ValueError("release evidence set ID is not derived from the release identity")
+    created_at = _aware_datetime(manifest["created_at"], "created_at")
 
     observed_gates: set[str] = set()
     observed_paths: set[str] = set()
+    completion_times: list[datetime] = []
     for item in manifest["evidence"]:
         gate = cast(str, item["gate"])
         relative_path = cast(str, item["report_path"])
@@ -389,7 +430,7 @@ def verify_release_evidence(evidence_dir: Path) -> dict[str, Any]:
             raise ValueError(f"release evidence report path is reused: {relative_path}")
         observed_gates.add(gate)
         observed_paths.add(relative_path)
-        _aware_datetime(item["completed_at"], f"{gate}.completed_at")
+        completion_times.append(_aware_datetime(item["completed_at"], f"{gate}.completed_at"))
         report_path = _safe_report_path(root, relative_path)
         if not report_path.is_file() or report_path.stat().st_size == 0:
             raise ValueError(f"release evidence report is missing or empty: {relative_path}")
@@ -402,20 +443,60 @@ def verify_release_evidence(evidence_dir: Path) -> dict[str, Any]:
         raise ValueError(
             f"required release evidence gates are missing: {', '.join(sorted(missing))}"
         )
+    newest_completion = max(completion_times)
+    oldest_completion = min(completion_times)
+    if newest_completion > created_at:
+        raise ValueError("release evidence manifest predates a gate report")
+    if (created_at - newest_completion).total_seconds() > MAX_ASSEMBLY_DELAY_SECONDS:
+        raise ValueError("release evidence manifest was assembled from stale gate reports")
+    if (newest_completion - oldest_completion).total_seconds() > MAX_EVIDENCE_SPAN_SECONDS:
+        raise ValueError("release evidence gate reports span more than the allowed release window")
     return {
         "status": "verified",
         "release_id": manifest["release_id"],
         "commit_sha": manifest["commit_sha"],
         "image_digest": manifest["image_digest"],
+        "evidence_set_id": manifest["evidence_set_id"],
         "gate_count": len(observed_gates),
         "manifest_sha256": manifest_sha256,
     }
 
 
+def _write_qualification(path: Path, result: dict[str, Any]) -> None:
+    if path.is_symlink():
+        raise ValueError("release qualification output cannot be a symbolic link")
+    target = path.resolve()
+    if target.exists():
+        raise ValueError("release qualification output already exists")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    qualification = {
+        "format_version": 1,
+        "status": "qualified",
+        "verified_at": datetime.now().astimezone().isoformat(),
+        **{key: value for key, value in result.items() if key != "status"},
+        "verifier": {"name": "windops-release-gate", "version": "2"},
+    }
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            json.dump(qualification, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Verify the complete, content-addressed WindOps release evidence bundle"
+        description="Verify the complete, content-addressed OpenVigil release evidence bundle"
     )
     parser.add_argument("--evidence-dir", type=Path, required=True)
+    parser.add_argument("--qualification-output", type=Path)
     args = parser.parse_args()
-    print(json.dumps(verify_release_evidence(args.evidence_dir), sort_keys=True))
+    result = verify_release_evidence(args.evidence_dir)
+    if args.qualification_output is not None:
+        _write_qualification(args.qualification_output, result)
+    print(json.dumps(result, sort_keys=True))

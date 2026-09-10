@@ -11,6 +11,7 @@ import pytest
 from windops_backend.benchmarks.care.contract import CareContractError
 from windops_backend.benchmarks.care.quality import (
     QUALITY_RULE_VERSION,
+    StatusSequenceState,
     audit_event_quality,
     build_quality_contract,
     evaluate_status_point,
@@ -168,6 +169,58 @@ def test_status_rules_preserve_a_prediction_and_short_bc_disagreements() -> None
     ).model_usable
     with pytest.raises(CareContractError, match="explicit trusted-status allowlist"):
         evaluate_status_point(farm="B", split="train", status_id="1", trusted_status_ids=[])
+
+
+def test_status_sequence_is_batch_continuous_and_gap_split_event_safe() -> None:
+    state = StatusSequenceState("B", ("0",))
+    first_batch = [
+        state.observe(
+            source_row_id=row_id,
+            split="prediction",
+            status_id="9",
+            corroboration_signal_values=(0.0, float("nan")),
+        )
+        for row_id in (10, 11)
+    ]
+    second_batch_first = state.observe(
+        source_row_id=12,
+        split="prediction",
+        status_id="9",
+        corroboration_signal_values=(0.0, float("nan")),
+    )
+    after_gap = state.observe(
+        source_row_id=14,
+        split="prediction",
+        status_id="9",
+        corroboration_signal_values=(0.0, float("nan")),
+    )
+    after_split = state.observe(
+        source_row_id=15,
+        split="train",
+        status_id="9",
+        corroboration_signal_values=(0.0, float("nan")),
+    )
+    uncorroborated = state.observe(
+        source_row_id=16,
+        split="train",
+        status_id="9",
+        corroboration_signal_values=(1.0, float("nan")),
+    )
+    new_event = StatusSequenceState("B", ("0",)).observe(
+        source_row_id=15,
+        split="train",
+        status_id="9",
+        corroboration_signal_values=(0.0, float("nan")),
+    )
+
+    assert [item.disagreement_run_length for item in first_batch] == [1, 2]
+    assert second_batch_first.disagreement_run_length == 3
+    assert second_batch_first.corroborated_by_signal is True
+    assert after_gap.disagreement_run_length == 1
+    assert after_split.disagreement_run_length == 1
+    assert uncorroborated.disagreement_run_length == 2
+    assert uncorroborated.corroborated_by_signal is False
+    assert new_event.disagreement_run_length == 1
 
 
 def test_quality_contract_and_event_audit_preserve_raw_values_and_masks(tmp_path: Path) -> None:

@@ -106,7 +106,7 @@ async def test_platform_configuration_contract_batch_comments_and_twin_artifact(
             "source_kind": "opcua",
             "allowed_turbines": ["WT-023"],
             "allowed_variables": ["main_bearing_temperature"],
-            "secret_reference": "vault://windops/scada/governed-opcua",
+            "secret_reference": "vault://openvigil/scada/governed-opcua",
             "reason": "commissioned under change request DATA-101",
         },
     )

@@ -26,7 +26,16 @@ export function useAccessibleDialog<T extends HTMLElement>(
     const dialog = dialogRef.current;
     if (!dialog) return;
 
-    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+    const focusable = () =>
+      Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => {
+        const style = window.getComputedStyle(element);
+        return (
+          !element.closest("[inert]") &&
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          element.getClientRects().length > 0
+        );
+      });
     (focusable()[0] ?? dialog).focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {

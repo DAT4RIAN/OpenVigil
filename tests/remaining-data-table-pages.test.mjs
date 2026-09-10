@@ -42,8 +42,8 @@ test("maintenance and predictive tables preserve row-driven detail selection", (
 test("catalog and spare-parts exports retain honest identifiers and deep links", () => {
   const [, resourceSource, , dataCenterSource] = pageSources;
 
-  assert.match(resourceSource, /windops-spare-parts\.csv/);
+  assert.match(resourceSource, /openvigil-spare-parts\.csv/);
   assert.match(resourceSource, /reservedForWorkOrderIds/);
-  assert.match(dataCenterSource, /windops-data-catalog\.csv/);
+  assert.match(dataCenterSource, /openvigil-data-catalog\.csv/);
   assert.match(dataCenterSource, /href=\{row\.original\.queryHref\}/);
 });

@@ -165,7 +165,7 @@ async def test_wt023_full_audited_workflow(client: httpx.AsyncClient) -> None:
         "query_maintenance_history",
         "query_similar_failures",
         "calculate_health_score",
-        "predict_rul",
+        "assess_condition_evidence",
         "create_decision",
         "create_work_order",
         "query_manual",

@@ -58,14 +58,14 @@ function accessGateResponse(status: number, code: string, message: string): Resp
   const forbidden = status === 403;
   const network = status === 502 || code === "BACKEND_UNAVAILABLE";
   const title = forbidden
-    ? "当前账号没有 WindOps 访问权限"
+    ? "当前账号没有 OpenVigil 访问权限"
     : network
       ? "无法连接生产服务"
       : "生产服务尚未就绪";
   const action = forbidden
     ? `<a href="${chatGPTSignOutPath("/")}">退出并切换账号</a>`
     : '<a href="">重新检查</a>';
-  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · WindOps</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f3f6f8;color:#16232b;font:16px/1.6 system-ui,sans-serif}.gate{width:min(560px,calc(100% - 32px));box-sizing:border-box;padding:32px;border:1px solid #d8e0e5;border-radius:18px;background:#fff;box-shadow:0 18px 60px #19313c14}.mark{font-weight:800;color:#087a6b;letter-spacing:.04em}.code{font:12px ui-monospace,monospace;color:#667780}.actions{display:flex;gap:12px;margin-top:24px}.actions a{display:inline-flex;padding:10px 16px;border-radius:9px;background:#087a6b;color:#fff;text-decoration:none}.actions a+ a{background:#eef3f5;color:#243640}@media(max-width:420px){.gate{padding:24px}.actions{align-items:stretch;flex-direction:column}}</style></head><body><main class="gate" data-session-gate="${status}"><div class="mark">WindOps Production</div><h1>${title}</h1><p>${escaped(message)}</p><p class="code">${escaped(code)} · HTTP ${status}</p><div class="actions">${action}<a href="${chatGPTSignOutPath("/")}">安全退出</a></div></main></body></html>`;
+  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · OpenVigil</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f3f6f8;color:#16232b;font:16px/1.6 system-ui,sans-serif}.gate{width:min(560px,calc(100% - 32px));box-sizing:border-box;padding:32px;border:1px solid #d8e0e5;border-radius:18px;background:#fff;box-shadow:0 18px 60px #19313c14}.mark{font-weight:800;color:#087a6b;letter-spacing:.04em}.code{font:12px ui-monospace,monospace;color:#667780}.actions{display:flex;gap:12px;margin-top:24px}.actions a{display:inline-flex;padding:10px 16px;border-radius:9px;background:#087a6b;color:#fff;text-decoration:none}.actions a+ a{background:#eef3f5;color:#243640}@media(max-width:420px){.gate{padding:24px}.actions{align-items:stretch;flex-direction:column}}</style></head><body><main class="gate" data-session-gate="${status}"><div class="mark">OpenVigil Production</div><h1>${title}</h1><p>${escaped(message)}</p><p class="code">${escaped(code)} · HTTP ${status}</p><div class="actions">${action}<a href="${chatGPTSignOutPath("/")}">安全退出</a></div></main></body></html>`;
   return new Response(html, {
     status,
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },

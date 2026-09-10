@@ -9,15 +9,20 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { API_ACCESS_EVENT, type ApiAccessFailure } from "@/lib/api-access-events";
+import {
+  API_ACCESS_EVENT,
+  API_ACCESS_RECOVERY_EVENT,
+  type ApiAccessFailure,
+  type ApiAccessRecovery,
+} from "@/lib/api-access-events";
 import { chatGPTSignInPath } from "@/lib/auth-paths";
-import type { WindOpsCapability, WindOpsIdentitySession } from "@/lib/identity-session";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilCapability, OpenVigilIdentitySession } from "@/lib/identity-session";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 
 interface IdentityContextValue {
-  readonly runtimeMode: WindOpsRuntimeMode;
-  readonly session: WindOpsIdentitySession | null;
-  readonly can: (capability: WindOpsCapability) => boolean;
+  readonly runtimeMode: OpenVigilRuntimeMode;
+  readonly session: OpenVigilIdentitySession | null;
+  readonly can: (capability: OpenVigilCapability) => boolean;
 }
 
 const IdentityContext = createContext<IdentityContextValue | null>(null);
@@ -72,13 +77,13 @@ export function IdentityProvider({
   session,
 }: {
   readonly children: ReactNode;
-  readonly runtimeMode: WindOpsRuntimeMode;
-  readonly session: WindOpsIdentitySession | null;
+  readonly runtimeMode: OpenVigilRuntimeMode;
+  readonly session: OpenVigilIdentitySession | null;
 }) {
   const [failure, setFailure] = useState<ApiAccessFailure | null>(null);
   const capabilities = useMemo(() => new Set(session?.capabilities ?? []), [session]);
   const can = useCallback(
-    (capability: WindOpsCapability) => runtimeMode === "demo" || capabilities.has(capability),
+    (capability: OpenVigilCapability) => runtimeMode === "demo" || capabilities.has(capability),
     [capabilities, runtimeMode],
   );
 
@@ -87,8 +92,27 @@ export function IdentityProvider({
       const detail = (event as CustomEvent<ApiAccessFailure>).detail;
       if (detail) setFailure(detail);
     };
+    const handleRecovery = (event: Event) => {
+      const detail = (event as CustomEvent<ApiAccessRecovery>).detail;
+      if (!detail) return;
+      setFailure((current) => {
+        if (!current || current.scope !== detail.scope) return current;
+        if (
+          current.operationKey &&
+          detail.operationKey &&
+          current.operationKey !== detail.operationKey
+        ) {
+          return current;
+        }
+        return null;
+      });
+    };
     window.addEventListener(API_ACCESS_EVENT, handleFailure);
-    return () => window.removeEventListener(API_ACCESS_EVENT, handleFailure);
+    window.addEventListener(API_ACCESS_RECOVERY_EVENT, handleRecovery);
+    return () => {
+      window.removeEventListener(API_ACCESS_EVENT, handleFailure);
+      window.removeEventListener(API_ACCESS_RECOVERY_EVENT, handleRecovery);
+    };
   }, []);
 
   const value = useMemo(() => ({ runtimeMode, session, can }), [can, runtimeMode, session]);
@@ -100,8 +124,8 @@ export function IdentityProvider({
   );
 }
 
-export function useWindOpsIdentity(): IdentityContextValue {
+export function useOpenVigilIdentity(): IdentityContextValue {
   const value = useContext(IdentityContext);
-  if (!value) throw new Error("useWindOpsIdentity must be used inside IdentityProvider");
+  if (!value) throw new Error("useOpenVigilIdentity must be used inside IdentityProvider");
   return value;
 }

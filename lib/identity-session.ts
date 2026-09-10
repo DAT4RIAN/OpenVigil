@@ -1,4 +1,4 @@
-export const WINDOPS_CAPABILITIES = [
+export const OPENVIGIL_CAPABILITIES = [
   "agent.manage",
   "alarm.command",
   "mission.approve",
@@ -28,13 +28,13 @@ export const WINDOPS_CAPABILITIES = [
   "work_order.task.complete",
 ] as const;
 
-export type WindOpsCapability = (typeof WINDOPS_CAPABILITIES)[number];
+export type OpenVigilCapability = (typeof OPENVIGIL_CAPABILITIES)[number];
 
 export interface BackendIdentitySession {
   readonly subject: string;
   readonly email: string | null;
   readonly roles: readonly string[];
-  readonly capabilities: readonly WindOpsCapability[];
+  readonly capabilities: readonly OpenVigilCapability[];
   readonly scope: {
     readonly tenant_count: number;
     readonly wind_farm_count: number;
@@ -44,14 +44,14 @@ export interface BackendIdentitySession {
   };
 }
 
-export interface WindOpsIdentitySession extends BackendIdentitySession {
+export interface OpenVigilIdentitySession extends BackendIdentitySession {
   readonly displayName: string;
   readonly signOutPath: string;
 }
 
 export const TRUSTED_SESSION_HEADER = "x-windops-trusted-session";
 
-const capabilitySet = new Set<string>(WINDOPS_CAPABILITIES);
+const capabilitySet = new Set<string>(OPENVIGIL_CAPABILITIES);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -72,7 +72,7 @@ export function parseBackendIdentitySession(
   if (!isRecord(value) || value.subject !== expectedSubject) return null;
   if (value.email !== null && typeof value.email !== "string") return null;
   const roles = boundedStrings(value.roles, 8);
-  const capabilities = boundedStrings(value.capabilities, WINDOPS_CAPABILITIES.length);
+  const capabilities = boundedStrings(value.capabilities, OPENVIGIL_CAPABILITIES.length);
   if (!roles || !capabilities || !capabilities.every((item) => capabilitySet.has(item))) {
     return null;
   }
@@ -93,7 +93,7 @@ export function parseBackendIdentitySession(
     subject: value.subject,
     email: value.email as string | null,
     roles,
-    capabilities: capabilities as WindOpsCapability[],
+    capabilities: capabilities as OpenVigilCapability[],
     scope: {
       tenant_count: Number(value.scope.tenant_count),
       wind_farm_count: Number(value.scope.wind_farm_count),

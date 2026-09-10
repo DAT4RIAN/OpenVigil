@@ -267,7 +267,7 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
       title: "WT-023 主轴承检查、处置与复测闭环案例",
       type: "incident-case",
       equipment: "WT-023 / 主轴承",
-      manufacturer: "WindOps D1 Workflow",
+      manufacturer: "OpenVigil D1 Workflow",
       version: "Server closed-loop v1",
       updatedAt: knowledgeEvent?.timestamp ?? "2026-08-13T10:24:00+08:00",
       vectorized: false,
@@ -684,7 +684,7 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
             ]}
             columns={columns}
             csvExport={{
-              filename: "windops-knowledge-documents.csv",
+              filename: "openvigil-knowledge-documents.csv",
               columns: [
                 { label: "Document ID", value: (row) => row.id },
                 { label: "Title", value: (row) => row.title },

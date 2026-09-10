@@ -152,12 +152,28 @@ required = [
     pathlib.Path('/app/alembic.ini'),
     pathlib.Path('/app/alembic/versions'),
     pathlib.Path('/app/requirements.container.txt'),
+    pathlib.Path('/app/care-benchmark-dependency-closure.json'),
 ]
 if any(not path.exists() for path in required):
     raise SystemExit('migration payload or dependency lock is missing')
-lock = required[-1].read_text(encoding='utf-8')
+requirements_lock = required[2]
+lock = requirements_lock.read_text(encoding='utf-8')
 if '--hash=sha256:' not in lock:
     raise SystemExit('container dependency lock is not hash locked')
+persisted_closure = json.loads(required[3].read_text(encoding='utf-8'))
+closure_output = subprocess.run(
+    [
+        'windops-care-dependency-closure',
+        '--requirements-lock',
+        str(requirements_lock),
+    ],
+    check=True,
+    capture_output=True,
+    text=True,
+).stdout
+runtime_closure = json.loads(closure_output.splitlines()[-1])
+if persisted_closure != runtime_closure:
+    raise SystemExit('CARE benchmark dependency closure drifted after image build')
 if importlib.util.find_spec('pytest') is not None:
     raise SystemExit('test dependencies must not be installed in the runtime image')
 subprocess.run([shutil.which('python'), '-m', 'pip', 'check'], check=True)
@@ -176,6 +192,7 @@ for executable in ('pg_dump', 'pg_restore', 'psql'):
 print(json.dumps({
     'entrypoints': entrypoints,
     'dependency_lock': 'hash-locked',
+    'care_benchmark_dependency_closure': runtime_closure,
     'pip_check': 'passed',
     'postgres_clients': postgres_clients,
 }))
@@ -252,6 +269,7 @@ def verify_container_artifact(
             "migration_payload",
             "hash_locked_dependencies",
             "runtime_dependency_check",
+            "care_benchmark_dependency_closure",
             "postgresql_client_major_exact",
             "no_test_dependencies",
         ],
@@ -277,7 +295,7 @@ def _write_report(path: Path, report: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Verify a pushed WindOps release image")
+    parser = argparse.ArgumentParser(description="Verify a pushed OpenVigil release image")
     parser.add_argument("--image", required=True)
     parser.add_argument("--release-id", required=True)
     parser.add_argument("--commit-sha", required=True)

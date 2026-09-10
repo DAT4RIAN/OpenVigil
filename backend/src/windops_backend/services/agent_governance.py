@@ -21,7 +21,6 @@ from windops_backend.models import (
     AgentToolLink,
     Approval,
     Mission,
-    ModelPrediction,
     Resource,
     ResourceReservation,
     SkillDefinition,
@@ -49,7 +48,7 @@ DEFAULT_AGENT_BY_TOOL = {
     "query_maintenance_history": "maintenance_strategy_agent",
     "query_similar_failures": "failure_diagnosis_agent",
     "calculate_health_score": "maintenance_strategy_agent",
-    "predict_rul": "maintenance_strategy_agent",
+    "assess_condition_evidence": "maintenance_strategy_agent",
     "create_decision": "maintenance_strategy_agent",
     "create_work_order": "work_order_agent",
     "query_manual": "knowledge_agent",
@@ -407,21 +406,10 @@ async def _execute(
         }
     if tool == "calculate_health_score":
         return await adapter.calculate_health_score(turbine_id)
-    if tool == "predict_rul":
-        prediction = await session.scalar(
-            select(ModelPrediction)
-            .where(ModelPrediction.turbine_id == turbine_id, ModelPrediction.status == "succeeded")
-            .order_by(desc(ModelPrediction.created_at))
-            .limit(1)
-        )
-        if prediction is None:
-            raise NotFoundError(f"no governed online prediction exists for {turbine_id}")
-        return {
-            "prediction_id": prediction.id,
-            "model_id": prediction.model_id,
-            "deployment_id": prediction.deployment_id,
-            **prediction.output,
-        }
+    if tool == "assess_condition_evidence":
+        component = str(args.get("component") or "asset")
+        primary_variable = str(args.get("primary_variable") or "") or None
+        return await adapter.assess_condition_evidence(turbine_id, component, primary_variable)
     if tool == "query_manual":
         documents = await adapter.visible_knowledge_documents()
         query = str(args.get("query") or "").strip().lower()

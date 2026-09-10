@@ -1,11 +1,11 @@
-/** WindOps Sites 网关入口：托管 vinext 前端，并将生产 API 请求统一代理到 Python 后端。 */
+/** OpenVigil Sites 网关入口：托管 vinext 前端，并将生产 API 请求统一代理到 Python 后端。 */
 import {
   handleImageOptimization,
   DEFAULT_DEVICE_SIZES,
   DEFAULT_IMAGE_SIZES,
 } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
-import { runWithWorkerEnv, type WindOpsWorkerEnv } from "../lib/worker-env";
+import { runWithWorkerEnv, type OpenVigilWorkerEnv } from "../lib/worker-env";
 import {
   enforceProductionRequestBoundary,
   getProductionBackendConfig,
@@ -48,7 +48,7 @@ function withSecurityHeaders(request: Request, response: Response, production: b
   });
 }
 
-interface Env extends WindOpsWorkerEnv {
+interface Env extends OpenVigilWorkerEnv {
   readonly ASSETS?: Fetcher;
   readonly DB?: D1Database;
   readonly IMAGES?: {

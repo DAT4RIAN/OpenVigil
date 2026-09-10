@@ -46,6 +46,10 @@ def _inspect(policy: dict[str, object]) -> dict[str, object]:
 
 def test_release_policy_and_image_identity_are_digest_bound() -> None:
     policy = load_release_policy(POLICY_PATH)
+    assert "windops-care-full-scale" in policy["required_entrypoints"]
+    assert "windops-care-dependency-closure" in policy["required_entrypoints"]
+    assert "windops-care-workload-smoke" in policy["required_entrypoints"]
+    assert "windops-care-fullscale-acceptance" in policy["required_entrypoints"]
     report = verify_image_inspect(
         _inspect(policy),
         image=IMAGE,

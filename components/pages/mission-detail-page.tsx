@@ -23,7 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
-import { useWindOpsIdentity } from "@/components/providers/identity-provider";
+import { useOpenVigilIdentity } from "@/components/providers/identity-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   downloadMissionJson,
@@ -54,7 +54,7 @@ import { isServerWorkflowAlternativeId } from "@/lib/server-workflow-contract";
 import { cn } from "@/lib/utils";
 import { agentDisplayName } from "@/lib/agent-control-meta";
 import { apiGet, apiPostCommand, createIdempotencyKey } from "@/lib/api-client";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 import {
   localizedMissionTitle,
   localizedSeverityLabel,
@@ -117,7 +117,7 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
         eyebrow="MISSION 详情"
         title={mission.id}
         description={`${mission.turbineId} · ${localizedMissionTitle(mission.title)} · 结构化协作与执行记录`}
-        breadcrumb={["AI 运营", "Mission 中心", mission.id]}
+        breadcrumb={["AI 运营", { label: "Mission 中心", href: "/missions" }, mission.id]}
         meta={
           <>
             <StatusBadge
@@ -167,7 +167,7 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
           </>
         }
       />
-      <section className="mission-stage-bar">
+      <section className="mission-stage-bar" tabIndex={0} aria-label="Mission 阶段，可横向滚动">
         {steps.map((step, index) => (
           <div
             className={cn(
@@ -409,7 +409,7 @@ function FeaturedMissionDetailPage() {
         eyebrow="MISSION 详情"
         title={featuredMission.id}
         description={`${turbine023.id} · ${localizedMissionTitle(featuredMission.title)} · 多 Agent 协同诊断与运维决策`}
-        breadcrumb={["AI 运营", "Mission 中心", featuredMission.id]}
+        breadcrumb={["AI 运营", { label: "Mission 中心", href: "/missions" }, featuredMission.id]}
         meta={
           <>
             <StatusBadge
@@ -450,7 +450,7 @@ function FeaturedMissionDetailPage() {
         }
       />
 
-      <section className="mission-stage-bar">
+      <section className="mission-stage-bar" tabIndex={0} aria-label="Mission 阶段，可横向滚动">
         {steps.map((step, index) => {
           const complete = index < statusIndex || workflow.missionStatus === "completed";
           const active = index === statusIndex;
@@ -965,7 +965,7 @@ async function persistMissionComment(
 }
 
 function ProductionMissionDetailPage({ missionId }: { readonly missionId: string }) {
-  const { can } = useWindOpsIdentity();
+  const { can } = useOpenVigilIdentity();
   const canComment = can("mission.comment");
   const [isCommenting, setIsCommenting] = useState(false);
   const [commentDraft, setCommentDraft] = useState("");
@@ -1061,7 +1061,7 @@ function ProductionMissionDetailPage({ missionId }: { readonly missionId: string
           eyebrow="MISSION 详情"
           title={missionId}
           description="从权威 Mission、证据、决策、审批和 Agent 执行账本加载。"
-          breadcrumb={["AI 运营", "Mission 中心", missionId]}
+          breadcrumb={["AI 运营", { label: "Mission 中心", href: "/missions" }, missionId]}
         />
         <Card>
           <CardHeader
@@ -1093,7 +1093,7 @@ function ProductionMissionDetailPage({ missionId }: { readonly missionId: string
         eyebrow="MISSION 详情"
         title={mission.mission_id}
         description={`${mission.turbine_id} · ${mission.title} · 权威协作与执行记录`}
-        breadcrumb={["AI 运营", "Mission 中心", mission.mission_id]}
+        breadcrumb={["AI 运营", { label: "Mission 中心", href: "/missions" }, mission.mission_id]}
         meta={
           <>
             <StatusBadge value={mission.status} label={mission.status} tone="info" />
@@ -1190,7 +1190,12 @@ function ProductionMissionDetailPage({ missionId }: { readonly missionId: string
               </div>
             </div>
           ) : null}
-          <div className="mission-timeline">
+          <div
+            className="mission-timeline"
+            role="region"
+            tabIndex={0}
+            aria-label="评论与 Agent 执行，可滚动"
+          >
             {mission.executions.map((execution) => (
               <div className="timeline-event" key={execution.execution_id}>
                 <time>{new Date(execution.started_at).toLocaleString("zh-CN")}</time>
@@ -1342,7 +1347,7 @@ export function MissionDetailPage({
   runtimeMode = "demo",
 }: {
   missionId?: string;
-  runtimeMode?: WindOpsRuntimeMode;
+  runtimeMode?: OpenVigilRuntimeMode;
 }) {
   if (runtimeMode === "production") {
     return <ProductionMissionDetailPage missionId={missionId} />;

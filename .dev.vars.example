@@ -9,6 +9,7 @@ WINDOPS_BACKEND_AUTH_MODE=sites_delegation
 WINDOPS_BACKEND_DELEGATION_SECRET=replace-with-the-same-random-48-plus-character-backend-secret
 # Production must match the immutable identity reported by the backend deployment.
 WINDOPS_BACKEND_EXPECTED_RELEASE_ID=replace-with-approved-release-id
+WINDOPS_BACKEND_EXPECTED_COMMIT_SHA=replace-with-approved-full-commit-sha
 WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST=sha256:replace-with-approved-image-digest
 # Optional only for non-production service-token development.
 WINDOPS_BACKEND_API_TOKEN=replace-with-a-configured-windops-role-token

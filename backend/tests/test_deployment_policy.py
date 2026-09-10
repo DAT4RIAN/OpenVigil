@@ -115,13 +115,16 @@ def test_rendered_production_manifests_emit_machine_verifiable_evidence(tmp_path
     assert report["expected_release_id"] == RELEASE_ID
     assert report["expected_commit_sha"] == COMMIT_SHA
     assert report["approved_backup_storage_class"] == STORAGE_CLASS
-    assert report["resource_count"] == 14
+    assert report["resource_count"] == 21
     assert {workload["name"] for workload in report["workloads"]} == {
         "windops-api",
         "windops-worker",
         "windops-outbox-relay",
+        "windops-read-audit-worker",
         "windops-migrate-release",
         "windops-backup",
+        "windops-read-audit-maintenance",
+        "windops-care-full-scale",
     }
     assert report["manifest_files"] == [
         {"name": "rendered.yaml", "sha256": report["manifest_files"][0]["sha256"]}

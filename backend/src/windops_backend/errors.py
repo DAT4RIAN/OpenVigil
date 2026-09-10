@@ -37,6 +37,26 @@ class InvalidTransitionError(DomainError):
     status_code = 422
 
 
+class AnomalyActivationArtifactDriftError(DomainError):
+    code = "ANOMALY_ACTIVATION_ARTIFACT_DRIFT"
+    status_code = 409
+
+
+class AnomalyActivationEvaluationError(DomainError):
+    code = "ANOMALY_ACTIVATION_EVALUATION_INVALID"
+    status_code = 422
+
+
+class AnomalyActivationBindingError(DomainError):
+    code = "ANOMALY_ACTIVATION_BINDING_INVALID"
+    status_code = 422
+
+
+class AnomalyActivationConcurrencyError(DomainError):
+    code = "ANOMALY_ACTIVATION_CONCURRENT_CHANGE"
+    status_code = 409
+
+
 class KnowledgeGraphUnavailableError(DomainError):
     code = "KNOWLEDGE_GRAPH_UNAVAILABLE"
     status_code = 503

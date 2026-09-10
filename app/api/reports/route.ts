@@ -5,7 +5,7 @@ import {
   buildReportCatalog,
   reportTypes,
   type ReportPeriod,
-  type WindOpsReport,
+  type OpenVigilReport,
 } from "@/lib/report-data";
 
 import { jsonResponse } from "../_shared";
@@ -63,8 +63,8 @@ const parseInteger = (
 };
 
 const compareReports = (
-  left: WindOpsReport,
-  right: WindOpsReport,
+  left: OpenVigilReport,
+  right: OpenVigilReport,
   sort: SortField,
   order: SortOrder,
 ): number => {

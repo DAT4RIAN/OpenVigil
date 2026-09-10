@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { AppShell } from "@/components/layout/app-shell";
-import { useWindOpsIdentity } from "@/components/providers/identity-provider";
+import { useOpenVigilIdentity } from "@/components/providers/identity-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, EmptyState } from "@/components/ui/primitives";
 import { apiGet, apiPost } from "@/lib/api-client";
@@ -252,7 +252,7 @@ const kindIcons = {
 } as const;
 
 export function ModelManagementPage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
-  const { can } = useWindOpsIdentity();
+  const { can } = useOpenVigilIdentity();
   const canManageModels = runtimeMode === "demo" || can("model.manage");
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<"all" | ModelKind>("all");
@@ -485,7 +485,7 @@ export function ModelManagementPage({ runtimeMode }: { runtimeMode: "demo" | "pr
         description={
           runtimeMode === "production"
             ? "登记经过哈希校验的模型制品，治理部署流量、回滚和在线推理监控。"
-            : "审阅 WindOps 当前确定性评分、检索与文档生成能力，以及它们真实的运行边界。"
+            : "审阅 OpenVigil 当前确定性评分、检索与文档生成能力，以及它们真实的运行边界。"
         }
         breadcrumb={["平台管理", "模型管理"]}
         meta={
@@ -1099,7 +1099,11 @@ export function ModelManagementPage({ runtimeMode }: { runtimeMode: "demo" | "pr
             <header>
               <div>
                 <strong>登记预测模型制品</strong>
-                <p>制品将直传对象存储；后端验证对象范围、内容类型和 SHA-256。</p>
+                <p>
+                  制品将直传对象存储；后端验证对象范围、内容类型和
+                  SHA-256。寿命与故障概率字段仅适用于已经独立完成业务验证的外部模型；CARE
+                  不验证这些能力，Demo 也不会生成或展示此类结论。
+                </p>
               </div>
               <button type="button" onClick={() => setRegistrationOpen(false)} aria-label="关闭">
                 <X size={16} />

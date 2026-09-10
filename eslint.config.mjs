@@ -66,6 +66,13 @@ const eslintConfig = defineConfig([
         version: "detect",
       },
     },
+    rules: {
+      // Named scroll regions must be keyboard-focusable so overflow content can be reached.
+      "jsx-a11y/no-noninteractive-tabindex": [
+        "error",
+        { tags: ["section"], roles: ["tabpanel", "region"] },
+      ],
+    },
   },
 ]);
 

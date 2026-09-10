@@ -35,7 +35,7 @@ export interface ReportSection {
   readonly findings: readonly string[];
 }
 
-export interface WindOpsReport {
+export interface OpenVigilReport {
   readonly id: string;
   readonly type: ReportType;
   readonly typeLabel: string;
@@ -81,7 +81,7 @@ const countBy = <T extends string>(values: readonly T[]): Readonly<Record<T, num
 const percentage = (part: number, total: number): string =>
   `${((part / Math.max(1, total)) * 100).toFixed(1)}%`;
 
-const workflowForReport = (snapshot: ServerWorkflowSnapshot): WindOpsReport["workflow"] => ({
+const workflowForReport = (snapshot: ServerWorkflowSnapshot): OpenVigilReport["workflow"] => ({
   turbineId: snapshot.turbineId,
   missionStatus: snapshot.mission.status,
   decisionStatus: snapshot.decision.status,
@@ -94,7 +94,7 @@ const workflowForReport = (snapshot: ServerWorkflowSnapshot): WindOpsReport["wor
   knowledgeCaseId: snapshot.knowledgeCaseId,
 });
 
-export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly WindOpsReport[] {
+export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly OpenVigilReport[] {
   const currentMissions = overlayWorkflowMission(missions, snapshot);
   const currentWorkOrders = overlayWorkflowWorkOrder(workOrders, snapshot);
   const currentHealth = overlayWorkflowHealth(healthAssessments, snapshot);
@@ -328,7 +328,7 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
           findings: [
             "主轴承振动 RMS 在连续 44 个采样点中从 3.79 升至 4.81 mm/s，增幅 27%。",
             "BPFO 频带能量增加 19%，符合外圈退化模式。",
-            "最相似历史案例匹配分为 0.91，RUL 模型估计需在 47 天内干预。",
+            "最相似历史案例匹配分为 0.91；厂家规程要求告警后 72 小时内完成人工复检。",
           ],
         },
         {
@@ -419,8 +419,8 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
       periodEnd: generatedAt,
       ownerAgent: "预测维护 Agent",
       assetScope: `${windFarm.code} / ${turbines.length} 台风机`,
-      highlight: `${elevatedHealthRisk.length} 台风机的 30 天风险为高或严重；WT-023 健康度为 ${snapshot.health.turbineScore}。`,
-      tags: ["health", "risk", "RUL", "trend", "WT-023"],
+      highlight: `${elevatedHealthRisk.length} 台风机的状态风险为高或严重；WT-023 健康度为 ${snapshot.health.turbineScore}。`,
+      tags: ["health", "risk", "anomaly", "trend", "WT-023"],
       metrics: [
         {
           label: "全场健康度",
@@ -431,7 +431,7 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
         {
           label: "较高风险",
           value: `${elevatedHealthRisk.length}`,
-          context: "30 天高风险或严重风险",
+          context: "状态证据高风险或严重风险",
           tone: "critical",
         },
         {
@@ -450,11 +450,11 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
       sections: [
         {
           heading: "全场健康分布",
-          summary: "已计算全部 64 台风机的健康评分与 30 天风险。",
+          summary: "已汇总全部 64 台风机的健康评分、异常分数与告警状态。",
           findings: [
             `${currentHealth.filter((item) => item.state === "healthy").length} 台资产健康，${currentHealth.filter((item) => item.state === "degraded" || item.state === "critical").length} 台处于退化或严重状态。`,
             `${decliningHealth.length} 台资产在确定性快照中呈下降趋势。`,
-            `模型给出的最高故障概率为 ${Math.max(...currentHealth.map((item) => item.failureProbability30d))}%。`,
+            `全场最高异常分数为 ${Math.max(...currentHealth.map((item) => item.anomalyScore)).toFixed(2)}。`,
           ],
         },
         {
@@ -543,12 +543,12 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
 }
 
 export const findReport = (
-  catalog: readonly WindOpsReport[],
+  catalog: readonly OpenVigilReport[],
   reportId: string,
-): WindOpsReport | undefined =>
+): OpenVigilReport | undefined =>
   catalog.find((report) => report.id === reportId.trim().toUpperCase());
 
-export function reportToPlainText(report: WindOpsReport): readonly string[] {
+export function reportToPlainText(report: OpenVigilReport): readonly string[] {
   return [
     report.title,
     report.subtitle,
@@ -577,6 +577,6 @@ export function reportToPlainText(report: WindOpsReport): readonly string[] {
     `任务=${report.workflow.completedTaskCount}/${report.workflow.totalTaskCount}；健康度=${report.workflow.healthScore}；主轴承=${report.workflow.mainBearingHealthScore}；修订=${report.workflow.revision}`,
     `关联实体：${report.linkedEntityIds.join(", ")}`,
     "",
-    "基于 WindOps 确定性演示数据生成，并叠加权威服务端工作流状态。",
+    "基于 OpenVigil 确定性演示数据生成，并叠加权威服务端工作流状态。",
   ];
 }

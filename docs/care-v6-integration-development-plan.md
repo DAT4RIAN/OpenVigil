@@ -12,7 +12,7 @@
 - 本地压缩包：`C:\coding\reference\CARE_To_Compare.zip`
 - 评审依据：[CARE v6 数据集接入开发计划评审意见](./care-v6-integration-plan-review.md)
 - 修订状态：已将评审中的 P0/P1 要求纳入阶段门槛；P0 契约未冻结前不得开始全量导入、模型上线或平台回放
-- 文档目的：定义 CARE v6 在 WindOps 中的数据治理、离线评估、异常模型运行时、平台回放和界面展示方案。
+- 文档目的：定义 CARE v6 在 OpenVigil 中的数据治理、离线评估、异常模型运行时、平台回放和界面展示方案。
 
 ## 2. 总体结论与强制决策
 
@@ -971,7 +971,7 @@ care6:<run-id>:<farm>:<event>:<row>:<variable-hash>
 - 原始数据集版本和内容哈希；
 - 制品许可证声明。
 
-CARE 数据制品许可证与 WindOps MIT 源代码许可证分离。对外分发前复核制品类型和 ShareAlike 适用性；本节为工程合规要求，不替代法律意见。
+CARE 数据制品许可证与 OpenVigil MIT 源代码许可证分离。对外分发前复核制品类型和 ShareAlike 适用性；本节为工程合规要求，不替代法律意见。
 
 ## 15. 风险与缓解
 

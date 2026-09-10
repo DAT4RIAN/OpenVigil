@@ -15,7 +15,6 @@ const safeToolArguments: Readonly<Partial<Record<AgentToolName, AgentToolArgumen
   query_maintenance_history: { turbineId: "WT-023", limit: 8 },
   query_similar_failures: { turbineId: "WT-023", subsystem: "main-bearing", limit: 3 },
   calculate_health_score: { turbineId: "WT-023" },
-  predict_rul: { turbineId: "WT-023", subsystem: "main-bearing" },
   query_manual: { turbineId: "WT-023", limit: 5 },
   query_work_orders: { turbineId: "WT-023", limit: 5 },
   query_spare_parts: { workOrderId: "WO-20260823-017", limit: 5 },

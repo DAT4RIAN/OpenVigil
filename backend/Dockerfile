@@ -26,7 +26,7 @@ ARG WINDOPS_SOURCE_URL=unknown
 ARG PYTHON_BASE_IMAGE
 ARG POSTGRES_CLIENT_IMAGE
 ARG POSTGRES_CLIENT_MAJOR
-LABEL org.opencontainers.image.title="WindOps backend" \
+LABEL org.opencontainers.image.title="OpenVigil backend" \
     org.opencontainers.image.version="${WINDOPS_RELEASE_ID}" \
     org.opencontainers.image.revision="${WINDOPS_COMMIT_SHA}" \
     org.opencontainers.image.source="${WINDOPS_SOURCE_URL}" \
@@ -64,12 +64,15 @@ WORKDIR /app
 COPY alembic.ini requirements.container.txt ./
 COPY alembic ./alembic
 COPY connector.example.json ./
+RUN windops-care-dependency-closure \
+    --requirements-lock /app/requirements.container.txt \
+    --report /app/care-benchmark-dependency-closure.json
 RUN chown -R 10001:10001 /app
 
 USER 10001:10001
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=3s --start-period=30s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/healthz', timeout=2).read()"]
+    CMD ["python", "-c", "import json,os,urllib.request; host=json.loads(os.environ['WINDOPS_TRUSTED_HOSTS'])[0]; request=urllib.request.Request('http://127.0.0.1:8000/api/v1/healthz',headers={'Host':host}); urllib.request.urlopen(request,timeout=2).read()"]
 
 CMD ["windops-api"]

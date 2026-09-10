@@ -12,8 +12,6 @@ export interface DigitalTwinSubsystem {
   readonly healthScore: number;
   readonly state: HealthState;
   readonly alertCount: number;
-  readonly failureProbability30d: number;
-  readonly remainingUsefulLifeDays: number | null;
   readonly anomalyScore: number;
   readonly primaryFinding: string;
 }
@@ -86,8 +84,6 @@ function featuredSubsystems(workflow?: ServerWorkflowSnapshot): readonly Digital
         healthScore: subsystem.healthScore,
         state: subsystem.state,
         alertCount: subsystem.activeAlarmCount,
-        failureProbability30d: subsystem.failureProbability30d,
-        remainingUsefulLifeDays: subsystem.remainingUsefulLifeDays,
         anomalyScore: subsystem.anomalyScore,
         primaryFinding: subsystem.primaryFinding,
       });
@@ -99,8 +95,6 @@ function featuredSubsystems(workflow?: ServerWorkflowSnapshot): readonly Digital
       healthScore: workflow.health.mainBearingScore,
       state: completed ? ("watch" as const) : subsystem.state,
       alertCount: completed ? 0 : subsystem.activeAlarmCount,
-      failureProbability30d: completed ? 12 : subsystem.failureProbability30d,
-      remainingUsefulLifeDays: completed ? 126 : subsystem.remainingUsefulLifeDays,
       anomalyScore: completed ? 0.42 : subsystem.anomalyScore,
       primaryFinding: completed
         ? "现场维护与复测完成，振动和温升回落，保持趋势观察"
@@ -118,8 +112,6 @@ function genericSubsystems(turbineId: string): readonly DigitalTwinSubsystem[] {
       healthScore: assessment.healthScore,
       state: assessment.state,
       alertCount: assessment.alertCount,
-      failureProbability30d: assessment.failureProbability30d,
-      remainingUsefulLifeDays: assessment.rulDays,
       anomalyScore: Number(clamp((100 - assessment.healthScore) / 80, 0.05, 0.96).toFixed(2)),
       primaryFinding:
         assessment.alertCount > 0

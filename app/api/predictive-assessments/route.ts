@@ -6,14 +6,14 @@ import { getProductionBackendConfig } from "@/lib/production-runtime";
 import {
   predictiveAssessments,
   predictiveModelMeta,
+  evidenceBandFor,
   matrixRiskFor,
-  probabilityBandFor,
   predictiveRiskLevels,
   predictiveTrends,
   type PredictiveAssessment,
 } from "./fixtures";
 
-const sortModes = ["risk-desc", "probability-desc", "rul-asc", "health-asc"] as const;
+const sortModes = ["risk-desc", "anomaly-desc", "health-asc"] as const;
 type SortMode = (typeof sortModes)[number];
 
 const integerParameter = (
@@ -33,16 +33,9 @@ const sortAssessments = (
   sort: SortMode,
 ): PredictiveAssessment[] =>
   [...data].sort((left, right) => {
-    if (sort === "probability-desc") {
+    if (sort === "anomaly-desc") {
       return (
-        right.failureProbability30d - left.failureProbability30d ||
-        left.turbineId.localeCompare(right.turbineId)
-      );
-    }
-    if (sort === "rul-asc") {
-      return (
-        left.remainingUsefulLifeDays - right.remainingUsefulLifeDays ||
-        left.turbineId.localeCompare(right.turbineId)
+        right.anomalyScore - left.anomalyScore || left.turbineId.localeCompare(right.turbineId)
       );
     }
     if (sort === "health-asc") {
@@ -103,27 +96,30 @@ export async function GET(request: Request): Promise<Response> {
   const currentAssessments = predictiveAssessments.map((assessment) => {
     if (assessment.turbineId !== workflow.snapshot.turbineId) return assessment;
     const closed = workflow.snapshot.workOrder.status === "completed";
-    const failureProbability30d = closed ? 12 : assessment.failureProbability30d;
-    const probabilityBand = probabilityBandFor(failureProbability30d);
+    const anomalyScore = closed ? 0.42 : assessment.anomalyScore;
     const consequenceBand = closed ? 3 : assessment.consequenceBand;
-    const riskScore = probabilityBand * consequenceBand;
+    const evidenceBand = evidenceBandFor(
+      anomalyScore,
+      workflow.snapshot.health.mainBearingScore,
+      closed ? 0 : assessment.activeAlarmCount,
+    );
+    const riskScore = evidenceBand * consequenceBand;
     return {
       ...assessment,
       healthScore: workflow.snapshot.health.turbineScore,
       componentHealth: workflow.snapshot.health.mainBearingScore,
       trend: closed ? ("improving" as const) : assessment.trend,
-      failureProbability30d,
-      remainingUsefulLifeDays: closed ? 126 : assessment.remainingUsefulLifeDays,
-      anomalyScore: closed ? 0.42 : assessment.anomalyScore,
+      anomalyScore,
       primaryFinding: closed ? "主轴承检查与复测已完成，健康趋势恢复" : assessment.primaryFinding,
-      probabilityBand,
+      evidenceBand,
       consequenceBand,
-      matrixRisk: matrixRiskFor(probabilityBand, consequenceBand),
+      matrixRisk: matrixRiskFor(evidenceBand, consequenceBand),
       riskScore,
       priorityScore: Number(
         (
-          failureProbability30d * consequenceBand +
-          (closed ? 0.42 : assessment.anomalyScore) * 10
+          (100 - workflow.snapshot.health.mainBearingScore) * consequenceBand +
+          anomalyScore * 10 +
+          (closed ? 0 : assessment.activeAlarmCount) * 5
         ).toFixed(2),
       ),
       assessedAt: workflow.snapshot.updatedAt,

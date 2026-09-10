@@ -206,7 +206,12 @@ export function MissionActivityTimeline({
           </div>
         </div>
       ) : null}
-      <div className="mission-timeline">
+      <div
+        className="mission-timeline"
+        role="region"
+        tabIndex={0}
+        aria-label="Agent 活动时间线，可滚动"
+      >
         {filteredEvents.map((event, index) => {
           const Icon = activityIcon[event.kind];
           const agent = event.agentId ? agents.find((item) => item.id === event.agentId) : null;

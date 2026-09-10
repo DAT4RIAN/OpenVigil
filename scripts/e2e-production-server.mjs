@@ -397,6 +397,7 @@ const productionEnvironment = {
   WINDOPS_BACKEND_DELEGATION_SECRET: DELEGATION_SECRET,
   WINDOPS_BACKEND_REQUEST_TIMEOUT_MS: "5000",
   WINDOPS_BACKEND_EXPECTED_RELEASE_ID: RELEASE_ID,
+  WINDOPS_BACKEND_EXPECTED_COMMIT_SHA: COMMIT_SHA,
   WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST: IMAGE_DIGEST,
 };
 const demoEnvironment = { ASSETS: assetBinding, WINDOPS_RUNTIME_MODE: "demo" };
@@ -481,7 +482,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  process.stdout.write(`WindOps E2E server listening at ${ORIGIN}\n`);
+  process.stdout.write(`OpenVigil E2E server listening at ${ORIGIN}\n`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

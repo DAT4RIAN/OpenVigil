@@ -9,6 +9,8 @@ resources:
   - network-policy.yaml
   - migration-job.yaml
   - backup-cronjob.yaml
+  - read-audit-maintenance-cronjob.yaml
+  - care-full-scale-cronjob.yaml
 labels:
   - pairs:
       app.kubernetes.io/part-of: windops-backend

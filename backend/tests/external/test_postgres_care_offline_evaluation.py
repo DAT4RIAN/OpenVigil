@@ -66,16 +66,25 @@ def _load_real_documents(
 @pytest.mark.asyncio
 async def test_postgres_offline_evaluation_registration_is_exactly_idempotent(
     tmp_path: Path,
+    record_testsuite_property: Any,
 ) -> None:
     real_root_value = os.getenv("WINDOPS_CARE_REAL_ARTIFACT_ROOT", "").strip()
+    trust_anchor = None
     if real_root_value:
         source_manifest, quality, imported_manifest, evaluated_manifest, evaluation_root = (
             _load_real_documents(real_root_value)
         )
     else:
-        _, _, source_manifest, quality, import_root, _, imported = build_minimal_import_fixture(
-            tmp_path
-        )
+        (
+            _,
+            _,
+            source_manifest,
+            quality,
+            import_root,
+            _,
+            imported,
+            trust_anchor,
+        ) = build_minimal_import_fixture(tmp_path)
         imported_manifest = imported.manifest
         evaluated_manifest = build_offline_evaluations(
             imported_manifest,
@@ -83,6 +92,7 @@ async def test_postgres_offline_evaluation_registration_is_exactly_idempotent(
             import_root,
             tmp_path / "evaluation-output",
             created_at=CREATED_AT,
+            trust_anchor=trust_anchor,
         ).manifest
         evaluation_root = tmp_path / "evaluation-output"
     engine = create_async_engine(_database_url(), pool_size=2, max_overflow=0)
@@ -96,12 +106,14 @@ async def test_postgres_offline_evaluation_registration_is_exactly_idempotent(
                 quality,
                 tenant_id="tenant-east-china",
                 subject="care-worker",
+                trust_anchor=trust_anchor,
             )
             first = await register_offline_evaluations(
                 session,
                 evaluated_manifest,
                 artifact_root=evaluation_root,
                 subject="care-worker",
+                trust_anchor=trust_anchor,
             )
         assert imported_registration.created_count == 88
         expected = sum(2 + 2 + len(model["metrics"]) for model in evaluated_manifest["models"])
@@ -116,12 +128,14 @@ async def test_postgres_offline_evaluation_registration_is_exactly_idempotent(
                 quality,
                 tenant_id="tenant-east-china",
                 subject="care-worker",
+                trust_anchor=trust_anchor,
             )
             replay = await register_offline_evaluations(
                 session,
                 evaluated_manifest,
                 artifact_root=evaluation_root,
                 subject="care-worker",
+                trust_anchor=trust_anchor,
             )
         assert imported_replay.created_count == 0
         assert imported_replay.replayed_count == 88
@@ -173,3 +187,21 @@ async def test_postgres_offline_evaluation_registration_is_exactly_idempotent(
             ) == sum(len(model["metrics"]) for model in evaluated_manifest["models"])
     finally:
         await engine.dispose()
+    record_testsuite_property(
+        "care.offline.source_manifest_sha256", source_manifest["manifest_sha256"]
+    )
+    record_testsuite_property(
+        "care.offline.quality_contract_sha256", quality["quality_contract_sha256"]
+    )
+    record_testsuite_property(
+        "care.offline.import_identity_sha256",
+        imported_manifest["immutable_registration_identity"],
+    )
+    record_testsuite_property(
+        "care.offline.evaluation_identity_sha256",
+        evaluated_manifest["evaluation_identity_sha256"],
+    )
+    record_testsuite_property(
+        "care.offline.approved_root_sha256",
+        evaluated_manifest["care_approval"]["approved_root_sha256"],
+    )

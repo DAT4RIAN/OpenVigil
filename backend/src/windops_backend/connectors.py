@@ -355,7 +355,7 @@ class BackendIngestClient:
             response.raise_for_status()
             body = response.json()
             if not isinstance(body, dict) or not isinstance(body.get("results"), list):
-                raise RuntimeError("WindOps ingest returned an invalid result contract")
+                raise RuntimeError("OpenVigil ingest returned an invalid result contract")
             completed = {
                 str(item.get("source_event_id"))
                 for item in body["results"]
@@ -363,7 +363,7 @@ class BackendIngestClient:
                 and item.get("disposition") in {"accepted", "duplicate", "quarantined"}
             }
             if completed != set(ids):
-                raise RuntimeError("WindOps ingest did not acknowledge the complete batch")
+                raise RuntimeError("OpenVigil ingest did not acknowledge the complete batch")
         except Exception as exc:
             self.spool.fail(ids, f"{type(exc).__name__}: {exc}")
             raise
@@ -522,7 +522,7 @@ def _load_config(path: Path) -> ConnectorConfig:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run a durable WindOps telemetry connector")
+    parser = argparse.ArgumentParser(description="Run a durable OpenVigil telemetry connector")
     parser.add_argument("--config", type=Path, required=True)
     arguments = parser.parse_args()
     if sys.platform == "win32":

@@ -1,6 +1,6 @@
 import { readWorkflowForApi } from "@/app/api/_workflow";
 import { buildReportCatalog, findReport } from "@/lib/report-data";
-import type { WindOpsReport } from "@/lib/report-data";
+import type { OpenVigilReport } from "@/lib/report-data";
 import {
   getProductionBackendConfig,
   proxyProductionBackendRequest,
@@ -37,7 +37,7 @@ export async function GET(request: Request, context: ReportRouteContext): Promis
       "/api/v1/reports/" + encodeURIComponent(id),
     );
     if (!upstream.ok) return upstream;
-    const payload = (await upstream.json()) as { data?: WindOpsReport };
+    const payload = (await upstream.json()) as { data?: OpenVigilReport };
     const report =
       payload.data && typeof payload.data === "object" && payload.data.id === id
         ? payload.data

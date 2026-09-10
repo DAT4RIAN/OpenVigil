@@ -2,7 +2,7 @@
 
 ## License boundary
 
-WindOps source code remains under the repository's MIT `LICENSE`. CARE v6 source
+OpenVigil source code remains under the repository's MIT `LICENSE`. CARE v6 source
 data and every derived CARE data artifact are a separate licensing domain under
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). No CARE raw,
 standard, prediction, quality, or report data file may be added to Git or a

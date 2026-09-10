@@ -3,7 +3,7 @@
   border: 1px solid color-mix(in srgb, var(--warning) 24%, var(--border));
   border-radius: 7px;
   color: var(--warning);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   margin-bottom: 12px;
   padding: 10px 12px;
 }
@@ -38,7 +38,7 @@
 .kpis small,
 .kpis em {
   color: var(--foreground-subtle);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   font-style: normal;
   letter-spacing: 0.07em;
 }
@@ -106,18 +106,18 @@
 }
 
 .connectionList strong {
-  font-size: 9.5px;
+  font-size: var(--font-secondary);
 }
 
 .connectionList small {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .connectionList p {
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   line-height: 1.45;
   margin: 2px 0 0;
 }
@@ -144,12 +144,12 @@
 
 .definitionList dt {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .definitionList dd {
   font-family: var(--font-geist-mono), monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   margin: 0;
   text-align: right;
 }
@@ -173,12 +173,12 @@
 
 .securityNotice strong {
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .securityNotice small {
   color: var(--foreground-muted);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
 }
 
 .themeOptions {
@@ -216,17 +216,17 @@
 
 .themeOptions strong {
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .themeOptions small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .localNote {
   color: var(--foreground-subtle);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   margin: 9px 0 0;
 }
 
@@ -257,12 +257,12 @@
 
 .websocketList strong {
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .websocketList small {
   color: var(--foreground-muted);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
 }
 
 .policyPanel {
@@ -288,16 +288,16 @@
 .policyGrid small {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .policyGrid strong {
-  font-size: 9.5px;
+  font-size: var(--font-secondary);
 }
 
 .policyGrid p {
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   line-height: 1.45;
   margin: 0;
 }
@@ -305,7 +305,7 @@
 .policyGrid span {
   border-top: 1px solid var(--border);
   color: var(--primary);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   margin-top: 3px;
   padding-top: 6px;
 }

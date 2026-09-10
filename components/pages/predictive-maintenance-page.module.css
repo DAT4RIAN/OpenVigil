@@ -41,7 +41,7 @@
   gap: 6px;
   color: var(--foreground-muted);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   white-space: nowrap;
 }
 
@@ -68,7 +68,7 @@
 .windowControl > span {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 700;
   letter-spacing: 0.09em;
 }
@@ -101,7 +101,7 @@
   background: transparent;
   color: var(--foreground-muted);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 10px;
+  font-size: var(--font-secondary);
   font-weight: 700;
   cursor: pointer;
 }
@@ -137,14 +137,14 @@
 .snapshotState small {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   letter-spacing: 0.08em;
 }
 
 .snapshotState strong {
   color: var(--foreground);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .heroGrid {
@@ -181,7 +181,7 @@
 .rankingHeader > div > span {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 700;
   letter-spacing: 0.1em;
 }
@@ -198,7 +198,7 @@
 .rankingHeader p {
   margin: 0;
   color: var(--foreground-muted);
-  font-size: 10px;
+  font-size: var(--font-secondary);
   line-height: 1.5;
 }
 
@@ -233,7 +233,7 @@
 
 .healthRing small {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .assetHealth > div:last-child {
@@ -245,7 +245,7 @@
 .metricCard > span {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -257,7 +257,7 @@
 
 .assetHealth > div:last-child small {
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .storyStatus {
@@ -285,13 +285,13 @@
 .storyStatus strong {
   display: block;
   color: var(--foreground);
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .storyStatus p {
   margin: 2px 0 0;
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   line-height: 1.45;
 }
 
@@ -325,7 +325,7 @@
 
 .metricCard > strong small {
   color: var(--foreground-muted);
-  font-size: 10px;
+  font-size: var(--font-secondary);
   letter-spacing: normal;
 }
 
@@ -335,7 +335,7 @@
   padding-top: 8px;
   border-top: 1px solid var(--border);
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .metricIconCritical,
@@ -409,7 +409,7 @@
   border: 1px solid var(--border);
   border-radius: 99px;
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   white-space: nowrap;
 }
 
@@ -427,7 +427,7 @@
   justify-content: flex-end;
   gap: 4px;
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .matrixLegend i {
@@ -465,7 +465,7 @@
 .xAxis {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 7px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -517,16 +517,16 @@
   right: 4px;
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .matrixCoordinate {
   position: absolute;
   bottom: 2px;
   left: 4px;
-  color: color-mix(in srgb, var(--foreground-subtle) 78%, transparent);
+  color: var(--foreground-muted);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 6px;
+  font-size: var(--font-metadata);
 }
 
 .matrixCell > div {
@@ -542,27 +542,40 @@
 
 .matrixDot,
 .matrixDotSelected {
-  width: 6px;
-  height: 6px;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
   padding: 0;
+  width: 24px;
+}
+
+.matrixDot::before,
+.matrixDotSelected::before {
+  background: var(--foreground-muted);
   border: 1px solid color-mix(in srgb, var(--foreground) 22%, transparent);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--foreground-muted) 62%, transparent);
-  cursor: pointer;
+  content: "";
+  height: 6px;
+  width: 6px;
 }
 
-.matrixDot:hover,
-.matrixDot:focus-visible {
-  transform: scale(1.6);
+.matrixDot:hover::before,
+.matrixDot:focus-visible::before {
   background: var(--foreground);
+  transform: scale(1.6);
 }
 
-.matrixDotSelected {
+.matrixDotSelected::before {
+  background: var(--critical);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 2px var(--critical);
   width: 9px;
   height: 9px;
-  border: 2px solid var(--surface);
-  background: var(--critical);
-  box-shadow: 0 0 0 2px var(--critical);
 }
 
 .explainScore {
@@ -585,7 +598,7 @@
 
 .explainScore small {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .explainScore strong {
@@ -625,19 +638,19 @@
   border-radius: 50%;
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .evidenceList strong {
   display: block;
   color: var(--foreground);
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .evidenceList p {
   margin: 2px 0 0;
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   line-height: 1.45;
 }
 
@@ -646,7 +659,7 @@
   align-items: center;
   gap: 5px;
   color: var(--primary);
-  font-size: 10px;
+  font-size: var(--font-secondary);
   font-weight: 650;
 }
 
@@ -666,7 +679,7 @@
   align-items: center;
   gap: 5px;
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   white-space: nowrap;
 }
 
@@ -714,7 +727,7 @@
   outline: 0;
   background: transparent;
   color: var(--foreground);
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .tableToolbar select {
@@ -722,14 +735,14 @@
   outline: 0;
   background: transparent;
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .tableToolbar > span {
   margin-left: auto;
   color: var(--foreground-muted);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .tableScroll {
@@ -756,7 +769,7 @@
   border-bottom: 1px solid var(--border);
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-align: left;
@@ -772,7 +785,7 @@
   padding: 9px 11px;
   border-bottom: 1px solid var(--border);
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .tableScroll tbody tr {
@@ -788,20 +801,20 @@
   display: block;
   color: var(--foreground);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .tableScroll td small {
   display: block;
   margin-top: 2px;
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .rank {
   color: var(--primary);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 700;
 }
 
@@ -851,7 +864,7 @@
 }
 .emptyState p {
   margin: 0;
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .methodFooter {
@@ -879,12 +892,12 @@
 .methodFooter span {
   display: grid;
   gap: 1px;
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .methodFooter strong {
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .errorBanner,
@@ -898,7 +911,7 @@
 .errorBanner {
   background: var(--critical-soft);
   color: var(--critical);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .inferenceProvenance {
@@ -916,7 +929,7 @@
 .inferenceProvenance span,
 .inferenceProvenance dt {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .inferenceProvenance h3,
@@ -932,7 +945,7 @@
 
 .inferenceProvenance p {
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .inferenceProvenance dl {
@@ -951,7 +964,7 @@
 
 .inferenceProvenance dd {
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   overflow-wrap: anywhere;
 }
 

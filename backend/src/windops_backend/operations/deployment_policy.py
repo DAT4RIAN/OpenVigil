@@ -18,22 +18,32 @@ PLACEHOLDER_DIGEST = "sha256:" + "0" * 64
 EXPECTED_NAMESPACE = "windops"
 RUNTIME_CONFIGURATION_RESOURCE = "windops-runtime"
 RUNTIME_SERVICE_ACCOUNT = "windops-runtime"
+CARE_CONFIGURATION_RESOURCE = "windops-care-runtime"
+CARE_SERVICE_ACCOUNT = "windops-care-worker"
+CARE_WORKLOAD = "windops-care-full-scale"
 REQUIRED_RESOURCE_IDENTITIES = frozenset(
     {
         ("Namespace", "windops"),
         ("ServiceAccount", "windops-runtime"),
+        ("ServiceAccount", "windops-care-worker"),
         ("Service", "windops-api"),
         ("Deployment", "windops-api"),
         ("Deployment", "windops-worker"),
         ("Deployment", "windops-outbox-relay"),
+        ("Deployment", "windops-read-audit-worker"),
         ("Job", "windops-migrate-release"),
         ("CronJob", "windops-backup"),
+        ("CronJob", "windops-read-audit-maintenance"),
+        ("CronJob", "windops-care-full-scale"),
         ("PersistentVolumeClaim", "windops-backups"),
+        ("PersistentVolumeClaim", "windops-care-source"),
+        ("PersistentVolumeClaim", "windops-care-workspace"),
         ("PodDisruptionBudget", "windops-api"),
         ("HorizontalPodAutoscaler", "windops-api"),
         ("NetworkPolicy", "windops-default-deny"),
         ("NetworkPolicy", "windops-api-ingress"),
         ("NetworkPolicy", "windops-runtime-egress"),
+        ("NetworkPolicy", "windops-care-egress"),
     }
 )
 WORKLOAD_KINDS = frozenset({"Deployment", "Job", "CronJob"})
@@ -52,7 +62,7 @@ RELEASE_ENV = {
 
 
 class DeploymentPolicyError(ValueError):
-    """Raised when rendered deployment manifests violate the WindOps policy."""
+    """Raised when rendered deployment manifests violate the OpenVigil policy."""
 
 
 def _sha256(path: Path) -> str:
@@ -165,6 +175,7 @@ def _validate_container(
     workload_name: str,
     expected_image_digest: str,
     release: dict[str, str],
+    configuration_resource: str,
 ) -> str:
     name = container.get("name")
     image = container.get("image")
@@ -235,10 +246,9 @@ def _validate_container(
         for item in env_from
         if isinstance(item, dict) and "secretRef" in item
     }
-    if secret_names != {RUNTIME_CONFIGURATION_RESOURCE}:
+    if secret_names != {configuration_resource}:
         raise DeploymentPolicyError(
-            f"{workload_name}/{name} must load only the external "
-            f"{RUNTIME_CONFIGURATION_RESOURCE} Secret"
+            f"{workload_name}/{name} must load only the external {configuration_resource} Secret"
         )
     environment = _sequence(container.get("env"), f"{workload_name}/{name}.env")
     observed_environment: dict[str, object] = {}
@@ -290,8 +300,12 @@ def _validate_workload(
         release=release,
     )
     pod_spec = _mapping(template.get("spec"), f"{kind}/{name}.podSpec")
-    if pod_spec.get("serviceAccountName") != RUNTIME_SERVICE_ACCOUNT:
-        raise DeploymentPolicyError(f"{kind}/{name} must use {RUNTIME_SERVICE_ACCOUNT}")
+    service_account = CARE_SERVICE_ACCOUNT if name == CARE_WORKLOAD else RUNTIME_SERVICE_ACCOUNT
+    configuration_resource = (
+        CARE_CONFIGURATION_RESOURCE if name == CARE_WORKLOAD else RUNTIME_CONFIGURATION_RESOURCE
+    )
+    if pod_spec.get("serviceAccountName") != service_account:
+        raise DeploymentPolicyError(f"{kind}/{name} must use {service_account}")
     if pod_spec.get("automountServiceAccountToken") is not False:
         raise DeploymentPolicyError(f"{kind}/{name} must disable service-account token mounting")
     for forbidden in ("hostNetwork", "hostPID", "hostIPC"):
@@ -321,6 +335,7 @@ def _validate_workload(
             workload_name=f"{kind}/{name}",
             expected_image_digest=expected_image_digest,
             release=release,
+            configuration_resource=configuration_resource,
         )
         for container in containers
     ]
@@ -332,6 +347,7 @@ def _validate_workload(
                     workload_name=f"{kind}/{name}",
                     expected_image_digest=expected_image_digest,
                     release=release,
+                    configuration_resource=configuration_resource,
                 )
             )
     return {"kind": kind, "name": name, "images": images}
@@ -468,9 +484,125 @@ def _validate_network_policy(documents: list[dict[str, Any]]) -> None:
         _named(documents, "NetworkPolicy", "windops-runtime-egress").get("spec"),
         "NetworkPolicy/windops-runtime-egress.spec",
     )
-    if egress.get("podSelector") != {} or egress.get("policyTypes") != ["Egress"]:
-        raise DeploymentPolicyError("windops-runtime-egress must govern every runtime pod")
+    if egress.get("podSelector") != {
+        "matchExpressions": [
+            {
+                "key": "app.kubernetes.io/component",
+                "operator": "NotIn",
+                "values": ["care-worker"],
+            }
+        ]
+    } or egress.get("policyTypes") != ["Egress"]:
+        raise DeploymentPolicyError("windops-runtime-egress must exclude CARE worker pods")
     _validate_network_rules(egress.get("egress"), "windops-runtime-egress.egress", "to")
+
+    care_egress = _mapping(
+        _named(documents, "NetworkPolicy", "windops-care-egress").get("spec"),
+        "NetworkPolicy/windops-care-egress.spec",
+    )
+    if care_egress.get("podSelector") != {
+        "matchLabels": {"app.kubernetes.io/component": "care-worker"}
+    } or care_egress.get("policyTypes") != ["Egress"]:
+        raise DeploymentPolicyError("windops-care-egress must select only CARE worker pods")
+    _validate_network_rules(care_egress.get("egress"), "windops-care-egress.egress", "to")
+    care_ports = {
+        port["port"]
+        for rule in _sequence(care_egress.get("egress"), "windops-care-egress.egress")
+        for port in _sequence(_mapping(rule, "care egress rule").get("ports"), "care ports")
+    }
+    if care_ports != {53, 5432, 9000}:
+        raise DeploymentPolicyError("windops-care-egress may use only DNS, PostgreSQL and MinIO")
+
+
+def _validate_care_workload(documents: list[dict[str, Any]]) -> None:
+    workload = _named(documents, "CronJob", CARE_WORKLOAD)
+    spec = _mapping(workload.get("spec"), f"CronJob/{CARE_WORKLOAD}.spec")
+    if (
+        spec.get("suspend") is not True
+        or spec.get("concurrencyPolicy") != "Forbid"
+        or spec.get("timeZone") != "Etc/UTC"
+    ):
+        raise DeploymentPolicyError("CARE workload must be suspended, serialized and UTC-bound")
+    job_spec = _mapping(
+        _mapping(spec.get("jobTemplate"), "CARE jobTemplate").get("spec"),
+        "CARE job spec",
+    )
+    expected_job_limits = {
+        "parallelism": 1,
+        "completions": 1,
+        "backoffLimit": 2,
+        "activeDeadlineSeconds": 72000,
+    }
+    if any(job_spec.get(field) != value for field, value in expected_job_limits.items()):
+        raise DeploymentPolicyError("CARE workload retry, concurrency or timeout limits drifted")
+    pod_spec = _mapping(_pod_template(workload).get("spec"), "CARE pod spec")
+    if pod_spec.get("restartPolicy") != "Never":
+        raise DeploymentPolicyError("CARE workload must use job-level bounded retries")
+    container = _mapping(
+        _sequence(pod_spec.get("containers"), "CARE containers")[0],
+        "CARE container",
+    )
+    environment = {
+        item["name"]: item.get("value")
+        for item in _sequence(container.get("env"), "CARE environment")
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    required_environment = {
+        "WINDOPS_CARE_QUEUE": "care-v6-offline",
+        "WINDOPS_CARE_MAX_CONCURRENCY": "1",
+        "WINDOPS_CARE_MAX_ATTEMPTS": "3",
+    }
+    if any(environment.get(name) != value for name, value in required_environment.items()):
+        raise DeploymentPolicyError("CARE queue, concurrency or attempt contract drifted")
+    script = "\n".join(str(value) for value in container.get("args", []))
+    required_tokens = {
+        "windops-care-dependency-closure",
+        "windops-care-full-scale import",
+        "windops-care-full-scale evaluate",
+        "windops-care-full-scale register",
+        "--use-care-worker-runtime",
+        "--state-path /care/work/state/import.json",
+        "--state-path /care/work/state/evaluate.json",
+    }
+    if container.get("command") != ["/bin/sh", "-ec"] or any(
+        token not in script for token in required_tokens
+    ):
+        raise DeploymentPolicyError("CARE workload does not execute the governed full-scale flow")
+    mounts = {
+        mount.get("name"): mount
+        for mount in _sequence(container.get("volumeMounts"), "CARE volume mounts")
+        if isinstance(mount, dict)
+    }
+    if mounts.get("care-source", {}).get("readOnly") is not True:
+        raise DeploymentPolicyError("CARE source volume must be mounted read-only")
+    volumes = {
+        volume.get("name"): volume
+        for volume in _sequence(pod_spec.get("volumes"), "CARE volumes")
+        if isinstance(volume, dict)
+    }
+    source_claim = _mapping(
+        volumes.get("care-source", {}).get("persistentVolumeClaim"),
+        "CARE source claim",
+    )
+    if source_claim != {"claimName": "windops-care-source", "readOnly": True}:
+        raise DeploymentPolicyError("CARE source PVC binding must be read-only")
+    workspace_claim = _mapping(
+        volumes.get("care-workspace", {}).get("persistentVolumeClaim"),
+        "CARE workspace claim",
+    )
+    if workspace_claim != {"claimName": "windops-care-workspace"}:
+        raise DeploymentPolicyError("CARE workspace must use its isolated PVC")
+    expected_storage = {
+        "windops-care-source": "windops-encrypted-care-source",
+        "windops-care-workspace": "windops-encrypted-care-workspace",
+    }
+    for claim_name, storage_class in expected_storage.items():
+        claim = _mapping(
+            _named(documents, "PersistentVolumeClaim", claim_name).get("spec"),
+            f"PersistentVolumeClaim/{claim_name}.spec",
+        )
+        if claim.get("storageClassName") != storage_class:
+            raise DeploymentPolicyError(f"{claim_name} must use approved encrypted storage")
 
 
 def verify_deployment_policy(
@@ -529,9 +661,12 @@ def verify_deployment_policy(
         if namespace_labels.get(f"pod-security.kubernetes.io/{mode}") != "restricted":
             raise DeploymentPolicyError(f"windops namespace Pod Security {mode} must be restricted")
 
-    service_account = _named(documents, "ServiceAccount", RUNTIME_SERVICE_ACCOUNT)
-    if service_account.get("automountServiceAccountToken") is not False:
-        raise DeploymentPolicyError("runtime ServiceAccount must disable token automount")
+    for account_name in (RUNTIME_SERVICE_ACCOUNT, CARE_SERVICE_ACCOUNT):
+        service_account = _named(documents, "ServiceAccount", account_name)
+        if service_account.get("automountServiceAccountToken") is not False:
+            raise DeploymentPolicyError(
+                f"{account_name} ServiceAccount must disable token automount"
+            )
 
     pvc = _mapping(
         _named(documents, "PersistentVolumeClaim", "windops-backups").get("spec"),
@@ -551,6 +686,7 @@ def verify_deployment_policy(
         if resource.get("kind") in WORKLOAD_KINDS
     ]
     _validate_availability(documents)
+    _validate_care_workload(documents)
     _validate_network_policy(documents)
     return {
         "format_version": 1,
@@ -574,6 +710,9 @@ def verify_deployment_policy(
             "availability_and_probes",
             "destination_scoped_network_policy",
             "encrypted_backup_storage",
+            "isolated_care_execution_plane",
+            "care_checkpoint_retry_idempotency",
+            "care_scoped_storage_credentials",
         ],
     }
 
@@ -600,7 +739,7 @@ def _write_report(path: Path, report: dict[str, Any]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Verify rendered WindOps Kubernetes manifests and emit release evidence"
+        description="Verify rendered OpenVigil Kubernetes manifests and emit release evidence"
     )
     parser.add_argument("--manifests", type=Path, required=True)
     parser.add_argument("--expected-image-digest", required=True)

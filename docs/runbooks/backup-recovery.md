@@ -1,8 +1,8 @@
-# WindOps 备份、恢复与灾难演练
+# OpenVigil 备份、恢复与灾难演练
 
 ## 目标与边界
 
-WindOps 的恢复单元包含 PostgreSQL/TimescaleDB 权威账本，以及现场证据、知识文档、模型制品、孪生制品和 CARE benchmark 派生制品五个 MinIO bucket。Neo4j 是可重建投影，Redis/Dramatiq 是执行基础设施，均不作为恢复权威源。
+OpenVigil 的恢复单元包含 PostgreSQL/TimescaleDB 权威账本，以及现场证据、知识文档、模型制品、孪生制品和 CARE benchmark 派生制品五个 MinIO bucket。Neo4j 是可重建投影，Redis/Dramatiq 是执行基础设施，均不作为恢复权威源。
 
 备份命令生成一个不可覆盖的时间戳目录，内容包括：
 

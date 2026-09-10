@@ -1,5 +1,5 @@
 {
-  "name": "windops-multi-agent-platform",
+  "name": "openvigil-multi-agent-platform",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -17,6 +17,7 @@
     "test:e2e": "playwright test",
     "test:e2e:real": "playwright test tests/e2e/real-cross-layer.spec.ts",
     "test:start-smoke": "node scripts/standard-start-smoke.mjs",
+    "check:repository-artifacts": "node scripts/check-repository-artifacts.mjs",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
@@ -51,6 +52,7 @@
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
+    "axe-core": "4.11.4",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-plugin-jsx-a11y": "6.10.2",

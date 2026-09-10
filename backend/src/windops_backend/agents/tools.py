@@ -70,7 +70,7 @@ TOOL_CATALOG: tuple[dict[str, str], ...] = (
     {"name": "query_maintenance_history", "mode": "read"},
     {"name": "query_similar_failures", "mode": "vector-read"},
     {"name": "calculate_health_score", "mode": "compute"},
-    {"name": "predict_rul", "mode": "compute"},
+    {"name": "assess_condition_evidence", "mode": "compute"},
     {"name": "create_decision", "mode": "draft-write-gated"},
     {"name": "create_work_order", "mode": "human-approval-gated-write"},
     {"name": "query_manual", "mode": "read"},
@@ -260,7 +260,7 @@ def _citation_href(uri: str, minio_public_base: str) -> str:
     return uri
 
 
-class WindOpsToolAdapter(Protocol):
+class OpenVigilToolAdapter(Protocol):
     async def get_turbine_status(self, turbine_id: str) -> dict[str, Any]: ...
 
     async def query_scada(
@@ -283,7 +283,7 @@ class WindOpsToolAdapter(Protocol):
 
     async def calculate_health_score(self, turbine_id: str) -> dict[str, Any]: ...
 
-    async def predict_rul(
+    async def assess_condition_evidence(
         self, turbine_id: str, component: str, primary_variable: str | None = None
     ) -> dict[str, Any]: ...
 
@@ -805,7 +805,7 @@ class SQLToolAdapter:
         self._record_call("calculate_health_score", started, {"turbine_id": turbine_id})
         return result
 
-    async def predict_rul(
+    async def assess_condition_evidence(
         self, turbine_id: str, component: str, primary_variable: str | None = None
     ) -> dict[str, Any]:
         started = perf_counter()
@@ -837,23 +837,32 @@ class SQLToolAdapter:
             }
         anomaly = max(0.0, min(1.0, float(condition.get("anomaly_score", 0.0))))
         trend = max(0.0, float(condition.get("trend_pct", 0.0)))
-        daily_damage = 0.15 + (anomaly * 2.2) + (trend / 35.0)
-        estimated_days = max(7, round(180 / daily_damage))
-        failure_probability = round(min(0.95, anomaly * 0.32 + trend / 240.0), 3)
+        evidence_band = (
+            5
+            if anomaly >= 0.9
+            else 4
+            if anomaly >= 0.75
+            else 3
+            if anomaly >= 0.6
+            else 2
+            if anomaly >= 0.4
+            else 1
+        )
         result = {
             "turbine_id": turbine_id,
             "component": component,
-            "estimated_rul_days": estimated_days,
-            "failure_probability_30d": failure_probability,
+            "evidence_band": evidence_band,
+            "condition": "attention" if evidence_band >= 3 else "stable",
             "inputs": {
                 **({"primary_variable": selected_variable} if primary_variable is not None else {}),
                 "anomaly_score": anomaly,
                 "trend_pct": trend,
             },
-            "model_version": "physics-informed-rul-2026.08",
+            "assessment_version": "condition-evidence-2026.09",
+            "boundary": "does not estimate remaining life or failure probability",
         }
         self._record_call(
-            "predict_rul",
+            "assess_condition_evidence",
             started,
             {
                 "turbine_id": turbine_id,

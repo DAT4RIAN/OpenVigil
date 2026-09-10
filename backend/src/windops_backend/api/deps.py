@@ -33,13 +33,17 @@ from windops_backend.models import (
     AgentExecution,
     DelegatedRequestAudit,
     DelegatedRequestNonce,
-    ReadAccessAudit,
 )
 from windops_backend.outbox import (
     KNOWLEDGE_GRAPH_PROJECTION_REQUESTED,
     mark_dispatched,
     pending_event_ids_by_type,
     process_knowledge_graph_projection_event,
+)
+from windops_backend.read_audit import (
+    ReadAuditEnqueueError,
+    ReadAuditSink,
+    build_read_audit_event,
 )
 from windops_backend.services.models import (
     ModelInferenceClient,
@@ -301,7 +305,7 @@ async def get_principal(
     except IdentityRoleError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "FORBIDDEN", "message": "No WindOps role is assigned"},
+            detail={"code": "FORBIDDEN", "message": "No OpenVigil role is assigned"},
         ) from exc
     except InvalidIdentityError as exc:
         raise _authentication_error() from exc
@@ -540,21 +544,24 @@ async def require_read_access(
     _require_endpoint_data_scope(request, policy)
     attach_access_policy(session, policy)
 
-    query: dict[str, object] = {
-        key: request.query_params.getlist(key) for key in request.query_params.keys()
-    }
-    query["_authorization"] = access_scope_audit(policy)
-    session.add(
-        ReadAccessAudit(
-            id=str(uuid4()),
-            subject=principal.subject,
-            role=",".join(principal.roles),
-            method=request.method,
-            endpoint=request.url.path,
-            query=query,
-        )
+    query = {key: request.query_params.getlist(key) for key in request.query_params.keys()}
+    event = build_read_audit_event(
+        subject=principal.subject,
+        roles=principal.roles,
+        method=request.method,
+        endpoint=request.url.path,
+        query=query,
+        authorization=access_scope_audit(policy),
     )
-    await session.commit()
+    sink = cast(ReadAuditSink, request.app.state.read_audit_sink)
+    try:
+        await sink.record(event)
+    except ReadAuditEnqueueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": exc.code, "message": str(exc)},
+            headers={"Retry-After": "1"},
+        ) from exc
     return principal
 
 

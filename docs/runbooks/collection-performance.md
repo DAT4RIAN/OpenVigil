@@ -1,6 +1,6 @@
 # Bounded collection performance contract
 
-WindOps list reads are page contracts, not implicit exports. The Sites Worker forwards exactly one
+OpenVigil list reads are page contracts, not implicit exports. The Sites Worker forwards exactly one
 backend page and returns the backend cursor or offset metadata. It must never follow cursors on the
 caller's behalf. A caller that needs more rows requests the next page explicitly. Raw full-ledger
 export is not exposed by collection routes; governed handover/export uses a persisted report snapshot

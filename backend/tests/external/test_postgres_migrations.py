@@ -36,6 +36,7 @@ from windops_backend.models import (
     BenchmarkFeatureMap,
     BenchmarkFile,
     BenchmarkMetricSnapshot,
+    BenchmarkQualityArtifact,
     BenchmarkQualityReport,
     BenchmarkReplayRun,
     PlatformConfigurationRevision,
@@ -55,7 +56,7 @@ from windops_backend.services.operational_views import (
 
 DELEGATION_SECRET = "external-production-gateway-secret-with-at-least-forty-eight-characters"
 
-HEAD_REVISION = "0026_schema_contract_alignment"
+HEAD_REVISION = "0028_read_audit_pipeline"
 PREVIOUS_SUPPORTED_REVISION = "0015_alarm_command_state"
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _DATABASE_IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
@@ -308,6 +309,62 @@ async def test_schema_contract_alignment_backfills_and_matches_orm(
                 text("UPDATE tenants SET created_at = NULL WHERE id = 'tenant-east-china'")
             )
 
+        _run_alembic(database_url, "upgrade", "0026_schema_contract_alignment")
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO benchmark_dataset_versions "
+                    "(id, tenant_id, dataset_id, version, status, source_uri, manifest_uri, "
+                    "manifest_sha256, content_sha256, size_bytes, file_count, license_name, "
+                    "license_url, doi, citation, attribution, created_by) VALUES "
+                    "('care-v6-migration', 'tenant-east-china', 'care', 'v6-migration', "
+                    "'ready', 'file:///care.zip', 'file:///manifest.json', :manifest_sha, "
+                    ":content_sha, 1, 1, 'CC BY-SA 4.0', "
+                    "'https://creativecommons.org/licenses/by-sa/4.0/', "
+                    "'10.5281/zenodo.15846963', 'CARE', '{}'::jsonb, 'migration-contract')"
+                ),
+                {"manifest_sha": "d" * 64, "content_sha": "e" * 64},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO benchmark_files "
+                    "(id, dataset_version_id, file_kind, relative_path, farm, event_id, "
+                    "size_bytes, row_count, schema_sha256, content_sha256, metadata) VALUES "
+                    "('care-v6-migration-file', 'care-v6-migration', 'event', "
+                    "'Wind Farm A/datasets/0.csv', 'A', 0, 1, 10, :schema_sha, "
+                    ":content_sha, '{}'::jsonb)"
+                ),
+                {"schema_sha": "f" * 64, "content_sha": "1" * 64},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO benchmark_events "
+                    "(id, dataset_version_id, source_file_id, event_id, farm, source_asset_id, "
+                    "logical_asset_id, event_label, first_source_row_id, last_source_row_id, "
+                    "train_row_count, prediction_row_count, event_interval_start, "
+                    "event_interval_end, truth_metadata) VALUES "
+                    "('care-v6-migration-event', 'care-v6-migration', "
+                    "'care-v6-migration-file', 0, 'A', '0', 'CARE-A-0', 'anomaly', "
+                    "0, 9, 8, 2, 8, 9, '{}'::jsonb)"
+                )
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO benchmark_quality_reports "
+                    "(id, event_id, quality_rule_version, feature_set_version, status, "
+                    "artifact_uri, artifact_sha256, mask_uri, mask_sha256, summary) VALUES "
+                    "('care-v6-migration-quality', 'care-v6-migration-event', "
+                    "'care-v6-quality-rules-v1', 'care-v6-avg-feature-set-v1', 'completed', "
+                    "'file:///legacy-report.json', :artifact_sha, 'file:///legacy-mask.json', "
+                    ":mask_sha, CAST(:summary AS jsonb))"
+                ),
+                {
+                    "artifact_sha": "2" * 64,
+                    "mask_sha": "3" * 64,
+                    "summary": '{"row_count":10,"mask_count":0}',
+                },
+            )
+
         _run_alembic(database_url, "upgrade", "head")
         assert HEAD_REVISION in _run_alembic(database_url, "current").stdout
         async with engine.connect() as connection:
@@ -325,6 +382,26 @@ async def test_schema_contract_alignment_backfills_and_matches_orm(
                     {"table_name": table_name, "column_name": column_name},
                 )
                 assert nullable == "NO", f"{table_name}.{column_name} remained nullable"
+
+            migrated_quality = (
+                await connection.execute(
+                    text(
+                        "SELECT report.canonical_content_sha256, artifact.artifact_stage, "
+                        "artifact.artifact_sha256, artifact.mask_sha256, "
+                        "artifact.audit_subject FROM benchmark_quality_reports AS report "
+                        "JOIN benchmark_quality_artifacts AS artifact "
+                        "ON artifact.quality_report_id = report.id "
+                        "WHERE report.id = 'care-v6-migration-quality'"
+                    )
+                )
+            ).one()
+            assert tuple(migrated_quality) == (
+                None,
+                "legacy-migrated-v1",
+                "2" * 64,
+                "3" * 64,
+                "migration:0027_quality_artifact_stages",
+            )
 
             index_definitions = dict(
                 (
@@ -452,6 +529,7 @@ async def test_care_metadata_upgrade_preserves_legacy_rows_and_downgrade_fails_c
             "benchmark_events",
             "benchmark_feature_maps",
             "benchmark_quality_reports",
+            "benchmark_quality_artifacts",
             "benchmark_evaluation_runs",
             "benchmark_event_results",
             "benchmark_metric_snapshots",
@@ -476,6 +554,7 @@ async def test_care_metadata_upgrade_preserves_legacy_rows_and_downgrade_fails_c
                 BenchmarkEvent,
                 BenchmarkFeatureMap,
                 BenchmarkQualityReport,
+                BenchmarkQualityArtifact,
                 BenchmarkEvaluationRun,
                 BenchmarkEventResult,
                 BenchmarkMetricSnapshot,
@@ -507,6 +586,7 @@ async def test_care_metadata_upgrade_preserves_legacy_rows_and_downgrade_fails_c
                 "fk_benchmark_replay_registered_model_version",
                 "uq_benchmark_evaluation_input_identity",
                 "uq_benchmark_event_result_run_event",
+                "uq_benchmark_quality_artifact_identity",
                 "ck_benchmark_replay_deployment_model",
                 "ck_model_predictions_anomaly_structure",
                 "ck_alarms_has_source",
@@ -525,6 +605,8 @@ async def test_care_metadata_upgrade_preserves_legacy_rows_and_downgrade_fails_c
                 "ix_benchmark_datasets_tenant_status",
                 "ix_benchmark_evaluation_model_created",
                 "ix_benchmark_replay_event_status",
+                "ix_benchmark_quality_artifacts_report_created",
+                "ix_benchmark_quality_artifacts_stage_created",
                 "ix_model_predictions_benchmark_replay_created",
                 "ix_model_predictions_benchmark_evaluation_created",
             }.issubset(care_indexes)
@@ -540,7 +622,6 @@ async def test_care_metadata_upgrade_preserves_legacy_rows_and_downgrade_fails_c
                 {"id": prediction_id},
             )
             assert prediction_kind == "predictive"
-
         async with engine.begin() as connection:
             await connection.execute(
                 text(
@@ -1644,7 +1725,7 @@ async def test_real_production_rotation_contract_uses_fastapi_and_postgresql(
             assert "CONFIGURATION_SECURITY_REMEDIATION_REQUIRED" in not_ready.text
 
             body = (
-                b'{"replacement_secret_reference":"vault://windops/platform/rotated",'
+                b'{"replacement_secret_reference":"vault://openvigil/platform/rotated",'
                 b'"rotation_evidence":"CHG-EXTERNAL-ROTATION-001"}'
             )
             target = (

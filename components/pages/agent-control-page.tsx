@@ -40,7 +40,7 @@ import type { AgentToolExecution } from "@/lib/agent-tool-runtime";
 import { buildAgentToolPreviewRequest } from "@/lib/agent-tool-preview";
 import type { DemoWorkflowEvent, DemoWorkflowState } from "@/lib/demo-workflow";
 import type { ActivityEvent, Agent, AgentLayer, AgentStatus } from "@/lib/types";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 import { useRealtimeChannel } from "@/lib/use-realtime-channel";
 import { useProductionEvents } from "@/lib/use-production-events";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
@@ -85,7 +85,7 @@ type AgentCollectionResponse = {
   data: readonly Agent[];
   meta: {
     count: number;
-    runtimeMode?: WindOpsRuntimeMode;
+    runtimeMode?: OpenVigilRuntimeMode;
     fixtureFallback?: boolean;
   };
 };
@@ -283,7 +283,7 @@ function AgentDrawer({
   executions: readonly LedgerToolExecution[];
   publicEvents: readonly ActivityEvent[];
   currentTask: string | null;
-  runtimeMode: WindOpsRuntimeMode;
+  runtimeMode: OpenVigilRuntimeMode;
   onChanged: () => Promise<unknown>;
 }) {
   const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
@@ -687,7 +687,7 @@ function AgentDrawer({
   );
 }
 
-export function AgentControlPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMode }) {
+export function AgentControlPage({ runtimeMode }: { runtimeMode: OpenVigilRuntimeMode }) {
   const queryClient = useQueryClient();
   const workflow = useDemoWorkflow();
   const [layer, setLayer] = useState<"all" | AgentLayer>("all");
@@ -819,7 +819,7 @@ export function AgentControlPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeM
       ? {
           id: agentStream.frame.correlationId,
           agentId: asText(agentStream.frame.data.agentId),
-          actorLabel: asText(agentStream.frame.data.actorLabel, "WindOps Agent"),
+          actorLabel: asText(agentStream.frame.data.actorLabel, "OpenVigil Agent"),
           title: asText(agentStream.frame.data.title, "收到 Agent 活动"),
           outcome: asText(agentStream.frame.data.outcome, "neutral"),
           timestamp: agentStream.frame.emittedAt,

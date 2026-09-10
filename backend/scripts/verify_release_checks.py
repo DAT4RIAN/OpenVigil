@@ -9,7 +9,14 @@ from collections.abc import Iterable
 from typing import Any
 
 REQUIRED_CHECKS = frozenset(
-    {"frontend", "backend", "postgres-contract", "browser-e2e", "real-cross-layer-e2e"}
+    {
+        "frontend",
+        "backend",
+        "postgres-contract",
+        "care-postgres-contract",
+        "browser-e2e",
+        "real-cross-layer-e2e",
+    }
 )
 
 

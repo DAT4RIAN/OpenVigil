@@ -53,7 +53,7 @@ def create_observability_runtime(settings: Settings) -> ObservabilityRuntime:
         registry=registry,
         http_requests=Counter(
             "windops_http_requests_total",
-            "HTTP requests processed by the WindOps API.",
+            "HTTP requests processed by the OpenVigil API.",
             ("method", "route", "status"),
             registry=registry,
         ),
@@ -95,7 +95,7 @@ def create_observability_runtime(settings: Settings) -> ObservabilityRuntime:
         ),
         release=Info(
             "windops_release",
-            "Immutable build identity reported by the running WindOps API.",
+            "Immutable build identity reported by the running OpenVigil API.",
             registry=registry,
         ),
     )

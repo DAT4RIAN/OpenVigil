@@ -38,7 +38,7 @@ import {
 } from "@/lib/maintenance-plan-data";
 import type { RiskLevel } from "@/lib/types";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 
 import styles from "./maintenance-plan-page.module.css";
 
@@ -347,7 +347,7 @@ function PlanDetail({
   runtimeMode,
 }: {
   plan: MaintenancePlan;
-  runtimeMode: WindOpsRuntimeMode;
+  runtimeMode: OpenVigilRuntimeMode;
 }) {
   const criticalConflicts = plan.conflicts.filter((item) => item.severity === "critical").length;
   return (
@@ -496,7 +496,7 @@ function PlanDetail({
   );
 }
 
-export function MaintenancePlanPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMode }) {
+export function MaintenancePlanPage({ runtimeMode }: { runtimeMode: OpenVigilRuntimeMode }) {
   const workflow = useDemoWorkflow();
   const isProduction = runtimeMode === "production";
   const [view, setView] = useState<ViewMode>("calendar");
@@ -932,7 +932,7 @@ export function MaintenancePlanPage({ runtimeMode }: { runtimeMode: WindOpsRunti
                   },
                 ]}
                 csvExport={{
-                  filename: "windops-maintenance-plans.csv",
+                  filename: "openvigil-maintenance-plans.csv",
                   columns: [
                     { label: "计划ID", value: (plan) => plan.id },
                     { label: "工单", value: (plan) => plan.workOrderId },

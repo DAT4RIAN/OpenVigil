@@ -8,7 +8,7 @@ import { QueryProvider } from "@/components/providers/query-provider";
 import {
   decodeTrustedSession,
   TRUSTED_SESSION_HEADER,
-  type WindOpsIdentitySession,
+  type OpenVigilIdentitySession,
 } from "@/lib/identity-session";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 import "./globals.css";
@@ -25,7 +25,9 @@ const geistMono = Geist_Mono({
 
 const themeBootstrap = `(() => {
   try {
-    const stored = localStorage.getItem("windops-theme");
+    const current = localStorage.getItem("openvigil-theme");
+    const stored = current ?? localStorage.getItem("windops-theme");
+    if (current === null && stored !== null) localStorage.setItem("openvigil-theme", stored);
     const preference = stored === "dark" || stored === "system" ? stored : "light";
     const resolved = preference === "system" && matchMedia("(prefers-color-scheme: dark)").matches
       ? "dark"
@@ -59,21 +61,21 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(origin),
     title: {
-      default: "WindOps 多智能体运维平台",
-      template: "%s · WindOps",
+      default: "OpenVigil 多智能体运维平台",
+      template: "%s · OpenVigil",
     },
     description,
     openGraph: {
       type: "website",
-      title: "WindOps · AI 原生风场智能运维",
+      title: "OpenVigil · AI 原生风场智能运维",
       description,
       images: [
-        { url: socialImage, width: 1536, height: 1024, alt: "WindOps 风电运维多智能体平台" },
+        { url: socialImage, width: 1536, height: 1024, alt: "OpenVigil 风电运维多智能体平台" },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "WindOps · AI 原生风场智能运维",
+      title: "OpenVigil · AI 原生风场智能运维",
       description,
       images: [socialImage],
     },
@@ -86,7 +88,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const runtime = getProductionBackendConfig();
-  let session: WindOpsIdentitySession | null = null;
+  let session: OpenVigilIdentitySession | null = null;
   if (runtime.mode === "production") {
     const user = await requireChatGPTUser("/");
     const requestHeaders = await headers();
@@ -99,7 +101,7 @@ export default async function RootLayout({
         <html lang="zh-CN">
           <body>
             <main className="root-session-gate" role="alert">
-              <strong>WindOps Production</strong>
+              <strong>OpenVigil Production</strong>
               <h1>生产身份会话不可用</h1>
               <p>可信 capability 会话缺失或无效，业务页面已安全停止。</p>
               <Link href="/">重新检查</Link>

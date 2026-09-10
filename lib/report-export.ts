@@ -1,4 +1,4 @@
-import { reportToPlainText, type WindOpsReport } from "./report-data";
+import { reportToPlainText, type OpenVigilReport } from "./report-data";
 
 export type ReportExportFormat = "pdf" | "docx";
 
@@ -64,7 +64,7 @@ const pdfUnicode = (value: string): string => {
 };
 
 /** Create a deterministic, self-contained PDF 1.4 document without a runtime dependency. */
-export function createReportPdf(report: WindOpsReport): Uint8Array {
+export function createReportPdf(report: OpenVigilReport): Uint8Array {
   const wrapped = reportToPlainText(report).flatMap((line) => wrapLine(line, 94));
   const linesPerPage = 42;
   const pages = Array.from(
@@ -95,7 +95,7 @@ export function createReportPdf(report: WindOpsReport): Uint8Array {
       ...pageLines.map((line) => `${pdfUnicode(line || " ")} Tj\n0 -16 Td`),
       "ET",
       "BT /F1 8 Tf 0.38 0.42 0.44 rg 50 30 Td",
-      `${pdfUnicode(`WindOps report ${report.id} | Page ${index + 1} of ${pages.length}`)} Tj ET`,
+      `${pdfUnicode(`OpenVigil report ${report.id} | Page ${index + 1} of ${pages.length}`)} Tj ET`,
     ];
     const stream = commands.join("\n");
     const streamLength = encoder.encode(stream).byteLength;
@@ -256,7 +256,7 @@ const wordParagraph = (
 };
 
 /** Create a minimal but standards-compliant DOCX package using stored ZIP entries. */
-export function createReportDocx(report: WindOpsReport): Uint8Array {
+export function createReportDocx(report: OpenVigilReport): Uint8Array {
   const paragraphs = reportToPlainText(report).map((line, index) => {
     const isHeading =
       index === 0 ||
@@ -294,7 +294,7 @@ export function createReportDocx(report: WindOpsReport): Uint8Array {
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
     `<dc:title>${xmlEscape(report.title)}</dc:title>` +
-    "<dc:creator>WindOps Report Center</dc:creator>" +
+    "<dc:creator>OpenVigil Report Center</dc:creator>" +
     `<dc:subject>${xmlEscape(report.typeLabel)}</dc:subject>` +
     `<dcterms:created xsi:type="dcterms:W3CDTF">${createdAt}</dcterms:created>` +
     `<dcterms:modified xsi:type="dcterms:W3CDTF">${createdAt}</dcterms:modified>` +
@@ -309,6 +309,6 @@ export function createReportDocx(report: WindOpsReport): Uint8Array {
 }
 
 export const reportExportFilename = (
-  report: Pick<WindOpsReport, "id">,
+  report: Pick<OpenVigilReport, "id">,
   format: ReportExportFormat,
 ): string => `${report.id.toLowerCase()}.${format}`;

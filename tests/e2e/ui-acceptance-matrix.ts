@@ -1,0 +1,78 @@
+export const routeAcceptanceMatrix = [
+  { path: "/", owner: "/", risk: "critical" },
+  { path: "/wind-farms", owner: "/wind-farms", risk: "standard" },
+  { path: "/turbines/WT-023", owner: "/turbines/WT-023", risk: "critical" },
+  { path: "/scada", owner: "/scada", risk: "standard" },
+  { path: "/health", owner: "/health", risk: "standard" },
+  { path: "/alarms", owner: "/alarms", risk: "critical" },
+  { path: "/diagnosis", owner: "/diagnosis", risk: "standard" },
+  { path: "/predictive-maintenance", owner: "/predictive-maintenance", risk: "critical" },
+  { path: "/agents", owner: "/agents", risk: "standard" },
+  { path: "/missions", owner: "/missions", risk: "critical" },
+  { path: "/missions/MISSION-2026-0823", owner: "/missions", risk: "critical" },
+  { path: "/decisions", owner: "/decisions", risk: "critical" },
+  { path: "/work-orders", owner: "/work-orders", risk: "critical" },
+  { path: "/maintenance", owner: "/maintenance", risk: "standard" },
+  { path: "/resources", owner: "/resources", risk: "standard" },
+  { path: "/knowledge", owner: "/knowledge", risk: "standard" },
+  { path: "/digital-twin", owner: "/digital-twin", risk: "standard" },
+  { path: "/knowledge-graph", owner: "/knowledge-graph", risk: "standard" },
+  { path: "/data", owner: "/data", risk: "standard" },
+  { path: "/reports", owner: "/reports", risk: "standard" },
+  { path: "/models", owner: "/models", risk: "critical" },
+  { path: "/settings", owner: "/settings", risk: "critical" },
+] as const;
+
+export const viewportAcceptanceMatrix = [
+  { name: "desktop-1440", width: 1440, height: 900 },
+  { name: "desktop-1280", width: 1280, height: 800 },
+  { name: "tablet-900", width: 900, height: 900 },
+  { name: "mobile-390", width: 390, height: 844 },
+] as const;
+
+export const roleAcceptanceMatrix = [
+  { subject: "user-manager", role: "operations_manager" },
+  { subject: "user-approver", role: "operations_approver" },
+  { subject: "user-reviewer", role: "maintenance_reviewer" },
+  { subject: "user-field", role: "field_technician" },
+] as const;
+
+export const lifecycleAcceptanceMatrix = {
+  mission: [
+    "initial-loading",
+    "refreshing",
+    "success-empty",
+    "permission-error",
+    "conflict",
+    "service-error",
+    "network-error",
+    "stale",
+    "filtered-empty",
+    "disabled",
+  ],
+  decision: [
+    "initial-loading",
+    "refreshing",
+    "success-data",
+    "success-empty",
+    "permission-error",
+    "conflict",
+    "service-error",
+    "network-error",
+    "stale",
+    "disabled",
+  ],
+  workOrder: [
+    "initial-loading",
+    "refreshing",
+    "success-empty",
+    "permission-error",
+    "conflict",
+    "service-error",
+    "network-error",
+    "stale",
+    "filtered-empty",
+    "disabled",
+  ],
+  governedCommand: ["running", "success", "failed", "result-unknown", "reconciled"],
+} as const;

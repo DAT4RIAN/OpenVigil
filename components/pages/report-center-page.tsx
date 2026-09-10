@@ -25,16 +25,16 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, EmptyState } from "@/components/ui/primitives";
 import { apiGet, apiPostCommand } from "@/lib/api-client";
-import type { ReportPeriod, ReportType, WindOpsReport } from "@/lib/report-data";
+import type { ReportPeriod, ReportType, OpenVigilReport } from "@/lib/report-data";
 import { localizedStatusLabel } from "@/lib/ui-localization";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 
 import styles from "./report-center-page.module.css";
 
 type ReportsEnvelope = {
   ok: true;
   data: {
-    reports: WindOpsReport[];
+    reports: OpenVigilReport[];
     facets: {
       reportTypes: Record<ReportType, number>;
       periods: Record<ReportPeriod, number>;
@@ -89,7 +89,13 @@ const buildReportsPath = (query: string, type: TypeFilter, period: PeriodFilter)
   return `/api/reports?${params.toString()}`;
 };
 
-function ExportActions({ report, compact = false }: { report: WindOpsReport; compact?: boolean }) {
+function ExportActions({
+  report,
+  compact = false,
+}: {
+  report: OpenVigilReport;
+  compact?: boolean;
+}) {
   const basePath = `/api/reports/${encodeURIComponent(report.id)}/export`;
   const versionCheck = report.contentDigest
     ? `expectedDigest=${encodeURIComponent(report.contentDigest)}`
@@ -114,7 +120,7 @@ function ExportActions({ report, compact = false }: { report: WindOpsReport; com
   );
 }
 
-function ReportPreview({ report, production }: { report: WindOpsReport; production: boolean }) {
+function ReportPreview({ report, production }: { report: OpenVigilReport; production: boolean }) {
   return (
     <article className={styles.preview} aria-label={`${report.title}预览`}>
       <header className={styles.previewHeader}>
@@ -242,7 +248,7 @@ function ReportPreview({ report, production }: { report: WindOpsReport; producti
   );
 }
 
-export function ReportCenterPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMode }) {
+export function ReportCenterPage({ runtimeMode }: { runtimeMode: OpenVigilRuntimeMode }) {
   const isProduction = runtimeMode === "production";
   const [query, setQuery] = useState("");
   const [type, setType] = useState<TypeFilter>("all");
@@ -260,7 +266,7 @@ export function ReportCenterPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeM
   const reports = reportsQuery.data?.data.reports ?? [];
   const generationMutation = useMutation({
     mutationFn: () =>
-      apiPostCommand<{ data: WindOpsReport; meta: { replayed: boolean } }>(
+      apiPostCommand<{ data: OpenVigilReport; meta: { replayed: boolean } }>(
         "/api/backend/reports",
         {
           report_type: generationType,

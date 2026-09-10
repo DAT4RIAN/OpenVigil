@@ -1,6 +1,7 @@
 import hashlib
 import json
 import math
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -27,6 +28,10 @@ from windops_backend.models import (
 from windops_backend.outbox import enqueue_knowledge_graph_projection, enqueue_mission_analysis
 from windops_backend.schemas import IngestResult, ScadaSampleIn
 from windops_backend.services.events import append_domain_event
+
+
+class _BatchIngestFallback(RuntimeError):
+    """Retry a batch through the fully general per-sample path."""
 
 
 def _payload_hash(sample: ScadaSampleIn, source_id: str) -> str:
@@ -482,3 +487,224 @@ async def ingest_sample(
         alarm_id=alarm_id,
         mission_id=mission_id,
     )
+
+
+async def _ingest_postgres_accepted_batch(
+    session: AsyncSession,
+    samples: Sequence[ScadaSampleIn],
+    *,
+    source_id: str,
+    policy: TelemetrySourcePolicy,
+) -> list[IngestResult]:
+    """Persist an all-accepted PostgreSQL batch with bounded database round trips.
+
+    Receipt conflicts, quarantines, and direct alarm-producing samples deliberately
+    fall back to ``ingest_sample`` so their established edge-case behavior remains
+    unchanged. The savepoint rolls back every speculative batch mutation first.
+    """
+
+    turbine_ids = {sample.turbine_id for sample in samples}
+    existing_turbines = set(
+        (await session.scalars(select(Turbine.id).where(Turbine.id.in_(turbine_ids)))).all()
+    )
+    for sample in samples:
+        if sample.turbine_id not in existing_turbines:
+            raise NotFoundError(f"turbine {sample.turbine_id} was not found")
+
+    source = await ensure_ingest_source(session, source_id, policy)
+    stream_keys = sorted({f"{sample.turbine_id}:{sample.variable}" for sample in samples})
+
+    try:
+        async with session.begin_nested():
+            await session.execute(
+                postgres_insert(IngestStreamState)
+                .values(
+                    [
+                        {"source_id": source_id, "stream_key": stream_key}
+                        for stream_key in stream_keys
+                    ]
+                )
+                .on_conflict_do_nothing(
+                    index_elements=[IngestStreamState.source_id, IngestStreamState.stream_key]
+                )
+            )
+            states = {
+                state.stream_key: state
+                for state in (
+                    await session.scalars(
+                        select(IngestStreamState)
+                        .where(
+                            IngestStreamState.source_id == source_id,
+                            IngestStreamState.stream_key.in_(stream_keys),
+                        )
+                        .order_by(IngestStreamState.stream_key)
+                        .with_for_update()
+                    )
+                ).all()
+            }
+            if len(states) != len(stream_keys):  # pragma: no cover - database contract breach
+                raise RuntimeError("failed to initialize every ingest stream in the batch")
+
+            received_at = datetime.now(UTC)
+            prepared: list[tuple[ScadaSampleIn, IngestStreamState, bool]] = []
+            for sample in samples:
+                stream_key = f"{sample.turbine_id}:{sample.variable}"
+                state = states[stream_key]
+                reason = _quarantine_reason(sample, policy, state, received_at)
+                if reason is not None:
+                    raise _BatchIngestFallback(reason)
+
+                watermark = (
+                    _as_utc(state.watermark_observed_at)
+                    if state.watermark_observed_at is not None
+                    else None
+                )
+                observed_at = _as_utc(sample.observed_at)
+                is_late = bool(
+                    (watermark is not None and observed_at < watermark)
+                    or (
+                        sample.source_sequence is not None
+                        and state.highest_sequence is not None
+                        and sample.source_sequence < state.highest_sequence
+                    )
+                )
+                state.accepted_count += 1
+                state.late_count += int(is_late)
+                state.updated_at = received_at
+                if watermark is None or observed_at > watermark:
+                    state.watermark_observed_at = sample.observed_at
+                if sample.source_sequence is not None and (
+                    state.highest_sequence is None
+                    or sample.source_sequence > state.highest_sequence
+                ):
+                    state.highest_sequence = sample.source_sequence
+                prepared.append((sample, state, is_late))
+
+            receipt_values = [
+                {
+                    "source_event_id": sample.source_event_id,
+                    "source_id": source_id,
+                    "payload_hash": _payload_hash(sample, source_id),
+                    "disposition": "accepted",
+                    "received_at": received_at,
+                }
+                for sample in samples
+            ]
+            inserted_receipt_ids = set(
+                (
+                    await session.scalars(
+                        postgres_insert(IngestReceipt)
+                        .values(receipt_values)
+                        .on_conflict_do_nothing(index_elements=[IngestReceipt.source_event_id])
+                        .returning(IngestReceipt.source_event_id)
+                    )
+                ).all()
+            )
+            if inserted_receipt_ids != {sample.source_event_id for sample in samples}:
+                raise _BatchIngestFallback("receipt conflict")
+
+            for sample, _state, is_late in prepared:
+                session.add(
+                    ScadaSample(
+                        id=str(uuid4()),
+                        observed_at=sample.observed_at,
+                        source_event_id=sample.source_event_id,
+                        source_id=source_id,
+                        source_sequence=sample.source_sequence,
+                        received_at=received_at,
+                        is_late=is_late,
+                        turbine_id=sample.turbine_id,
+                        variable=sample.variable,
+                        value=sample.value,
+                        unit=sample.unit,
+                        quality=sample.quality,
+                        attributes={**sample.attributes, "quality_code": sample.quality_code},
+                    )
+                )
+                append_domain_event(
+                    session,
+                    event_type="scada.sample.accepted",
+                    aggregate_type="turbine",
+                    aggregate_id=sample.turbine_id,
+                    payload={
+                        "source_event_id": sample.source_event_id,
+                        "source_id": source_id,
+                        "source_sequence": sample.source_sequence,
+                        "turbine_id": sample.turbine_id,
+                        "variable": sample.variable,
+                        "value": sample.value,
+                        "unit": sample.unit,
+                        "quality": sample.quality,
+                        "quality_code": sample.quality_code,
+                        "observed_at": sample.observed_at.isoformat(),
+                        "received_at": received_at.isoformat(),
+                        "late": is_late,
+                    },
+                )
+
+            last_sample, _last_state, last_is_late = prepared[-1]
+            source.status = (
+                "degraded" if last_sample.quality != "good" or last_is_late else "healthy"
+            )
+            source.last_seen_at = received_at
+            source.updated_at = received_at
+            await session.flush()
+            return [
+                IngestResult(
+                    source_event_id=sample.source_event_id,
+                    disposition="accepted",
+                    late=is_late,
+                )
+                for sample, _state, is_late in prepared
+            ]
+    except _BatchIngestFallback:
+        return [
+            await ingest_sample(
+                session,
+                sample,
+                source_id=source_id,
+                policy=policy,
+            )
+            for sample in samples
+        ]
+
+
+async def ingest_samples(
+    session: AsyncSession,
+    samples: Sequence[ScadaSampleIn],
+    *,
+    source_id: str = "scada-default",
+    policy: TelemetrySourcePolicy | None = None,
+) -> list[IngestResult]:
+    """Ingest a request batch while preserving the single-sample contract."""
+
+    resolved_policy = policy or TelemetrySourcePolicy(
+        display_name="Default normalized SCADA source",
+        source_kind="rest",
+        sequence_required=False,
+    )
+    bind = session.bind
+    dialect = bind.dialect.name if bind is not None else "unknown"
+    source_event_ids = [sample.source_event_id for sample in samples]
+    can_batch = (
+        dialect == "postgresql"
+        and len(samples) > 1
+        and len(set(source_event_ids)) == len(source_event_ids)
+        and not any(_is_main_bearing_anomaly(sample) for sample in samples)
+    )
+    if can_batch:
+        return await _ingest_postgres_accepted_batch(
+            session,
+            samples,
+            source_id=source_id,
+            policy=resolved_policy,
+        )
+    return [
+        await ingest_sample(
+            session,
+            sample,
+            source_id=source_id,
+            policy=resolved_policy,
+        )
+        for sample in samples
+    ]

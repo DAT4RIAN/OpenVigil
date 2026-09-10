@@ -6,23 +6,21 @@ export interface GenericSubsystemAssessment {
   readonly healthScore: number;
   readonly state: HealthState;
   readonly alertCount: number;
-  readonly failureProbability30d: number;
-  readonly rulDays: number;
 }
 
 const subsystemProfiles = [
-  { key: "blades", name: "叶片", healthOffset: 3, riskOffset: -3, rulOffset: 48 },
-  { key: "hub", name: "轮毂", healthOffset: 1, riskOffset: -1, rulOffset: 34 },
-  { key: "main-shaft", name: "主轴", healthOffset: 0, riskOffset: 1, rulOffset: 21 },
-  { key: "main-bearing", name: "主轴承", healthOffset: -5, riskOffset: 6, rulOffset: -18 },
-  { key: "gearbox", name: "齿轮箱", healthOffset: 2, riskOffset: 0, rulOffset: 28 },
-  { key: "generator", name: "发电机", healthOffset: 5, riskOffset: -4, rulOffset: 62 },
-  { key: "converter", name: "变流器", healthOffset: -3, riskOffset: 4, rulOffset: 6 },
-  { key: "yaw", name: "偏航系统", healthOffset: -1, riskOffset: 3, rulOffset: 17 },
-  { key: "pitch", name: "变桨系统", healthOffset: -2, riskOffset: 2, rulOffset: 12 },
-  { key: "tower", name: "塔架", healthOffset: 2, riskOffset: -2, rulOffset: 83 },
-  { key: "foundation", name: "基础", healthOffset: 4, riskOffset: -2, rulOffset: 95 },
-  { key: "electrical", name: "电气系统", healthOffset: 6, riskOffset: -5, rulOffset: 74 },
+  { key: "blades", name: "叶片", healthOffset: 3 },
+  { key: "hub", name: "轮毂", healthOffset: 1 },
+  { key: "main-shaft", name: "主轴", healthOffset: 0 },
+  { key: "main-bearing", name: "主轴承", healthOffset: -5 },
+  { key: "gearbox", name: "齿轮箱", healthOffset: 2 },
+  { key: "generator", name: "发电机", healthOffset: 5 },
+  { key: "converter", name: "变流器", healthOffset: -3 },
+  { key: "yaw", name: "偏航系统", healthOffset: -1 },
+  { key: "pitch", name: "变桨系统", healthOffset: -2 },
+  { key: "tower", name: "塔架", healthOffset: 2 },
+  { key: "foundation", name: "基础", healthOffset: 4 },
+  { key: "electrical", name: "电气系统", healthOffset: 6 },
 ] as const;
 
 const clamp = (value: number, minimum: number, maximum: number): number =>
@@ -47,18 +45,7 @@ export function buildGenericSubsystemAssessments(
 ): readonly GenericSubsystemAssessment[] {
   const estimates = subsystemProfiles.map((profile) => {
     const healthScore = clamp(turbine.healthScore + profile.healthOffset, 42, 99);
-    const failureProbability30d = clamp(
-      Math.round((100 - healthScore) * 0.72 + profile.riskOffset),
-      2,
-      62,
-    );
-    const rulDays = clamp(
-      Math.round(healthScore * 4.4 - failureProbability30d * 2.1 + profile.rulOffset),
-      18,
-      540,
-    );
-
-    return { profile, healthScore, failureProbability30d, rulDays };
+    return { profile, healthScore };
   });
 
   const priority = estimates
@@ -66,7 +53,6 @@ export function buildGenericSubsystemAssessments(
     .sort(
       (left, right) =>
         left.estimate.healthScore - right.estimate.healthScore ||
-        right.estimate.failureProbability30d - left.estimate.failureProbability30d ||
         left.estimate.profile.key.localeCompare(right.estimate.profile.key),
     );
   const alertCounts = Array.from({ length: subsystemProfiles.length }, () => 0);
@@ -76,7 +62,7 @@ export function buildGenericSubsystemAssessments(
     if (target) alertCounts[target.index] += 1;
   }
 
-  return estimates.map(({ profile, healthScore, failureProbability30d, rulDays }, index) => {
+  return estimates.map(({ profile, healthScore }, index) => {
     const alertCount = alertCounts[index] ?? 0;
 
     return Object.freeze({
@@ -85,8 +71,6 @@ export function buildGenericSubsystemAssessments(
       healthScore,
       state: assessmentState(turbine, healthScore),
       alertCount,
-      failureProbability30d,
-      rulDays,
     });
   });
 }

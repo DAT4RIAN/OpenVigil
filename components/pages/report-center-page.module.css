@@ -27,20 +27,20 @@
 
 .summaryStrip small,
 .catalog header span,
-.previewHeader span,
+.previewHeader > div > span,
 .highlight span,
 .workflowHeader span,
 .selectField > span {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 750;
   letter-spacing: 0.1em;
 }
 
 .summaryStrip strong {
   color: var(--foreground);
-  font-size: 11px;
+  font-size: var(--font-secondary);
 }
 
 .toolbar {
@@ -77,7 +77,7 @@
 .generationPanel > div small,
 .reasonField span {
   color: var(--foreground-subtle);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .reasonField input {
@@ -92,7 +92,7 @@
 .generationError {
   grid-column: 1 / -1;
   color: var(--danger);
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .searchField {
@@ -136,7 +136,7 @@
   outline: 0;
   background: var(--surface-subtle);
   color: var(--foreground);
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .workspace {
@@ -176,12 +176,12 @@
 .catalog header strong {
   color: var(--foreground);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .catalog header > small {
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   line-height: 1.45;
 }
 
@@ -240,7 +240,7 @@
 .reportCardCopy small {
   color: var(--primary);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-style: normal;
   font-weight: 750;
   letter-spacing: 0.06em;
@@ -250,7 +250,7 @@
 .reportCardCopy strong {
   overflow: hidden;
   color: var(--foreground);
-  font-size: 10px;
+  font-size: var(--font-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -258,7 +258,7 @@
 .reportCardCopy em {
   overflow: hidden;
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -328,7 +328,7 @@
 .previewHeader p {
   margin: 0;
   color: var(--foreground-muted);
-  font-size: 10px;
+  font-size: var(--font-secondary);
   line-height: 1.5;
 }
 
@@ -349,7 +349,7 @@
   margin-bottom: 3px;
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 7px;
+  font-size: var(--font-metadata);
   font-weight: 750;
   letter-spacing: 0.09em;
 }
@@ -358,7 +358,7 @@
   overflow: hidden;
   margin: 0;
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -411,7 +411,7 @@
   overflow: hidden;
   margin-bottom: 7px;
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -432,7 +432,7 @@
   overflow: hidden;
   margin-top: 3px;
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -470,7 +470,7 @@
   border-radius: 50%;
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 750;
 }
 
@@ -483,7 +483,7 @@
 .reportBody p {
   margin: 0 0 8px;
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   line-height: 1.55;
 }
 
@@ -496,7 +496,7 @@
 
 .reportBody li {
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   line-height: 1.5;
 }
 
@@ -523,7 +523,7 @@
 .entityLinks code {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .workflowSteps {
@@ -542,14 +542,14 @@
 .workflowSteps small {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), Consolas, monospace;
-  font-size: 7px;
+  font-size: var(--font-metadata);
   letter-spacing: 0.06em;
 }
 
 .workflowSteps strong {
   overflow: hidden;
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -593,7 +593,7 @@
 
 .previewFooter > div:first-child > span {
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 650;
 }
 
@@ -601,7 +601,7 @@
   display: block;
   margin-top: 2px;
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 400;
 }
 
@@ -615,7 +615,7 @@
 .compactExportActions a {
   min-height: 31px;
   padding: 0 9px;
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 @keyframes loading {

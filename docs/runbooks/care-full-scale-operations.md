@@ -66,6 +66,23 @@ coalesces them into exact 8,192-row groups (except the final remainder). This
 prevents per-fragment Parquet metadata from growing with the number of CSV read
 blocks; the physical row-group count is verified before publication and replay.
 
+The PostgreSQL release performance contract uses fixed work rather than an
+operator-selected sample. Replay measures seven API transactions of 54 samples
+each and requires at least 50 rows/s. Its JUnit profile must contain exactly
+seven database measurements, no more than 40 SQL statements per transaction,
+and a consistent database-time aggregate. The PostgreSQL fast path performs one
+receipt upsert, one ordered stream-state lock and one flush for an all-accepted
+batch. Receipt conflicts, quarantine candidates, repeated source event IDs and
+direct alarm-producing samples fall back to the fully general per-sample path;
+the optimization must not weaken idempotency, ordering or alert side effects.
+
+Catalog validation registers all 95 events and 36 evaluation runs, warms five
+governed page requests once, then measures each request 20 times. Every request
+must stay at or below 12 SQL statements, every endpoint p95 must stay at or below
+500 ms, and every response must stay at or below 512 KiB. The evidence verifier
+rejects missing, non-finite, inconsistent or over-budget SQL profiles in addition
+to the existing end-to-end thresholds.
+
 ## Preflight
 
 Run from the repository root. Confirm the control manifest and quality contract
@@ -73,11 +90,14 @@ exist, the source hashes still match, the CARE bucket is private/versioned, and
 the worker identity has no `DeleteObject` permission. Do not place the output
 inside the source directory.
 
-Production workers must select `--use-configured-minio`; this resolves only the
-configured `WINDOPS_MINIO_CARE_BUCKET` and never a field/knowledge/model/twin
-bucket. `--object-store-root` is the mutually exclusive filesystem adapter for
-isolated local validation. Omitting both stores local derived files only and is
-not a production publication.
+Production workers must select `--use-care-worker-runtime`. This reads only the
+dedicated `WINDOPS_CARE_DATABASE_URL` and `WINDOPS_CARE_MINIO_*` values from the
+external `windops-care-runtime` Secret. Startup requires PostgreSQL TLS, MinIO
+TLS, a strong dedicated secret, and an explicit denial list containing all four
+operational buckets. `--use-configured-minio` remains a compatibility path for
+the general runtime, and `--object-store-root` is the mutually exclusive
+filesystem adapter for isolated local validation; neither is the approved
+production batch path.
 
 The normal worker deliberately has no `DeleteObject` permission. It uploads to
 the private `care/v6/_tmp/` prefix, copies and verifies the content-addressed
@@ -90,6 +110,10 @@ any failure before final-object verification, remains retryable and fail-closed.
 ```powershell
 Push-Location backend
 uv lock --check
+uv run windops-care-dependency-closure `
+  --requirements-lock requirements.container.txt `
+  --uv-lock uv.lock `
+  --report ..\.artifacts\care-v6\preflight\dependency-closure-<change-id>.json
 uv run windops-care-contract `
   --dataset-root C:\coding\reference\CARE_To_Compare `
   --zip-path C:\coding\reference\CARE_To_Compare.zip `
@@ -104,6 +128,12 @@ Pop-Location
 
 Never overwrite the approved manifest or modify the source to resolve a
 mismatch.
+
+The dependency-closure report is mandatory release evidence. It records the
+exact `uv.lock` and production container-lock SHA-256 values, verifies the six
+benchmark runtime distributions against those locks, imports all CARE modules,
+and runs all CARE CLI help paths. A missing package, entrypoint, or mismatched
+version fails closed before source data is opened.
 
 ## Import and evaluation
 
@@ -141,8 +171,48 @@ Pop-Location
 ```
 
 For the equivalent production worker invocation, replace the
-`--object-store-root ...` line with `--use-configured-minio` after the CARE
-bucket versioning/lifecycle/worker policy preflight has passed.
+`--object-store-root ...` line with `--use-care-worker-runtime` after the CARE
+bucket versioning/lifecycle/worker policy preflight has passed. Registration
+also receives `--use-care-worker-runtime` so it uses the dedicated, TLS-only
+PostgreSQL registration role rather than the API configuration.
+
+## Kubernetes execution plane and release evidence
+
+The `windops-care-full-scale` CronJob is a suspended execution template, not a
+recurring benchmark schedule. It selects the isolated `care-v6-offline` queue,
+one concurrent pod, three total attempts (`backoffLimit: 2`), and a 72,000-second
+deadline. Its source PVC is mounted read-only; checkpoints, derived artifacts,
+and replay results use the separate encrypted workspace PVC. The pod has a
+dedicated ServiceAccount and Secret and can reach only DNS, the labelled CARE
+PostgreSQL service, and the labelled CARE MinIO service.
+
+After source approval and release-manifest rendering, create one traceable Job:
+
+```text
+kubectl create job care-v6-<release-id> \
+  --from=cronjob/windops-care-full-scale \
+  --namespace windops
+```
+
+The command runs dependency closure, import, evaluation, and transactional
+registration, then repeats all three operations with the same immutable output
+and state paths. The second import/evaluation must report `replayed=true`; the
+second registration must replay existing rows without duplication. Kubernetes
+retries reuse the same workspace and job identity, while the application state
+still refuses a fourth attempt.
+
+The independent release runner packages
+`artifacts/care/care-full-scale-release-evidence.json` plus exactly ten named
+roles under `artifacts/care/fullscale/`: dependency closure, import/evaluation
+manifests, import/evaluation states, import/evaluation replay results, initial
+and replay registration results, and storage-scope proof. Every artifact entry
+includes its role, relative path, SHA-256, and media type.
+`windops-care-fullscale-acceptance` parses these raw artifacts and rejects identity
+drift, fewer than 95 events or 36 folds, enabled cross-farm claims, failed
+resource limits, incomplete replay/registration, writable source, storage
+policy drift, or access to any operational bucket. The protected release
+workflow additionally runs `windops-care-workload-smoke` from the exact built
+image and will not qualify the release unless both CARE checks pass.
 
 Success is the final JSON line with a manifest path and SHA-256, followed by an
 independent rerun that returns `replayed=true` and the same file SHA-256. Verify
@@ -267,7 +337,7 @@ the normal event. Restart, same-run replay, new-run isolation, truth access,
 governed export, and ShareAlike review all passed.
 
 The isolated disaster-recovery drill restored PostgreSQL schema revision
-`0026_schema_contract_alignment`, all 21 governed table invariants, and all 520
+`0028_read_audit_pipeline`, all governed table invariants, and all required
 CARE MinIO objects with exact size and SHA-256 metadata. Its measured recovery
 time objective was 1,387.397 seconds. Source and recovery identities had no
 delete permission, and lifecycle-managed `_tmp` objects were excluded from the

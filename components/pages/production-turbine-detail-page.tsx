@@ -127,7 +127,12 @@ export function ProductionTurbineDetailPage({ turbineId }: { readonly turbineId:
         eyebrow="数字资产"
         title={asset ? `${asset.id} · ${asset.model}` : turbineId}
         description="生产资产主数据、最新遥测、健康、告警、Mission、工单与文档关联"
-        breadcrumb={["资产与监测", "风场", asset?.windFarmName ?? "生产风场", turbineId]}
+        breadcrumb={[
+          "资产与监测",
+          { label: "风场", href: "/wind-farms" },
+          asset?.windFarmName ?? "生产风场",
+          turbineId,
+        ]}
         meta={
           <>
             <StatusBadge

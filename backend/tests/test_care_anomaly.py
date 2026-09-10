@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from dataclasses import replace
@@ -37,6 +38,15 @@ from windops_backend.benchmarks.care.anomaly import (
     verify_governed_anomaly_output,
     write_anomaly_runtime_contract,
 )
+from windops_backend.benchmarks.care.online_contract import (
+    ONLINE_ALERT_POLICY_ID,
+    ONLINE_ALERT_POLICY_VERSION,
+    ONLINE_COMPONENT,
+    ONLINE_RUNTIME_SCHEMA_VERSION,
+    ONLINE_SCORE_TRANSFORM_VERSION,
+    ONLINE_THRESHOLD_POLICY_VERSION,
+    canonical_online_hash,
+)
 from windops_backend.benchmarks.care.quality import FEATURE_SET_VERSION, QUALITY_RULE_VERSION
 from windops_backend.benchmarks.care.replay import (
     CareReplayError,
@@ -59,24 +69,58 @@ from windops_backend.benchmarks.care.scoring import (
     build_prediction_artifact,
     fixed_threshold_policy,
 )
+from windops_backend.benchmarks.care.trust import (
+    APPROVAL_LINEAGE_SCHEMA_VERSION,
+    load_official_care_trust_anchor,
+    verify_care_trust_anchor,
+)
 from windops_backend.config import ModelInferenceTarget
 from windops_backend.errors import ConflictError
 from windops_backend.models import (
     Alarm,
+    BenchmarkDatasetVersion,
+    BenchmarkEvaluationRun,
+    DomainEvent,
     IngestReceipt,
     ModelDeployment,
     ModelPrediction,
     RegisteredModel,
     Turbine,
 )
+from windops_backend.models import (
+    BenchmarkMetricSnapshot as PersistedMetricSnapshot,
+)
 from windops_backend.schemas import ModelRegisterRequest
-from windops_backend.services.models import activate_deployment, run_anomaly_inference
+from windops_backend.services.models import run_anomaly_inference
 from windops_backend.storage import InMemoryArtifactVerifier
 
 FEATURE_SET_SHA = "1" * 64
 QUALITY_CONTRACT_SHA = "2" * 64
 EVIDENCE_SHA = "3" * 64
 MODEL_ARTIFACT_SHA = "4" * 64
+MODEL_PACKAGE_SHA = "5" * 64
+
+
+def _approved_lineage() -> dict[str, Any]:
+    anchor = load_official_care_trust_anchor()
+    root = verify_care_trust_anchor(anchor)
+    source = root["source"]
+    quality = root["quality"]
+    approval = root["approval"]
+    signature = base64.b64decode(str(root["signature_base64"]))
+    return {
+        "schema_version": APPROVAL_LINEAGE_SCHEMA_VERSION,
+        "root_id": root["root_id"],
+        "approved_root_sha256": root["approved_root_sha256"],
+        "signature_algorithm": approval["algorithm"],
+        "signature_key_id": approval["key_id"],
+        "signature_sha256": hashlib.sha256(signature).hexdigest(),
+        "canonical_source_contract_sha256": source["canonical_source_contract_sha256"],
+        "canonical_quality_policy_sha256": quality["canonical_quality_policy_sha256"],
+        "source_manifest_sha256": "6" * 64,
+        "quality_contract_sha256": "7" * 64,
+        "source_archive_sha256": source["archive"]["sha256"],
+    }
 
 
 def _threshold() -> ThresholdPolicy:
@@ -146,6 +190,7 @@ def _evaluation_artifact(
         ),
         FinalCareEvaluator(truths),
         predictions,
+        approval_lineage=_approved_lineage(),
     )
     return artifact, threshold
 
@@ -238,7 +283,56 @@ def _model_request(kind: str = "anomaly") -> dict[str, Any]:
         "content_type": "application/onnx",
         "input_schema": canonical_anomaly_input_schema(),
         "output_schema": canonical_anomaly_output_schema(),
+        "metrics": {
+            "model_package_sha256": MODEL_PACKAGE_SHA,
+            "care_approval": _approved_lineage(),
+        },
     }
+
+
+def _online_runtime(
+    *,
+    model_artifact_uri: str,
+    evaluation_run_id: str,
+    threshold: ThresholdPolicy,
+) -> dict[str, Any]:
+    online_threshold_payload = {
+        "value": 0.5,
+        "version": ONLINE_THRESHOLD_POLICY_VERSION,
+        "prediction_truth_used": False,
+    }
+    online_threshold = {
+        **online_threshold_payload,
+        "threshold_policy_sha256": canonical_online_hash(online_threshold_payload),
+    }
+    payload: dict[str, Any] = {
+        "schema_version": ONLINE_RUNTIME_SCHEMA_VERSION,
+        "model_id": "ANOM-CARE-001",
+        "model_version": "1.0.0",
+        "model_package_sha256": MODEL_PACKAGE_SHA,
+        "evaluation_run_id": evaluation_run_id,
+        "feature_set_version": FEATURE_SET_VERSION,
+        "quality_rule_version": QUALITY_RULE_VERSION,
+        "score_transform_version": ONLINE_SCORE_TRANSFORM_VERSION,
+        "offline_threshold_policy_sha256": threshold.to_dict()["threshold_policy_sha256"],
+        "online_threshold_policy": online_threshold,
+        "evidence_artifact": {
+            "uri": model_artifact_uri,
+            "sha256": MODEL_PACKAGE_SHA,
+        },
+        "alert_policy_template": {
+            "policy_id": ONLINE_ALERT_POLICY_ID,
+            "policy_version": ONLINE_ALERT_POLICY_VERSION,
+            "component": ONLINE_COMPONENT,
+            "trigger_threshold": 0.5,
+            "consecutive_trigger_windows": 3,
+            "consecutive_recovery_windows": 2,
+            "prediction_truth_used": False,
+        },
+        "release_claim": "development-vertical-slice-only",
+        "prediction_truth_used": False,
+    }
+    return {**payload, "runtime_configuration_sha256": canonical_online_hash(payload)}
 
 
 def _alert_input(
@@ -581,6 +675,122 @@ def _manager_headers(key: str) -> dict[str, str]:
     }
 
 
+async def _persist_authoritative_activation_evidence(
+    app: FastAPI,
+    artifact: dict[str, Any],
+    threshold: ThresholdPolicy,
+    *,
+    model_artifact_uri: str,
+    model_artifact_sha256: str,
+) -> tuple[str, str]:
+    evaluation_uri = "minio://windops-care-benchmarks/care/v6/reports/evaluations/eval-final-1.json"
+    body = (json.dumps(artifact, ensure_ascii=False, sort_keys=True) + "\n").encode()
+    verifier = app.state.artifact_verifier
+    assert isinstance(verifier, InMemoryArtifactVerifier)
+    evaluation_sha256 = verifier.register_object(evaluation_uri, body, "application/json")
+    snapshot = BenchmarkMetricSnapshot.from_evaluation_artifact(artifact)
+    metrics = (
+        ("care_score", snapshot.care_score, 0.8, "gte"),
+        ("event_detection_rate", snapshot.event_detection_rate, 1.0, "gte"),
+        (
+            "normal_event_false_positive_rate",
+            snapshot.normal_event_false_positive_rate,
+            0.0,
+            "lte",
+        ),
+        ("unscorable_event_count", float(snapshot.unscorable_event_count), 0.0, "eq"),
+        ("data_failure_event_count", float(snapshot.data_failure_event_count), 0.0, "eq"),
+        ("model_failure_event_count", float(snapshot.model_failure_event_count), 0.0, "eq"),
+    )
+    async with app.state.session_factory() as session, session.begin():
+        if await session.get(BenchmarkDatasetVersion, "care-v6") is None:
+            session.add(
+                BenchmarkDatasetVersion(
+                    id="care-v6",
+                    tenant_id="tenant-east-china",
+                    dataset_id="care-v6",
+                    version="v6",
+                    status="ready",
+                    source_uri="minio://windops-care-benchmarks/care/v6/raw/source.zip",
+                    manifest_uri="minio://windops-care-benchmarks/care/v6/reports/source.json",
+                    manifest_sha256="8" * 64,
+                    content_sha256="9" * 64,
+                    source_archive_md5="a" * 32,
+                    source_archive_sha256="b" * 64,
+                    size_bytes=1,
+                    file_count=1,
+                    license_name="CC BY-SA 4.0",
+                    license_url="https://creativecommons.org/licenses/by-sa/4.0/",
+                    doi="10.5281/zenodo.15846963",
+                    citation="CARE v6 test fixture",
+                    attribution={},
+                    created_by="care-test",
+                )
+            )
+            await session.flush()
+        session.add(
+            BenchmarkEvaluationRun(
+                id="eval-final-1",
+                dataset_version_id="care-v6",
+                model_id="ANOM-CARE-001",
+                model_version="1.0.0",
+                run_kind="final-holdout",
+                protocol_version="within-farm-leave-one-turbine-out-v1",
+                farm="A",
+                status="completed",
+                feature_set_version=FEATURE_SET_VERSION,
+                quality_rule_version=QUALITY_RULE_VERSION,
+                threshold_policy_version=threshold.version,
+                threshold_policy_sha256=str(threshold.to_dict()["threshold_policy_sha256"]),
+                random_seed=0,
+                input_identity_sha256="c" * 64,
+                artifact_uri=evaluation_uri,
+                artifact_sha256=evaluation_sha256,
+                requested_event_count=snapshot.requested_event_count,
+                scored_event_count=snapshot.scored_event_count,
+                failed_event_count=(
+                    snapshot.data_failure_event_count + snapshot.model_failure_event_count
+                ),
+                unscorable_event_count=snapshot.unscorable_event_count,
+                extension_data={
+                    "model_package": {
+                        "artifact_uri": model_artifact_uri,
+                        "file_sha256": model_artifact_sha256,
+                        "document_sha256": MODEL_PACKAGE_SHA,
+                    },
+                    "care_approval": _approved_lineage(),
+                },
+                created_by="care-test",
+                completed_at=datetime.now(UTC),
+            )
+        )
+        for index, (name, value, threshold_value, direction) in enumerate(metrics):
+            passed = (
+                value >= threshold_value
+                if direction == "gte"
+                else value <= threshold_value
+                if direction == "lte"
+                else value == threshold_value
+            )
+            session.add(
+                PersistedMetricSnapshot(
+                    id=f"eval-final-1-m-{index}",
+                    evaluation_run_id="eval-final-1",
+                    metric_name=name,
+                    protocol_version="care-score-v6",
+                    metric_version="care-activation-test-v1",
+                    value=value,
+                    unit="ratio" if "rate" in name or name == "care_score" else "events",
+                    is_release_metric=True,
+                    threshold_value=threshold_value,
+                    threshold_direction=direction,
+                    passed=passed,
+                    details={"evaluation_artifact_sha256": evaluation_sha256},
+                )
+            )
+    return evaluation_uri, evaluation_sha256
+
+
 @pytest.mark.asyncio
 async def test_anomaly_register_stage_server_gate_infer_and_retry_without_fake_receipt(
     app: FastAPI,
@@ -605,13 +815,19 @@ async def test_anomaly_register_stage_server_gate_infer_and_retry_without_fake_r
         json=payload,
     )
     assert registered.status_code == 201, registered.text
+    artifact, threshold = _evaluation_artifact()
+    runtime = _online_runtime(
+        model_artifact_uri=uri,
+        evaluation_run_id="eval-final-1",
+        threshold=threshold,
+    )
     staged = await client.post(
         "/api/v1/models/ANOM-CARE-001/deployments",
         headers=_manager_headers("care-anomaly-stage-1"),
         json={
             "target_id": "anomaly-primary",
             "stage": "production",
-            "evaluation_gate": {"frontend_claim": "passed"},
+            "evaluation_gate": {"care_online_runtime": runtime},
         },
     )
     assert staged.status_code == 201, staged.text
@@ -621,17 +837,15 @@ async def test_anomaly_register_stage_server_gate_infer_and_retry_without_fake_r
         headers=_manager_headers("care-anomaly-bypass-1"),
         json={"traffic_percent": 100, "reason": "frontend claims metrics passed"},
     )
-    assert bypass.status_code != 200
+    assert bypass.status_code == 422
+    assert bypass.json()["error"]["code"] == "ANOMALY_ACTIVATION_BINDING_INVALID"
 
-    artifact, threshold = _evaluation_artifact()
-    authorization = evaluate_activation_gate(
-        _gate_policy(threshold),
-        _gate_evidence(
-            artifact,
-            deployment_id=deployment_id,
-            model_artifact_sha256=package_sha,
-        ),
-        authorized_at=datetime.now(UTC),
+    await _persist_authoritative_activation_evidence(
+        app,
+        artifact,
+        threshold,
+        model_artifact_uri=uri,
+        model_artifact_sha256=package_sha,
     )
     run, samples = _replay_samples()
     async with app.state.session_factory() as session, session.begin():
@@ -644,15 +858,35 @@ async def test_anomaly_register_stage_server_gate_infer_and_retry_without_fake_r
                 health_score=100,
             )
         )
-        active = await activate_deployment(
-            session,
-            deployment_id=deployment_id,
-            traffic_percent=100,
-            reason="server-verified CARE benchmark gate",
-            subject="care-model-operator@example.com",
-            anomaly_authorization=authorization,
-        )
-        assert active.status == "active"
+
+    activated = await client.post(
+        f"/api/v1/models/deployments/{deployment_id}/activate",
+        headers=_manager_headers("care-anomaly-http-activate-1"),
+        json={
+            "traffic_percent": 100,
+            "reason": "server-verified CARE benchmark gate",
+        },
+    )
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["status"] == "active"
+    assert (
+        activated.json()["evaluation_gate"]["server_authorization"]["consumed_in_transaction"]
+        is True
+    )
+    assert (
+        activated.json()["evaluation_gate"]["server_authorization"]["care_approved_root_sha256"]
+        == _approved_lineage()["approved_root_sha256"]
+    )
+    concurrent = await client.post(
+        f"/api/v1/models/deployments/{deployment_id}/activate",
+        headers=_manager_headers("care-anomaly-http-concurrent-1"),
+        json={
+            "traffic_percent": 100,
+            "reason": "concurrent activation must not rewrite routing",
+        },
+    )
+    assert concurrent.status_code == 409
+    assert concurrent.json()["error"]["code"] == "ANOMALY_ACTIVATION_CONCURRENT_CHANGE"
 
     fake = _FakeAnomalyClient()
     evidence_ref = ArtifactReference("minio://care/predictions/window.json", EVIDENCE_SHA)
@@ -717,3 +951,186 @@ async def test_anomaly_register_stage_server_gate_infer_and_retry_without_fake_r
         deployment = await session.get(ModelDeployment, deployment_id)
         assert model is not None and model.kind == "anomaly"
         assert deployment is not None and deployment.status == "active"
+
+    replacement = await client.post(
+        "/api/v1/models/ANOM-CARE-001/deployments",
+        headers=_manager_headers("care-anomaly-stage-replacement-1"),
+        json={
+            "target_id": "anomaly-primary",
+            "stage": "production",
+            "evaluation_gate": {"care_online_runtime": runtime},
+        },
+    )
+    assert replacement.status_code == 201, replacement.text
+    replacement_id = str(replacement.json()["deployment_id"])
+    replacement_activation = await client.post(
+        f"/api/v1/models/deployments/{replacement_id}/activate",
+        headers=_manager_headers("care-anomaly-activate-replacement-1"),
+        json={"traffic_percent": 100, "reason": "activate governed replacement"},
+    )
+    assert replacement_activation.status_code == 200, replacement_activation.text
+    rolled_back = await client.post(
+        "/api/v1/models/ANOM-CARE-001/rollback",
+        headers=_manager_headers("care-anomaly-http-rollback-1"),
+        json={
+            "target_deployment_id": deployment_id,
+            "reason": "rollback to the previous governed deployment",
+        },
+    )
+    assert rolled_back.status_code == 200, rolled_back.text
+    assert rolled_back.json()["deployment_id"] == deployment_id
+    assert rolled_back.json()["rollback_from_id"] == replacement_id
+    async with app.state.session_factory() as session:
+        active_rows = list(
+            (
+                await session.scalars(
+                    select(ModelDeployment).where(
+                        ModelDeployment.stage == "production",
+                        ModelDeployment.status == "active",
+                    )
+                )
+            ).all()
+        )
+        assert [(row.id, row.traffic_percent) for row in active_rows] == [(deployment_id, 100)]
+        event_types = list(
+            (
+                await session.scalars(
+                    select(DomainEvent.event_type)
+                    .where(DomainEvent.aggregate_id == deployment_id)
+                    .order_by(DomainEvent.sequence)
+                )
+            ).all()
+        )
+        assert "model.activation.authorization-consumed" in event_types
+        assert "model.activation.denied" in event_types
+        assert "model.deployment.rolled-back" in event_types
+
+
+@pytest.mark.asyncio
+async def test_anomaly_http_activation_failures_are_stable_audited_and_atomic(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+) -> None:
+    package = b"second verified CARE anomaly package"
+    package_sha = hashlib.sha256(package).hexdigest()
+    payload = _model_request()
+    payload["artifact_sha256"] = package_sha
+    uri = str(payload["artifact_uri"])
+    verifier = app.state.artifact_verifier
+    assert isinstance(verifier, InMemoryArtifactVerifier)
+    verifier.register_object(uri, package, "application/onnx")
+    app.state.settings.model_inference_targets["anomaly-primary"] = ModelInferenceTarget(
+        endpoint_url="http://anomaly.test/v1/predict",
+        api_token=SecretStr("test-anomaly-token"),
+    )
+    registered = await client.post(
+        "/api/v1/models",
+        headers=_manager_headers("care-anomaly-negative-register-1"),
+        json=payload,
+    )
+    assert registered.status_code == 201, registered.text
+    artifact, threshold = _evaluation_artifact()
+    runtime = _online_runtime(
+        model_artifact_uri=uri,
+        evaluation_run_id="eval-final-1",
+        threshold=threshold,
+    )
+    staged = await client.post(
+        "/api/v1/models/ANOM-CARE-001/deployments",
+        headers=_manager_headers("care-anomaly-negative-stage-1"),
+        json={
+            "target_id": "anomaly-primary",
+            "stage": "production",
+            "evaluation_gate": {"care_online_runtime": runtime},
+        },
+    )
+    assert staged.status_code == 201, staged.text
+    deployment_id = str(staged.json()["deployment_id"])
+    evaluation_uri, evaluation_sha256 = await _persist_authoritative_activation_evidence(
+        app,
+        artifact,
+        threshold,
+        model_artifact_uri=uri,
+        model_artifact_sha256=package_sha,
+    )
+
+    verifier.register_object(evaluation_uri, b"{}\n", "application/json")
+    drift = await client.post(
+        f"/api/v1/models/deployments/{deployment_id}/activate",
+        headers=_manager_headers("care-anomaly-artifact-drift-1"),
+        json={"traffic_percent": 100, "reason": "reject evaluation artifact drift"},
+    )
+    assert drift.status_code == 409
+    assert drift.json()["error"]["code"] == "ANOMALY_ACTIVATION_ARTIFACT_DRIFT"
+
+    original_body = (json.dumps(artifact, ensure_ascii=False, sort_keys=True) + "\n").encode()
+    assert (
+        verifier.register_object(evaluation_uri, original_body, "application/json")
+        == evaluation_sha256
+    )
+    async with app.state.session_factory() as session, session.begin():
+        evaluation = await session.get(BenchmarkEvaluationRun, "eval-final-1")
+        assert evaluation is not None
+        evaluation.invalidated_at = datetime.now(UTC)
+    invalidated = await client.post(
+        f"/api/v1/models/deployments/{deployment_id}/activate",
+        headers=_manager_headers("care-anomaly-invalidated-1"),
+        json={"traffic_percent": 100, "reason": "reject invalidated evaluation"},
+    )
+    assert invalidated.status_code == 422
+    assert invalidated.json()["error"]["code"] == "ANOMALY_ACTIVATION_EVALUATION_INVALID"
+
+    async with app.state.session_factory() as session, session.begin():
+        evaluation = await session.get(BenchmarkEvaluationRun, "eval-final-1")
+        deployment = await session.get(ModelDeployment, deployment_id)
+        assert evaluation is not None and deployment is not None
+        evaluation.invalidated_at = None
+        changed_gate = json.loads(json.dumps(deployment.evaluation_gate))
+        changed_runtime = changed_gate["care_online_runtime"]
+        changed_runtime["model_package_sha256"] = "0" * 64
+        unsigned_runtime = {
+            key: value
+            for key, value in changed_runtime.items()
+            if key != "runtime_configuration_sha256"
+        }
+        changed_runtime["runtime_configuration_sha256"] = canonical_online_hash(unsigned_runtime)
+        deployment.evaluation_gate = changed_gate
+    binding = await client.post(
+        f"/api/v1/models/deployments/{deployment_id}/activate",
+        headers=_manager_headers("care-anomaly-binding-drift-1"),
+        json={"traffic_percent": 100, "reason": "reject model binding drift"},
+    )
+    assert binding.status_code == 422
+    assert binding.json()["error"]["code"] == "ANOMALY_ACTIVATION_BINDING_INVALID"
+
+    async with app.state.session_factory() as session:
+        deployment = await session.get(ModelDeployment, deployment_id)
+        assert deployment is not None
+        assert (deployment.status, deployment.traffic_percent, deployment.activated_at) == (
+            "staged",
+            0,
+            None,
+        )
+        events = list(
+            (
+                await session.scalars(
+                    select(DomainEvent)
+                    .where(DomainEvent.aggregate_id == deployment_id)
+                    .order_by(DomainEvent.sequence)
+                )
+            ).all()
+        )
+        denials = [event for event in events if event.event_type == "model.activation.denied"]
+        assert [event.payload["error_code"] for event in denials] == [
+            "ANOMALY_ACTIVATION_ARTIFACT_DRIFT",
+            "ANOMALY_ACTIVATION_EVALUATION_INVALID",
+            "ANOMALY_ACTIVATION_BINDING_INVALID",
+        ]
+        assert all(
+            event.event_type
+            not in {
+                "model.activation.authorization-consumed",
+                "model.deployment.activated",
+            }
+            for event in events
+        )

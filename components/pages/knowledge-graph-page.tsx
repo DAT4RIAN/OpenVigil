@@ -13,7 +13,7 @@ import { StatusBadge } from "@/components/data-display/status-badge";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, EmptyState } from "@/components/ui/primitives";
-import { apiGet, WindOpsApiError } from "@/lib/api-client";
+import { apiGet, OpenVigilApiError } from "@/lib/api-client";
 
 import styles from "./knowledge-graph-page.module.css";
 
@@ -137,8 +137,8 @@ export function KnowledgeGraphPage({
     [graph],
   );
   const handleSelect = useCallback((uid: string) => setSelectedUid(uid), []);
-  const error = graphQuery.error instanceof WindOpsApiError ? graphQuery.error : null;
-  const searchError = searchQuery.error instanceof WindOpsApiError ? searchQuery.error : null;
+  const error = graphQuery.error instanceof OpenVigilApiError ? graphQuery.error : null;
+  const searchError = searchQuery.error instanceof OpenVigilApiError ? searchQuery.error : null;
 
   return (
     <AppShell runtimeMode={runtimeMode} activePath="/knowledge-graph">

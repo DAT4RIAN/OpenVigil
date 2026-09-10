@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   Activity,
@@ -40,6 +41,7 @@ import {
 } from "lucide-react";
 import { Avatar, Button } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
+import { RuntimeHealthBadge } from "@/components/ui/query-state";
 import {
   agents,
   alarms,
@@ -53,8 +55,8 @@ import {
 import { cn } from "@/lib/utils";
 import { hydrateDemoWorkflow, useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
-import { useWindOpsIdentity } from "@/components/providers/identity-provider";
-import type { WindOpsCapability } from "@/lib/identity-session";
+import { useOpenVigilIdentity } from "@/components/providers/identity-provider";
+import type { OpenVigilCapability } from "@/lib/identity-session";
 import {
   deriveWorkflowKpis,
   overlayClientAgents,
@@ -62,6 +64,14 @@ import {
   overlayClientDecisions,
   overlayClientMissions,
 } from "@/lib/client-workflow-overlays";
+import { apiGet } from "@/lib/api-client";
+import { isNavigationItemActive } from "@/lib/navigation-ownership";
+import {
+  deriveQueryViewState,
+  mergeRuntimeHealth,
+  queryRuntimeHealth,
+  type RuntimeHealthSnapshot,
+} from "@/lib/query-state";
 
 type NavigationItem = {
   label: string;
@@ -69,15 +79,26 @@ type NavigationItem = {
   icon: LucideIcon;
   badge?: string;
   disabled?: boolean;
-  capability?: WindOpsCapability;
+  capability?: OpenVigilCapability;
 };
 
 type RuntimeMode = "demo" | "production";
+
+type RuntimeEnvelope = {
+  readonly data: {
+    readonly productionReady: boolean;
+  };
+};
 
 type NavigationGroup = {
   label: string;
   items: NavigationItem[];
 };
+
+const themePreferenceKey = "openvigil-theme";
+const legacyThemePreferenceKey = "windops-theme";
+const sidebarPreferenceKey = "openvigil-sidebar-collapsed";
+const legacySidebarPreferenceKey = "windops-sidebar-collapsed";
 
 const activeAgentCount = agents.filter((agent) =>
   ["thinking", "working", "reviewing"].includes(agent.status),
@@ -250,13 +271,13 @@ const primaryCommands = [
   },
   {
     label: "打开设备健康矩阵",
-    description: "64 台机组 · 风险与 RUL",
+    description: "64 台机组 · 健康 · 异常 · 告警",
     href: "/health",
     icon: HeartPulse,
   },
   {
     label: "打开预测性维护",
-    description: "64 台机组 · 失效概率 · RUL · 风险矩阵",
+    description: "64 台机组 · 状态证据 · 维护优先级",
     href: "/predictive-maintenance",
     icon: CircleGauge,
   },
@@ -374,7 +395,11 @@ function ThemeControl() {
   const [theme, setTheme] = useState<"light" | "dark" | "system">("light");
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("windops-theme");
+    const current = window.localStorage.getItem(themePreferenceKey);
+    const stored = current ?? window.localStorage.getItem(legacyThemePreferenceKey);
+    if (current === null && stored !== null) {
+      window.localStorage.setItem(themePreferenceKey, stored);
+    }
     const preference =
       stored === "dark" || stored === "light" || stored === "system" ? stored : "light";
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -383,12 +408,14 @@ function ThemeControl() {
         value === "system" ? (media.matches ? "dark" : "light") : value;
       document.documentElement.style.colorScheme =
         value === "system" ? (media.matches ? "dark" : "light") : value;
-      window.dispatchEvent(new CustomEvent("windops-theme-change"));
+      window.dispatchEvent(new CustomEvent("openvigil-theme-change"));
     };
     apply(preference);
     const frame = window.requestAnimationFrame(() => setTheme(preference));
     const handleSystemChange = () => {
-      if ((window.localStorage.getItem("windops-theme") ?? "light") === "system") apply("system");
+      if ((window.localStorage.getItem(themePreferenceKey) ?? "light") === "system") {
+        apply("system");
+      }
     };
     media.addEventListener("change", handleSystemChange);
     return () => {
@@ -400,7 +427,7 @@ function ThemeControl() {
   function toggleTheme() {
     const next = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
     setTheme(next);
-    window.localStorage.setItem("windops-theme", next);
+    window.localStorage.setItem(themePreferenceKey, next);
     document.documentElement.dataset.theme =
       next === "system"
         ? window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -408,7 +435,7 @@ function ThemeControl() {
           : "light"
         : next;
     document.documentElement.style.colorScheme = document.documentElement.dataset.theme;
-    window.dispatchEvent(new CustomEvent("windops-theme-change"));
+    window.dispatchEvent(new CustomEvent("openvigil-theme-change"));
   }
 
   return (
@@ -439,7 +466,7 @@ function CommandPalette({
   onClose: () => void;
   runtimeMode: RuntimeMode;
 }) {
-  const { can } = useWindOpsIdentity();
+  const { can } = useOpenVigilIdentity();
   const dialogRef = useAccessibleDialog<HTMLDivElement>(onClose, open);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -472,7 +499,7 @@ function CommandPalette({
         className="command-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="WindOps 快捷命令"
+        aria-label="OpenVigil 快捷命令"
         tabIndex={-1}
       >
         <div className="command-dialog__search">
@@ -547,13 +574,15 @@ export function AppShell({
   children,
   activePath = "/",
   runtimeMode,
+  pageHealth,
 }: {
   children: ReactNode;
   activePath?: string;
   runtimeMode: RuntimeMode;
+  pageHealth?: RuntimeHealthSnapshot;
 }) {
   const isProduction = runtimeMode === "production";
-  const { session, can } = useWindOpsIdentity();
+  const { session, can } = useOpenVigilIdentity();
   const workflow = useDemoWorkflow();
   const displayAlarms = useMemo(
     () => (isProduction ? [] : overlayClientAlarms(alarms, workflow)),
@@ -584,9 +613,33 @@ export function AppShell({
   );
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [overlayNavigation, setOverlayNavigation] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState("--:--:--");
+  const runtimeQuery = useQuery({
+    queryKey: ["production-runtime"],
+    queryFn: ({ signal }) => apiGet<RuntimeEnvelope>("/api/runtime", signal),
+    enabled: isProduction,
+    retry: false,
+    refetchInterval: 30_000,
+    staleTime: 45_000,
+  });
+  const runtimeState = deriveQueryViewState({
+    data: runtimeQuery.data?.data,
+    dataUpdatedAt: runtimeQuery.dataUpdatedAt,
+    error: runtimeQuery.error,
+    isError: runtimeQuery.isError,
+    isFetching: runtimeQuery.isFetching,
+    isPending: runtimeQuery.isPending,
+    isStale: runtimeQuery.isStale,
+    isEmpty: () => false,
+    staleAfterMs: 60_000,
+  });
+  const systemHealth = mergeRuntimeHealth(
+    isProduction ? queryRuntimeHealth(runtimeState, "生产运行时") : null,
+    isProduction ? pageHealth : null,
+  );
   const visibleNavigation = useMemo(
     () =>
       navigation
@@ -599,6 +652,50 @@ export function AppShell({
         .filter((group) => group.items.length > 0),
     [can, isProduction],
   );
+  const sidebarDialogRef = useAccessibleDialog<HTMLElement>(
+    () => setMobileOpen(false),
+    mobileOpen && overlayNavigation,
+  );
+
+  useEffect(() => {
+    const overlayQuery = window.matchMedia("(max-width: 1023px)");
+    const laptopQuery = window.matchMedia("(min-width: 1024px) and (max-width: 1439px)");
+    const currentPreference = window.localStorage.getItem(sidebarPreferenceKey);
+    const storedPreference =
+      currentPreference ?? window.localStorage.getItem(legacySidebarPreferenceKey);
+    if (currentPreference === null && storedPreference !== null) {
+      window.localStorage.setItem(sidebarPreferenceKey, storedPreference);
+    }
+
+    const updateOverlayNavigation = () => {
+      setOverlayNavigation(overlayQuery.matches);
+      if (!overlayQuery.matches) setMobileOpen(false);
+    };
+    const frame = window.requestAnimationFrame(() => {
+      setCollapsed(
+        storedPreference === "true"
+          ? true
+          : storedPreference === "false"
+            ? false
+            : laptopQuery.matches,
+      );
+      updateOverlayNavigation();
+    });
+    overlayQuery.addEventListener("change", updateOverlayNavigation);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      overlayQuery.removeEventListener("change", updateOverlayNavigation);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mobileOpen || !overlayNavigation) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen, overlayNavigation]);
 
   useEffect(() => {
     if (!isProduction) hydrateDemoWorkflow();
@@ -624,6 +721,7 @@ export function AppShell({
       if (event.key === "Escape") {
         setPaletteOpen(false);
         setNotificationsOpen(false);
+        setMobileOpen(false);
       }
     }
     window.addEventListener("keydown", handleKeyboard);
@@ -634,7 +732,7 @@ export function AppShell({
   }, [isProduction]);
 
   return (
-    <div className={cn("app-shell", collapsed && "app-shell--collapsed")}>
+    <div className={cn("app-shell", collapsed && !overlayNavigation && "app-shell--collapsed")}>
       {mobileOpen ? (
         <button
           className="mobile-backdrop"
@@ -642,14 +740,24 @@ export function AppShell({
           onClick={() => setMobileOpen(false)}
         />
       ) : null}
-      <aside className={cn("sidebar", mobileOpen && "sidebar--mobile-open")}>
+      <aside
+        ref={sidebarDialogRef}
+        id="openvigil-primary-sidebar"
+        className={cn("sidebar", mobileOpen && "sidebar--mobile-open")}
+        role={mobileOpen && overlayNavigation ? "dialog" : undefined}
+        aria-modal={mobileOpen && overlayNavigation ? "true" : undefined}
+        aria-label={mobileOpen && overlayNavigation ? "主导航抽屉" : undefined}
+        aria-hidden={overlayNavigation && !mobileOpen ? "true" : undefined}
+        inert={overlayNavigation && !mobileOpen ? true : undefined}
+        tabIndex={mobileOpen && overlayNavigation ? -1 : undefined}
+      >
         <div className="sidebar__brand">
-          <Link href="/" className="brand-lockup" aria-label="WindOps 首页">
+          <Link href="/" className="brand-lockup" aria-label="OpenVigil 首页">
             <span className="brand-mark">
               <Wind size={20} strokeWidth={2.25} />
             </span>
             <span className="brand-copy">
-              <strong>WindOps</strong>
+              <strong>OpenVigil</strong>
               <small>工业智能</small>
             </span>
           </Link>
@@ -684,7 +792,7 @@ export function AppShell({
                   const Icon = item.icon;
                   const href =
                     isProduction && item.href === "/turbines/WT-023" ? "/wind-farms" : item.href;
-                  const active = href === "/" ? activePath === "/" : activePath === href;
+                  const active = isNavigationItemActive(activePath, href, runtimeMode);
                   if (item.disabled) {
                     return (
                       <span
@@ -705,6 +813,7 @@ export function AppShell({
                       href={href}
                       key={item.label}
                       title={collapsed ? item.label : undefined}
+                      aria-current={active ? "page" : undefined}
                     >
                       <Icon size={17} />
                       <span>{item.label}</span>
@@ -730,23 +839,32 @@ export function AppShell({
         </nav>
 
         <div className="sidebar__footer">
-          <div className="system-health">
+          <div className="system-health" data-health={isProduction ? systemHealth.status : "ready"}>
             <span className="system-health__icon">
               <Zap size={16} />
             </span>
             <span>
-              <strong>{isProduction ? "生产服务" : "AI 系统正常"}</strong>
+              <strong>{isProduction ? `Production · ${systemHealth.label}` : "AI 系统正常"}</strong>
               <small>
                 {isProduction
-                  ? "状态以就绪探针为准"
+                  ? systemHealth.detail
                   : `${workflowKpis.onlineAgentCount} / ${displayAgents.length} Agent 在线`}
               </small>
             </span>
-            <span className="system-health__pulse" />
+            <span
+              className={cn(
+                "system-health__pulse",
+                isProduction && `system-health__pulse--${systemHealth.status}`,
+              )}
+            />
           </div>
           <button
             className="sidebar-collapse"
-            onClick={() => setCollapsed((value) => !value)}
+            onClick={() => {
+              const next = !collapsed;
+              setCollapsed(next);
+              window.localStorage.setItem(sidebarPreferenceKey, String(next));
+            }}
             aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
           >
             {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
@@ -764,15 +882,16 @@ export function AppShell({
               className="mobile-menu-button"
               onClick={() => setMobileOpen(true)}
               aria-label="打开导航"
+              aria-controls="openvigil-primary-sidebar"
+              aria-expanded={mobileOpen}
             >
               <Menu size={19} />
             </Button>
             <div className="live-context" aria-live="polite">
               <StatusBadge
-                value="running"
-                label={isProduction ? "生产运行模式" : "本地演示运行中"}
-                tone="success"
-                pulse
+                value={runtimeMode}
+                label={isProduction ? "Production" : "Demo"}
+                tone="neutral"
                 compact
               />
               <span>
@@ -782,7 +901,7 @@ export function AppShell({
                 {currentTime}
               </time>
               {isProduction ? (
-                <StatusBadge value="ready" label="持久事件账本" tone="success" compact />
+                <RuntimeHealthBadge health={systemHealth} compact />
               ) : (
                 <span
                   title={
@@ -835,7 +954,11 @@ export function AppShell({
                 </small>
               </span>
             </div>
-            <button className="global-search" onClick={() => setPaletteOpen(true)}>
+            <button
+              className="global-search"
+              onClick={() => setPaletteOpen(true)}
+              aria-label="打开全局搜索"
+            >
               <Search size={16} />
               <span>搜索机组、告警、Mission…</span>
               <kbd>Ctrl K</kbd>
@@ -928,7 +1051,7 @@ export function AppShell({
               <a
                 className="user-menu"
                 href={session.signOutPath}
-                title="安全退出 WindOps"
+                title="安全退出 OpenVigil"
                 data-authenticated-subject={session.subject}
               >
                 <Avatar label={session.displayName} tone="slate" size="sm" />

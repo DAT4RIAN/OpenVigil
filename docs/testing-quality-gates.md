@@ -1,6 +1,6 @@
 # Testing and quality gates
 
-WindOps treats regression evidence as a release input rather than an optional report. Pull
+OpenVigil treats regression evidence as a release input rather than an optional report. Pull
 requests and pushes to `main` run the same deterministic unit, contract, coverage, browser, and
 bundle checks described here.
 

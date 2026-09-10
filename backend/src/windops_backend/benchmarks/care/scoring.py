@@ -14,13 +14,16 @@ from windops_backend.benchmarks.care.contract import DATASET_ID, DATASET_VERSION
 from windops_backend.benchmarks.care.quality import (
     FEATURE_SET_VERSION,
     QUALITY_RULE_VERSION,
+    STATUS_CORROBORATION_RULE_ID,
     STATUS_RULE_VERSION,
+    STATUS_SUSTAINED_DISAGREEMENT_MIN_ROWS,
     evaluate_status_point,
+    status_evidence_policy,
 )
 
 SCORE_PROTOCOL_VERSION = "care-score-v6"
 SCORE_PROTOCOL_SCHEMA_VERSION = "care-score-v6-protocol-v1"
-PREDICTION_ARTIFACT_SCHEMA_VERSION = "care-v6-event-prediction-v1"
+PREDICTION_ARTIFACT_SCHEMA_VERSION = "care-v6-event-prediction-v2"
 EVALUATION_ARTIFACT_SCHEMA_VERSION = "care-v6-evaluation-v1"
 THRESHOLD_POLICY_SCHEMA_VERSION = "care-v6-threshold-policy-v1"
 
@@ -180,6 +183,8 @@ def build_score_protocol() -> dict[str, Any]:
         },
         "status_filter": {
             "version": STATUS_RULE_VERSION,
+            "corroboration_rule_id": STATUS_CORROBORATION_RULE_ID,
+            "minimum_sustained_disagreement_rows": (STATUS_SUSTAINED_DISAGREEMENT_MIN_ROWS),
             "A_prediction": "retain all statuses (CARE v6 exception)",
             "B_C": (
                 "retain trusted and short/uncorroborated disagreement; filter sustained "
@@ -391,6 +396,9 @@ class PredictionPoint:
     status_id: str
     disagreement_run_length: int = 1
     corroborated_by_signal: bool = False
+    corroboration_signal_count: int = 0
+    corroboration_finite_signal_count: int = 0
+    corroboration_inactive_or_invalid_signal_count: int = 0
 
     def __post_init__(self) -> None:
         if self.source_row_id < 0:
@@ -401,6 +409,20 @@ class PredictionPoint:
         _require_nonempty(self.status_id, field="status ID")
         if self.disagreement_run_length < 1:
             raise CareScoreError("disagreement_run_length must be positive")
+        counts = (
+            self.corroboration_signal_count,
+            self.corroboration_finite_signal_count,
+            self.corroboration_inactive_or_invalid_signal_count,
+        )
+        if any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in counts
+        ):
+            raise CareScoreError("status corroboration counts must be non-negative integers")
+        if (
+            self.corroboration_finite_signal_count > self.corroboration_signal_count
+            or self.corroboration_inactive_or_invalid_signal_count > self.corroboration_signal_count
+        ):
+            raise CareScoreError("status corroboration counts are inconsistent")
 
 
 @dataclass(frozen=True, slots=True)
@@ -482,7 +504,9 @@ def build_prediction_artifact(
     threshold_policy: ThresholdPolicy,
     *,
     trusted_status_ids: Sequence[str],
+    status_signal_columns: Sequence[str] = (),
     license_metadata: Mapping[str, Any] | None = None,
+    approval_lineage: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a truth-free prediction artifact with replayable point intermediates."""
 
@@ -493,10 +517,27 @@ def build_prediction_artifact(
     trusted = tuple(sorted(set(trusted_status_ids)))
     if not trusted:
         raise CareScoreError("prediction scoring requires an explicit trusted-status allowlist")
+    try:
+        status_policy = status_evidence_policy(batch.farm, status_signal_columns)
+    except ValueError as exc:
+        raise CareScoreError(str(exc)) from exc
 
     criticality = 0
     points: list[dict[str, Any]] = []
     for point in batch.points:
+        if point.corroboration_signal_count != len(status_signal_columns):
+            raise CareScoreError(
+                "status corroboration count does not match the frozen signal columns"
+            )
+        expected_corroborated = (
+            batch.farm in {"B", "C"}
+            and point.status_id not in trusted
+            and point.corroboration_signal_count > 0
+            and point.corroboration_inactive_or_invalid_signal_count
+            == point.corroboration_signal_count
+        )
+        if point.corroborated_by_signal is not expected_corroborated:
+            raise CareScoreError("status corroboration flag does not match its evidence counts")
         decision = evaluate_status_point(
             farm=batch.farm,
             split="prediction",
@@ -524,6 +565,12 @@ def build_prediction_artifact(
                 "status_confidence": decision.confidence,
                 "disagreement_run_length": point.disagreement_run_length,
                 "corroborated_by_signal": point.corroborated_by_signal,
+                "corroboration_signal_count": point.corroboration_signal_count,
+                "corroboration_finite_signal_count": (point.corroboration_finite_signal_count),
+                "corroboration_inactive_or_invalid_signal_count": (
+                    point.corroboration_inactive_or_invalid_signal_count
+                ),
+                "corroboration_rule_id": STATUS_CORROBORATION_RULE_ID,
                 "criticality": criticality,
             }
         )
@@ -547,6 +594,7 @@ def build_prediction_artifact(
         "quality_contract_sha256": batch.quality_contract_sha256,
         "model_selection_provenance": batch.model_selection_provenance.to_dict(),
         "status_rule_version": STATUS_RULE_VERSION,
+        "status_evidence_policy": status_policy,
         "trusted_status_ids": list(trusted),
         "threshold_policy": threshold_policy.to_dict(),
         "point_count": len(points),
@@ -556,6 +604,8 @@ def build_prediction_artifact(
     }
     if license_metadata is not None:
         payload["license"] = dict(license_metadata)
+    if approval_lineage is not None:
+        payload["care_approval"] = dict(approval_lineage)
     return {**payload, "prediction_artifact_sha256": _canonical_hash(payload)}
 
 
@@ -642,6 +692,20 @@ def verify_prediction_artifact(artifact: Mapping[str, Any]) -> None:
     trusted = tuple(str(item) for item in trusted_raw)
     if not trusted:
         raise CareScoreError("prediction artifact trusted-status allowlist is empty")
+    evidence_policy = artifact.get("status_evidence_policy")
+    if not isinstance(evidence_policy, Mapping):
+        raise CareScoreError("prediction artifact status evidence policy is missing")
+    signal_columns = evidence_policy.get("corroboration_signal_columns")
+    if not isinstance(signal_columns, list) or any(
+        not isinstance(value, str) for value in signal_columns
+    ):
+        raise CareScoreError("prediction artifact status signal columns are malformed")
+    try:
+        expected_evidence_policy = status_evidence_policy(str(farm), signal_columns)
+    except ValueError as exc:
+        raise CareScoreError(str(exc)) from exc
+    if dict(evidence_policy) != expected_evidence_policy:
+        raise CareScoreError("prediction artifact status evidence policy drifted")
 
     points = artifact.get("points")
     if not isinstance(points, list) or not points:
@@ -680,13 +744,42 @@ def verify_prediction_artifact(artifact: Mapping[str, Any]) -> None:
             or disagreement_run_length < 1
         ):
             raise CareScoreError("prediction artifact disagreement run length is invalid")
+        corroborated = raw_point.get("corroborated_by_signal")
+        signal_count = raw_point.get("corroboration_signal_count")
+        finite_signal_count = raw_point.get("corroboration_finite_signal_count")
+        inactive_signal_count = raw_point.get("corroboration_inactive_or_invalid_signal_count")
+        if (
+            not isinstance(corroborated, bool)
+            or not isinstance(signal_count, int)
+            or isinstance(signal_count, bool)
+            or signal_count < 0
+            or not isinstance(finite_signal_count, int)
+            or isinstance(finite_signal_count, bool)
+            or finite_signal_count < 0
+            or not isinstance(inactive_signal_count, int)
+            or isinstance(inactive_signal_count, bool)
+            or inactive_signal_count < 0
+            or finite_signal_count > signal_count
+            or inactive_signal_count > signal_count
+            or signal_count != len(signal_columns)
+            or raw_point.get("corroboration_rule_id") != STATUS_CORROBORATION_RULE_ID
+        ):
+            raise CareScoreError("prediction artifact status corroboration evidence is invalid")
+        expected_corroborated = (
+            farm in {"B", "C"}
+            and str(raw_point.get("status_id", "")) not in trusted
+            and signal_count > 0
+            and inactive_signal_count == signal_count
+        )
+        if corroborated is not expected_corroborated:
+            raise CareScoreError("prediction artifact status corroboration flag is invalid")
         decision = evaluate_status_point(
             farm=str(farm),
             split="prediction",
             status_id=str(raw_point.get("status_id", "")),
             trusted_status_ids=trusted,
             disagreement_run_length=disagreement_run_length,
-            corroborated_by_signal=bool(raw_point.get("corroborated_by_signal")),
+            corroborated_by_signal=corroborated,
         )
         if (
             raw_point.get("valid_point_mask") is not decision.model_usable
@@ -1227,6 +1320,7 @@ def build_evaluation_artifact(
     *,
     protocol: Mapping[str, Any] | None = None,
     failures: Sequence[EvaluationFailure] = (),
+    approval_lineage: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     protocol_value = dict(protocol or build_score_protocol())
     verify_score_protocol(protocol_value)
@@ -1298,6 +1392,8 @@ def build_evaluation_artifact(
         "event_results": results,
         "summary": _aggregate_results(results, ordered_predictions),
     }
+    if approval_lineage is not None:
+        payload["care_approval"] = dict(approval_lineage)
     return {**payload, "evaluation_artifact_sha256": _canonical_hash(payload)}
 
 
@@ -1407,6 +1503,11 @@ def recompute_evaluation_artifact(artifact: Mapping[str, Any]) -> dict[str, Any]
         predictions,
         protocol=protocol,
         failures=failures,
+        approval_lineage=(
+            artifact.get("care_approval")
+            if isinstance(artifact.get("care_approval"), Mapping)
+            else None
+        ),
     )
     if _canonical_json_bytes(rebuilt) != _canonical_json_bytes(artifact):
         raise CareScoreError("evaluation artifact cannot be reproduced from its saved inputs")

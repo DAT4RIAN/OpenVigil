@@ -23,7 +23,7 @@ import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, EmptyState } from "@/components/ui/primitives";
-import { apiGet, apiPost, WindOpsApiError } from "@/lib/api-client";
+import { apiGet, apiPost, OpenVigilApiError } from "@/lib/api-client";
 import {
   PLATFORM_SNAPSHOT_AT,
   assetCatalogHierarchy,
@@ -37,7 +37,7 @@ import {
 } from "@/lib/platform-admin-data";
 import styles from "./data-center-page.module.css";
 import { localizedMetricLabel } from "@/lib/ui-localization";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 
 type CatalogEnvelope = {
   data: readonly DataCatalogEntry[];
@@ -376,7 +376,7 @@ const catalogColumns: readonly LegacyColumnDef<DataCatalogEntry, unknown>[] = [
   },
 ];
 
-export function DataCenterPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMode }) {
+export function DataCenterPage({ runtimeMode }: { runtimeMode: OpenVigilRuntimeMode }) {
   const isProduction = runtimeMode === "production";
   const [category, setCategory] = useState<"all" | DataCatalogCategory>("all");
   const [status, setStatus] = useState<"all" | DataCatalogStatus>("all");
@@ -598,7 +598,7 @@ export function DataCenterPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMod
     catalogQuery.data?.meta.schemaObjectCount ?? (isProduction ? 0 : schemaObjects.length);
   const catalogTotal = catalogQuery.data?.meta.total ?? (isProduction ? 0 : dataCatalog.length);
   const benchmarkPermissionDenied =
-    benchmarkDatasetsQuery.error instanceof WindOpsApiError &&
+    benchmarkDatasetsQuery.error instanceof OpenVigilApiError &&
     benchmarkDatasetsQuery.error.status === 403;
   const benchmarkShowsPreviousData =
     benchmarkDatasetsQuery.isPlaceholderData ||
@@ -817,7 +817,7 @@ export function DataCenterPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMod
               <input
                 value={sourceSecret}
                 onChange={(event) => setSourceSecret(event.target.value)}
-                placeholder="vault://windops/scada/offshore-opcua-01"
+                placeholder="vault://openvigil/scada/offshore-opcua-01"
               />
             </label>
             <label>
@@ -1443,7 +1443,7 @@ export function DataCenterPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMod
                 },
               ]}
               csvExport={{
-                filename: "windops-data-catalog.csv",
+                filename: "openvigil-data-catalog.csv",
                 columns: [
                   { label: "数据集ID", value: (entry) => entry.id },
                   { label: "名称", value: (entry) => entry.name },

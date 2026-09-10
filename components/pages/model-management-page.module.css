@@ -13,12 +13,12 @@
 
 .disclosure > div strong {
   color: var(--foreground);
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .disclosure p {
   color: var(--foreground-muted);
-  font-size: 8.5px;
+  font-size: var(--font-metadata);
   line-height: 1.5;
   margin: 3px 0 0;
 }
@@ -26,7 +26,7 @@
 .disclosure > span {
   color: var(--foreground-subtle);
   display: grid;
-  font-size: 7px;
+  font-size: var(--font-metadata);
   gap: 2px;
   letter-spacing: 0.06em;
   text-align: right;
@@ -53,7 +53,7 @@
 .kpis small,
 .kpis em {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-style: normal;
   letter-spacing: 0.08em;
 }
@@ -79,7 +79,7 @@
 
 .toolbar label > span {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
 }
 
@@ -89,7 +89,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--foreground);
-  font-size: 10px;
+  font-size: var(--font-secondary);
   height: 34px;
   padding: 0 9px;
   width: 100%;
@@ -119,7 +119,7 @@
 
 .resultCount {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   padding: 9px 4px;
   white-space: nowrap;
@@ -182,13 +182,13 @@
 }
 
 .modelList strong {
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .modelList small,
 .modelList em {
   color: var(--foreground-muted);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   font-style: normal;
 }
 
@@ -239,11 +239,11 @@
 
 .boundaries small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .boundaries strong {
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .ioGrid {
@@ -262,7 +262,7 @@
 
 .ioGrid h3,
 .metrics h3 {
-  font-size: 9px;
+  font-size: var(--font-secondary);
   margin: 0 0 8px;
 }
 
@@ -276,7 +276,7 @@
 
 .ioGrid li {
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   line-height: 1.4;
   padding-left: 11px;
   position: relative;
@@ -313,11 +313,11 @@
 
 .metrics small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .metrics strong {
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .limitation {
@@ -337,12 +337,12 @@
 
 .limitation strong {
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .limitation p {
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   line-height: 1.5;
   margin: 0;
 }
@@ -351,7 +351,7 @@
   align-items: center;
   color: var(--primary);
   display: inline-flex;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 700;
   gap: 5px;
   margin-top: 12px;
@@ -377,7 +377,7 @@
 
 .deployments h3,
 .deployments p {
-  font-size: 9px;
+  font-size: var(--font-secondary);
   margin: 0;
 }
 
@@ -398,11 +398,11 @@
 }
 
 .deployments strong {
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .deployments small {
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .dialogBackdrop {
@@ -449,7 +449,7 @@
 
 .registrationDialog header p {
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   margin: 0;
 }
 
@@ -473,7 +473,7 @@
 
 .registrationGrid label > span {
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
 }
 
@@ -484,7 +484,7 @@
   border-radius: 6px;
   color: var(--foreground);
   font: inherit;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   padding: 8px;
 }
 
@@ -504,7 +504,7 @@
 .errorBanner,
 .loadingState {
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   padding: 16px;
   text-align: center;
 }
@@ -543,7 +543,7 @@
 .benchmarkHeader p,
 .resultHeader small {
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   margin: 0;
 }
 
@@ -560,7 +560,7 @@
   border-radius: 7px;
   color: var(--foreground-muted);
   display: flex;
-  font-size: 8.5px;
+  font-size: var(--font-metadata);
   gap: 7px;
   justify-content: center;
   min-height: 52px;
@@ -601,14 +601,14 @@
 }
 
 .evaluationTabs strong {
-  font-size: 9px;
+  font-size: var(--font-secondary);
   text-transform: uppercase;
 }
 
 .evaluationTabs small {
   color: var(--foreground-muted);
   font-family: var(--font-mono);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -639,14 +639,14 @@
 .metricTable small,
 .metricTable em {
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   font-style: normal;
 }
 
 .evaluationFacts strong,
 .accountingGrid strong,
 .metricTable strong {
-  font-size: 8.5px;
+  font-size: var(--font-secondary);
   overflow-wrap: anywhere;
 }
 
@@ -680,12 +680,12 @@
 }
 
 .releaseGate strong {
-  font-size: 8.5px;
+  font-size: var(--font-secondary);
 }
 
 .releaseGate small {
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .artifactStatus {
@@ -699,7 +699,7 @@
   border: 1px solid color-mix(in srgb, var(--success) 20%, var(--border));
   border-radius: 999px;
   color: var(--success);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   padding: 4px 7px;
 }
 
@@ -737,13 +737,13 @@
 }
 
 .eventResults strong {
-  font-size: 8px;
+  font-size: var(--font-secondary);
   overflow-wrap: anywhere;
 }
 
 .eventResults small {
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   overflow-wrap: anywhere;
 }
 

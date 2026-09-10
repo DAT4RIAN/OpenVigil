@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-export interface WindOpsWorkerEnv {
+export interface OpenVigilWorkerEnv {
   readonly ASSETS?: Fetcher;
   readonly DB?: D1Database;
   readonly WINDOPS_RUNTIME_MODE?: string;
@@ -10,6 +10,7 @@ export interface WindOpsWorkerEnv {
   readonly WINDOPS_BACKEND_DELEGATION_SECRET?: string;
   readonly WINDOPS_BACKEND_REQUEST_TIMEOUT_MS?: string;
   readonly WINDOPS_BACKEND_EXPECTED_RELEASE_ID?: string;
+  readonly WINDOPS_BACKEND_EXPECTED_COMMIT_SHA?: string;
   readonly WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST?: string;
   readonly IMAGES?: {
     input(stream: ReadableStream): {
@@ -20,12 +21,12 @@ export interface WindOpsWorkerEnv {
   };
 }
 
-const workerEnvironment = new AsyncLocalStorage<WindOpsWorkerEnv>();
+const workerEnvironment = new AsyncLocalStorage<OpenVigilWorkerEnv>();
 
-export function runWithWorkerEnv<T>(env: WindOpsWorkerEnv, callback: () => T): T {
+export function runWithWorkerEnv<T>(env: OpenVigilWorkerEnv, callback: () => T): T {
   return workerEnvironment.run(env, callback);
 }
 
-export function getWorkerEnv(): WindOpsWorkerEnv {
+export function getWorkerEnv(): OpenVigilWorkerEnv {
   return workerEnvironment.getStore() ?? {};
 }

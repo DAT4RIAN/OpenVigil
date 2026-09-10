@@ -2,12 +2,17 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testIgnore: process.env.WINDOPS_E2E_REAL_BACKEND === "1" ? [] : ["**/real-cross-layer.spec.ts"],
   outputDir: ".artifacts/playwright/test-results",
   fullyParallel: false,
   forbidOnly: true,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
-  reporter: [["line"], ["html", { outputFolder: ".artifacts/playwright/report", open: "never" }]],
+  reporter: [
+    ["line"],
+    ["html", { outputFolder: ".artifacts/playwright/report", open: "never" }],
+    ["./scripts/playwright-no-skips-reporter.mjs"],
+  ],
   use: {
     baseURL: "http://127.0.0.1:4179",
     screenshot: "only-on-failure",

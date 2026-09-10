@@ -109,7 +109,7 @@ def run_disaster_recovery_drill(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Back up WindOps and restore it into an explicitly isolated drill target"
+        description="Back up OpenVigil and restore it into an explicitly isolated drill target"
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--confirm-target", required=True)

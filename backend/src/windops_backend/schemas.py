@@ -501,6 +501,8 @@ class BenchmarkQualityReportCreateRequest(BaseModel):
     event_id: str = Field(pattern=BENCHMARK_ID_PATTERN)
     quality_rule_version: str = Field(min_length=3, max_length=64)
     feature_set_version: str = Field(min_length=3, max_length=64)
+    canonical_content_sha256: str = Field(pattern=BENCHMARK_SHA256_PATTERN)
+    artifact_stage: str = Field(pattern=r"^[a-z][a-z0-9-]{2,63}$")
     status: Literal["pending", "running", "completed", "failed", "cancelled"]
     artifact_uri: str = Field(min_length=8, max_length=1024)
     artifact_sha256: str = Field(pattern=BENCHMARK_SHA256_PATTERN)
@@ -834,7 +836,7 @@ class AgentToolExecuteRequest(BaseModel):
         "query_maintenance_history",
         "query_similar_failures",
         "calculate_health_score",
-        "predict_rul",
+        "assess_condition_evidence",
         "create_decision",
         "create_work_order",
         "query_manual",

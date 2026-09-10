@@ -30,7 +30,7 @@ import { useRealtimeChannel } from "@/lib/use-realtime-channel";
 import { useProductionEvents } from "@/lib/use-production-events";
 import { localizedMetricLabel } from "@/lib/ui-localization";
 import { localizedStatusLabel } from "@/lib/ui-localization";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 
 import styles from "./digital-twin-page.module.css";
 import { TwinModelViewer } from "./twin-model-viewer";
@@ -181,7 +181,7 @@ const sha256Hex = async (file: File): Promise<string> => {
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
 };
 
-export function DigitalTwinPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMode }) {
+export function DigitalTwinPage({ runtimeMode }: { runtimeMode: OpenVigilRuntimeMode }) {
   const isProduction = runtimeMode === "production";
   const [turbineId, setTurbineId] = useState("WT-023");
   const [selectedKey, setSelectedKey] = useState("main-bearing");
@@ -585,16 +585,16 @@ export function DigitalTwinPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMo
               </div>
               <div className={styles.riskMetrics}>
                 <span>
-                  <small>30D 失效概率</small>
-                  <strong>{selected.failureProbability30d}%</strong>
-                </span>
-                <span>
-                  <small>估计 RUL</small>
-                  <strong>{selected.remainingUsefulLifeDays ?? "—"} 天</strong>
-                </span>
-                <span>
                   <small>异常分数</small>
                   <strong>{selected.anomalyScore.toFixed(2)}</strong>
+                </span>
+                <span>
+                  <small>健康趋势</small>
+                  <strong>{selected.state === "healthy" ? "稳定" : "需关注"}</strong>
+                </span>
+                <span>
+                  <small>健康评分</small>
+                  <strong>{selected.healthScore} / 100</strong>
                 </span>
                 <span>
                   <small>关联告警</small>

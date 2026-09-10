@@ -45,6 +45,11 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+/.codex_tmp/
+
+# Project-local scratch. Existing reviewed fixtures under tmp remain tracked,
+# while new databases, clones, wheels, and candidate indexes stay local.
+/tmp/*
 
 # Python backend local environment and caches
 /backend/.venv/

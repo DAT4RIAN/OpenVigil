@@ -22,6 +22,7 @@ from windops_backend.models import (
     BenchmarkFeatureMap,
     BenchmarkFile,
     BenchmarkMetricSnapshot,
+    BenchmarkQualityArtifact,
     BenchmarkQualityReport,
     BenchmarkReplayRun,
     ModelDeployment,
@@ -301,7 +302,7 @@ async def register_quality_report(
     subject: str = "benchmark-worker",
 ) -> tuple[BenchmarkQualityReport, bool]:
     scope = (
-        f"benchmark-quality:{request.event_id}:{request.quality_rule_version}:"
+        f"benchmark-quality-canonical:{request.event_id}:{request.quality_rule_version}:"
         f"{request.feature_set_version}"
     )
     async with _claim_identity(session, scope):
@@ -313,29 +314,77 @@ async def register_quality_report(
             )
         )
         if existing is not None:
-            if (
-                existing.status == request.status
-                and existing.artifact_sha256 == request.artifact_sha256
-                and existing.mask_sha256 == request.mask_sha256
-                and existing.summary == request.summary
+            if existing.status != request.status or (
+                existing.canonical_content_sha256 is not None
+                and existing.canonical_content_sha256 != request.canonical_content_sha256
             ):
-                return existing, True
-            raise ConflictError("quality-report identity already exists with different content")
-        if await session.get(BenchmarkEvent, request.event_id) is None:
-            raise NotFoundError(f"benchmark event {request.event_id} was not found")
-        row = BenchmarkQualityReport(
-            id=request.quality_report_id,
-            event_id=request.event_id,
-            quality_rule_version=request.quality_rule_version,
-            feature_set_version=request.feature_set_version,
-            status=request.status,
+                raise ConflictError("quality-report identity already exists with different content")
+            if existing.canonical_content_sha256 is None:
+                existing.canonical_content_sha256 = request.canonical_content_sha256
+            row = existing
+        else:
+            if await session.get(BenchmarkEvent, request.event_id) is None:
+                raise NotFoundError(f"benchmark event {request.event_id} was not found")
+            row = BenchmarkQualityReport(
+                id=request.quality_report_id,
+                event_id=request.event_id,
+                quality_rule_version=request.quality_rule_version,
+                feature_set_version=request.feature_set_version,
+                canonical_content_sha256=request.canonical_content_sha256,
+                status=request.status,
+                artifact_uri=request.artifact_uri,
+                artifact_sha256=request.artifact_sha256,
+                mask_uri=request.mask_uri,
+                mask_sha256=request.mask_sha256,
+                summary=request.summary,
+            )
+            session.add(row)
+        await session.flush()
+
+        artifact_identity = _document_sha256(
+            {
+                "quality_report_id": row.id,
+                "canonical_content_sha256": request.canonical_content_sha256,
+                "artifact_stage": request.artifact_stage,
+                "artifact_uri": request.artifact_uri,
+                "artifact_sha256": request.artifact_sha256,
+                "mask_uri": request.mask_uri,
+                "mask_sha256": request.mask_sha256,
+                "summary": request.summary,
+            }
+        )
+        artifact = await session.scalar(
+            select(BenchmarkQualityArtifact).where(
+                BenchmarkQualityArtifact.identity_sha256 == artifact_identity
+            )
+        )
+        if artifact is not None:
+            if (
+                artifact.quality_report_id != row.id
+                or artifact.artifact_stage != request.artifact_stage
+                or artifact.artifact_uri != request.artifact_uri
+                or artifact.artifact_sha256 != request.artifact_sha256
+                or artifact.mask_uri != request.mask_uri
+                or artifact.mask_sha256 != request.mask_sha256
+                or artifact.summary != request.summary
+            ):
+                raise ConflictError(
+                    "quality artifact identity already exists with different content"
+                )
+            return row, True
+        artifact = BenchmarkQualityArtifact(
+            id=f"care-qa-{artifact_identity[:56]}",
+            quality_report_id=row.id,
+            artifact_stage=request.artifact_stage,
+            identity_sha256=artifact_identity,
             artifact_uri=request.artifact_uri,
             artifact_sha256=request.artifact_sha256,
             mask_uri=request.mask_uri,
             mask_sha256=request.mask_sha256,
             summary=request.summary,
+            audit_subject=subject,
         )
-        session.add(row)
+        session.add(artifact)
         await session.flush()
         append_domain_event(
             session,
@@ -344,10 +393,13 @@ async def register_quality_report(
             aggregate_id=request.event_id,
             payload={
                 "quality_report_id": row.id,
+                "quality_artifact_id": artifact.id,
+                "artifact_stage": artifact.artifact_stage,
+                "canonical_content_sha256": request.canonical_content_sha256,
                 "quality_rule_version": row.quality_rule_version,
                 "feature_set_version": row.feature_set_version,
-                "artifact_sha256": row.artifact_sha256,
-                "mask_sha256": row.mask_sha256,
+                "artifact_sha256": artifact.artifact_sha256,
+                "mask_sha256": artifact.mask_sha256,
                 "requested_by": subject,
             },
         )

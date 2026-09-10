@@ -11,6 +11,7 @@ import {
   Columns3,
   Download,
   Search,
+  X,
 } from "lucide-react";
 import { flexRender } from "@tanstack/react-table";
 import type {
@@ -212,17 +213,29 @@ export function DataTable<TData extends RowData>({
       <div className={styles.toolbar}>
         <div className={styles.toolbarPrimary}>
           {searchTextForRow ? (
-            <label className={styles.searchField}>
-              <Search size={14} aria-hidden="true" />
-              <span className={styles.srOnly}>搜索表格</span>
-              <input
-                aria-label="搜索表格"
-                placeholder={searchPlaceholder}
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
+            <div className={styles.searchGroup}>
+              <label className={styles.searchField}>
+                <Search size={14} aria-hidden="true" />
+                <span className={styles.srOnly}>搜索表格</span>
+                <input
+                  aria-label="搜索表格"
+                  placeholder={searchPlaceholder}
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </label>
+              {query ? (
+                <button
+                  className={styles.clearSearch}
+                  type="button"
+                  aria-label="清除表格搜索"
+                  onClick={() => setQuery("")}
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
           ) : null}
           {filterControls}
           <span aria-live="polite">

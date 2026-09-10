@@ -29,7 +29,7 @@
 .kpis small,
 .kpis em {
   color: var(--foreground-subtle);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-style: normal;
   letter-spacing: 0.07em;
 }
@@ -88,18 +88,18 @@
 
 .treeRoot strong,
 .focusTurbine strong {
-  font-size: 11px;
+  font-size: var(--font-secondary);
 }
 
 .treeRoot small,
 .focusTurbine small {
   color: var(--foreground-muted);
-  font-size: 8.5px;
+  font-size: var(--font-metadata);
 }
 
 .treeRoot > span:last-child {
   color: var(--foreground-subtle);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   margin-left: auto;
 }
 
@@ -119,7 +119,7 @@
 
 .focusTurbine a {
   color: var(--primary);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 700;
   margin-left: auto;
 }
@@ -162,7 +162,7 @@
 }
 
 .subsystemGrid strong {
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .subsystemGrid b {
@@ -171,7 +171,7 @@
 
 .subsystemGrid small {
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .sensorList {
@@ -210,14 +210,14 @@
 
 .sensorList strong {
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .sensorList small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .sensorList a {
@@ -234,7 +234,7 @@
   border: 1px solid color-mix(in srgb, var(--warning) 24%, var(--border));
   border-radius: 6px;
   color: var(--foreground-muted);
-  font-size: 8.5px;
+  font-size: var(--font-metadata);
   line-height: 1.55;
   margin: 12px 0 0;
   padding: 9px;
@@ -251,7 +251,7 @@
 
 .resultCount {
   color: var(--foreground-subtle);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 700;
 }
 
@@ -271,7 +271,7 @@
 
 .toolbar label > span {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -282,7 +282,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--foreground);
-  font-size: 10px;
+  font-size: var(--font-secondary);
   height: 34px;
   padding: 0 9px;
   width: 100%;
@@ -316,7 +316,7 @@
 
 .tableWrap table {
   border-collapse: collapse;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   min-width: 1050px;
   width: 100%;
 }
@@ -324,7 +324,7 @@
 .tableWrap th {
   background: var(--surface-subtle);
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   letter-spacing: 0.07em;
   padding: 9px 12px;
   text-align: left;
@@ -344,7 +344,7 @@
 
 .tableWrap td > small {
   color: var(--foreground-muted);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   line-height: 1.45;
   margin-top: 3px;
   max-width: 220px;
@@ -374,18 +374,18 @@
 }
 
 .datasetName strong {
-  font-size: 9.5px;
+  font-size: var(--font-secondary);
 }
 
 .datasetName small {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .datasetName em {
   color: var(--foreground-muted);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   font-style: normal;
   line-height: 1.4;
   max-width: 260px;
@@ -399,19 +399,19 @@
 
 .badgeStack > span:first-child {
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-secondary);
 }
 
 .monoValue {
   font-family: var(--font-geist-mono), monospace;
-  font-size: 11px;
+  font-size: var(--font-secondary);
 }
 
 .queryLink {
   align-items: center;
   color: var(--primary);
   display: inline-flex;
-  font-size: 8.5px;
+  font-size: var(--font-secondary);
   font-weight: 700;
   gap: 4px;
   white-space: nowrap;
@@ -420,7 +420,7 @@
 .errorBanner,
 .loadingState {
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   padding: 16px;
   text-align: center;
 }
@@ -454,7 +454,7 @@
   border-top: 1px solid var(--border);
   color: var(--foreground-muted);
   display: flex;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   gap: 10px;
   min-height: 64px;
   padding: 14px 16px;
@@ -467,12 +467,12 @@
 
 .benchmarkState strong {
   color: var(--foreground);
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .benchmarkState small {
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .benchmarkState[data-state="error"],
@@ -498,7 +498,7 @@
 .benchmarkToolbar label > span,
 .benchmarkSubheader label > span {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.06em;
 }
@@ -510,7 +510,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--foreground);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   height: 32px;
   padding: 0 8px;
   width: 100%;
@@ -527,7 +527,7 @@
   border-radius: 6px;
   color: var(--foreground-muted);
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--font-secondary);
   height: 32px;
   padding: 0 10px;
 }
@@ -542,7 +542,7 @@
   border: 1px solid color-mix(in srgb, var(--warning) 24%, var(--border));
   border-radius: 6px;
   color: var(--warning);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   padding: 8px 10px;
 }
 
@@ -566,7 +566,7 @@
 .benchmarkIdentity small,
 .benchmarkIdentity p {
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   line-height: 1.5;
   margin: 0;
 }
@@ -593,7 +593,7 @@
   align-items: center;
   color: var(--primary);
   display: inline-flex;
-  font-size: 8px;
+  font-size: var(--font-secondary);
   font-weight: 700;
   gap: 4px;
 }
@@ -615,7 +615,7 @@
 .benchmarkMetrics small,
 .benchmarkMetrics em {
   color: var(--foreground-muted);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   font-style: normal;
   line-height: 1.4;
 }
@@ -639,7 +639,7 @@
 }
 
 .benchmarkDetailGrid h3 {
-  font-size: 9px;
+  font-size: var(--font-secondary);
   margin: 0 0 8px;
 }
 
@@ -659,7 +659,7 @@
 
 .benchmarkDetailGrid dt,
 .benchmarkDetailGrid dd {
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   margin: 0;
 }
 
@@ -692,12 +692,12 @@
 }
 
 .benchmarkSubheader strong {
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .benchmarkSubheader small {
   color: var(--foreground-muted);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
 }
 
 .benchmarkEventList {
@@ -720,7 +720,7 @@
 }
 
 .benchmarkEventList strong {
-  font-size: 8px;
+  font-size: var(--font-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -728,7 +728,7 @@
 .benchmarkEventList small,
 .benchmarkEventList em {
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   font-style: normal;
 }
 
@@ -763,12 +763,12 @@
 
 .curvePanel strong {
   font-family: var(--font-geist-mono), monospace;
-  font-size: 8px;
+  font-size: var(--font-secondary);
 }
 
 .curvePanel small {
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 @media (max-width: 1100px) {

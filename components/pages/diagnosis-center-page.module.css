@@ -34,13 +34,13 @@
 }
 
 .modelNotice strong {
-  font-size: 9px;
+  font-size: var(--font-secondary);
   letter-spacing: 0.015em;
 }
 
 .modelNotice p {
   color: var(--foreground-muted);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   line-height: 1.55;
   margin-top: 3px;
 }
@@ -49,7 +49,7 @@
   align-items: center;
   color: var(--foreground-muted);
   display: flex;
-  font-size: 7px;
+  font-size: var(--font-metadata);
   gap: 5px;
   white-space: nowrap;
 }
@@ -61,7 +61,7 @@
   border-radius: 7px;
   color: var(--warning);
   display: flex;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   gap: 7px;
   margin-bottom: 10px;
   padding: 9px 11px;
@@ -92,7 +92,7 @@
 .benchmarkHeader span,
 .benchmarkHeader p {
   color: var(--foreground-muted);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   margin: 0;
 }
 
@@ -112,7 +112,7 @@
   border-radius: 6px;
   color: var(--foreground);
   cursor: pointer;
-  font-size: 7.5px;
+  font-size: var(--font-secondary);
   min-height: 30px;
   padding: 0 9px;
 }
@@ -129,7 +129,7 @@
   border-radius: 7px;
   color: var(--foreground-muted);
   display: flex;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   gap: 7px;
   justify-content: center;
   min-height: 48px;
@@ -182,13 +182,13 @@
 }
 
 .benchmarkRuns strong {
-  font-size: 8.5px;
+  font-size: var(--font-secondary);
 }
 
 .benchmarkRuns small {
   color: var(--foreground-muted);
   font-family: var(--font-mono);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -228,14 +228,14 @@
 .predictionEvidence small,
 .predictionEvidence em {
   color: var(--foreground-muted);
-  font-size: 6.8px;
+  font-size: var(--font-metadata);
   font-style: normal;
   overflow-wrap: anywhere;
 }
 
 .benchmarkFacts strong,
 .predictionEvidence strong {
-  font-size: 7.8px;
+  font-size: var(--font-secondary);
   overflow-wrap: anywhere;
 }
 
@@ -265,14 +265,14 @@
 
 .truthStrip strong,
 .firstAlert strong {
-  font-size: 8px;
+  font-size: var(--font-secondary);
 }
 
 .truthStrip small,
 .firstAlert small,
 .firstAlert em {
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   font-style: normal;
   overflow-wrap: anywhere;
 }
@@ -281,7 +281,7 @@
   align-items: center;
   color: var(--primary);
   display: inline-flex;
-  font-size: 7.5px;
+  font-size: var(--font-secondary);
   gap: 3px;
 }
 
@@ -315,12 +315,12 @@
 }
 
 .predictionHeadline strong {
-  font-size: 8.5px;
+  font-size: var(--font-secondary);
 }
 
 .predictionHeadline small {
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .predictionEvidence {
@@ -360,7 +360,7 @@
 
 .assetSelect > span {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -374,7 +374,7 @@
   border: 0;
   color: var(--foreground);
   font: inherit;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   min-width: 0;
   outline: 0;
 }
@@ -399,7 +399,7 @@
   align-items: center;
   color: var(--foreground-subtle);
   display: flex;
-  font-size: 7px;
+  font-size: var(--font-metadata);
   gap: 10px;
   margin-left: auto;
   padding: 0 5px;
@@ -415,7 +415,7 @@
 .toolbarStats strong {
   color: var(--foreground);
   font-family: var(--font-geist-mono);
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .workspace {
@@ -464,20 +464,20 @@
 .sectionHeader > div > span {
   color: var(--primary);
   font-family: var(--font-geist-mono);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.08em;
 }
 
 .panelHeader h2,
 .sectionHeader h3 {
-  font-size: 10px;
+  font-size: var(--font-secondary);
   margin-top: 2px;
 }
 
 .sectionHeader p {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   margin-top: 2px;
 }
 
@@ -489,7 +489,7 @@
 .syncState {
   color: var(--foreground-subtle) !important;
   font-family: var(--font-geist-mono);
-  font-size: 7px !important;
+  font-size: var(--font-metadata) !important;
 }
 
 .syncState[data-fetching="true"] {
@@ -535,12 +535,12 @@
 
 .recordTopline strong {
   font-family: var(--font-geist-mono);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .recordHeadline {
   display: -webkit-box;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   line-height: 1.45;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -549,7 +549,7 @@
 
 .recordMeta {
   color: var(--foreground-subtle);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
   gap: 6px;
 }
 
@@ -567,11 +567,11 @@
 
 .emptyState strong {
   color: var(--foreground-muted);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .emptyState p {
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .detailPanel {
@@ -603,7 +603,7 @@
 .heroEyebrow {
   color: var(--primary);
   font-family: var(--font-geist-mono);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -630,7 +630,7 @@
 
 .heroCopy > p {
   color: var(--foreground-muted);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   line-height: 1.55;
   margin-top: 5px;
 }
@@ -651,7 +651,7 @@
 .heroMetrics small {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono);
-  font-size: 6px;
+  font-size: var(--font-metadata);
 }
 
 .heroMetrics strong {
@@ -675,7 +675,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   display: inline-flex;
-  font-size: 7.5px;
+  font-size: var(--font-secondary);
   gap: 5px;
   justify-content: center;
   min-height: 31px;
@@ -712,7 +712,7 @@
 
 .anomalySummary {
   color: var(--foreground-muted);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   line-height: 1.6;
   padding: 11px 12px;
 }
@@ -742,7 +742,7 @@
 .signalGrid span,
 .signalGrid > div > small {
   color: var(--foreground-subtle);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
 }
 
 .signalGrid strong {
@@ -752,7 +752,7 @@
 
 .signalGrid strong small {
   color: var(--foreground-subtle);
-  font-size: 6.5px;
+  font-size: var(--font-secondary);
 }
 
 .gatePanel[data-state="locked"],
@@ -777,12 +777,12 @@
 }
 
 .gateMessage strong {
-  font-size: 8px;
+  font-size: var(--font-secondary);
 }
 
 .gateMessage p {
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   line-height: 1.55;
   margin-top: 3px;
 }
@@ -802,7 +802,7 @@
 
 .gateColumns > div > span {
   color: var(--foreground-subtle);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
   font-weight: 700;
 }
 
@@ -818,7 +818,7 @@
   align-items: flex-start;
   color: var(--foreground-muted);
   display: flex;
-  font-size: 7px;
+  font-size: var(--font-metadata);
   gap: 5px;
   line-height: 1.4;
 }
@@ -838,7 +838,7 @@
   color: var(--foreground-subtle);
   display: flex;
   font-family: var(--font-geist-mono);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
   gap: 12px;
   padding: 8px 12px;
 }
@@ -847,7 +847,7 @@
   align-items: center;
   color: var(--success);
   display: flex;
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
   gap: 4px;
   white-space: nowrap;
 }
@@ -874,7 +874,7 @@
   color: var(--foreground-subtle);
   display: flex;
   font-family: var(--font-geist-mono);
-  font-size: 9px;
+  font-size: var(--font-secondary);
   justify-content: center;
   padding-top: 14px;
 }
@@ -901,12 +901,12 @@
 }
 
 .candidateTitle > div:first-child strong {
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .candidateTitle > div:first-child span {
   color: var(--foreground-subtle);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
 }
 
 .probability {
@@ -922,7 +922,7 @@
 
 .probability small {
   color: var(--foreground-subtle);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
 }
 
 .probabilityBar {
@@ -952,7 +952,7 @@
 
 .evidenceColumns > div > span {
   color: var(--foreground-subtle);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
   font-weight: 700;
 }
 
@@ -968,7 +968,7 @@
   align-items: flex-start;
   color: var(--foreground-muted);
   display: flex;
-  font-size: 7px;
+  font-size: var(--font-metadata);
   gap: 5px;
   line-height: 1.45;
 }
@@ -990,7 +990,7 @@
   border-radius: 6px;
   color: var(--primary);
   display: flex;
-  font-size: 7px;
+  font-size: var(--font-metadata);
   gap: 6px;
   line-height: 1.5;
   margin-top: 10px;
@@ -1048,7 +1048,7 @@
   color: var(--foreground-subtle);
   display: flex;
   font-family: var(--font-geist-mono);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   height: 26px;
   justify-content: center;
   position: relative;
@@ -1096,17 +1096,17 @@
 }
 
 .stepHeader strong {
-  font-size: 7.5px;
+  font-size: var(--font-secondary);
 }
 
 .stepHeader small {
   color: var(--foreground-subtle);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
 }
 
 .stepBody > p {
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   line-height: 1.55;
   margin-top: 5px;
 }
@@ -1120,7 +1120,7 @@
 
 .toolResults span {
   color: var(--foreground-subtle);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
   line-height: 1.4;
 }
 
@@ -1129,7 +1129,7 @@
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--primary);
-  font-size: 6px;
+  font-size: var(--font-metadata);
   margin-right: 4px;
   padding: 1px 4px;
 }
@@ -1161,7 +1161,7 @@
 .citationIndex {
   color: var(--primary);
   font-family: var(--font-geist-mono);
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
   padding-top: 1px;
 }
 
@@ -1173,18 +1173,18 @@
 }
 
 .citationList strong {
-  font-size: 7.5px;
+  font-size: var(--font-secondary);
 }
 
 .citationList small {
   color: var(--foreground-subtle);
-  font-size: 6px;
+  font-size: var(--font-metadata);
 }
 
 .citationList p {
   color: var(--foreground-muted);
   display: -webkit-box;
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
   line-height: 1.45;
   margin-top: 2px;
   overflow: hidden;
@@ -1204,7 +1204,7 @@
   border-radius: 8px;
   color: var(--foreground-subtle);
   display: flex;
-  font-size: 6.5px;
+  font-size: var(--font-metadata);
   gap: 18px;
   justify-content: center;
   margin-top: 10px;

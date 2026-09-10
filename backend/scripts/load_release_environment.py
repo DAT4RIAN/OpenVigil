@@ -47,6 +47,17 @@ def main() -> int:
         )
     if values["WINDOPS_ENVIRONMENT"].casefold() != "production":
         raise SystemExit("isolated-release environment must select production validation")
+    reserved_identity = {
+        "WINDOPS_RELEASE_ID",
+        "WINDOPS_RELEASE_COMMIT_SHA",
+        "WINDOPS_RELEASE_IMAGE_DIGEST",
+    }
+    supplied_identity = reserved_identity.intersection(values)
+    if supplied_identity:
+        raise SystemExit(
+            "isolated-release environment cannot override candidate identity: "
+            + ", ".join(sorted(supplied_identity))
+        )
     environment_path = Path(output_path)
     environment_path.write_text(
         "".join(f"{name}={value}\n" for name, value in sorted(values.items())),

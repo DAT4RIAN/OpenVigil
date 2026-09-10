@@ -640,33 +640,67 @@ export async function productionPredictiveAssessmentsResponse(request: Request):
     "assessments",
   );
   if (result instanceof Response) return result;
-  const data = result.rows.map((row) => ({
-    id: text(row.assessment_id),
-    turbineId: text(row.turbine_id),
-    turbineModel: text(row.turbine_model),
-    healthScore: number(row.health_score),
-    state: text(row.state, "watch"),
-    trend: text(row.trend, "stable"),
-    riskLevel: text(row.risk_level, "low"),
-    failureProbability30d: number(row.failure_probability_30d),
-    remainingUsefulLifeDays: number(row.remaining_useful_life_days),
-    anomalyScore: number(row.anomaly_score),
-    primaryFinding: text(row.primary_finding),
-    assessedAt: text(row.assessed_at),
-    component: text(row.component),
-    componentHealth: number(row.component_health),
-    turbineStatus: text(row.turbine_status, "running"),
-    activeAlarmCount: number(row.active_alarm_count),
-    probabilityBand: number(row.probability_band),
-    consequenceBand: number(row.consequence_band),
-    matrixRisk: text(row.matrix_risk, "low"),
-    riskScore: number(row.risk_score),
-    priorityScore: number(row.priority_score),
-    modelId: text(row.model_id),
-    deploymentId: text(row.deployment_id),
-    featureObservedAt: text(row.feature_observed_at),
-    latencyMs: number(row.latency_ms),
-  }));
+  const data = result.rows.map((row) => {
+    const anomalyScore = number(row.anomaly_score);
+    const componentHealth = number(row.component_health);
+    const activeAlarmCount = number(row.active_alarm_count);
+    const anomalyBand =
+      anomalyScore >= 0.9
+        ? 5
+        : anomalyScore >= 0.75
+          ? 4
+          : anomalyScore >= 0.6
+            ? 3
+            : anomalyScore >= 0.4
+              ? 2
+              : 1;
+    const healthBand =
+      componentHealth < 50
+        ? 5
+        : componentHealth < 65
+          ? 4
+          : componentHealth < 75
+            ? 3
+            : componentHealth < 90
+              ? 2
+              : 1;
+    const evidenceBand = Math.min(5, Math.max(1, anomalyBand, healthBand, activeAlarmCount));
+    const consequenceBand = number(row.consequence_band);
+    const riskScore = evidenceBand * consequenceBand;
+    const matrixRisk =
+      riskScore >= 20 ? "critical" : riskScore >= 12 ? "high" : riskScore >= 6 ? "medium" : "low";
+    return {
+      id: text(row.assessment_id),
+      turbineId: text(row.turbine_id),
+      turbineModel: text(row.turbine_model),
+      healthScore: number(row.health_score),
+      state: text(row.state, "watch"),
+      trend: text(row.trend, "stable"),
+      riskLevel: matrixRisk,
+      anomalyScore,
+      primaryFinding: text(row.primary_finding),
+      assessedAt: text(row.assessed_at),
+      component: text(row.component),
+      componentHealth,
+      turbineStatus: text(row.turbine_status, "running"),
+      activeAlarmCount,
+      evidenceBand,
+      consequenceBand,
+      matrixRisk,
+      riskScore,
+      priorityScore: Number(
+        (
+          (100 - componentHealth) * consequenceBand +
+          anomalyScore * 10 +
+          activeAlarmCount * 5
+        ).toFixed(2),
+      ),
+      modelId: text(row.model_id),
+      deploymentId: text(row.deployment_id),
+      featureObservedAt: text(row.feature_observed_at),
+      latencyMs: number(row.latency_ms),
+    };
+  });
   return Response.json(
     {
       data,
@@ -676,16 +710,16 @@ export async function productionPredictiveAssessmentsResponse(request: Request):
         filteredTotal: data.length,
         model: {
           id: data[0]?.modelId ?? "unavailable",
-          label: data.length ? "生产在线预测模型" : "尚无可用在线预测",
+          label: data.length ? "生产在线状态评估" : "尚无可用在线状态评估",
           mode: "external-governed-inference",
-          horizonDays: 30,
+          observationWindowHours: 24,
           evaluatedAt: data[0]?.assessedAt ?? new Date().toISOString(),
           deterministic: false,
           readOnly: false,
           performsRealInference: data.length > 0,
           notice: data.length
-            ? "结果来自已登记制品和受治理 HTTPS 推理端点；输出已通过 JSON Schema 与数值边界校验。"
-            : "尚无成功的生产预测。请先登记、部署模型并运行在线评估。",
+            ? "结果来自已登记制品和受治理 HTTPS 推理端点；仅使用健康、异常、告警与后果证据排序。"
+            : "尚无成功的生产状态评估。请先登记、部署合格模型并运行在线评估。",
         },
         runtimeMode: "production",
         fixtureFallback: false,
@@ -1186,8 +1220,6 @@ export async function productionHealthAssessmentsResponse(request: Request): Pro
     trend: text(row.trend),
     riskLevel: text(row.risk_level),
     activeAlarmCount: number(row.active_alarm_count),
-    failureProbability30d: number(row.failure_probability_30d),
-    remainingUsefulLifeDays: number(row.remaining_useful_life_days),
     anomalyScore: number(row.anomaly_score),
     predictionAvailable: row.prediction_available === true,
     primaryFinding: text(row.primary_finding),

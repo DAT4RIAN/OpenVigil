@@ -27,7 +27,7 @@ class InvalidIdentityError(IdentityError):
 
 
 class IdentityRoleError(IdentityError):
-    """The authenticated Sites user has no WindOps application role."""
+    """The authenticated Sites user has no OpenVigil application role."""
 
 
 @dataclass(frozen=True)
@@ -122,7 +122,7 @@ class DelegatedIdentityAuthenticator:
             )
         )
         if not roles:
-            raise IdentityRoleError("the authenticated Sites user has no WindOps role")
+            raise IdentityRoleError("the authenticated Sites user has no OpenVigil role")
         raw_email = claims.get("email")
         email = raw_email.strip() if isinstance(raw_email, str) and raw_email.strip() else None
         return VerifiedIdentity(

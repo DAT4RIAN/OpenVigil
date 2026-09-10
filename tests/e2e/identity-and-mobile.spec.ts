@@ -52,13 +52,13 @@ test("production authenticates before business rendering and rejects machine she
     });
     expect(response.status()).toBe(403);
     const html = await response.text();
-    expect(html).toContain("当前账号没有 WindOps 访问权限");
+    expect(html).toContain("当前账号没有 OpenVigil 访问权限");
     expect(html).not.toContain("创建配置修订");
   }
 
   const demo = await request.get("/", { headers: { "x-e2e-runtime": "demo" } });
   expect(demo.status()).toBe(200);
-  expect(await demo.text()).toContain("当前重点事件");
+  expect(await demo.text()).toContain("运营指挥中心");
 });
 
 test("field technician gets capability-aware desktop/mobile navigation, refresh, and sign-out", async ({
@@ -89,7 +89,7 @@ test("field technician gets capability-aware desktop/mobile navigation, refresh,
   await expect(page.locator('nav a[href="/models"]')).toHaveCount(0);
   await page.locator(".sidebar__mobile-close").click();
 
-  const signOut = page.locator('a[title="安全退出 WindOps"]');
+  const signOut = page.locator('a[title="安全退出 OpenVigil"]');
   await expect(signOut).toHaveAttribute("href", "/signout-with-chatgpt?return_to=%2F");
   await signOut.click();
   await expect(page).toHaveURL(/\/signout-with-chatgpt\?return_to=%2F$/);
@@ -167,6 +167,95 @@ test("manager, approver, reviewer, and field technician see only backend-issued 
   expect(state.approvalCalls[0].idempotencyKey).toMatch(/^mission-approve-/);
 });
 
+test("decision approval controls fail closed by backend-issued role capability", async ({
+  browser,
+}) => {
+  const now = new Date().toISOString();
+  const payload = {
+    data: [
+      {
+        id: "DECISION-ROLE-001",
+        missionId: "MISSION-E2E-001",
+        missionRevision: 7,
+        turbineId: "WT-E2E-01",
+        incident: "Role matrix decision",
+        diagnosis: "Role capabilities must control each approval action independently.",
+        confidencePercent: 86,
+        status: "under-review",
+        risk: "high",
+        evidenceIds: [],
+        alternatives: [
+          {
+            id: "ALT-ROLE-001",
+            label: "方案 A",
+            title: "受控检查",
+            description: "在受控窗口完成检查。",
+            safetyRisk: "low",
+            deteriorationRiskPercent: 12,
+            estimatedCostCny: 68000,
+            estimatedDowntimeHours: 4,
+            estimatedEnergyLossMWh: 9.2,
+            weatherWindowId: null,
+            requiredResources: ["海维测试组"],
+            recommended: true,
+            rationale: "满足安全边界。",
+          },
+        ],
+        recommendedAlternativeId: "ALT-ROLE-001",
+        recommendedAction: "受控检查",
+        weatherWindowId: null,
+        requiredResources: ["海维测试组"],
+        approval: {
+          required: true,
+          action: null,
+          selectedAlternativeId: null,
+          approver: null,
+          approverRole: null,
+          timestamp: null,
+          reason: null,
+          comment: null,
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+  };
+  const expectations = [
+    { subject: "user-manager", enabled: ["升级处理"] },
+    { subject: "user-approver", enabled: ["拒绝", "批准方案"] },
+    { subject: "user-reviewer", enabled: ["要求修订"] },
+    { subject: "user-field", enabled: [] },
+  ] as const;
+  const actions = ["拒绝", "要求修订", "升级处理", "批准方案"] as const;
+
+  for (const entry of expectations) {
+    const { context, page } = await rolePage(browser, entry.subject);
+    await page.route("**/api/decisions", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(payload),
+      }),
+    );
+    await page.goto("/decisions");
+    await expect(page.getByText("Role matrix decision", { exact: true }).first()).toBeVisible();
+    const reason = page.getByRole("textbox", { name: "审批理由" });
+    if (entry.enabled.length > 0) {
+      await expect(reason).toBeEnabled();
+      await reason.fill("role matrix approval reason");
+    } else {
+      await expect(reason).toBeDisabled();
+    }
+    for (const action of actions) {
+      const button = page.getByRole("button", { name: action, exact: true });
+      await expect(button).toBeVisible();
+      if ((entry.enabled as readonly string[]).includes(action)) await expect(button).toBeEnabled();
+      else await expect(button).toBeDisabled();
+    }
+    await context.close();
+  }
+});
+
 test("401, 403, backend-unready, and browser network failures have distinct recovery UI", async ({
   browser,
   request,
@@ -233,9 +322,9 @@ test("P1 incident remains readable at 320/360/390/430 px with long and 200% text
   for (const width of [320, 360, 390, 430]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
-    const incident = page.locator(".command-strip__incident");
+    const incident = page.locator(".command-strip");
     await expect(incident).toBeVisible();
-    const title = incident.locator(".incident-copy strong");
+    const title = incident.locator(".incident-title-link");
     const link = incident.locator(".incident-link");
 
     for (const value of [
@@ -250,7 +339,7 @@ test("P1 incident remains readable at 320/360/390/430 px with long and 200% text
       const geometry = await incident.evaluate((node) => {
         const index = node.querySelector(".incident-index")!.getBoundingClientRect();
         const copy = node.querySelector(".incident-copy")!.getBoundingClientRect();
-        const progress = node.querySelector(".incident-progress")!.getBoundingClientRect();
+        const signals = node.querySelector(".incident-signals")!.getBoundingClientRect();
         const action = node.querySelector(".incident-link")!.getBoundingClientRect();
         const viewportWidth = document.documentElement.clientWidth;
         return {
@@ -258,7 +347,7 @@ test("P1 incident remains readable at 320/360/390/430 px with long and 200% text
           documentWidth: document.documentElement.scrollWidth,
           copyWidth: copy.width,
           separatedFromIndex: copy.left >= index.right - 1,
-          progressBelowCopy: progress.top >= copy.bottom - 1,
+          signalsBelowCopy: signals.top >= copy.bottom - 1,
           actionBelowCopy: action.top >= copy.bottom - 1,
           actionHeight: action.height,
           overflowing: [...document.querySelectorAll("body *")]
@@ -275,22 +364,24 @@ test("P1 incident remains readable at 320/360/390/430 px with long and 200% text
       expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth);
       expect(geometry.copyWidth).toBeGreaterThan(180);
       expect(geometry.separatedFromIndex).toBe(true);
-      expect(geometry.progressBelowCopy).toBe(true);
+      expect(geometry.signalsBelowCopy).toBe(true);
       expect(geometry.actionBelowCopy).toBe(true);
       expect(geometry.actionHeight).toBeGreaterThanOrEqual(44);
     }
 
+    const actionHref = await link.getAttribute("href");
+    expect(actionHref).toMatch(/^\/missions\/MISSION-/);
     await link.focus();
     await expect(link).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(/\/missions\/MISSION-2026-0823$/);
+    await expect(page).toHaveURL(`${baseURL}${actionHref}`);
   }
 
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto("/");
-  await expect(page.locator(".command-strip__incident")).toHaveScreenshot(
-    "dashboard-p1-incident-390.png",
-    { animations: "disabled", maxDiffPixelRatio: 0.01 },
-  );
+  await expect(page.locator(".command-strip")).toHaveScreenshot("dashboard-p1-incident-390.png", {
+    animations: "disabled",
+    maxDiffPixelRatio: 0.01,
+  });
   await context.close();
 });

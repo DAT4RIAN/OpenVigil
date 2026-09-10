@@ -106,7 +106,7 @@ def test_snapshot_query_suppresses_transaction_command_tags(
 
     def run_postgres_command(command: tuple[str, ...], _password: str) -> CompletedProcess[str]:
         commands.append(command)
-        return CompletedProcess(command, 0, "0026_schema_contract_alignment\n", "")
+        return CompletedProcess(command, 0, "0028_read_audit_pipeline\n", "")
 
     monkeypatch.setattr(backups, "_run_postgres_command", run_postgres_command)
     result = backups._snapshot_query(
@@ -116,7 +116,7 @@ def test_snapshot_query_suppresses_transaction_command_tags(
         "SELECT version_num FROM alembic_version",
     )
 
-    assert result.stdout == "0026_schema_contract_alignment\n"
+    assert result.stdout == "0028_read_audit_pipeline\n"
     assert commands[0][:5] == (
         "psql",
         "--dbname=postgresql://backup@db/windops",
@@ -246,6 +246,8 @@ def test_database_invariants_cover_every_care_authoritative_table(
         "benchmark_metric_snapshots",
         "benchmark_replay_runs",
         "anomaly_alert_policy_states",
+        "read_access_audits",
+        "read_access_audit_archives",
     }.issubset(expected)
 
 
@@ -274,7 +276,7 @@ def test_create_backup_captures_manifest_metadata_from_exported_snapshot(
 
     def schema_revision(_database_url: str, *, snapshot_id: str | None = None) -> str:
         captured_snapshot_ids.append(snapshot_id)
-        return "0026_schema_contract_alignment"
+        return "0028_read_audit_pipeline"
 
     def invariants(_database_url: str, *, snapshot_id: str | None = None) -> dict[str, int]:
         captured_snapshot_ids.append(snapshot_id)
@@ -319,7 +321,7 @@ def test_create_backup_captures_manifest_metadata_from_exported_snapshot(
     dump_command = next(command for command in commands if command[0] == "pg_dump")
     assert "--snapshot=snapshot-42" in dump_command
     assert captured_snapshot_ids == ["snapshot-42", "snapshot-42"]
-    assert manifest["schema_revision"] == "0026_schema_contract_alignment"
+    assert manifest["schema_revision"] == "0028_read_audit_pipeline"
     assert manifest["database_invariants"] == {"wind_farms": 1, "turbines": 1}
     assert len(manifest["buckets"]) == 5
     assert settings.minio_care_bucket in manifest["buckets"]

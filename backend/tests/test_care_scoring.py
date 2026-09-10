@@ -75,6 +75,11 @@ def _prediction(
             status_id=statuses[index],
             disagreement_run_length=disagreement_runs[index],
             corroborated_by_signal=corroborated[index],
+            corroboration_signal_count=1 if farm in {"B", "C"} else 0,
+            corroboration_finite_signal_count=1 if farm in {"B", "C"} else 0,
+            corroboration_inactive_or_invalid_signal_count=(
+                1 if farm in {"B", "C"} and corroborated[index] else 0
+            ),
         )
         for index, score in enumerate(scores)
     )
@@ -97,7 +102,12 @@ def _prediction(
             hyperparameter_selection_split="train-validation",
         ),
     )
-    return build_prediction_artifact(batch, _threshold(threshold), trusted_status_ids=("0", "2"))
+    return build_prediction_artifact(
+        batch,
+        _threshold(threshold),
+        trusted_status_ids=("0", "2"),
+        status_signal_columns=(("fixture_scaled_power_avg",) if farm in {"B", "C"} else ()),
+    )
 
 
 def _truth(
@@ -260,7 +270,7 @@ def test_a_prediction_status_exception_and_bc_filter_freeze() -> None:
         farm="A",
         statuses=["4", "4", "4"],
         disagreement_runs=[10, 10, 10],
-        corroborated=[True, True, True],
+        corroborated=[False, False, False],
     )
     assert a_prediction["valid_point_count"] == 3
     assert [point["criticality"] for point in a_prediction["points"]] == [1, 2, 3]

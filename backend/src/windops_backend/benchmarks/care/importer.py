@@ -10,7 +10,7 @@ import tracemalloc
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,7 @@ from windops_backend.benchmarks.care.contract import (
     LICENSE_URL,
     METADATA_COLUMNS,
     ZENODO_URL,
+    CareContractError,
     verify_care_contract,
 )
 from windops_backend.benchmarks.care.licensing import (
@@ -47,6 +48,11 @@ from windops_backend.benchmarks.care.quality import (
     audit_event_quality,
     verify_quality_contract,
 )
+from windops_backend.benchmarks.care.trust import (
+    CareTrustAnchor,
+    verify_care_approval_lineage,
+    verify_care_source_rebuild,
+)
 from windops_backend.schemas import (
     BenchmarkDatasetVersionCreateRequest,
     BenchmarkEventCreateRequest,
@@ -64,7 +70,7 @@ from windops_backend.services.benchmark_metadata import (
 
 MINIMAL_IMPORT_SCHEMA_VERSION = "care-v6-a-minimal-import-v1"
 MINIMAL_EVENT_IDS = (0, 24)
-MINIMAL_FARM = "A"
+MINIMAL_FARM: Literal["A"] = "A"
 EXPECTED_MAPPING_COUNT = 81
 EXPECTED_MODEL_INPUT_COUNT = 54
 TRUTH_ACCESS_SCOPE = "benchmark-evaluation-truth"
@@ -526,11 +532,22 @@ def build_a_minimal_import(
     source_archive_path: Path | None = None,
     artifact_store: ImmutableArtifactStore | None = None,
     stop_after_chunks_by_event: Mapping[int, int] | None = None,
+    trust_anchor: CareTrustAnchor | None = None,
 ) -> MinimalImportResult:
     """Build the immutable A0/A24 bundle without exposing event truth to model inputs."""
 
-    contract = _validate_control_inputs(source_manifest, quality_contract)
     dataset_root = dataset_root.resolve(strict=True)
+    try:
+        approved_lineage = verify_care_source_rebuild(
+            source_manifest,
+            quality_contract,
+            dataset_root,
+            source_archive_path,
+            trust_anchor=trust_anchor,
+        )
+    except CareContractError as exc:
+        raise CareMinimalImportError(str(exc)) from exc
+    contract = _validate_control_inputs(source_manifest, quality_contract)
     output_root = output_root.resolve()
     if output_root == dataset_root or output_root.is_relative_to(dataset_root):
         raise CareMinimalImportError("minimal import output must be outside the read-only dataset")
@@ -828,8 +845,10 @@ def build_a_minimal_import(
     if archive_before != archive_after:
         raise CareMinimalImportError("source archive changed during minimal import")
     identity_payload = {
+        "care_approved_root_sha256": approved_lineage["approved_root_sha256"],
         "source_manifest_sha256": source_manifest["manifest_sha256"],
         "quality_contract_sha256": quality_contract["quality_contract_sha256"],
+        "care_approval": approved_lineage,
         "event_ids": list(MINIMAL_EVENT_IDS),
         "mapping_artifact_sha256": mapping_reference["file_sha256"],
         "model_input_columns": list(contract.model_input_columns),
@@ -855,6 +874,7 @@ def build_a_minimal_import(
         "source_manifest_sha256": source_manifest["manifest_sha256"],
         "source_dataset_sha256": contract.source_dataset_sha256,
         "quality_contract_sha256": quality_contract["quality_contract_sha256"],
+        "care_approval": approved_lineage,
         "mapping_version": COLUMN_MAPPING_VERSION,
         "mapping_count": EXPECTED_MAPPING_COUNT,
         "mapping_artifact": mapping_reference,
@@ -921,11 +941,24 @@ async def register_a_minimal_import(
     *,
     tenant_id: str,
     subject: str,
+    trust_anchor: CareTrustAnchor | None = None,
 ) -> MinimalImportRegistration:
     """Register the immutable bundle in the caller's transaction, without committing it."""
 
     contract = _validate_control_inputs(source_manifest, quality_contract)
     verify_minimal_import_manifest(import_manifest)
+    approval = import_manifest.get("care_approval")
+    if not isinstance(approval, Mapping):
+        raise CareMinimalImportError("minimal import is missing CARE approved-root lineage")
+    try:
+        verify_care_approval_lineage(
+            approval,
+            source_manifest,
+            quality_contract,
+            trust_anchor=trust_anchor,
+        )
+    except CareContractError as exc:
+        raise CareMinimalImportError(str(exc)) from exc
     if (
         import_manifest.get("source_manifest_sha256") != source_manifest["manifest_sha256"]
         or import_manifest.get("quality_contract_sha256")
@@ -962,6 +995,7 @@ async def register_a_minimal_import(
                 "artifact_license": license_metadata["artifact_license"],
                 "changes_made": license_metadata["changes_made"],
                 "share_alike_required": True,
+                "care_approval": dict(approval),
             },
         ),
         subject=subject,
@@ -1008,7 +1042,7 @@ async def register_a_minimal_import(
                 farm=MINIMAL_FARM,
                 source_asset_id=str(source_event["source_asset_id"]),
                 logical_asset_id=f"CARE-A-{source_event['source_asset_id']}",
-                event_label=str(source_event["event_label"]),
+                event_label=cast(Literal["anomaly", "normal"], str(source_event["event_label"])),
                 first_source_row_id=int(source_event["source_row_id_min"]),
                 last_source_row_id=int(source_event["source_row_id_max"]),
                 train_row_count=int(source_event["split_counts"]["train"]),
@@ -1069,6 +1103,8 @@ async def register_a_minimal_import(
                 event_id=event_database_id,
                 quality_rule_version=QUALITY_RULE_VERSION,
                 feature_set_version=FEATURE_SET_VERSION,
+                canonical_content_sha256=str(quality["source_quality_report_sha256"]),
+                artifact_stage="minimal-import",
                 status="completed",
                 artifact_uri=str(quality["report"]["artifact_uri"]),
                 artifact_sha256=str(quality["report"]["file_sha256"]),

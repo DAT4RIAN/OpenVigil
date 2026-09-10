@@ -15,6 +15,7 @@ REQUIRED_WORKLOADS = frozenset(
         "windops-outbox-relay",
         "windops-migrate-release",
         "windops-backup",
+        "windops-care-full-scale",
     }
 )
 RELEASE_ANNOTATIONS = {
@@ -111,7 +112,7 @@ def render_release_manifests(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Bind rendered WindOps manifests to one immutable release image"
+        description="Bind rendered OpenVigil manifests to one immutable release image"
     )
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)

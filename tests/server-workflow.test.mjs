@@ -653,7 +653,9 @@ test("closed WT-023 state is shared by predictive, knowledge, and audited Agent 
   assert.equal(predictive.response.status, 200);
   assert.equal(predictive.body.data[0].healthScore, 82);
   assert.equal(predictive.body.data[0].componentHealth, 78);
-  assert.equal(predictive.body.data[0].failureProbability30d, 12);
+  assert.equal(predictive.body.data[0].anomalyScore, 0.42);
+  assert.equal(predictive.body.data[0].failureProbability30d, undefined);
+  assert.equal(predictive.body.data[0].remainingUsefulLifeDays, undefined);
   assert.equal(predictive.body.meta.workflowRevision, 8);
 
   const knowledge = await fetchApi(database, "/api/knowledge-assistant", "POST", {

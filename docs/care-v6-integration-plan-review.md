@@ -6,7 +6,7 @@
 - 被评审方案：[CARE v6 数据集接入与验证开发计划](./care-v6-integration-development-plan.md)
 - 本地数据集：`C:\coding\reference\CARE_To_Compare`
 - 本地压缩包：`C:\coding\reference\CARE_To_Compare.zip`
-- 评审范围：本地数据真实性、CARE 官方资料、现有 WindOps 架构、SCADA 接入、模型运行时、告警链路、数据治理、测试与许可证要求
+- 评审范围：本地数据真实性、CARE 官方资料、现有 OpenVigil 架构、SCADA 接入、模型运行时、告警链路、数据治理、测试与许可证要求
 - 评审方式：只读核验；未修改项目代码或原始数据集
 
 ## 2. 总体结论

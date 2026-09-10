@@ -18,7 +18,7 @@ import {
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
-import { useWindOpsIdentity } from "@/components/providers/identity-provider";
+import { useOpenVigilIdentity } from "@/components/providers/identity-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, EmptyState, Progress } from "@/components/ui/primitives";
 import { apiGet, apiPost } from "@/lib/api-client";
@@ -158,7 +158,7 @@ function ResourceContent({
             },
           ]}
           csvExport={{
-            filename: "windops-spare-parts.csv",
+            filename: "openvigil-spare-parts.csv",
             columns: [
               { label: "备件ID", value: (part) => part.id },
               { label: "备件编号", value: (part) => part.partNumber },
@@ -413,7 +413,7 @@ const emptyResourceData: ResourceResponse["data"] = {
 };
 
 export function ResourceCenterPage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
-  const { can } = useWindOpsIdentity();
+  const { can } = useOpenVigilIdentity();
   const canManageResources = runtimeMode === "demo" || can("resource.manage");
   const [activeTab, setActiveTab] = useState<ResourceTab>("spare-parts");
   const [query, setQuery] = useState("");

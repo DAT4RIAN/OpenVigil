@@ -30,7 +30,7 @@ from windops_backend.config import ModelInferenceTarget
 async def test_truth_free_window_recomputes_the_immutable_package_scores(
     tmp_path: Path,
 ) -> None:
-    _, _, imported, import_root, output_root, built = _build_evaluations(tmp_path)
+    _, _, imported, import_root, output_root, built, _ = _build_evaluations(tmp_path)
     model = next(
         value
         for value in built.manifest["models"]

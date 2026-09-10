@@ -41,8 +41,13 @@ test("every turbine receives twelve deterministic subsystem assessments", () => 
     for (const assessment of first) {
       assert.ok(assessment.healthScore >= 42 && assessment.healthScore <= 99);
       assert.ok(assessment.alertCount >= 0);
-      assert.ok(assessment.failureProbability30d >= 2 && assessment.failureProbability30d <= 62);
-      assert.ok(assessment.rulDays >= 18 && assessment.rulDays <= 540);
+      assert.deepEqual(Object.keys(assessment).sort(), [
+        "alertCount",
+        "healthScore",
+        "key",
+        "name",
+        "state",
+      ]);
     }
   }
 });

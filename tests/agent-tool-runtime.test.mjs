@@ -47,7 +47,7 @@ test("deterministic Agent Tool API validates, executes, links, and records every
     assert.equal(response.error, null);
     assert.equal(response.meta.deterministic, true);
     assert.equal(response.meta.persisted, false);
-    assert.equal(response.data.catalog.length, 17);
+    assert.equal(response.data.catalog.length, 16);
     assert.deepEqual(response.data.executionHistory, []);
 
     const names = response.data.catalog.map((entry) => entry.name);
@@ -60,7 +60,6 @@ test("deterministic Agent Tool API validates, executes, links, and records every
       "query_maintenance_history",
       "query_similar_failures",
       "calculate_health_score",
-      "predict_rul",
       "create_decision",
       "create_work_order",
       "query_manual",
@@ -139,6 +138,14 @@ test("deterministic Agent Tool API validates, executes, links, and records every
       assert.equal(persistenceAttempt.error.code, "INVALID_TOOL_ARGUMENTS");
       assert.equal(persistenceAttempt.error.details.acceptedValue, true);
       assert.equal(persistenceAttempt.meta.historyCount, 0);
+
+      const unvalidatedLifetimeTool = await jsonRequest(
+        "POST",
+        { tool: "predict_rul", args: { turbineId: "WT-023", subsystem: "main-bearing" } },
+        400,
+      );
+      assert.equal(unvalidatedLifetimeTool.error.code, "UNKNOWN_AGENT_TOOL");
+      assert.equal(unvalidatedLifetimeTool.meta.historyCount, 0);
     },
   );
 
@@ -151,7 +158,6 @@ test("deterministic Agent Tool API validates, executes, links, and records every
     ["query_maintenance_history", { turbineId: "WT-023", limit: 10 }],
     ["query_similar_failures", { turbineId: "WT-023", subsystem: "main-bearing", limit: 5 }],
     ["calculate_health_score", { turbineId: "WT-023" }],
-    ["predict_rul", { turbineId: "WT-023", subsystem: "main-bearing" }],
     ["create_decision", { missionId: "MISSION-2026-0823", dryRun: true }],
     [
       "create_work_order",
@@ -182,7 +188,7 @@ test("deterministic Agent Tool API validates, executes, links, and records every
   const results = new Map();
 
   await t.test(
-    "all seventeen tools execute against fixtures with complete observability records",
+    "all sixteen tools execute against fixtures with complete observability records",
     async () => {
       for (const [tool, args] of calls) {
         const response = await jsonRequest("POST", { tool, args, persist: false });
@@ -246,11 +252,6 @@ test("deterministic Agent Tool API validates, executes, links, and records every
     const health = results.get("calculate_health_score");
     assert.equal(health.healthScore, 68);
     assert.equal(health.fixtureHealthScore, 68);
-
-    const rul = results.get("predict_rul");
-    assert.equal(rul.turbineId, "WT-023");
-    assert.equal(rul.subsystem, "main-bearing");
-    assert.equal(rul.predictedRulDays, 47);
 
     const decision = results.get("create_decision");
     assert.equal(decision.dryRun, true);

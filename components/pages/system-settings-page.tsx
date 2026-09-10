@@ -18,11 +18,11 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { AppShell } from "@/components/layout/app-shell";
-import { useWindOpsIdentity } from "@/components/providers/identity-provider";
+import { useOpenVigilIdentity } from "@/components/providers/identity-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader } from "@/components/ui/primitives";
 import { apiGet, apiPost } from "@/lib/api-client";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 import {
   PLATFORM_SNAPSHOT_AT,
   systemStatusFallback,
@@ -179,10 +179,13 @@ const systemValueLabels: Readonly<Record<string, string>> = {
   system: "跟随系统",
   "server-demo-principal": "服务器演示主体",
   "not-configured": "未配置",
-  "browser-local windops-theme": "浏览器本地 windops-theme",
+  "browser-local openvigil-theme": "浏览器本地 openvigil-theme",
 };
 
 const localizedSystemValue = (value: string): string => systemValueLabels[value] ?? value;
+
+const themePreferenceKey = "openvigil-theme";
+const legacyThemePreferenceKey = "windops-theme";
 
 function applyTheme(preference: ThemePreference): void {
   const resolved =
@@ -191,18 +194,18 @@ function applyTheme(preference: ThemePreference): void {
         ? "dark"
         : "light"
       : preference;
-  window.localStorage.setItem("windops-theme", preference);
+  window.localStorage.setItem(themePreferenceKey, preference);
   document.documentElement.dataset.theme = resolved;
   document.documentElement.style.colorScheme = resolved;
-  window.dispatchEvent(new CustomEvent("windops-theme-change"));
+  window.dispatchEvent(new CustomEvent("openvigil-theme-change"));
 }
 
 export function SystemSettingsPage({
   runtimeMode = "demo",
 }: {
-  readonly runtimeMode?: WindOpsRuntimeMode;
+  readonly runtimeMode?: OpenVigilRuntimeMode;
 }) {
-  const { can } = useWindOpsIdentity();
+  const { can } = useOpenVigilIdentity();
   const canManagePlatform = runtimeMode === "demo" || can("platform.manage");
   const [theme, setTheme] = useState<ThemePreference>("light");
   const [configurationKey, setConfigurationKey] = useState<ConfigurationKey>("backup_policy");
@@ -275,7 +278,11 @@ export function SystemSettingsPage({
   });
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("windops-theme");
+    const current = window.localStorage.getItem(themePreferenceKey);
+    const stored = current ?? window.localStorage.getItem(legacyThemePreferenceKey);
+    if (current === null && stored !== null) {
+      window.localStorage.setItem(themePreferenceKey, stored);
+    }
     const preference: ThemePreference =
       stored === "dark" || stored === "system" || stored === "light" ? stored : "light";
     const frame = window.requestAnimationFrame(() => setTheme(preference));
@@ -466,7 +473,7 @@ export function SystemSettingsPage({
             <dl className={styles.definitionList}>
               <div>
                 <dt>应用</dt>
-                <dd>WindOps Production</dd>
+                <dd>OpenVigil Production</dd>
               </div>
               <div>
                 <dt>运行边界</dt>
@@ -667,7 +674,7 @@ export function SystemSettingsPage({
                   disabled={!canManagePlatform}
                   value={secretReference}
                   onChange={(event) => setSecretReference(event.target.value)}
-                  placeholder="vault://windops/platform/credential"
+                  placeholder="vault://openvigil/platform/credential"
                 />
               </label>
               <label>

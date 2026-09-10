@@ -31,14 +31,14 @@ async function fetchJson(path, expectedStatus = 200) {
   return response.json();
 }
 
-test("server-renders the WindOps command center instead of the starter", async () => {
+test("server-renders the OpenVigil command center instead of the starter", async () => {
   const response = await fetchRoute("/", { accept: "text/html" });
 
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /WindOps/);
+  assert.match(html, /OpenVigil/);
   assert.match(html, /运营指挥中心/);
   assert.match(html, /WT-023/);
   assert.match(html, /MISSION-2026-0823/);
@@ -259,7 +259,7 @@ test("mock APIs distinguish live and archive fixture counts", async () => {
     "the command center must expose ten active missions",
   );
   assert.equal(health.counts.live.activeMissions, 10);
-  assert.equal(health.counts.live.agentTools, 17);
+  assert.equal(health.counts.live.agentTools, 16);
   assert.deepEqual(
     {
       spareParts: health.counts.live.spareParts,

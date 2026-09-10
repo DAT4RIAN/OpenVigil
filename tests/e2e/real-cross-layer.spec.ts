@@ -29,7 +29,7 @@ test.describe("real Worker to FastAPI release smoke", () => {
           "Idempotency-Key": "real-worker-rotation-confirm-001",
         },
         data: {
-          replacement_secret_reference: "vault://windops/platform/real-smoke-rotated",
+          replacement_secret_reference: "vault://openvigil/platform/real-smoke-rotated",
           rotation_evidence: "CHG-REAL-WORKER-ROTATION-001",
         },
       },

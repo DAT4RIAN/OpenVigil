@@ -408,7 +408,7 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
   {
     id: "DATA-API-HEALTH",
     name: "健康评估 API",
-    description: "64 台机组的健康、风险、RUL 与趋势读取接口。",
+    description: "64 台机组的健康、异常、告警风险与趋势读取接口。",
     category: "api",
     status: "demo",
     recordCount: healthAssessments.length,
@@ -534,14 +534,14 @@ export const modelRegistry: readonly ModelRegistryEntry[] = Object.freeze([
     updatedAt: PLATFORM_SNAPSHOT_AT,
   },
   {
-    id: "MODEL-PREDICTIVE-RISK",
-    name: "失效概率与 RUL 评估器",
-    version: "demo-1.1.0",
+    id: "MODEL-CONDITION-PRIORITY",
+    name: "状态证据优先级评估器",
+    version: "demo-2.0.0",
     kind: "predictive",
     status: "demo-only",
     runtime: "TypeScript 资产状态惩罚公式",
     inputs: ["健康分", "告警数", "机组状态", "资产序号"],
-    outputs: ["30 天失效概率", "剩余寿命天数", "风险等级"],
+    outputs: ["异常证据等级", "运营后果等级", "维护优先级"],
     metrics: [
       { label: "资产覆盖", value: `${healthAssessments.length}` },
       { label: "输出范围", value: "受显式边界约束" },
@@ -551,7 +551,7 @@ export const modelRegistry: readonly ModelRegistryEntry[] = Object.freeze([
     usesEmbeddings: false,
     artifactBacked: false,
     endpoint: "/api/predictive-assessments",
-    limitation: "RUL 与概率是演示公式结果，不能用于真实检修或安全决策。",
+    limitation: "Demo 隔离的确定性状态排序；不生成寿命或故障概率，不能代替现场判断。",
     deterministic: true,
     updatedAt: PLATFORM_SNAPSHOT_AT,
   },
@@ -647,7 +647,7 @@ export function queryModelRegistry(
 
 export interface SystemStatusSnapshot {
   readonly runtime: {
-    readonly application: "WindOps";
+    readonly application: "OpenVigil";
     readonly framework: "vinext / React Server Components";
     readonly execution: "Cloudflare Worker-compatible ESM";
     readonly apiCachePolicy: "no-store";
@@ -679,7 +679,7 @@ export interface SystemStatusSnapshot {
   };
   readonly theme: {
     readonly options: readonly ["light", "dark", "system"];
-    readonly persistence: "browser-local windops-theme";
+    readonly persistence: "browser-local openvigil-theme";
     readonly serverWrite: false;
   };
   readonly dataPolicies: readonly {
@@ -710,7 +710,7 @@ export interface SystemStatusInput {
 export function buildSystemStatusSnapshot(input: SystemStatusInput): SystemStatusSnapshot {
   const snapshot: SystemStatusSnapshot = {
     runtime: {
-      application: "WindOps",
+      application: "OpenVigil",
       framework: "vinext / React Server Components",
       execution: "Cloudflare Worker-compatible ESM",
       apiCachePolicy: "no-store",
@@ -775,7 +775,7 @@ export function buildSystemStatusSnapshot(input: SystemStatusInput): SystemStatu
     },
     theme: {
       options: ["light", "dark", "system"],
-      persistence: "browser-local windops-theme",
+      persistence: "browser-local openvigil-theme",
       serverWrite: false,
     },
     dataPolicies: [
@@ -801,7 +801,7 @@ export function buildSystemStatusSnapshot(input: SystemStatusInput): SystemStatu
         id: "POLICY-THEME",
         scope: "显示主题",
         policy: "仅保存在当前浏览器",
-        enforcement: "localStorage: windops-theme",
+        enforcement: "localStorage: openvigil-theme",
       },
     ],
     security: {

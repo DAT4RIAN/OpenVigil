@@ -39,7 +39,6 @@ export const AGENT_TOOL_NAMES = [
   "query_maintenance_history",
   "query_similar_failures",
   "calculate_health_score",
-  "predict_rul",
   "create_decision",
   "create_work_order",
   "query_manual",
@@ -376,21 +375,6 @@ export const agentToolCatalog: readonly AgentToolCatalogEntry[] = Object.freeze(
       }),
     ],
     fixtureSources: ["farm-data", "telemetry-data"],
-  },
-  {
-    name: "predict_rul",
-    description: "Read the fixture-backed remaining-useful-life estimate for a turbine subsystem.",
-    category: "prediction",
-    readOnly: true,
-    dryRun: false,
-    deterministicLatencyMs: 61,
-    parameters: [
-      parameter("turbineId", "string", true, "Canonical turbine ID."),
-      parameter("subsystem", "string", true, "Subsystem to assess.", {
-        values: subsystemValues,
-      }),
-    ],
-    fixtureSources: ["telemetry-data"],
   },
   {
     name: "create_decision",
@@ -802,13 +786,6 @@ const normalizeArgs = (tool: AgentToolName, rawArgs: unknown): AgentToolArgument
       return Object.freeze({
         turbineId: stringValue(tool, args, "turbineId", true)?.toUpperCase(),
         ...(subsystem ? { subsystem } : {}),
-      });
-    }
-    case "predict_rul": {
-      assertOnlyKeys(tool, args, ["turbineId", "subsystem"]);
-      return Object.freeze({
-        turbineId: stringValue(tool, args, "turbineId", true)?.toUpperCase(),
-        subsystem: enumValue(tool, args, "subsystem", subsystemValues, true),
       });
     }
     case "create_decision": {
@@ -1354,46 +1331,6 @@ const calculateHealthScore = (
   };
 };
 
-const predictRul = (args: AgentToolArguments, context: AgentToolExecutionContext): unknown => {
-  const turbineId = args.turbineId as string;
-  requiredTurbine(turbineId);
-  const subsystem = args.subsystem as SubsystemKey;
-  const assessment = subsystemHealth.find(
-    (item) => item.turbineId === turbineId && item.key === subsystem,
-  );
-  if (!assessment || assessment.remainingUsefulLifeDays === null) {
-    throw new AgentToolRuntimeError(
-      "RUL_ESTIMATE_NOT_FOUND",
-      `No remaining-useful-life estimate exists for ${turbineId}/${subsystem}.`,
-      404,
-      { turbineId, subsystem },
-    );
-  }
-  const workflowMainBearing =
-    turbineId === context.workflowSnapshot?.turbineId && subsystem === "main-bearing";
-  const closed = workflowMainBearing && context.workflowSnapshot?.workOrder.status === "completed";
-  const estimate = closed ? 126 : assessment.remainingUsefulLifeDays;
-  const anomalyScore = closed ? 0.42 : assessment.anomalyScore;
-  const confidencePercent = Math.max(50, Math.round(100 - anomalyScore * 15));
-
-  return {
-    snapshotAt: workflowMainBearing ? context.workflowSnapshot?.updatedAt : assessment.assessedAt,
-    turbineId,
-    subsystem,
-    predictedRulDays: estimate,
-    predictionIntervalDays: [Math.floor(estimate * 0.8), Math.ceil(estimate * 1.2)],
-    confidencePercent,
-    failureProbability30d: closed ? 12 : assessment.failureProbability30d,
-    healthScore: workflowMainBearing
-      ? context.workflowSnapshot?.health.mainBearingScore
-      : assessment.healthScore,
-    anomalyScore,
-    method: workflowMainBearing
-      ? "D1 workflow-backed deterministic estimate; no live model inference"
-      : "fixture-backed subsystem health estimate; no live model inference",
-  };
-};
-
 const createDecision = (args: AgentToolArguments): unknown => {
   const missionId = args.missionId as string;
   const mission = missions.find((item) => item.id === missionId);
@@ -1847,7 +1784,6 @@ const handlers: Readonly<
   query_maintenance_history: queryMaintenanceHistory,
   query_similar_failures: querySimilarFailures,
   calculate_health_score: calculateHealthScore,
-  predict_rul: predictRul,
   create_decision: createDecision,
   create_work_order: createWorkOrder,
   query_manual: queryManual,

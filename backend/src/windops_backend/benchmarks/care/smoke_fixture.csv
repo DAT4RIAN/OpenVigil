@@ -1,0 +1,4 @@
+time_stamp;asset_id;id;train_test;status_type_id;sensor_0_Avg;sensor_1_Avg
+2026-01-01 00:00:00;SMOKE-A01;0;train;0;1.0;2.0
+2026-01-01 00:10:00;SMOKE-A01;1;train;0;1.1;2.1
+2026-01-01 00:20:00;SMOKE-A01;2;prediction;0;1.2;2.2

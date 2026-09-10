@@ -1,10 +1,11 @@
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
+from windops_backend.operations.release_evidence import release_evidence_set_id
 from windops_backend.operations.release_gate import (
     MANIFEST_DIGEST_NAME,
     MANIFEST_NAME,
@@ -26,6 +27,9 @@ def _bundle(root: Path) -> Path:
         "commit_sha": "a" * 40,
         "image_digest": "sha256:" + "b" * 64,
     }
+    release["evidence_set_id"] = release_evidence_set_id(
+        release["release_id"], release["commit_sha"], release["image_digest"]
+    )
     evidence = []
     for gate in sorted(REQUIRED_RELEASE_GATES):
         artifact = root / "artifacts" / f"{gate}.json"
@@ -40,7 +44,7 @@ def _bundle(root: Path) -> Path:
         report.write_text(
             json.dumps(
                 {
-                    "format_version": 1,
+                    "format_version": 2,
                     "gate": gate,
                     "status": "passed",
                     "release": release,
@@ -48,6 +52,10 @@ def _bundle(root: Path) -> Path:
                     "completed_at": now,
                     "target": "isolated-production-candidate",
                     "tool": {"name": "release-test-harness", "version": "1.0"},
+                    "approval": {
+                        "approved_by": "independent-release-reviewer",
+                        "approval_reference": f"CHANGE-{gate.upper()}",
+                    },
                     "checks": [
                         {
                             "id": check_id,
@@ -81,7 +89,7 @@ def _bundle(root: Path) -> Path:
             }
         )
     manifest = {
-        "format_version": 1,
+        "format_version": 2,
         **release,
         "created_at": now,
         "evidence": evidence,
@@ -118,6 +126,9 @@ def test_complete_release_evidence_bundle_is_verified(tmp_path: Path) -> None:
     assert result["status"] == "verified"
     assert result["gate_count"] == len(REQUIRED_RELEASE_GATES)
     assert result["image_digest"] == "sha256:" + "b" * 64
+    assert result["evidence_set_id"] == release_evidence_set_id(
+        "windops-2026.08.14-rc1", "a" * 40, "sha256:" + "b" * 64
+    )
 
 
 def test_release_gate_rejects_missing_or_tampered_reports(tmp_path: Path) -> None:
@@ -194,4 +205,34 @@ def test_release_gate_rejects_tampered_or_undeclared_raw_artifacts(tmp_path: Pat
     report_path.write_text(json.dumps(report, sort_keys=True), encoding="utf-8")
     _refresh_report_digest(root, "migration")
     with pytest.raises(ValueError, match="cites undeclared artifacts"):
+        verify_release_evidence(root)
+
+
+def test_release_gate_rejects_stale_or_cross_run_reports(tmp_path: Path) -> None:
+    root = _bundle(tmp_path / "stale")
+    manifest_path = root / MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    stale_time = (datetime.now(UTC) - timedelta(days=4)).isoformat()
+    for gate in REQUIRED_RELEASE_GATES:
+        report_path = root / "reports" / f"{gate}.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        report["started_at"] = stale_time
+        report["completed_at"] = stale_time
+        report_path.write_text(json.dumps(report, sort_keys=True), encoding="utf-8")
+        for item in manifest["evidence"]:
+            if item["gate"] == gate:
+                item["completed_at"] = stale_time
+                item["report_sha256"] = _sha256(report_path)
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    _resign(root)
+    with pytest.raises(ValueError, match="stale gate reports"):
+        verify_release_evidence(root)
+
+    root = _bundle(tmp_path / "cross-run")
+    report_path = root / "reports" / "dast.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["release"]["evidence_set_id"] = "sha256:" + "c" * 64
+    report_path.write_text(json.dumps(report, sort_keys=True), encoding="utf-8")
+    _refresh_report_digest(root, "dast")
+    with pytest.raises(ValueError, match="evidence_set_id"):
         verify_release_evidence(root)

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { API_ACCESS_EVENT } from "../lib/api-access-events.ts";
-import { apiGet, apiPost, apiPostCommand, WindOpsApiError } from "../lib/api-client.ts";
+import { apiGet, apiPost, apiPostCommand, OpenVigilApiError } from "../lib/api-client.ts";
 
 test("POST transport retry reuses the exact idempotency key and request body", async () => {
   const originalFetch = globalThis.fetch;
@@ -56,6 +56,33 @@ test("automatic POST keys remain stable across the one transport retry", async (
   }
 });
 
+test("a twice-lost command response is result-unknown and retains the reconciliation key", async () => {
+  const originalFetch = globalThis.fetch;
+  const observedKeys = [];
+  globalThis.fetch = async (_input, init) => {
+    observedKeys.push(new Headers(init.headers).get("idempotency-key"));
+    throw new TypeError("simulated response loss");
+  };
+  try {
+    await assert.rejects(
+      () =>
+        apiPostCommand(
+          "/api/backend/predictive-assessments/run",
+          { turbine_ids: ["WT-901"] },
+          "predictive-reconcile-001",
+        ),
+      (error) =>
+        error instanceof OpenVigilApiError &&
+        error.status === 0 &&
+        error.code === "COMMAND_RESULT_UNKNOWN" &&
+        error.operationKey === "predictive-reconcile-001",
+    );
+    assert.deepEqual(observedKeys, ["predictive-reconcile-001", "predictive-reconcile-001"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("API access failures distinguish authentication, authorization, backend, and network", async () => {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
@@ -70,15 +97,22 @@ test("API access failures distinguish authentication, authorization, backend, an
       [403, "authorization"],
       [503, "backend"],
     ]) {
-      globalThis.fetch = async () =>
-        Response.json(
+      let requestCorrelationId = null;
+      globalThis.fetch = async (_input, init) => {
+        requestCorrelationId = new Headers(init.headers).get("x-correlation-id");
+        return Response.json(
           { error: { code: `STATUS_${status}`, message: `failure ${status}` } },
           { status },
         );
+      };
       await assert.rejects(
         () => apiGet("/api/backend/session"),
-        (error) => error instanceof WindOpsApiError && error.status === status,
+        (error) =>
+          error instanceof OpenVigilApiError &&
+          error.status === status &&
+          error.correlationId === requestCorrelationId,
       );
+      assert.match(requestCorrelationId, /^read-/);
       assert.equal(failures.at(-1).kind, kind);
       assert.equal(failures.at(-1).status, status);
     }
@@ -86,7 +120,14 @@ test("API access failures distinguish authentication, authorization, backend, an
     globalThis.fetch = async () => {
       throw new TypeError("network down");
     };
-    await assert.rejects(() => apiGet("/api/backend/session"), /network down/);
+    await assert.rejects(
+      () => apiGet("/api/backend/session"),
+      (error) =>
+        error instanceof OpenVigilApiError &&
+        error.status === 0 &&
+        error.code === "NETWORK_FAILURE" &&
+        /^read-/.test(error.correlationId),
+    );
     assert.equal(failures.at(-1).kind, "network");
     assert.equal(failures.at(-1).status, null);
   } finally {

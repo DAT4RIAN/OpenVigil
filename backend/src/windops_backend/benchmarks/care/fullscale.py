@@ -13,9 +13,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, cast
+from typing import Any, Literal, cast
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from windops_backend.benchmarks.care.anomaly import (
     canonical_anomaly_input_schema,
@@ -30,6 +30,7 @@ from windops_backend.benchmarks.care.contract import (
     LICENSE_URL,
     METADATA_COLUMNS,
     ZENODO_URL,
+    CareContractError,
     verify_care_contract,
 )
 from windops_backend.benchmarks.care.importer import (
@@ -64,10 +65,23 @@ from windops_backend.benchmarks.care.pipeline import (
     MinioImmutableArtifactStore,
     convert_care_csv_to_parquet,
 )
-from windops_backend.benchmarks.care.quality import audit_event_quality, verify_quality_contract
+from windops_backend.benchmarks.care.quality import (
+    STATUS_CORROBORATION_RULE_ID,
+    ZERO_RUN_RULE_ID,
+    StatusPointEvidence,
+    StatusSequenceState,
+    audit_event_quality,
+    evaluate_status_point,
+    status_evidence_policy,
+    verify_quality_contract,
+)
 from windops_backend.benchmarks.care.resources import (
     peak_process_resident_bytes,
     trim_process_resident_memory,
+)
+from windops_backend.benchmarks.care.runtime import (
+    care_minio_client,
+    get_care_worker_settings,
 )
 from windops_backend.benchmarks.care.scoring import (
     SCORE_PROTOCOL_VERSION,
@@ -82,6 +96,12 @@ from windops_backend.benchmarks.care.scoring import (
     build_evaluation_artifact,
     build_prediction_artifact,
     verify_prediction_artifact,
+)
+from windops_backend.benchmarks.care.trust import (
+    CareTrustAnchor,
+    verify_care_approval_lineage,
+    verify_care_source_rebuild,
+    verify_embedded_care_approval,
 )
 from windops_backend.config import get_settings
 from windops_backend.db import create_engine, create_session_factory
@@ -113,10 +133,10 @@ from windops_backend.services.models import register_model
 FULL_SCALE_IMPORT_VERSION = "care-v6-full-scale-import-v5"
 FULL_SCALE_IMPORT_SCHEMA_VERSION = "care-v6-full-scale-import-manifest-v1"
 FULL_SCALE_EVENT_SCHEMA_VERSION = "care-v6-full-scale-event-v1"
-FULL_SCALE_EVALUATION_VERSION = "care-v6-within-farm-loao-v5"
+FULL_SCALE_EVALUATION_VERSION = "care-v6-within-farm-loao-v7"
 FULL_SCALE_EVALUATION_SCHEMA_VERSION = "care-v6-full-scale-evaluation-manifest-v1"
 FULL_SCALE_FOLD_SCHEMA_VERSION = "care-v6-within-farm-fold-v1"
-FULL_SCALE_MODEL_SCHEMA_VERSION = "care-v6-within-farm-zscore-model-v1"
+FULL_SCALE_MODEL_SCHEMA_VERSION = "care-v6-within-farm-zscore-model-v3"
 FULL_SCALE_PREDICTION_FREEZE_SCHEMA_VERSION = "care-v6-prediction-freeze-v1"
 FULL_SCALE_RESOURCE_POLICY_VERSION = "care-v6-full-scale-resource-policy-v5"
 FULL_SCALE_OPERATIONAL_POLICY_VERSION = "care-v6-full-scale-operational-policy-v4"
@@ -124,6 +144,8 @@ FULL_SCALE_PROTOCOL_FROZEN_AT = "2026-08-27T00:00:00+00:00"
 FULL_SCALE_THRESHOLD = 4.506536091667749
 FULL_SCALE_THRESHOLD_VERSION = "care-v6-within-farm-loao-threshold-v1"
 FULL_SCALE_THRESHOLD_RUN_ID = "care-a-minimal-zscore-train-calibration"
+FULL_SCALE_MODEL_VERSION = "1.2.0"
+FULL_SCALE_QUALITY_MASK_POLICY_VERSION = "care-v6-model-quality-mask-apply-v1"
 FULL_SCALE_TRAIN_STATUS_IDS = ("0",)
 FULL_SCALE_STAGE_ORDER = ("A", "C", "B")
 MIN_REPLAY_WRITE_ROWS_PER_SECOND = 50.0
@@ -699,9 +721,21 @@ def build_full_scale_import(
     stop_after_events: int | None = None,
     expected_counts: FullScaleExpectedCounts = CARE_V6_FULL_SCALE_COUNTS,
     resource_limits: FullScaleResourceLimits = DEFAULT_FULL_SCALE_RESOURCE_LIMITS,
+    trust_anchor: CareTrustAnchor | None = None,
 ) -> FullScaleImportResult:
     """Create recoverable full-signal artifacts in the mandatory A -> C -> B order."""
 
+    dataset_root = dataset_root.resolve(strict=True)
+    try:
+        approved_lineage = verify_care_source_rebuild(
+            source_manifest,
+            quality_contract,
+            dataset_root,
+            source_archive_path,
+            trust_anchor=trust_anchor,
+        )
+    except CareContractError as exc:
+        raise CareFullScaleError(str(exc)) from exc
     contract = _build_contract(
         source_manifest,
         quality_contract,
@@ -712,7 +746,6 @@ def build_full_scale_import(
         quality_contract,
         expected_counts=expected_counts,
     )
-    dataset_root = dataset_root.resolve(strict=True)
     output_root = output_root.resolve()
     if output_root == dataset_root or output_root.is_relative_to(dataset_root):
         raise CareFullScaleError("full-scale output must be outside the read-only dataset")
@@ -734,6 +767,7 @@ def build_full_scale_import(
             quality_contract=quality_contract,
             expected_counts=expected_counts,
             resource_limits=resource_limits,
+            trust_anchor=trust_anchor,
         )
         return FullScaleImportResult(manifest_path, raw, _sha256_file(manifest_path), True)
 
@@ -1138,6 +1172,7 @@ def build_full_scale_import(
             "source_manifest_sha256": source_manifest["manifest_sha256"],
             "source_dataset_sha256": contract.source_dataset_sha256,
             "quality_contract_sha256": quality_contract["quality_contract_sha256"],
+            "care_approval": approved_lineage,
             "plan": plan,
             "stage_order": list(FULL_SCALE_STAGE_ORDER),
             "mapping_artifacts": mapping_references,
@@ -1185,6 +1220,7 @@ def build_full_scale_import(
             quality_contract=quality_contract,
             expected_counts=expected_counts,
             resource_limits=resource_limits,
+            trust_anchor=trust_anchor,
         )
         job_control.complete(manifest_path.resolve().as_uri(), resource_actual)
         return FullScaleImportResult(
@@ -1208,6 +1244,7 @@ def verify_full_scale_import_manifest(
     quality_contract: Mapping[str, Any],
     expected_counts: FullScaleExpectedCounts = CARE_V6_FULL_SCALE_COUNTS,
     resource_limits: FullScaleResourceLimits = DEFAULT_FULL_SCALE_RESOURCE_LIMITS,
+    trust_anchor: CareTrustAnchor | None = None,
 ) -> None:
     contract = _build_contract(
         source_manifest,
@@ -1218,6 +1255,18 @@ def verify_full_scale_import_manifest(
     unsigned = {key: item for key, item in value.items() if key != "manifest_sha256"}
     if not _is_sha256(actual_hash) or _canonical_hash(unsigned) != actual_hash:
         raise CareFullScaleError("full-scale import manifest hash is invalid")
+    approval = value.get("care_approval")
+    if not isinstance(approval, Mapping):
+        raise CareFullScaleError("full-scale import is missing CARE approved-root lineage")
+    try:
+        verify_care_approval_lineage(
+            approval,
+            source_manifest,
+            quality_contract,
+            trust_anchor=trust_anchor,
+        )
+    except CareContractError as exc:
+        raise CareFullScaleError(str(exc)) from exc
     events = value.get("events")
     mappings = value.get("mapping_artifacts")
     if (
@@ -1341,6 +1390,7 @@ async def register_full_scale_import(
     subject: str,
     expected_counts: FullScaleExpectedCounts = CARE_V6_FULL_SCALE_COUNTS,
     resource_limits: FullScaleResourceLimits = DEFAULT_FULL_SCALE_RESOURCE_LIMITS,
+    trust_anchor: CareTrustAnchor | None = None,
 ) -> FullScaleImportRegistration:
     """Idempotently extend the phased CARE registration to all verified events."""
 
@@ -1356,6 +1406,7 @@ async def register_full_scale_import(
         quality_contract=quality_contract,
         expected_counts=expected_counts,
         resource_limits=resource_limits,
+        trust_anchor=trust_anchor,
     )
     source_zip = source_manifest["source"]["zip"]
     license_metadata = import_manifest["license"]
@@ -1386,6 +1437,7 @@ async def register_full_scale_import(
                 "changes_made": license_metadata["changes_made"],
                 "share_alike_required": True,
                 "full_import_manifest_sha256": import_manifest["manifest_sha256"],
+                "care_approval": dict(import_manifest["care_approval"]),
             },
         ),
         subject=subject,
@@ -1436,7 +1488,7 @@ async def register_full_scale_import(
                 farm=cast(Any, farm),
                 source_asset_id=str(source_event["source_asset_id"]),
                 logical_asset_id=str(imported["logical_asset_id"]),
-                event_label=str(source_event["event_label"]),
+                event_label=cast(Literal["anomaly", "normal"], str(source_event["event_label"])),
                 first_source_row_id=int(source_event["source_row_id_min"]),
                 last_source_row_id=int(source_event["source_row_id_max"]),
                 train_row_count=int(source_event["split_counts"]["train"]),
@@ -1500,6 +1552,8 @@ async def register_full_scale_import(
                 event_id=event_database_id,
                 quality_rule_version=QUALITY_RULE_VERSION,
                 feature_set_version=FEATURE_SET_VERSION,
+                canonical_content_sha256=str(quality["source_quality_report_sha256"]),
+                artifact_stage="full-scale-import",
                 status="completed",
                 artifact_uri=str(quality["report"]["artifact_uri"]),
                 artifact_sha256=str(quality["report"]["file_sha256"]),
@@ -1529,7 +1583,12 @@ class _Moments:
     counts: Any
     sums: Any
     sum_squares: Any
+    quality_mask_counts: Any
+    status_usable_train_rows: int = 0
     trusted_train_rows: int = 0
+    retained_disagreement_train_rows: int = 0
+    masked_status_train_rows: int = 0
+    quality_masked_train_rows: int = 0
 
 
 def _new_moments(np: Any, feature_count: int) -> _Moments:
@@ -1537,6 +1596,7 @@ def _new_moments(np: Any, feature_count: int) -> _Moments:
         counts=np.zeros(feature_count, dtype=np.int64),
         sums=np.zeros(feature_count, dtype=np.float64),
         sum_squares=np.zeros(feature_count, dtype=np.float64),
+        quality_mask_counts=np.zeros(feature_count, dtype=np.int64),
     )
 
 
@@ -1612,6 +1672,210 @@ def _load_json_reference(output_root: Path, reference: Mapping[str, Any]) -> Map
     return raw
 
 
+def _quality_mask_policy(feature_columns: Sequence[str]) -> dict[str, Any]:
+    payload = {
+        "policy_version": FULL_SCALE_QUALITY_MASK_POLICY_VERSION,
+        "decision": "apply",
+        "feature_columns_sha256": _canonical_hash(list(feature_columns)),
+        "range_coordinate": "inclusive-source-row-id",
+        "training_action": "exclude-masked-feature-values-from-fold-moments",
+        "prediction_action": "impute-masked-feature-values-with-fold-training-mean",
+        "nonfinite_prediction_action": "impute-with-fold-training-mean",
+        "score_stage": "after-mask-and-imputation",
+        "ignored_mask_requires_sensitivity_approval": True,
+    }
+    return {**payload, "policy_sha256": _canonical_hash(payload)}
+
+
+def _quality_mask_impact_summary(
+    training_resources: Mapping[str, Any],
+    predictions: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    prediction_point_count = sum(int(item["point_count"]) for item in predictions)
+    absolute_delta_sum = sum(
+        float(item["quality_mask_mean_absolute_score_delta"]) * int(item["point_count"])
+        for item in predictions
+    )
+    payload = {
+        "policy_version": FULL_SCALE_QUALITY_MASK_POLICY_VERSION,
+        "decision": "apply",
+        "quality_masked_train_row_count": int(training_resources["quality_masked_train_row_count"]),
+        "quality_masked_train_feature_value_count": int(
+            training_resources["quality_masked_train_feature_value_count"]
+        ),
+        "quality_masked_prediction_point_count": sum(
+            int(item["quality_masked_prediction_point_count"]) for item in predictions
+        ),
+        "quality_masked_prediction_feature_value_count": sum(
+            int(item["quality_masked_prediction_feature_value_count"]) for item in predictions
+        ),
+        "quality_mask_score_changed_prediction_point_count": sum(
+            int(item["quality_mask_score_changed_prediction_point_count"]) for item in predictions
+        ),
+        "quality_mask_binary_decision_changed_point_count": sum(
+            int(item["quality_mask_binary_decision_changed_point_count"]) for item in predictions
+        ),
+        "quality_mask_max_absolute_score_delta": max(
+            (float(item["quality_mask_max_absolute_score_delta"]) for item in predictions),
+            default=0.0,
+        ),
+        "quality_mask_mean_absolute_score_delta": (
+            absolute_delta_sum / prediction_point_count if prediction_point_count else 0.0
+        ),
+        "actual_fold_metrics_use_masked_predictions": True,
+        "counterfactual_scope": (
+            "prediction-time masks ignored with the same mask-trained fold profile"
+        ),
+        "metric_change_explanation": (
+            "fold metrics are recomputed from mask-applied scores; score and binary-decision "
+            "delta counts quantify prediction-time impact, while verifier-recomputed fold "
+            "moments prove training-time impact"
+        ),
+    }
+    return {**payload, "impact_sha256": _canonical_hash(payload)}
+
+
+def _quality_mask_lineage(
+    import_manifest: Mapping[str, Any],
+    farm: str,
+    *,
+    excluded_asset_id: str | None = None,
+) -> dict[str, Any]:
+    events: list[dict[str, Any]] = []
+    for event in import_manifest["events"]:
+        if str(event["farm"]) != farm or (
+            excluded_asset_id is not None and str(event["source_asset_id"]) == excluded_asset_id
+        ):
+            continue
+        quality = event.get("quality")
+        reference = quality.get("mask") if isinstance(quality, Mapping) else None
+        if not isinstance(reference, Mapping):
+            raise CareFullScaleError("full-scale event quality mask reference is missing")
+        file_sha256 = reference.get("file_sha256")
+        source_quality_sha256 = quality.get("source_quality_report_sha256")
+        mask_count = quality.get("mask_count")
+        if (
+            not _is_sha256(file_sha256)
+            or not _is_sha256(source_quality_sha256)
+            or not isinstance(mask_count, int)
+            or isinstance(mask_count, bool)
+            or mask_count < 0
+        ):
+            raise CareFullScaleError("full-scale event quality mask lineage is malformed")
+        events.append(
+            {
+                "event_id": int(event["event_id"]),
+                "source_asset_id": str(event["source_asset_id"]),
+                "quality_mask_file_sha256": file_sha256,
+                "source_quality_report_sha256": source_quality_sha256,
+                "mask_range_count": mask_count,
+            }
+        )
+    events.sort(key=lambda item: int(item["event_id"]))
+    payload = {
+        "farm": farm,
+        "excluded_asset_id": excluded_asset_id,
+        "event_count": len(events),
+        "events": events,
+    }
+    return {**payload, "lineage_sha256": _canonical_hash(payload)}
+
+
+def _load_quality_mask_artifact(
+    output_root: Path,
+    event: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    quality = event.get("quality")
+    reference = quality.get("mask") if isinstance(quality, Mapping) else None
+    if not isinstance(reference, Mapping):
+        raise CareFullScaleError("full-scale event quality mask reference is missing")
+    if not isinstance(quality, Mapping):
+        raise CareFullScaleError("full-scale event quality evidence is missing")
+    raw = _load_json_reference(output_root, reference)
+    ranges = raw.get("quality_mask_ranges")
+    if (
+        raw.get("schema_version") != "care-v6-quality-mask-artifact-v1"
+        or raw.get("dataset_id") != DATASET_ID
+        or raw.get("dataset_version") != DATASET_VERSION
+        or raw.get("farm") != event.get("farm")
+        or raw.get("event_id") != event.get("event_id")
+        or raw.get("source_event_file_sha256") != event.get("source_file_sha256")
+        or raw.get("source_quality_report_sha256") != quality.get("source_quality_report_sha256")
+        or raw.get("quality_rule_version") != QUALITY_RULE_VERSION
+        or raw.get("raw_values_modified") is not False
+        or not isinstance(ranges, list)
+        or raw.get("mask_count") != len(ranges)
+        or raw.get("mask_count") != quality.get("mask_count")
+    ):
+        raise CareFullScaleError("full-scale quality mask artifact identity is invalid")
+    previous_end_by_column: dict[str, int] = {}
+    for item in ranges:
+        if not isinstance(item, Mapping):
+            raise CareFullScaleError("full-scale quality mask range is malformed")
+        column = item.get("source_column")
+        start = item.get("source_row_id_start")
+        end = item.get("source_row_id_end")
+        length = item.get("length")
+        if (
+            not isinstance(column, str)
+            or not column
+            or not isinstance(start, int)
+            or isinstance(start, bool)
+            or not isinstance(end, int)
+            or isinstance(end, bool)
+            or end < start
+            or not isinstance(length, int)
+            or isinstance(length, bool)
+            or length != end - start + 1
+            or item.get("rule_id") != ZERO_RUN_RULE_ID
+            or item.get("rule_version") != QUALITY_RULE_VERSION
+            or item.get("raw_value_preserved") is not True
+            or start <= previous_end_by_column.get(column, -1)
+        ):
+            raise CareFullScaleError("full-scale quality mask range is invalid")
+        previous_end_by_column[column] = end
+    return raw
+
+
+def _quality_mask_index(
+    mask_artifact: Mapping[str, Any],
+    feature_columns: Sequence[str],
+) -> dict[str, tuple[tuple[int, int], ...]]:
+    selected = set(feature_columns)
+    by_column: dict[str, list[tuple[int, int]]] = {}
+    for item in mask_artifact["quality_mask_ranges"]:
+        column = str(item["source_column"])
+        if column in selected:
+            by_column.setdefault(column, []).append(
+                (int(item["source_row_id_start"]), int(item["source_row_id_end"]))
+            )
+    return {column: tuple(ranges) for column, ranges in by_column.items()}
+
+
+def _quality_mask_matrix(
+    *,
+    row_ids: Sequence[Any],
+    feature_columns: Sequence[str],
+    mask_index: Mapping[str, tuple[tuple[int, int], ...]],
+    np: Any,
+) -> Any:
+    rows = np.asarray([int(value) for value in row_ids], dtype=np.int64)
+    if len(rows) > 1 and bool((np.diff(rows) <= 0).any()):
+        raise CareFullScaleError("full-scale Parquet source row IDs are not strictly increasing")
+    result = np.zeros((len(rows), len(feature_columns)), dtype=bool)
+    for feature_index, column in enumerate(feature_columns):
+        ranges = mask_index.get(column, ())
+        if not ranges or not len(rows):
+            continue
+        starts = np.asarray([start for start, _ in ranges], dtype=np.int64)
+        ends = np.asarray([end for _, end in ranges], dtype=np.int64)
+        positions = np.searchsorted(starts, rows, side="right") - 1
+        has_candidate = positions >= 0
+        safe_positions = np.where(has_candidate, positions, 0)
+        result[:, feature_index] = has_candidate & (rows <= ends[safe_positions])
+    return result
+
+
 def _feature_matrix(batch: Any, columns: Sequence[str], np: Any) -> Any:
     arrays = []
     for column in columns:
@@ -1632,6 +1896,73 @@ def _batch_values(batch: Any, name: str) -> list[Any]:
     if index < 0:
         raise CareFullScaleError(f"full-scale Parquet is missing metadata column {name}")
     return cast(list[Any], batch.column(index).to_pylist())
+
+
+def _evaluation_column_contracts(
+    output_root: Path,
+    import_manifest: Mapping[str, Any],
+) -> tuple[dict[str, tuple[str, ...]], dict[str, tuple[str, ...]]]:
+    features_by_farm: dict[str, tuple[str, ...]] = {}
+    status_signals_by_farm: dict[str, tuple[str, ...]] = {}
+    mapping_references = import_manifest.get("mapping_artifacts")
+    if not isinstance(mapping_references, Mapping):
+        raise CareFullScaleError("full-scale mapping references are malformed")
+    for farm in FULL_SCALE_STAGE_ORDER:
+        reference = mapping_references.get(farm)
+        if not isinstance(reference, Mapping):
+            raise CareFullScaleError(f"full-scale farm {farm} mapping reference is missing")
+        mapping = _load_json_reference(output_root, reference)
+        features = tuple(str(item) for item in mapping.get("approved_model_input_columns", []))
+        if not features or len(features) != int(mapping.get("approved_model_input_count", -1)):
+            raise CareFullScaleError(f"full-scale farm {farm} feature mapping is invalid")
+        raw_mappings = mapping.get("mappings")
+        if not isinstance(raw_mappings, list):
+            raise CareFullScaleError(f"full-scale farm {farm} mapping rows are invalid")
+        semantics_by_column = {
+            str(item.get("source_column")): item.get("quality_semantics")
+            for item in raw_mappings
+            if isinstance(item, Mapping)
+        }
+        status_signal_values: list[str] = []
+        for column in features:
+            semantics = semantics_by_column.get(column)
+            if (
+                isinstance(semantics, Mapping)
+                and semantics.get("value_semantics") == "anonymized-rated-power-scaled"
+            ):
+                status_signal_values.append(column)
+        status_signals = tuple(status_signal_values)
+        try:
+            status_evidence_policy(farm, status_signals)
+        except CareContractError as exc:
+            raise CareFullScaleError(str(exc)) from exc
+        features_by_farm[farm] = features
+        status_signals_by_farm[farm] = status_signals
+    return features_by_farm, status_signals_by_farm
+
+
+def _batch_status_evidence(
+    *,
+    state: StatusSequenceState,
+    row_ids: Sequence[Any],
+    splits: Sequence[Any],
+    statuses: Sequence[Any],
+    feature_values: Any,
+    feature_columns: Sequence[str],
+    status_signal_columns: Sequence[str],
+) -> tuple[StatusPointEvidence, ...]:
+    signal_indexes = tuple(feature_columns.index(column) for column in status_signal_columns)
+    return tuple(
+        state.observe(
+            source_row_id=int(row_id),
+            split=str(split),
+            status_id=_normalise_status(status),
+            corroboration_signal_values=tuple(
+                feature_values[index, position] for position in signal_indexes
+            ),
+        )
+        for index, (row_id, split, status) in enumerate(zip(row_ids, splits, statuses, strict=True))
+    )
 
 
 def _iter_event_batches(
@@ -1655,6 +1986,7 @@ def _accumulate_moments(
     import_manifest: Mapping[str, Any],
     output_root: Path,
     features_by_farm: Mapping[str, tuple[str, ...]],
+    status_signals_by_farm: Mapping[str, tuple[str, ...]],
 ) -> tuple[dict[str, _Moments], dict[tuple[str, str], _Moments], dict[str, Any]]:
     np = importlib.import_module("numpy")
     arrow = importlib.import_module("pyarrow")
@@ -1664,14 +1996,23 @@ def _accumulate_moments(
     peak_batch = 0
     peak_arrow = 0
     scanned_rows = 0
+    status_usable_rows = 0
     trusted_rows = 0
+    retained_disagreement_rows = 0
+    masked_status_rows = 0
+    quality_masked_rows = 0
+    quality_masked_values = 0
     started = time.perf_counter()
     for event in import_manifest["events"]:
         farm = str(event["farm"])
         asset = str(event["source_asset_id"])
         features = features_by_farm[farm]
+        status_signals = status_signals_by_farm[farm]
+        mask_artifact = _load_quality_mask_artifact(output_root, event)
+        mask_index = _quality_mask_index(mask_artifact, features)
         asset_moments = assets.setdefault((farm, asset), _new_moments(np, len(features)))
-        columns = ("asset_id", "train_test", "status_type_id", *features)
+        status_state = StatusSequenceState(farm, FULL_SCALE_TRAIN_STATUS_IDS)
+        columns = ("asset_id", "id", "train_test", "status_type_id", *features)
         for batch in _iter_event_batches(output_root, event, columns):
             peak_batch = max(peak_batch, int(batch.nbytes))
             peak_arrow = max(
@@ -1683,29 +2024,102 @@ def _accumulate_moments(
                 raise CareFullScaleError("Parquet asset identity differs from the event manifest")
             split = _batch_values(batch, "train_test")
             status = [_normalise_status(value) for value in _batch_values(batch, "status_type_id")]
+            row_ids = _batch_values(batch, "id")
+            all_values = _feature_matrix(batch, features, np)
+            all_quality_masks = _quality_mask_matrix(
+                row_ids=row_ids,
+                feature_columns=features,
+                mask_index=mask_index,
+                np=np,
+            )
+            evidence = _batch_status_evidence(
+                state=status_state,
+                row_ids=row_ids,
+                splits=split,
+                statuses=status,
+                feature_values=all_values,
+                feature_columns=features,
+                status_signal_columns=status_signals,
+            )
+            decisions = tuple(
+                evaluate_status_point(
+                    farm=farm,
+                    split=str(split_value),
+                    status_id=status_value,
+                    trusted_status_ids=FULL_SCALE_TRAIN_STATUS_IDS,
+                    disagreement_run_length=item.disagreement_run_length,
+                    corroborated_by_signal=item.corroborated_by_signal,
+                )
+                for split_value, status_value, item in zip(
+                    split,
+                    status,
+                    evidence,
+                    strict=True,
+                )
+            )
             train_mask = np.asarray(
                 [
-                    str(split_value) == "train" and status_value in FULL_SCALE_TRAIN_STATUS_IDS
-                    for split_value, status_value in zip(split, status, strict=True)
+                    str(split_value) == "train" and decision.model_usable
+                    for split_value, decision in zip(split, decisions, strict=True)
                 ],
                 dtype=bool,
             )
             scanned_rows += len(split)
+            batch_trusted_rows = sum(
+                str(split_value) == "train" and status_value in FULL_SCALE_TRAIN_STATUS_IDS
+                for split_value, status_value in zip(split, status, strict=True)
+            )
+            batch_retained_rows = sum(
+                str(split_value) == "train"
+                and status_value not in FULL_SCALE_TRAIN_STATUS_IDS
+                and decision.model_usable
+                for split_value, status_value, decision in zip(
+                    split,
+                    status,
+                    decisions,
+                    strict=True,
+                )
+            )
+            batch_masked_rows = sum(
+                str(split_value) == "train" and not decision.model_usable
+                for split_value, decision in zip(split, decisions, strict=True)
+            )
             if not bool(train_mask.any()):
+                for moments in (totals[farm], asset_moments):
+                    moments.trusted_train_rows += batch_trusted_rows
+                    moments.retained_disagreement_train_rows += batch_retained_rows
+                    moments.masked_status_train_rows += batch_masked_rows
+                trusted_rows += batch_trusted_rows
+                retained_disagreement_rows += batch_retained_rows
+                masked_status_rows += batch_masked_rows
                 continue
-            values = _feature_matrix(batch, features, np)[train_mask]
-            finite = np.isfinite(values)
+            values = all_values[train_mask]
+            quality_masks = all_quality_masks[train_mask]
+            finite = np.isfinite(values) & ~quality_masks
             safe = np.where(finite, values, 0.0)
             counts = finite.sum(axis=0, dtype=np.int64)
             sums = safe.sum(axis=0, dtype=np.float64)
             sum_squares = np.square(safe).sum(axis=0, dtype=np.float64)
+            quality_counts = quality_masks.sum(axis=0, dtype=np.int64)
+            batch_quality_masked_rows = int(quality_masks.any(axis=1).sum())
+            batch_quality_masked_values = int(quality_counts.sum())
             selected_rows = int(train_mask.sum())
             for moments in (totals[farm], asset_moments):
                 moments.counts += counts
                 moments.sums += sums
                 moments.sum_squares += sum_squares
-                moments.trusted_train_rows += selected_rows
-            trusted_rows += selected_rows
+                moments.quality_mask_counts += quality_counts
+                moments.status_usable_train_rows += selected_rows
+                moments.trusted_train_rows += batch_trusted_rows
+                moments.retained_disagreement_train_rows += batch_retained_rows
+                moments.masked_status_train_rows += batch_masked_rows
+                moments.quality_masked_train_rows += batch_quality_masked_rows
+            status_usable_rows += selected_rows
+            trusted_rows += batch_trusted_rows
+            retained_disagreement_rows += batch_retained_rows
+            masked_status_rows += batch_masked_rows
+            quality_masked_rows += batch_quality_masked_rows
+            quality_masked_values += batch_quality_masked_values
         if not trim_process_resident_memory():
             raise CareFullScaleError(
                 "full-scale evaluator could not trim training-pass resident memory"
@@ -1716,7 +2130,12 @@ def _accumulate_moments(
         {
             "elapsed_seconds": time.perf_counter() - started,
             "scanned_row_count": scanned_rows,
+            "status_usable_train_row_count": status_usable_rows,
             "trusted_train_row_count": trusted_rows,
+            "retained_disagreement_train_row_count": retained_disagreement_rows,
+            "masked_status_train_row_count": masked_status_rows,
+            "quality_masked_train_row_count": quality_masked_rows,
+            "quality_masked_train_feature_value_count": quality_masked_values,
             "peak_record_batch_bytes": peak_batch,
             "peak_arrow_allocated_bytes": peak_arrow,
         },
@@ -1728,6 +2147,7 @@ def _build_fold_profiles(
     totals: Mapping[str, _Moments],
     assets: Mapping[tuple[str, str], _Moments],
     features_by_farm: Mapping[str, tuple[str, ...]],
+    import_manifest: Mapping[str, Any],
 ) -> dict[tuple[str, str], dict[str, Any]]:
     np = importlib.import_module("numpy")
     profiles: dict[tuple[str, str], dict[str, Any]] = {}
@@ -1745,12 +2165,19 @@ def _build_fold_profiles(
             )
         sums = total.sums - own.sums
         sum_squares = total.sum_squares - own.sum_squares
+        quality_mask_counts = total.quality_mask_counts - own.quality_mask_counts
         means = sums / counts
         variances = np.maximum(0.0, (sum_squares / counts) - np.square(means))
         standard_deviations = np.sqrt(variances)
         standard_deviations = np.where(standard_deviations > 1e-12, standard_deviations, 1.0)
         if not bool(np.isfinite(means).all()) or not bool(np.isfinite(standard_deviations).all()):
             raise CareFullScaleError("full-scale fold profile is non-finite")
+        quality_mask_lineage = _quality_mask_lineage(
+            import_manifest,
+            farm,
+            excluded_asset_id=asset,
+        )
+        quality_mask_policy = _quality_mask_policy(features_by_farm[farm])
         profiles[(farm, asset)] = {
             "farm": farm,
             "held_out_asset_id": asset,
@@ -1759,11 +2186,28 @@ def _build_fold_profiles(
                 for item_farm, item_asset in assets
                 if item_farm == farm and item_asset != asset
             ),
+            "status_usable_train_row_count": (
+                total.status_usable_train_rows - own.status_usable_train_rows
+            ),
             "trusted_train_row_count": total.trusted_train_rows - own.trusted_train_rows,
+            "retained_disagreement_train_row_count": (
+                total.retained_disagreement_train_rows - own.retained_disagreement_train_rows
+            ),
+            "masked_status_train_row_count": (
+                total.masked_status_train_rows - own.masked_status_train_rows
+            ),
+            "quality_masked_train_row_count": (
+                total.quality_masked_train_rows - own.quality_masked_train_rows
+            ),
+            "quality_masked_train_feature_value_count": int(quality_mask_counts.sum()),
+            "quality_masked_train_feature_counts": quality_mask_counts.tolist(),
+            "quality_mask_policy_sha256": quality_mask_policy["policy_sha256"],
+            "training_quality_mask_lineage_sha256": quality_mask_lineage["lineage_sha256"],
+            "training_quality_mask_event_count": quality_mask_lineage["event_count"],
             "finite_counts": counts.tolist(),
             "means": means.tolist(),
             "standard_deviations": standard_deviations.tolist(),
-            "imputation": "leave-one-asset-out-feature-mean-v1",
+            "imputation": "leave-one-asset-out-feature-mean-for-nonfinite-or-quality-masked-v2",
             "prediction_truth_used": False,
         }
     return profiles
@@ -1785,7 +2229,7 @@ def _threshold_policy() -> ThresholdPolicy:
 
 def _model_selection(farm: str, asset: str) -> ModelSelectionProvenance:
     return ModelSelectionProvenance(
-        training_run_id=f"care-v6-{farm.lower()}-loao-{_safe_token(asset)}-train-v1",
+        training_run_id=f"care-v6-{farm.lower()}-loao-{_safe_token(asset)}-train-v2",
         feature_selection_split="not-used",
         early_stopping_split="not-used",
         hyperparameter_selection_split="not-used",
@@ -1797,10 +2241,12 @@ def _build_prediction(
     event: Mapping[str, Any],
     output_root: Path,
     features: tuple[str, ...],
+    status_signal_columns: tuple[str, ...],
     profile: Mapping[str, Any],
     feature_set_sha256: str,
     quality_contract_sha256: str,
     license_metadata: Mapping[str, Any],
+    approval_lineage: Mapping[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     np = importlib.import_module("numpy")
     arrow = importlib.import_module("pyarrow")
@@ -1809,10 +2255,14 @@ def _build_prediction(
     means = np.asarray(profile["means"], dtype=np.float64)
     standard_deviations = np.asarray(profile["standard_deviations"], dtype=np.float64)
     points: list[PredictionPoint] = []
+    point_input_evidence: list[tuple[int, int, int, float]] = []
+    quality_mask_artifact = _load_quality_mask_artifact(output_root, event)
+    quality_mask_index = _quality_mask_index(quality_mask_artifact, features)
     baseline_arrow = int(arrow.total_allocated_bytes())
     peak_batch = 0
     peak_arrow = 0
     started = time.perf_counter()
+    status_state = StatusSequenceState(farm, FULL_SCALE_TRAIN_STATUS_IDS)
     columns = ("time_stamp", "id", "train_test", "status_type_id", *features)
     for batch in _iter_event_batches(output_root, event, columns):
         peak_batch = max(peak_batch, int(batch.nbytes))
@@ -1821,22 +2271,46 @@ def _build_prediction(
             max(0, int(arrow.total_allocated_bytes()) - baseline_arrow),
         )
         split = _batch_values(batch, "train_test")
+        row_ids = _batch_values(batch, "id")
+        statuses = _batch_values(batch, "status_type_id")
+        all_values = _feature_matrix(batch, features, np)
+        all_quality_masks = _quality_mask_matrix(
+            row_ids=row_ids,
+            feature_columns=features,
+            mask_index=quality_mask_index,
+            np=np,
+        )
+        status_evidence = _batch_status_evidence(
+            state=status_state,
+            row_ids=row_ids,
+            splits=split,
+            statuses=statuses,
+            feature_values=all_values,
+            feature_columns=features,
+            status_signal_columns=status_signal_columns,
+        )
         prediction_positions = [
             index for index, value in enumerate(split) if str(value) == "prediction"
         ]
         if not prediction_positions:
             continue
-        values = _feature_matrix(batch, features, np)[prediction_positions]
+        values = all_values[prediction_positions]
+        quality_masks = all_quality_masks[prediction_positions]
         finite = np.isfinite(values)
-        imputed = np.where(finite, values, means)
+        usable = finite & ~quality_masks
+        imputed = np.where(usable, values, means)
         scores = np.max(np.abs((imputed - means) / standard_deviations), axis=1)
+        ignored_mask_values = np.where(finite, values, means)
+        ignored_mask_scores = np.max(
+            np.abs((ignored_mask_values - means) / standard_deviations),
+            axis=1,
+        )
         if not bool(np.isfinite(scores).all()):
             raise CareFullScaleError("full-scale model emitted a non-finite score")
-        row_ids = _batch_values(batch, "id")
         timestamps = _batch_values(batch, "time_stamp")
-        statuses = _batch_values(batch, "status_type_id")
         for score_index, batch_index in enumerate(prediction_positions):
             timestamp = _timestamp_text(timestamps[batch_index])
+            evidence = status_evidence[batch_index]
             points.append(
                 PredictionPoint(
                     source_row_id=int(row_ids[batch_index]),
@@ -1844,6 +2318,23 @@ def _build_prediction(
                     anonymous_time=timestamp,
                     anomaly_score=float(scores[score_index]),
                     status_id=_normalise_status(statuses[batch_index]),
+                    disagreement_run_length=evidence.disagreement_run_length,
+                    corroborated_by_signal=evidence.corroborated_by_signal,
+                    corroboration_signal_count=evidence.corroboration_signal_count,
+                    corroboration_finite_signal_count=(evidence.corroboration_finite_signal_count),
+                    corroboration_inactive_or_invalid_signal_count=(
+                        evidence.corroboration_inactive_or_invalid_signal_count
+                    ),
+                )
+            )
+            quality_masked_count = int(quality_masks[score_index].sum())
+            nonfinite_count = int((~finite[score_index]).sum())
+            point_input_evidence.append(
+                (
+                    quality_masked_count,
+                    nonfinite_count,
+                    int((~usable[score_index]).sum()),
+                    float(ignored_mask_scores[score_index]),
                 )
             )
     if len(points) != int(event["split_counts"]["prediction"]):
@@ -1855,7 +2346,7 @@ def _build_prediction(
             source_asset_id=asset,
             points=tuple(points),
             model_id=_model_id(farm),
-            model_version="1.0.0",
+            model_version=FULL_SCALE_MODEL_VERSION,
             deployment_id=None,
             feature_set_version=FEATURE_SET_VERSION,
             feature_set_sha256=feature_set_sha256,
@@ -1865,8 +2356,84 @@ def _build_prediction(
         ),
         _threshold_policy(),
         trusted_status_ids=FULL_SCALE_TRAIN_STATUS_IDS,
+        status_signal_columns=status_signal_columns,
         license_metadata=license_metadata,
+        approval_lineage=approval_lineage,
     )
+    artifact_payload = {
+        key: value for key, value in artifact.items() if key != "prediction_artifact_sha256"
+    }
+    artifact_points = artifact_payload.get("points")
+    if not isinstance(artifact_points, list) or len(artifact_points) != len(point_input_evidence):
+        raise CareFullScaleError("full-scale prediction input evidence shape is invalid")
+    for raw_point, input_evidence in zip(artifact_points, point_input_evidence, strict=True):
+        if not isinstance(raw_point, dict):
+            raise CareFullScaleError("full-scale prediction point is not mutable")
+        raw_point.update(
+            {
+                "quality_masked_feature_count": input_evidence[0],
+                "nonfinite_feature_count": input_evidence[1],
+                "imputed_feature_count": input_evidence[2],
+                "quality_mask_ignored_anomaly_score": input_evidence[3],
+                "quality_mask_score_delta": (float(raw_point["anomaly_score"]) - input_evidence[3]),
+                "quality_mask_changed_binary_prediction": (
+                    (float(raw_point["anomaly_score"]) > FULL_SCALE_THRESHOLD)
+                    != (input_evidence[3] > FULL_SCALE_THRESHOLD)
+                ),
+            }
+        )
+    event_quality = event["quality"]
+    mask_reference = event_quality["mask"]
+    selected_feature_columns = set(features)
+    selected_mask_range_count = sum(
+        1
+        for item in quality_mask_artifact["quality_mask_ranges"]
+        if str(item["source_column"]) in selected_feature_columns
+    )
+    artifact_payload.update(
+        {
+            "quality_mask_policy": _quality_mask_policy(features),
+            "quality_mask_reference": dict(mask_reference),
+            "quality_mask_range_count": int(quality_mask_artifact["mask_count"]),
+            "selected_quality_mask_range_count": selected_mask_range_count,
+            "quality_masked_prediction_feature_value_count": sum(
+                evidence[0] for evidence in point_input_evidence
+            ),
+            "quality_masked_prediction_point_count": sum(
+                evidence[0] > 0 for evidence in point_input_evidence
+            ),
+            "nonfinite_prediction_feature_value_count": sum(
+                evidence[1] for evidence in point_input_evidence
+            ),
+            "imputed_prediction_feature_value_count": sum(
+                evidence[2] for evidence in point_input_evidence
+            ),
+            "quality_mask_score_changed_prediction_point_count": sum(
+                float(point["quality_mask_score_delta"]) != 0.0 for point in artifact_points
+            ),
+            "quality_mask_binary_decision_changed_point_count": sum(
+                bool(point["quality_mask_changed_binary_prediction"]) for point in artifact_points
+            ),
+            "quality_mask_max_absolute_score_delta": max(
+                (abs(float(point["quality_mask_score_delta"])) for point in artifact_points),
+                default=0.0,
+            ),
+            "quality_mask_mean_absolute_score_delta": (
+                sum(abs(float(point["quality_mask_score_delta"])) for point in artifact_points)
+                / len(artifact_points)
+            ),
+            "quality_mask_impact_interpretation": (
+                "counterfactual ignores prediction-time masks while retaining the same "
+                "mask-trained fold; training-profile changes are proven separately by "
+                "raw fold recomputation"
+            ),
+        }
+    )
+    artifact = {
+        **artifact_payload,
+        "prediction_artifact_sha256": _canonical_hash(artifact_payload),
+    }
+    verify_prediction_artifact(artifact)
     if not trim_process_resident_memory():
         raise CareFullScaleError(
             "full-scale evaluator could not trim prediction-pass resident memory"
@@ -1899,6 +2466,239 @@ def _truth_from_event(output_root: Path, event: Mapping[str, Any]) -> CareEventT
         event_end_source_row_id=int(raw["event_end_id"]),
         failure_type=description or None,
     )
+
+
+def verify_full_scale_prediction_status_evidence(
+    prediction: Mapping[str, Any],
+    *,
+    output_root: Path,
+    event: Mapping[str, Any],
+    status_signal_columns: Sequence[str],
+) -> dict[str, int]:
+    """Recompute caller-supplied status fields from immutable Parquet rows and signals."""
+
+    verify_prediction_artifact(prediction)
+    farm = str(event["farm"])
+    expected_policy = status_evidence_policy(farm, status_signal_columns)
+    if prediction.get("status_evidence_policy") != expected_policy:
+        raise CareFullScaleError("full-scale prediction status evidence policy is invalid")
+    points = prediction.get("points")
+    if not isinstance(points, list):
+        raise CareFullScaleError("full-scale prediction points are missing")
+    np = importlib.import_module("numpy")
+    state = StatusSequenceState(farm, FULL_SCALE_TRAIN_STATUS_IDS)
+    point_index = 0
+    training_counts = {
+        "status_usable_train_row_count": 0,
+        "trusted_train_row_count": 0,
+        "retained_disagreement_train_row_count": 0,
+        "masked_status_train_row_count": 0,
+    }
+    columns = ("id", "train_test", "status_type_id", *status_signal_columns)
+    for batch in _iter_event_batches(output_root, event, columns):
+        row_ids = _batch_values(batch, "id")
+        splits = _batch_values(batch, "train_test")
+        statuses = _batch_values(batch, "status_type_id")
+        signal_values = (
+            _feature_matrix(batch, status_signal_columns, np)
+            if status_signal_columns
+            else np.empty((len(row_ids), 0), dtype=np.float64)
+        )
+        evidence = _batch_status_evidence(
+            state=state,
+            row_ids=row_ids,
+            splits=splits,
+            statuses=statuses,
+            feature_values=signal_values,
+            feature_columns=status_signal_columns,
+            status_signal_columns=status_signal_columns,
+        )
+        for batch_index, split in enumerate(splits):
+            status_id = _normalise_status(statuses[batch_index])
+            if str(split) == "train":
+                decision = evaluate_status_point(
+                    farm=farm,
+                    split="train",
+                    status_id=status_id,
+                    trusted_status_ids=FULL_SCALE_TRAIN_STATUS_IDS,
+                    disagreement_run_length=evidence[batch_index].disagreement_run_length,
+                    corroborated_by_signal=evidence[batch_index].corroborated_by_signal,
+                )
+                if decision.model_usable:
+                    training_counts["status_usable_train_row_count"] += 1
+                    if status_id in FULL_SCALE_TRAIN_STATUS_IDS:
+                        training_counts["trusted_train_row_count"] += 1
+                    else:
+                        training_counts["retained_disagreement_train_row_count"] += 1
+                else:
+                    training_counts["masked_status_train_row_count"] += 1
+            if str(split) != "prediction":
+                continue
+            if point_index >= len(points) or not isinstance(points[point_index], Mapping):
+                raise CareFullScaleError("full-scale prediction status evidence is incomplete")
+            point = points[point_index]
+            expected = {
+                "source_row_id": int(row_ids[batch_index]),
+                "status_id": status_id,
+                "disagreement_run_length": evidence[batch_index].disagreement_run_length,
+                "corroborated_by_signal": evidence[batch_index].corroborated_by_signal,
+                "corroboration_signal_count": evidence[batch_index].corroboration_signal_count,
+                "corroboration_finite_signal_count": evidence[
+                    batch_index
+                ].corroboration_finite_signal_count,
+                "corroboration_inactive_or_invalid_signal_count": evidence[
+                    batch_index
+                ].corroboration_inactive_or_invalid_signal_count,
+                "corroboration_rule_id": STATUS_CORROBORATION_RULE_ID,
+            }
+            if any(point.get(key) != value for key, value in expected.items()):
+                raise CareFullScaleError(
+                    "full-scale prediction status evidence differs from raw status and signals"
+                )
+            point_index += 1
+    if point_index != len(points):
+        raise CareFullScaleError("full-scale prediction status evidence has extra points")
+    return training_counts
+
+
+def verify_full_scale_prediction_model_inputs(
+    prediction: Mapping[str, Any],
+    *,
+    output_root: Path,
+    event: Mapping[str, Any],
+    features: Sequence[str],
+    status_signal_columns: Sequence[str],
+    profile: Mapping[str, Any],
+) -> dict[str, int]:
+    """Recompute quality-mask application and scores from immutable model inputs."""
+
+    training_counts = verify_full_scale_prediction_status_evidence(
+        prediction,
+        output_root=output_root,
+        event=event,
+        status_signal_columns=status_signal_columns,
+    )
+    expected_policy = _quality_mask_policy(features)
+    event_quality = event.get("quality")
+    mask_reference = event_quality.get("mask") if isinstance(event_quality, Mapping) else None
+    if (
+        prediction.get("quality_mask_policy") != expected_policy
+        or not isinstance(mask_reference, Mapping)
+        or prediction.get("quality_mask_reference") != dict(mask_reference)
+    ):
+        raise CareFullScaleError("full-scale prediction quality mask lineage is invalid")
+    mask_artifact = _load_quality_mask_artifact(output_root, event)
+    mask_index = _quality_mask_index(mask_artifact, features)
+    selected_columns = set(features)
+    selected_range_count = sum(
+        1
+        for item in mask_artifact["quality_mask_ranges"]
+        if str(item["source_column"]) in selected_columns
+    )
+    if (
+        prediction.get("quality_mask_range_count") != mask_artifact.get("mask_count")
+        or prediction.get("selected_quality_mask_range_count") != selected_range_count
+    ):
+        raise CareFullScaleError("full-scale prediction quality mask counts are invalid")
+
+    points = prediction.get("points")
+    if not isinstance(points, list):
+        raise CareFullScaleError("full-scale prediction points are missing")
+    np = importlib.import_module("numpy")
+    means = np.asarray(profile["means"], dtype=np.float64)
+    standard_deviations = np.asarray(profile["standard_deviations"], dtype=np.float64)
+    point_index = 0
+    masked_value_count = 0
+    masked_point_count = 0
+    nonfinite_value_count = 0
+    imputed_value_count = 0
+    score_changed_count = 0
+    binary_changed_count = 0
+    absolute_score_deltas: list[float] = []
+    columns = ("id", "train_test", *features)
+    for batch in _iter_event_batches(output_root, event, columns):
+        row_ids = _batch_values(batch, "id")
+        splits = _batch_values(batch, "train_test")
+        all_values = _feature_matrix(batch, features, np)
+        all_masks = _quality_mask_matrix(
+            row_ids=row_ids,
+            feature_columns=features,
+            mask_index=mask_index,
+            np=np,
+        )
+        prediction_positions = [
+            index for index, value in enumerate(splits) if str(value) == "prediction"
+        ]
+        if not prediction_positions:
+            continue
+        values = all_values[prediction_positions]
+        quality_masks = all_masks[prediction_positions]
+        finite = np.isfinite(values)
+        usable = finite & ~quality_masks
+        imputed = np.where(usable, values, means)
+        scores = np.max(np.abs((imputed - means) / standard_deviations), axis=1)
+        ignored_mask_values = np.where(finite, values, means)
+        ignored_mask_scores = np.max(
+            np.abs((ignored_mask_values - means) / standard_deviations),
+            axis=1,
+        )
+        for score_index, batch_index in enumerate(prediction_positions):
+            if point_index >= len(points) or not isinstance(points[point_index], Mapping):
+                raise CareFullScaleError("full-scale prediction model-input evidence is incomplete")
+            point = points[point_index]
+            quality_count = int(quality_masks[score_index].sum())
+            nonfinite_count = int((~finite[score_index]).sum())
+            imputed_count = int((~usable[score_index]).sum())
+            score = float(scores[score_index])
+            ignored_score = float(ignored_mask_scores[score_index])
+            score_delta = score - ignored_score
+            binary_changed = (score > FULL_SCALE_THRESHOLD) != (
+                ignored_score > FULL_SCALE_THRESHOLD
+            )
+            if (
+                point.get("source_row_id") != int(row_ids[batch_index])
+                or point.get("quality_masked_feature_count") != quality_count
+                or point.get("nonfinite_feature_count") != nonfinite_count
+                or point.get("imputed_feature_count") != imputed_count
+                or point.get("anomaly_score") != score
+                or point.get("quality_mask_ignored_anomaly_score") != ignored_score
+                or point.get("quality_mask_score_delta") != score_delta
+                or point.get("quality_mask_changed_binary_prediction") is not binary_changed
+            ):
+                raise CareFullScaleError(
+                    "full-scale prediction differs from raw values, quality mask, and fold"
+                )
+            masked_value_count += quality_count
+            masked_point_count += int(quality_count > 0)
+            nonfinite_value_count += nonfinite_count
+            imputed_value_count += imputed_count
+            score_changed_count += int(score_delta != 0.0)
+            binary_changed_count += int(binary_changed)
+            absolute_score_deltas.append(abs(score_delta))
+            point_index += 1
+    if point_index != len(points):
+        raise CareFullScaleError("full-scale prediction model-input evidence has extra points")
+    expected_counts = {
+        "quality_masked_prediction_feature_value_count": masked_value_count,
+        "quality_masked_prediction_point_count": masked_point_count,
+        "nonfinite_prediction_feature_value_count": nonfinite_value_count,
+        "imputed_prediction_feature_value_count": imputed_value_count,
+        "quality_mask_score_changed_prediction_point_count": score_changed_count,
+        "quality_mask_binary_decision_changed_point_count": binary_changed_count,
+        "quality_mask_max_absolute_score_delta": max(absolute_score_deltas, default=0.0),
+        "quality_mask_mean_absolute_score_delta": (
+            sum(absolute_score_deltas) / len(absolute_score_deltas)
+        ),
+    }
+    if any(prediction.get(name) != count for name, count in expected_counts.items()):
+        raise CareFullScaleError("full-scale prediction model-input totals are invalid")
+    if prediction.get("quality_mask_impact_interpretation") != (
+        "counterfactual ignores prediction-time masks while retaining the same "
+        "mask-trained fold; training-profile changes are proven separately by "
+        "raw fold recomputation"
+    ):
+        raise CareFullScaleError("full-scale prediction mask impact interpretation is invalid")
+    return training_counts
 
 
 def _operational_policy(resource_limits: FullScaleResourceLimits) -> dict[str, Any]:
@@ -1975,19 +2775,78 @@ def _verify_model_package(value: Mapping[str, Any]) -> None:
     unsigned = {key: item for key, item in value.items() if key != "model_package_sha256"}
     profiles = value.get("fold_profiles")
     features = value.get("feature_columns")
+    farm = value.get("farm")
+    status_policy = value.get("status_evidence_policy")
+    quality_mask_policy = value.get("quality_mask_policy")
+    quality_mask_lineage = value.get("quality_mask_lineage")
     if (
         not _is_sha256(actual)
         or _canonical_hash(unsigned) != actual
         or value.get("schema_version") != FULL_SCALE_MODEL_SCHEMA_VERSION
         or value.get("model_kind") != "anomaly"
+        or value.get("model_version") != FULL_SCALE_MODEL_VERSION
         or value.get("generalization_protocol") != "within-farm-leave-one-turbine-out-v1"
         or value.get("prediction_truth_used") is not False
         or not isinstance(features, list)
         or not features
         or not isinstance(profiles, list)
         or not profiles
+        or farm not in FULL_SCALE_STAGE_ORDER
+        or not isinstance(status_policy, Mapping)
+        or not isinstance(quality_mask_policy, Mapping)
+        or not isinstance(quality_mask_lineage, Mapping)
     ):
         raise CareFullScaleError("full-scale model package identity is invalid")
+    expected_quality_mask_policy = _quality_mask_policy([str(item) for item in features])
+    if dict(quality_mask_policy) != expected_quality_mask_policy:
+        raise CareFullScaleError("full-scale model quality mask policy drifted")
+    lineage_hash = quality_mask_lineage.get("lineage_sha256")
+    lineage_unsigned = {
+        key: item for key, item in quality_mask_lineage.items() if key != "lineage_sha256"
+    }
+    lineage_events = quality_mask_lineage.get("events")
+    if (
+        not _is_sha256(lineage_hash)
+        or _canonical_hash(lineage_unsigned) != lineage_hash
+        or quality_mask_lineage.get("farm") != farm
+        or quality_mask_lineage.get("excluded_asset_id") is not None
+        or not isinstance(lineage_events, list)
+        or quality_mask_lineage.get("event_count") != len(lineage_events)
+        or not lineage_events
+    ):
+        raise CareFullScaleError("full-scale model quality mask lineage is invalid")
+    seen_mask_events: set[int] = set()
+    for lineage_event in lineage_events:
+        if not isinstance(lineage_event, Mapping):
+            raise CareFullScaleError("full-scale model quality mask event is malformed")
+        event_id = lineage_event.get("event_id")
+        mask_count = lineage_event.get("mask_range_count")
+        if (
+            not isinstance(event_id, int)
+            or isinstance(event_id, bool)
+            or event_id in seen_mask_events
+            or not isinstance(lineage_event.get("source_asset_id"), str)
+            or not _is_sha256(lineage_event.get("quality_mask_file_sha256"))
+            or not _is_sha256(lineage_event.get("source_quality_report_sha256"))
+            or not isinstance(mask_count, int)
+            or isinstance(mask_count, bool)
+            or mask_count < 0
+        ):
+            raise CareFullScaleError("full-scale model quality mask event is invalid")
+        seen_mask_events.add(event_id)
+    status_signal_columns = status_policy.get("corroboration_signal_columns")
+    if (
+        not isinstance(status_signal_columns, list)
+        or any(not isinstance(item, str) for item in status_signal_columns)
+        or any(item not in features for item in status_signal_columns)
+    ):
+        raise CareFullScaleError("full-scale model status evidence policy is malformed")
+    try:
+        expected_status_policy = status_evidence_policy(str(farm), status_signal_columns)
+    except CareContractError as exc:
+        raise CareFullScaleError(str(exc)) from exc
+    if dict(status_policy) != expected_status_policy:
+        raise CareFullScaleError("full-scale model status evidence policy drifted")
     expected_length = len(features)
     held_out: set[str] = set()
     for profile in profiles:
@@ -1997,6 +2856,51 @@ def _verify_model_package(value: Mapping[str, Any]) -> None:
         if not asset or asset in held_out:
             raise CareFullScaleError("full-scale model fold identity is duplicated")
         held_out.add(asset)
+        usable_rows = profile.get("status_usable_train_row_count")
+        trusted_rows = profile.get("trusted_train_row_count")
+        retained_rows = profile.get("retained_disagreement_train_row_count")
+        masked_rows = profile.get("masked_status_train_row_count")
+        quality_masked_rows = profile.get("quality_masked_train_row_count")
+        quality_masked_values = profile.get("quality_masked_train_feature_value_count")
+        quality_mask_counts = profile.get("quality_masked_train_feature_counts")
+        quality_mask_event_count = profile.get("training_quality_mask_event_count")
+        if (
+            not isinstance(usable_rows, int)
+            or isinstance(usable_rows, bool)
+            or usable_rows < 0
+            or not isinstance(trusted_rows, int)
+            or isinstance(trusted_rows, bool)
+            or trusted_rows < 0
+            or not isinstance(retained_rows, int)
+            or isinstance(retained_rows, bool)
+            or retained_rows < 0
+            or not isinstance(masked_rows, int)
+            or isinstance(masked_rows, bool)
+            or masked_rows < 0
+            or not isinstance(quality_masked_rows, int)
+            or isinstance(quality_masked_rows, bool)
+            or quality_masked_rows < 0
+            or quality_masked_rows > usable_rows
+            or not isinstance(quality_masked_values, int)
+            or isinstance(quality_masked_values, bool)
+            or quality_masked_values < 0
+            or not isinstance(quality_mask_counts, list)
+            or len(quality_mask_counts) != expected_length
+            or any(
+                not isinstance(item, int) or isinstance(item, bool) or item < 0
+                for item in quality_mask_counts
+            )
+            or sum(quality_mask_counts) != quality_masked_values
+            or profile.get("quality_mask_policy_sha256") != quality_mask_policy["policy_sha256"]
+            or not _is_sha256(profile.get("training_quality_mask_lineage_sha256"))
+            or not isinstance(quality_mask_event_count, int)
+            or isinstance(quality_mask_event_count, bool)
+            or quality_mask_event_count < 1
+            or profile.get("imputation")
+            != "leave-one-asset-out-feature-mean-for-nonfinite-or-quality-masked-v2"
+            or usable_rows != trusted_rows + retained_rows
+        ):
+            raise CareFullScaleError(f"full-scale fold {asset} status counts are invalid")
         for name in ("finite_counts", "means", "standard_deviations"):
             values = profile.get(name)
             if not isinstance(values, list) or len(values) != expected_length:
@@ -2060,8 +2964,21 @@ def build_full_scale_evaluation(
     stop_after_predictions: int | None = None,
     expected_counts: FullScaleExpectedCounts = CARE_V6_FULL_SCALE_COUNTS,
     resource_limits: FullScaleResourceLimits = DEFAULT_FULL_SCALE_RESOURCE_LIMITS,
+    trust_anchor: CareTrustAnchor | None = None,
 ) -> FullScaleEvaluationResult:
     """Run two bounded passes and evaluate one held-out-asset fold per farm asset."""
+
+    approval = import_manifest.get("care_approval")
+    if not isinstance(approval, Mapping):
+        raise CareFullScaleError("full-scale import is missing CARE approved-root lineage")
+    try:
+        verify_embedded_care_approval(approval, trust_anchor=trust_anchor)
+    except CareContractError as exc:
+        raise CareFullScaleError(str(exc)) from exc
+    if approval.get("source_manifest_sha256") != import_manifest.get(
+        "source_manifest_sha256"
+    ) or approval.get("quality_contract_sha256") != import_manifest.get("quality_contract_sha256"):
+        raise CareFullScaleError("full-scale import approved-root lineage hashes drifted")
 
     output_root = output_root.resolve()
     manifest_path = (
@@ -2077,6 +2994,7 @@ def build_full_scale_evaluation(
             import_manifest=import_manifest,
             expected_counts=expected_counts,
             resource_limits=resource_limits,
+            trust_anchor=trust_anchor,
         )
         return FullScaleEvaluationResult(manifest_path, raw, _sha256_file(manifest_path), True)
     if (
@@ -2089,17 +3007,10 @@ def build_full_scale_evaluation(
     quality_contract_sha256 = str(import_manifest["quality_contract_sha256"])
     if not _is_sha256(source_dataset_sha256) or not _is_sha256(quality_contract_sha256):
         raise CareFullScaleError("full-scale evaluation control hashes are invalid")
-    mapping_documents = {
-        farm: _load_json_reference(output_root, reference)
-        for farm, reference in import_manifest["mapping_artifacts"].items()
-    }
-    features_by_farm: dict[str, tuple[str, ...]] = {}
-    for farm in FULL_SCALE_STAGE_ORDER:
-        mapping = mapping_documents[farm]
-        features = tuple(str(item) for item in mapping["approved_model_input_columns"])
-        if not features or len(features) != int(mapping["approved_model_input_count"]):
-            raise CareFullScaleError(f"full-scale farm {farm} feature mapping is invalid")
-        features_by_farm[farm] = features
+    features_by_farm, status_signals_by_farm = _evaluation_column_contracts(
+        output_root,
+        import_manifest,
+    )
 
     state_file = state_path or output_root / ".state" / f"{job_id}.json"
     job_control = FileBenchmarkJobControl(
@@ -2116,11 +3027,13 @@ def build_full_scale_evaluation(
             import_manifest=import_manifest,
             output_root=output_root,
             features_by_farm=features_by_farm,
+            status_signals_by_farm=status_signals_by_farm,
         )
         profiles = _build_fold_profiles(
             totals=totals,
             assets=asset_moments,
             features_by_farm=features_by_farm,
+            import_manifest=import_manifest,
         )
         if len(profiles) != expected_counts.asset_count:
             raise CareFullScaleError("full-scale fold count differs from farm-namespaced assets")
@@ -2132,13 +3045,15 @@ def build_full_scale_evaluation(
                 for profile_farm, asset in sorted(profiles)
                 if profile_farm == farm
             ]
+            quality_mask_policy = _quality_mask_policy(features_by_farm[farm])
+            quality_mask_lineage = _quality_mask_lineage(import_manifest, farm)
             model_payload = {
                 "schema_version": FULL_SCALE_MODEL_SCHEMA_VERSION,
                 "dataset_id": DATASET_ID,
                 "dataset_version": DATASET_VERSION,
                 "farm": farm,
                 "model_id": _model_id(farm),
-                "model_version": "1.0.0",
+                "model_version": FULL_SCALE_MODEL_VERSION,
                 "model_kind": "anomaly",
                 "algorithm": "maximum-absolute-leave-one-asset-standard-score",
                 "generalization_protocol": "within-farm-leave-one-turbine-out-v1",
@@ -2147,6 +3062,9 @@ def build_full_scale_evaluation(
                 "feature_columns": list(features_by_farm[farm]),
                 "quality_rule_version": QUALITY_RULE_VERSION,
                 "quality_contract_sha256": quality_contract_sha256,
+                "quality_mask_policy": quality_mask_policy,
+                "quality_mask_lineage": quality_mask_lineage,
+                "care_approval": dict(approval),
                 "threshold_policy": _threshold_policy().to_dict(),
                 "fold_profiles": farm_profiles,
                 "dependency_identity": {
@@ -2157,13 +3075,18 @@ def build_full_scale_evaluation(
                 },
                 "training_split": "train",
                 "trusted_train_status_ids": list(FULL_SCALE_TRAIN_STATUS_IDS),
+                "status_evidence_policy": status_evidence_policy(
+                    farm,
+                    status_signals_by_farm[farm],
+                ),
                 "prediction_truth_used": False,
                 "cross_farm_ontology_used": False,
                 "license": build_care_artifact_license(
                     artifact_type="full-scale-anomaly-model-package",
                     changes_made=(
                         "Computed per-farm leave-one-asset-out means and standard deviations "
-                        "from trusted train rows only; no prediction truth was read."
+                        "from status-usable train rows after applying immutable feature masks; "
+                        "no prediction truth was read."
                     ),
                     source_dataset_sha256=source_dataset_sha256,
                     source_artifact_sha256=str(import_manifest["manifest_sha256"]),
@@ -2221,7 +3144,14 @@ def build_full_scale_evaluation(
                 raw_prediction = json.loads(prediction_path.read_text(encoding="utf-8"))
                 if not isinstance(raw_prediction, Mapping):
                     raise CareFullScaleError("full-scale prediction root must be an object")
-                verify_prediction_artifact(raw_prediction)
+                verify_full_scale_prediction_model_inputs(
+                    raw_prediction,
+                    output_root=output_root,
+                    event=event,
+                    features=features_by_farm[farm],
+                    status_signal_columns=status_signals_by_farm[farm],
+                    profile=profiles[(farm, asset)],
+                )
                 if (
                     raw_prediction.get("event_id") != event_id
                     or raw_prediction.get("farm") != farm
@@ -2248,9 +3178,11 @@ def build_full_scale_evaluation(
                     event=event,
                     output_root=output_root,
                     features=features_by_farm[farm],
+                    status_signal_columns=status_signals_by_farm[farm],
                     profile=profiles[(farm, asset)],
                     feature_set_sha256=_canonical_hash(list(features_by_farm[farm])),
                     quality_contract_sha256=quality_contract_sha256,
+                    approval_lineage=approval,
                     license_metadata=build_care_artifact_license(
                         artifact_type="full-scale-event-prediction",
                         changes_made=(
@@ -2304,8 +3236,11 @@ def build_full_scale_evaluation(
             "dataset_id": DATASET_ID,
             "dataset_version": DATASET_VERSION,
             "source_import_manifest_sha256": import_manifest["manifest_sha256"],
+            "care_approval": dict(approval),
             "prediction_truth_present": False,
             "prediction_truth_read": False,
+            "quality_mask_policy_version": FULL_SCALE_QUALITY_MASK_POLICY_VERSION,
+            "quality_masks_applied": True,
             "event_ids": [int(event["event_id"]) for event in import_manifest["events"]],
             "prediction_artifacts": prediction_references,
             "prediction_event_count": len(prediction_references),
@@ -2354,17 +3289,37 @@ def build_full_scale_evaluation(
                 PredictionTruthVault(tuple(truths[event_id] for event_id in event_ids))
             )
             run = EvaluationRunSpec(
-                run_id=(f"care-v6-{farm.lower()}-loao-{_safe_token(asset)}-final-v1"),
+                run_id=(f"care-v6-{farm.lower()}-loao-{_safe_token(asset)}-final-v2"),
                 purpose="final-holdout",
                 generalization_protocol="within-farm-leave-one-turbine-out-v1",
                 event_ids=event_ids,
                 model_id=_model_id(farm),
-                model_version="1.0.0",
+                model_version=FULL_SCALE_MODEL_VERSION,
                 created_at=FULL_SCALE_PROTOCOL_FROZEN_AT,
                 farm=farm,
                 held_out_asset_id=asset,
             )
-            evaluation = build_evaluation_artifact(run, evaluator, predictions)
+            evaluation = build_evaluation_artifact(
+                run,
+                evaluator,
+                predictions,
+                approval_lineage=approval,
+            )
+            fold_profile = profiles[(farm, asset)]
+            prediction_quality_masks = [
+                {
+                    "event_id": int(prediction["event_id"]),
+                    "quality_mask_file_sha256": prediction["quality_mask_reference"]["file_sha256"],
+                    "quality_mask_range_count": prediction["quality_mask_range_count"],
+                    "quality_masked_prediction_feature_value_count": prediction[
+                        "quality_masked_prediction_feature_value_count"
+                    ],
+                    "quality_masked_prediction_point_count": prediction[
+                        "quality_masked_prediction_point_count"
+                    ],
+                }
+                for prediction in predictions
+            ]
             fold_payload = {
                 "schema_version": FULL_SCALE_FOLD_SCHEMA_VERSION,
                 "dataset_id": DATASET_ID,
@@ -2374,12 +3329,18 @@ def build_full_scale_evaluation(
                 "generalization_protocol": "within-farm-leave-one-turbine-out-v1",
                 "prediction_freeze_sha256": freeze["freeze_sha256"],
                 "truth_read_after_prediction_freeze": True,
+                "model_package_sha256": model_references[farm]["document_sha256"],
+                "quality_mask_policy": _quality_mask_policy(features_by_farm[farm]),
+                "fold_profile": dict(fold_profile),
+                "prediction_quality_masks": prediction_quality_masks,
                 "evaluation": evaluation,
+                "care_approval": dict(approval),
                 "license": build_care_artifact_license(
                     artifact_type="within-farm-evaluation-fold",
                     changes_made=(
                         "Evaluated one farm-namespaced held-out asset after every prediction "
-                        "artifact was frozen; truth was unavailable to training and calibration."
+                        "artifact was frozen; training and prediction mask lineage was retained, "
+                        "and truth was unavailable to training and calibration."
                     ),
                     source_dataset_sha256=source_dataset_sha256,
                     source_artifact_sha256=str(freeze["freeze_sha256"]),
@@ -2486,6 +3447,13 @@ def build_full_scale_evaluation(
         candidate_pass_count = sum(
             bool(summary["release_candidate_passed"]) for summary in fold_summaries
         )
+        quality_mask_impact = _quality_mask_impact_summary(
+            training_resources,
+            [
+                _load_json_reference(output_root, prediction_references[str(event["event_id"])])
+                for event in import_manifest["events"]
+            ],
+        )
         payload = {
             "schema_version": FULL_SCALE_EVALUATION_SCHEMA_VERSION,
             "dataset_id": DATASET_ID,
@@ -2493,6 +3461,7 @@ def build_full_scale_evaluation(
             "source_import_manifest_sha256": import_manifest["manifest_sha256"],
             "source_dataset_sha256": source_dataset_sha256,
             "quality_contract_sha256": quality_contract_sha256,
+            "care_approval": dict(approval),
             "generalization_protocol": "within-farm-leave-one-turbine-out-v1",
             "farm_namespaced_fold_count": len(profiles),
             "model_packages": model_references,
@@ -2512,6 +3481,7 @@ def build_full_scale_evaluation(
             "resource_actual": resource_actual,
             "training_resources": training_resources,
             "prediction_resources": prediction_resources,
+            "quality_mask_impact": quality_mask_impact,
             "operational_policy": _operational_policy(resource_limits),
             "server_release_gate": {
                 "authority": "immutable-evaluation-run-and-metric-snapshot-only",
@@ -2556,6 +3526,7 @@ def build_full_scale_evaluation(
             import_manifest=import_manifest,
             expected_counts=expected_counts,
             resource_limits=resource_limits,
+            trust_anchor=trust_anchor,
         )
         job_control.complete(manifest_path.resolve().as_uri(), resource_actual)
         return FullScaleEvaluationResult(
@@ -2578,6 +3549,7 @@ def verify_full_scale_evaluation_manifest(
     import_manifest: Mapping[str, Any],
     expected_counts: FullScaleExpectedCounts = CARE_V6_FULL_SCALE_COUNTS,
     resource_limits: FullScaleResourceLimits = DEFAULT_FULL_SCALE_RESOURCE_LIMITS,
+    trust_anchor: CareTrustAnchor | None = None,
 ) -> None:
     actual = value.get("manifest_sha256")
     unsigned = {key: item for key, item in value.items() if key != "manifest_sha256"}
@@ -2602,6 +3574,13 @@ def verify_full_scale_evaluation_manifest(
         or len(fold_summaries) != expected_counts.asset_count
     ):
         raise CareFullScaleError("full-scale evaluation manifest identity is invalid")
+    approval = value.get("care_approval")
+    if not isinstance(approval, Mapping) or approval != import_manifest.get("care_approval"):
+        raise CareFullScaleError("full-scale evaluation approved-root lineage is invalid")
+    try:
+        verify_embedded_care_approval(approval, trust_anchor=trust_anchor)
+    except CareContractError as exc:
+        raise CareFullScaleError(str(exc)) from exc
     for key, expected in expected_counts.to_document().items():
         if summary.get(key) != expected:
             raise CareFullScaleError(f"full-scale evaluation summary {key} is invalid")
@@ -2616,10 +3595,29 @@ def verify_full_scale_evaluation_manifest(
         and summary.get("prediction_point_count") != resource_prediction_count()
     ):
         raise CareFullScaleError("CARE v6 prediction point count is inconsistent")
+    features_by_farm, status_signals_by_farm = _evaluation_column_contracts(
+        output_root,
+        import_manifest,
+    )
+    loaded_model_packages: dict[str, Mapping[str, Any]] = {}
     for farm, reference in model_packages.items():
         if farm not in FULL_SCALE_STAGE_ORDER or not isinstance(reference, Mapping):
             raise CareFullScaleError("full-scale model reference is malformed")
-        _verify_model_package(_load_json_reference(output_root, reference))
+        model_package = _load_json_reference(output_root, reference)
+        _verify_model_package(model_package)
+        if (
+            model_package.get("feature_columns") != list(features_by_farm[farm])
+            or model_package.get("status_evidence_policy")
+            != status_evidence_policy(farm, status_signals_by_farm[farm])
+            or model_package.get("quality_mask_policy")
+            != _quality_mask_policy(features_by_farm[farm])
+            or model_package.get("quality_mask_lineage")
+            != _quality_mask_lineage(import_manifest, farm)
+        ):
+            raise CareFullScaleError(
+                "full-scale model inputs differ from the approved import mapping or masks"
+            )
+        loaded_model_packages[farm] = model_package
     if set(model_packages) != set(FULL_SCALE_STAGE_ORDER):
         raise CareFullScaleError("full-scale model packages do not cover every farm")
     freeze = _load_json_reference(output_root, prediction_freeze)
@@ -2629,6 +3627,8 @@ def verify_full_scale_evaluation_manifest(
         or _canonical_hash(freeze_unsigned) != freeze.get("freeze_sha256")
         or freeze.get("prediction_truth_present") is not False
         or freeze.get("prediction_truth_read") is not False
+        or freeze.get("quality_mask_policy_version") != FULL_SCALE_QUALITY_MASK_POLICY_VERSION
+        or freeze.get("quality_masks_applied") is not True
         or freeze.get("prediction_event_count") != expected_counts.event_count
     ):
         raise CareFullScaleError("full-scale prediction freeze is invalid")
@@ -2646,16 +3646,74 @@ def verify_full_scale_evaluation_manifest(
         or not isinstance(resource_actual, Mapping)
     ):
         raise CareFullScaleError("full-scale evaluation resource evidence is malformed")
+    verification_totals, verification_assets, verification_training = _accumulate_moments(
+        import_manifest=import_manifest,
+        output_root=output_root,
+        features_by_farm=features_by_farm,
+        status_signals_by_farm=status_signals_by_farm,
+    )
+    expected_profiles = _build_fold_profiles(
+        totals=verification_totals,
+        assets=verification_assets,
+        features_by_farm=features_by_farm,
+        import_manifest=import_manifest,
+    )
+    verified_training_count_fields = (
+        "scanned_row_count",
+        "status_usable_train_row_count",
+        "trusted_train_row_count",
+        "retained_disagreement_train_row_count",
+        "masked_status_train_row_count",
+        "quality_masked_train_row_count",
+        "quality_masked_train_feature_value_count",
+    )
+    if any(
+        training_resources.get(name) != verification_training.get(name)
+        for name in verified_training_count_fields
+    ):
+        raise CareFullScaleError(
+            "full-scale training totals differ from raw rows and quality masks"
+        )
+    for farm, model_package in loaded_model_packages.items():
+        for profile in model_package["fold_profiles"]:
+            profile_key = (farm, str(profile["held_out_asset_id"]))
+            if (
+                profile_key not in expected_profiles
+                or dict(profile) != expected_profiles[profile_key]
+            ):
+                raise CareFullScaleError(
+                    "full-scale fold moments differ from raw rows and quality masks"
+                )
     expected_events = {str(int(event["event_id"])): event for event in import_manifest["events"]}
     if set(prediction_references) != set(expected_events):
         raise CareFullScaleError("full-scale prediction references are incomplete")
     prediction_point_count = 0
+    verified_predictions: list[Mapping[str, Any]] = []
+    verified_prediction_by_event: dict[int, Mapping[str, Any]] = {}
+    raw_training_counts_by_asset: dict[tuple[str, str], dict[str, int]] = {}
     for event_id, event in expected_events.items():
         reference = prediction_references[event_id]
         if not isinstance(reference, Mapping):
             raise CareFullScaleError("full-scale prediction reference is malformed")
         prediction = _load_json_reference(output_root, reference)
-        verify_prediction_artifact(prediction)
+        verified_predictions.append(prediction)
+        verified_prediction_by_event[int(event_id)] = prediction
+        profile = expected_profiles[(str(event["farm"]), str(event["source_asset_id"]))]
+        event_training_counts = verify_full_scale_prediction_model_inputs(
+            prediction,
+            output_root=output_root,
+            event=event,
+            features=features_by_farm[str(event["farm"])],
+            status_signal_columns=status_signals_by_farm[str(event["farm"])],
+            profile=profile,
+        )
+        asset_key = (str(event["farm"]), str(event["source_asset_id"]))
+        asset_counts = raw_training_counts_by_asset.setdefault(
+            asset_key,
+            {name: 0 for name in event_training_counts},
+        )
+        for name, count in event_training_counts.items():
+            asset_counts[name] += count
         if (
             prediction.get("event_id") != int(event_id)
             or prediction.get("farm") != event["farm"]
@@ -2671,6 +3729,37 @@ def verify_full_scale_evaluation_manifest(
         != prediction_point_count
     ):
         raise CareFullScaleError("full-scale prediction resource count is invalid")
+    if value.get("quality_mask_impact") != _quality_mask_impact_summary(
+        training_resources,
+        verified_predictions,
+    ):
+        raise CareFullScaleError("full-scale quality mask impact summary is invalid")
+    raw_training_totals = {
+        name: sum(counts[name] for counts in raw_training_counts_by_asset.values())
+        for name in (
+            "status_usable_train_row_count",
+            "trusted_train_row_count",
+            "retained_disagreement_train_row_count",
+            "masked_status_train_row_count",
+        )
+    }
+    if any(training_resources.get(name) != count for name, count in raw_training_totals.items()):
+        raise CareFullScaleError("full-scale training status totals differ from raw rows")
+    for farm, model_package in loaded_model_packages.items():
+        for profile in model_package["fold_profiles"]:
+            held_out_asset = str(profile["held_out_asset_id"])
+            expected_profile_counts = {
+                name: sum(
+                    counts[name]
+                    for (item_farm, item_asset), counts in raw_training_counts_by_asset.items()
+                    if item_farm == farm and item_asset != held_out_asset
+                )
+                for name in raw_training_totals
+            }
+            if any(profile.get(name) != count for name, count in expected_profile_counts.items()):
+                raise CareFullScaleError(
+                    "full-scale fold status counts differ from raw status and signals"
+                )
     actual_elapsed = resource_actual.get("elapsed_seconds")
     actual_peak_resident = resource_actual.get("peak_process_resident_bytes")
     if (
@@ -2723,6 +3812,8 @@ def verify_full_scale_evaluation_manifest(
         fold_hash = fold.get("document_sha256")
         fold_unsigned = {key: item for key, item in fold.items() if key != "document_sha256"}
         evaluation = fold.get("evaluation")
+        farm = str(fold.get("farm", ""))
+        held_out_asset = str(fold.get("held_out_asset_id", ""))
         if (
             fold.get("schema_version") != FULL_SCALE_FOLD_SCHEMA_VERSION
             or _canonical_hash(fold_unsigned) != fold_hash
@@ -2731,9 +3822,36 @@ def verify_full_scale_evaluation_manifest(
             or not isinstance(evaluation, Mapping)
             or evaluation.get("run", {}).get("generalization_protocol")
             != "within-farm-leave-one-turbine-out-v1"
+            or farm not in loaded_model_packages
+            or fold.get("model_package_sha256")
+            != loaded_model_packages[farm]["model_package_sha256"]
+            or fold.get("quality_mask_policy") != _quality_mask_policy(features_by_farm[farm])
+            or fold.get("fold_profile") != expected_profiles.get((farm, held_out_asset))
         ):
             raise CareFullScaleError("full-scale fold artifact identity is invalid")
         event_ids = {int(item) for item in summary_item.get("event_ids", [])}
+        if not event_ids.issubset(verified_prediction_by_event):
+            raise CareFullScaleError("full-scale fold prediction mask coverage is incomplete")
+        expected_prediction_quality_masks = [
+            {
+                "event_id": event_id,
+                "quality_mask_file_sha256": verified_prediction_by_event[event_id][
+                    "quality_mask_reference"
+                ]["file_sha256"],
+                "quality_mask_range_count": verified_prediction_by_event[event_id][
+                    "quality_mask_range_count"
+                ],
+                "quality_masked_prediction_feature_value_count": verified_prediction_by_event[
+                    event_id
+                ]["quality_masked_prediction_feature_value_count"],
+                "quality_masked_prediction_point_count": verified_prediction_by_event[event_id][
+                    "quality_masked_prediction_point_count"
+                ],
+            }
+            for event_id in sorted(event_ids)
+        ]
+        if fold.get("prediction_quality_masks") != expected_prediction_quality_masks:
+            raise CareFullScaleError("full-scale fold prediction mask lineage is invalid")
         if accounted.intersection(event_ids):
             raise CareFullScaleError("full-scale fold event coverage overlaps")
         accounted.update(event_ids)
@@ -2772,6 +3890,7 @@ async def register_full_scale_evaluation(
     subject: str,
     expected_counts: FullScaleExpectedCounts = CARE_V6_FULL_SCALE_COUNTS,
     resource_limits: FullScaleResourceLimits = DEFAULT_FULL_SCALE_RESOURCE_LIMITS,
+    trust_anchor: CareTrustAnchor | None = None,
 ) -> FullScaleEvaluationRegistration:
     """Register three farm models, every held-out fold, and every event outcome."""
 
@@ -2782,6 +3901,7 @@ async def register_full_scale_evaluation(
         import_manifest=import_manifest,
         expected_counts=expected_counts,
         resource_limits=resource_limits,
+        trust_anchor=trust_anchor,
     )
     created = replayed = 0
     model_ids: list[str] = []
@@ -2816,8 +3936,13 @@ async def register_full_scale_evaluation(
                     "dependency_identity": package["dependency_identity"],
                     "feature_set_version": package["feature_set_version"],
                     "quality_rule_version": package["quality_rule_version"],
+                    "quality_mask_policy": package["quality_mask_policy"],
+                    "quality_mask_lineage_sha256": package["quality_mask_lineage"][
+                        "lineage_sha256"
+                    ],
                     "model_package_sha256": package["model_package_sha256"],
                     "prediction_truth_used": False,
+                    "care_approval": dict(evaluation_manifest["care_approval"]),
                 },
             ),
             content_size_bytes=int(reference["size_bytes"]),
@@ -2852,6 +3977,9 @@ async def register_full_scale_evaluation(
                 "farm": farm,
                 "held_out_asset_id": fold["held_out_asset_id"],
                 "event_ids": run_document["event_ids"],
+                "care_approved_root_sha256": evaluation_manifest["care_approval"][
+                    "approved_root_sha256"
+                ],
             }
         )
         run, was_replayed = await get_or_create_evaluation_run(
@@ -2877,7 +4005,12 @@ async def register_full_scale_evaluation(
                     "model_package": evaluation_manifest["model_packages"][farm],
                     "prediction_freeze_sha256": freeze["freeze_sha256"],
                     "prediction_truth_used": False,
+                    "quality_mask_policy": package["quality_mask_policy"],
+                    "quality_mask_lineage_sha256": package["quality_mask_lineage"][
+                        "lineage_sha256"
+                    ],
                     "release_candidate_passed": summary["release_candidate_passed"],
+                    "care_approval": dict(evaluation_manifest["care_approval"]),
                 },
             ),
             subject=subject,
@@ -3059,8 +4192,15 @@ def _read_json(path: Path) -> Mapping[str, Any]:
 
 
 async def _register_from_settings(args: argparse.Namespace) -> dict[str, Any]:
-    settings = get_settings()
-    engine = create_engine(settings)
+    if args.use_care_worker_runtime:
+        care_settings = get_care_worker_settings()
+        engine = create_async_engine(
+            care_settings.database_url.get_secret_value(),
+            pool_pre_ping=True,
+        )
+    else:
+        settings = get_settings()
+        engine = create_engine(settings)
     session_factory = create_session_factory(engine)
     try:
         source_manifest = _read_json(args.source_manifest)
@@ -3110,6 +4250,7 @@ def _parser() -> argparse.ArgumentParser:
     import_store = import_parser.add_mutually_exclusive_group()
     import_store.add_argument("--object-store-root", type=Path)
     import_store.add_argument("--use-configured-minio", action="store_true")
+    import_store.add_argument("--use-care-worker-runtime", action="store_true")
     import_parser.add_argument("--job-id", default="care-v6-full-import")
     import_parser.add_argument("--state-path", type=Path)
     evaluate_parser = subparsers.add_parser("evaluate", help="run within-farm LOAO evaluation")
@@ -3118,6 +4259,7 @@ def _parser() -> argparse.ArgumentParser:
     evaluation_store = evaluate_parser.add_mutually_exclusive_group()
     evaluation_store.add_argument("--object-store-root", type=Path)
     evaluation_store.add_argument("--use-configured-minio", action="store_true")
+    evaluation_store.add_argument("--use-care-worker-runtime", action="store_true")
     evaluate_parser.add_argument("--job-id", default="care-v6-full-evaluation")
     evaluate_parser.add_argument("--state-path", type=Path)
     register_parser = subparsers.add_parser(
@@ -3130,6 +4272,7 @@ def _parser() -> argparse.ArgumentParser:
     register_parser.add_argument("--artifact-root", type=Path, required=True)
     register_parser.add_argument("--tenant-id", default="tenant-east-china")
     register_parser.add_argument("--subject", default="care-full-scale-worker")
+    register_parser.add_argument("--use-care-worker-runtime", action="store_true")
     status_parser = subparsers.add_parser("status", help="verify and print a job state")
     status_parser.add_argument("--state-path", type=Path, required=True)
     cancel_parser = subparsers.add_parser(
@@ -3140,6 +4283,12 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _artifact_store_from_args(args: argparse.Namespace) -> ImmutableArtifactStore | None:
+    if args.use_care_worker_runtime:
+        care_settings = get_care_worker_settings()
+        return MinioImmutableArtifactStore(
+            care_minio_client(care_settings),
+            care_settings.minio_bucket,
+        )
     if args.use_configured_minio:
         settings = get_settings()
         return MinioImmutableArtifactStore(

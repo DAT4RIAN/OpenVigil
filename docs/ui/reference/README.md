@@ -1,17 +1,15 @@
 # UI Reference Assets
 
-把 Image2 或其他设计工具生成并最终选定的视觉参考图放在本目录。
+本目录保存已经选定、可被 `UI_UX_SPEC.md` 引用的视觉参考图。
 
-推荐命名：
+## Selected Direction
 
-- dashboard-desktop.png
-- dashboard-laptop.png
-- dashboard-mobile.png
-- contract-review-desktop.png
-- settings-desktop.png
+- Direction: `Incident-first Operations / 事件优先的运营指挥`
+- Primary asset: `dashboard-desktop.png`
+- Intended viewport: desktop `1440 × 900`（图片原生画布为 `1536 × 1024`）
+- Final prompt: `dashboard-desktop.prompt.md`
+- Selected on: `2026-09-03`
 
-注意：
+`dashboard-desktop.png` 主要指导 layout、hierarchy、spacing、component proportion、density 和 visual tone。它不是业务、状态机、权限、响应式或像素级实现真值，也不作为 visual regression baseline。
 
-- 这些图片是视觉意图参考，不是完整产品规格。
-- 不作为像素级自动化测试 baseline。
-- 经过 Reviewer 批准的真实浏览器截图才适合作为 visual regression baseline。
+经过 Reviewer 批准的真实浏览器截图才适合作为正式 baseline。

@@ -23,6 +23,9 @@ QUALITY_CONTRACT_VERSION = "care-v6-quality-contract-v1"
 QUALITY_RULE_VERSION = "care-v6-quality-rules-v1"
 FEATURE_SET_VERSION = "care-v6-avg-feature-set-v1"
 STATUS_RULE_VERSION = "care-v6-status-rules-v1"
+STATUS_CORROBORATION_RULE_ID = "care-v6-bc-status-signal-corroboration-v1"
+STATUS_SUSTAINED_DISAGREEMENT_MIN_ROWS = 3
+STATUS_SIGNAL_ZERO_TOLERANCE = 1e-12
 UNIT_RULE_VERSION = "care-v6-unit-rules-v1"
 TIME_RULE_VERSION = "care-v6-anonymous-time-v1"
 ZERO_RUN_RULE_ID = "care-v6-bc-prolonged-zero-v1"
@@ -51,6 +54,121 @@ class StatusDecision:
     reason: str
     confidence: float
     rule_version: str = STATUS_RULE_VERSION
+
+
+@dataclass(frozen=True, slots=True)
+class StatusPointEvidence:
+    disagreement_run_length: int
+    corroborated_by_signal: bool
+    corroboration_signal_count: int
+    corroboration_finite_signal_count: int
+    corroboration_inactive_or_invalid_signal_count: int
+    corroboration_rule_id: str = STATUS_CORROBORATION_RULE_ID
+
+
+@dataclass(slots=True)
+class StatusSequenceState:
+    """Derive status evidence across record batches within exactly one CARE event."""
+
+    farm: str
+    trusted_status_ids: tuple[str, ...]
+    _previous_source_row_id: int | None = None
+    _previous_split: str | None = None
+    _previous_disagreement_status_id: str | None = None
+    _disagreement_run_length: int = 0
+
+    def __post_init__(self) -> None:
+        if self.farm not in {"A", "B", "C"}:
+            raise CareContractError(f"unknown CARE farm for status sequence: {self.farm}")
+        self.trusted_status_ids = tuple(sorted(set(self.trusted_status_ids)))
+        if not self.trusted_status_ids:
+            raise CareContractError("status sequence requires an explicit trusted allowlist")
+
+    def observe(
+        self,
+        *,
+        source_row_id: int,
+        split: str,
+        status_id: str,
+        corroboration_signal_values: Sequence[Any],
+    ) -> StatusPointEvidence:
+        if (
+            isinstance(source_row_id, bool)
+            or not isinstance(source_row_id, int)
+            or source_row_id < 0
+        ):
+            raise CareContractError("status sequence source row ID must be non-negative")
+        if split not in {"train", "prediction"}:
+            raise CareContractError(f"unknown CARE split for status sequence: {split}")
+        status_id = str(status_id)
+        trusted = status_id in self.trusted_status_ids
+        contiguous = (
+            self._previous_source_row_id is not None
+            and source_row_id == self._previous_source_row_id + 1
+            and split == self._previous_split
+            and status_id == self._previous_disagreement_status_id
+            and not trusted
+        )
+        self._disagreement_run_length = self._disagreement_run_length + 1 if contiguous else 1
+        self._previous_source_row_id = source_row_id
+        self._previous_split = split
+        self._previous_disagreement_status_id = None if trusted else status_id
+
+        finite_count = 0
+        inactive_or_invalid_count = 0
+        for raw_value in corroboration_signal_values:
+            try:
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                inactive_or_invalid_count += 1
+                continue
+            if not math.isfinite(value):
+                inactive_or_invalid_count += 1
+                continue
+            finite_count += 1
+            if abs(value) <= STATUS_SIGNAL_ZERO_TOLERANCE:
+                inactive_or_invalid_count += 1
+        signal_count = len(corroboration_signal_values)
+        corroborated = (
+            self.farm in {"B", "C"}
+            and not trusted
+            and signal_count > 0
+            and inactive_or_invalid_count == signal_count
+        )
+        return StatusPointEvidence(
+            disagreement_run_length=self._disagreement_run_length,
+            corroborated_by_signal=corroborated,
+            corroboration_signal_count=signal_count,
+            corroboration_finite_signal_count=finite_count,
+            corroboration_inactive_or_invalid_signal_count=inactive_or_invalid_count,
+        )
+
+
+def status_evidence_policy(
+    farm: str,
+    corroboration_signal_columns: Sequence[str],
+) -> dict[str, Any]:
+    if farm not in {"A", "B", "C"}:
+        raise CareContractError(f"unknown CARE farm for status evidence policy: {farm}")
+    columns = tuple(str(value) for value in corroboration_signal_columns)
+    if len(columns) != len(set(columns)) or any(not value for value in columns):
+        raise CareContractError("status corroboration signal columns must be unique and non-empty")
+    if farm in {"B", "C"} and not columns:
+        raise CareContractError("B/C status corroboration requires approved signal columns")
+    return {
+        "rule_version": STATUS_RULE_VERSION,
+        "corroboration_rule_id": STATUS_CORROBORATION_RULE_ID,
+        "minimum_sustained_disagreement_rows": STATUS_SUSTAINED_DISAGREEMENT_MIN_ROWS,
+        "zero_tolerance": STATUS_SIGNAL_ZERO_TOLERANCE,
+        "corroboration_signal_columns": list(columns),
+        "corroboration_predicate": (
+            "all-approved-scaled-power-signals-zero-nonfinite-or-unparseable"
+        ),
+        "run_length_scope": ["dataset_version", "farm", "event_id", "split", "status_id"],
+        "record_batch_boundary_resets_run": False,
+        "noncontiguous_source_row_resets_run": True,
+        "event_boundary_resets_run": True,
+    }
 
 
 @dataclass
@@ -242,7 +360,10 @@ def evaluate_status_point(
         return StatusDecision(True, "trusted-operating-status", 1.0)
     if farm == "A":
         return StatusDecision(False, "untrusted-a-train-status", 0.95)
-    if disagreement_run_length < 3 or not corroborated_by_signal:
+    if (
+        disagreement_run_length < STATUS_SUSTAINED_DISAGREEMENT_MIN_ROWS
+        or not corroborated_by_signal
+    ):
         return StatusDecision(True, "bc-short-status-disagreement-retained", 0.5)
     return StatusDecision(False, "bc-sustained-corroborated-status-disagreement", 0.9)
 

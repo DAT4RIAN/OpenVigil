@@ -1,4 +1,4 @@
-# WindOps Python backend — durable Mission and work-order platform
+# OpenVigil Python backend — durable Mission and work-order platform
 
 This Python 3.12 service implements the audited operational chain:
 
@@ -32,8 +32,16 @@ independently.
 Every business read and write requires `Authorization: Bearer <role-secret>`;
 only `/healthz` and `/readyz` remain unauthenticated operational probes. Each
 secret maps server-side to one concrete service subject and role. Unsigned
-subject headers are ignored, every read writes a `read_access_audits` row, and
-the test-only explicit bypass is rejected outside `WINDOPS_ENVIRONMENT=test`.
+subject headers are ignored. Before business data is read, production appends a
+minimized attribution event to a bounded durable Redis stream; raw query values
+and full scope lists are represented only by SHA-256 fingerprints and counts.
+`windops-read-audit-worker` commits up to 500 events per transaction into monthly
+`read_access_audits` partitions, acknowledges only after commit, and reclaims
+unacknowledged deliveries. Redis failure or backlog saturation fails the read
+closed with `READ_AUDIT_UNAVAILABLE` or `READ_AUDIT_BACKPRESSURE`; a PostgreSQL
+audit outage leaves events queued and does not block reads until that explicit
+capacity boundary. The test-only explicit bypass is rejected outside
+`WINDOPS_ENVIRONMENT=test`.
 Actor names in JSON are ignored; approval and field evidence identity comes
 from the authenticated principal.
 
@@ -157,6 +165,8 @@ closure contract.
 - `0024_care_benchmark_metadata`: governed CARE dataset/event/evaluation/replay metadata, structured anomaly prediction provenance, and dual alarm-source constraints
 - `0025_benchmark_event_score_scope`: keep point-scorable CARE events valid when a single-class fold has no run-aggregate CARE score
 - `0026_schema_contract_alignment`: backfill and require ORM-mandatory timestamps while aligning PostgreSQL indexes and constraints with the declared model contract
+- `0027_quality_artifact_stages`: preserve one canonical CARE quality identity while appending independently audited minimal/full-scale stage artifacts without overwriting history
+- `0028_read_audit_pipeline`: move minimized business-read attribution to a bounded Redis stream, batch it into monthly PostgreSQL partitions, and compress/purge it under explicit retention
 
 `docker-compose.yml` is a local, production-shaped dependency stack (including
 Neo4j Community), not a
@@ -166,8 +176,9 @@ integration tests.
 
 `Dockerfile` and `deploy/kubernetes/` provide the production application
 baseline: a non-root multi-stage image, three API replicas, independent
-Dramatiq workers, a durable outbox relay, one-time migration Job, readiness and
-liveness probes, resource bounds, HPA, disruption budget, default-deny network
+Dramatiq workers, a durable outbox relay, one-time migration Job, dedicated
+read-audit batch/retention workers, readiness and liveness probes, resource
+bounds, HPA, disruption budget, default-deny network
 policy and scheduled verified backups. The checked-in digest is intentionally
 non-deployable. Follow `deploy/README.md` to inject the exact signed image digest
 and secret-manager-backed runtime configuration; the local Compose stack is
@@ -186,8 +197,16 @@ python -m pip install -e ".[test,dev]"
 alembic upgrade head
 dramatiq windops_backend.workers
 windops-outbox-relay
+windops-read-audit-worker
 uvicorn windops_backend.main:app --host 0.0.0.0 --port 8000
 ```
+
+The read-audit retention contract keeps hot rows for 30 days, then atomically
+compresses deterministic JSONL batches into `read_access_audit_archives`. The
+daily `windops-read-audit-maintenance` Job creates three months of future
+partitions, archives bounded batches and deletes compressed archives only after
+365 days. Both thresholds, queue capacity and batch sizes are runtime-validated;
+retention must always exceed the archive age.
 
 Set production values through the environment/secret manager, including
 `WINDOPS_ENVIRONMENT=production`, `WINDOPS_AGENT_MODE=litellm`,

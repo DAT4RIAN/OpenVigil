@@ -19,6 +19,10 @@ from windops_backend.api.deps import (
 )
 from windops_backend.config import Settings
 from windops_backend.errors import (
+    AnomalyActivationArtifactDriftError,
+    AnomalyActivationBindingError,
+    AnomalyActivationConcurrencyError,
+    AnomalyActivationEvaluationError,
     DomainError,
     InvalidTransitionError,
     NotFoundError,
@@ -48,13 +52,14 @@ from windops_backend.services.anomaly_alerts import (
     evaluate_anomaly_alert,
     run_replay_anomaly_inference,
 )
+from windops_backend.services.events import append_domain_event
 from windops_backend.services.idempotency import execute_idempotent_command
 from windops_backend.services.models import (
     ALLOWED_MODEL_CONTENT_TYPES,
     MAX_MODEL_ARTIFACT_BYTES,
     ModelInferenceClient,
-    activate_deployment,
     create_deployment,
+    govern_and_activate_deployment,
     register_model,
     run_predictive_inference,
     serialize_deployment,
@@ -379,11 +384,15 @@ async def activate_model_deployment(
     response: Response,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8, max_length=128),
     session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_runtime_settings),
+    artifact_verifier: ArtifactVerifier = Depends(get_artifact_verifier),
     principal: Principal = Depends(require_global_roles("operations_manager", data_scopes="model")),
 ) -> dict[str, Any]:
     async def operation() -> dict[str, Any]:
-        deployment = await activate_deployment(
+        deployment = await govern_and_activate_deployment(
             session,
+            settings,
+            artifact_verifier,
             deployment_id=deployment_id,
             traffic_percent=payload.traffic_percent,
             reason=payload.reason,
@@ -391,16 +400,38 @@ async def activate_model_deployment(
         )
         return serialize_deployment(deployment)
 
-    result, replayed = await execute_idempotent_command(
-        session,
-        subject=principal.subject,
-        command_type="model.deployment.activate.v1",
-        target=deployment_id,
-        idempotency_key=idempotency_key,
-        payload=payload,
-        status_code=status.HTTP_200_OK,
-        operation=operation,
-    )
+    try:
+        result, replayed = await execute_idempotent_command(
+            session,
+            subject=principal.subject,
+            command_type="model.deployment.activate.v1",
+            target=deployment_id,
+            idempotency_key=idempotency_key,
+            payload=payload,
+            status_code=status.HTTP_200_OK,
+            operation=operation,
+        )
+    except (
+        AnomalyActivationArtifactDriftError,
+        AnomalyActivationBindingError,
+        AnomalyActivationConcurrencyError,
+        AnomalyActivationEvaluationError,
+    ) as exc:
+        append_domain_event(
+            session,
+            event_type="model.activation.denied",
+            aggregate_type="model_deployment",
+            aggregate_id=deployment_id,
+            payload={
+                "operation": "activate",
+                "deployment_id": deployment_id,
+                "error_code": exc.code,
+                "reason": exc.message,
+                "subject": principal.subject,
+            },
+        )
+        await session.commit()
+        raise
     await session.commit()
     response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
     return result
@@ -413,37 +444,59 @@ async def rollback_model_deployment(
     response: Response,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8, max_length=128),
     session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_runtime_settings),
+    artifact_verifier: ArtifactVerifier = Depends(get_artifact_verifier),
     principal: Principal = Depends(require_global_roles("operations_manager", data_scopes="model")),
 ) -> dict[str, Any]:
     async def operation() -> dict[str, Any]:
         target = await session.get(ModelDeployment, payload.target_deployment_id)
         if target is None or target.model_id != model_id:
             raise NotFoundError("the requested rollback deployment does not belong to this model")
-        current = await session.scalar(
-            select(ModelDeployment)
-            .where(ModelDeployment.stage == target.stage, ModelDeployment.status == "active")
-            .order_by(desc(ModelDeployment.activated_at))
-        )
-        deployment = await activate_deployment(
+        deployment = await govern_and_activate_deployment(
             session,
+            settings,
+            artifact_verifier,
             deployment_id=target.id,
             traffic_percent=100,
             reason=payload.reason,
             subject=principal.subject,
-            rollback_from_id=current.id if current is not None else None,
+            rollback=True,
         )
         return serialize_deployment(deployment)
 
-    result, replayed = await execute_idempotent_command(
-        session,
-        subject=principal.subject,
-        command_type="model.deployment.rollback.v1",
-        target=model_id,
-        idempotency_key=idempotency_key,
-        payload=payload,
-        status_code=status.HTTP_200_OK,
-        operation=operation,
-    )
+    try:
+        result, replayed = await execute_idempotent_command(
+            session,
+            subject=principal.subject,
+            command_type="model.deployment.rollback.v1",
+            target=model_id,
+            idempotency_key=idempotency_key,
+            payload=payload,
+            status_code=status.HTTP_200_OK,
+            operation=operation,
+        )
+    except (
+        AnomalyActivationArtifactDriftError,
+        AnomalyActivationBindingError,
+        AnomalyActivationConcurrencyError,
+        AnomalyActivationEvaluationError,
+    ) as exc:
+        append_domain_event(
+            session,
+            event_type="model.activation.denied",
+            aggregate_type="model_deployment",
+            aggregate_id=payload.target_deployment_id,
+            payload={
+                "operation": "rollback",
+                "deployment_id": payload.target_deployment_id,
+                "model_id": model_id,
+                "error_code": exc.code,
+                "reason": exc.message,
+                "subject": principal.subject,
+            },
+        )
+        await session.commit()
+        raise
     await session.commit()
     response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
     return result

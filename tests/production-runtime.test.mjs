@@ -57,6 +57,7 @@ const productionEnvironment = {
   WINDOPS_BACKEND_DELEGATION_SECRET: delegationSecret,
   WINDOPS_BACKEND_REQUEST_TIMEOUT_MS: "5000",
   WINDOPS_BACKEND_EXPECTED_RELEASE_ID: expectedReleaseId,
+  WINDOPS_BACKEND_EXPECTED_COMMIT_SHA: expectedCommitSha,
   WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST: expectedImageDigest,
 };
 
@@ -148,12 +149,101 @@ test("governed benchmark reads are explicitly allowed by the production gateway"
   assert.equal(isAllowedProductionGatewayRequest("DELETE", exportPath), false);
 });
 
+test("governed anomaly commands are narrowly exposed by method and resource id", () => {
+  const predictionRun =
+    "/api/v1/models/deployments/3b42ea1d-9d63-49a0-8d72-c22130faac42/anomaly-predictions/run";
+  const alertEvaluation =
+    "/api/v1/model-predictions/bdd75808-e09c-4cef-8f94-764dafd85d3d/alert-evaluation";
+  for (const path of [predictionRun, alertEvaluation]) {
+    assert.equal(isAllowedProductionGatewayPath(path), true, path);
+    assert.equal(isAllowedProductionGatewayRequest("POST", path), true, path);
+    assert.equal(isAllowedProductionGatewayRequest("GET", path), false, path);
+    assert.equal(isAllowedProductionGatewayRequest("DELETE", path), false, path);
+  }
+  assert.equal(
+    isAllowedProductionGatewayPath("/api/v1/models/deployments/%2Fadmin/anomaly-predictions/run"),
+    false,
+  );
+  assert.equal(
+    isAllowedProductionGatewayPath("/api/v1/model-predictions/x/alert-evaluation"),
+    false,
+  );
+});
+
 function sitesRequest(url, init = {}) {
   const headers = new Headers(init.headers);
   headers.set("oai-authenticated-user-id", "sites-user-42");
   headers.set("oai-authenticated-user-email", "operator@example.com");
   return new Request(url, { ...init, headers });
 }
+
+test("governed anomaly gateway commands require JSON and an idempotency key", async () => {
+  const backendPath =
+    "/api/v1/models/deployments/3b42ea1d-9d63-49a0-8d72-c22130faac42/anomaly-predictions/run";
+  const requestUrl = "https://windops.example/api/backend/anomaly-run";
+  const originalFetch = globalThis.fetch;
+  let upstreamRequest = null;
+  globalThis.fetch = async (input, init) => {
+    upstreamRequest = { url: String(input), init };
+    return backendJson({ prediction_id: "prediction-42", status: "succeeded" });
+  };
+  try {
+    const missingContentType = await runWithWorkerEnv(productionEnvironment, () =>
+      proxyProductionBackendRequest(
+        sitesRequest(requestUrl, {
+          method: "POST",
+          headers: { "idempotency-key": "anomaly-command-42" },
+          body: "{}",
+        }),
+        backendPath,
+      ),
+    );
+    assert.equal(missingContentType.status, 415);
+    assert.equal(
+      (await missingContentType.json()).error.code,
+      "INVALID_ANOMALY_COMMAND_CONTENT_TYPE",
+    );
+    assert.equal(upstreamRequest, null);
+
+    const missingIdempotency = await runWithWorkerEnv(productionEnvironment, () =>
+      proxyProductionBackendRequest(
+        sitesRequest(requestUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        }),
+        backendPath,
+      ),
+    );
+    assert.equal(missingIdempotency.status, 400);
+    assert.equal(
+      (await missingIdempotency.json()).error.code,
+      "INVALID_ANOMALY_COMMAND_IDEMPOTENCY_KEY",
+    );
+    assert.equal(upstreamRequest, null);
+
+    const accepted = await runWithWorkerEnv(productionEnvironment, () =>
+      proxyProductionBackendRequest(
+        sitesRequest(requestUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "idempotency-key": "anomaly-command-42",
+          },
+          body: JSON.stringify({ benchmark_replay_run_id: "pred0001", source_row_id: 42 }),
+        }),
+        backendPath,
+      ),
+    );
+    assert.equal(accepted.status, 200);
+    assert.equal(upstreamRequest.url, `https://windops-backend.example${backendPath}`);
+    const forwarded = new Headers(upstreamRequest.init.headers);
+    assert.equal(forwarded.get("content-type"), "application/json; charset=utf-8");
+    assert.equal(forwarded.get("idempotency-key"), "anomaly-command-42");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 function fetchWorker(path, environment = productionEnvironment, init = {}) {
   const url = new URL(path, "https://windops.example");
@@ -203,7 +293,7 @@ test("production documents authenticate and authorize before rendering business 
   globalThis.fetch = async (input) => {
     if (String(input).endsWith("/api/v1/session")) {
       return backendJson(
-        { error: { code: "FORBIDDEN", message: "No WindOps role is assigned" } },
+        { error: { code: "FORBIDDEN", message: "No OpenVigil role is assigned" } },
         { status: 403 },
       );
     }
@@ -213,8 +303,8 @@ test("production documents authenticate and authorize before rendering business 
     const forbidden = await fetchWorker("/settings");
     assert.equal(forbidden.status, 403);
     const html = await forbidden.text();
-    assert.match(html, /当前账号没有 WindOps 访问权限/);
-    assert.match(html, /No WindOps role is assigned/);
+    assert.match(html, /当前账号没有 OpenVigil 访问权限/);
+    assert.match(html, /No OpenVigil role is assigned/);
     assert.doesNotMatch(html, /创建配置修订/);
   } finally {
     globalThis.fetch = originalFetch;
@@ -246,7 +336,7 @@ test("production shell trusts backend capabilities and discards client capabilit
     assert.match(html, /field_technician/);
     assert.match(html, /Sites 委托身份/);
     assert.match(html, /创建配置修订需要运维经理和全局平台授权/);
-    assert.match(html, /安全退出 WindOps/);
+    assert.match(html, /安全退出 OpenVigil/);
     assert.doesNotMatch(html, /operations_manager/);
     assert.doesNotMatch(html, /href="\/models"/);
   } finally {
@@ -307,6 +397,20 @@ test("production mode rejects insecure or example backend configuration", async 
   assert.equal(missingRelease.status, 500);
   assert.equal((await missingRelease.json()).error.code, "INVALID_EXPECTED_RELEASE_ID");
 
+  const missingCommit = await fetchWorker("/api/runtime", {
+    ...productionEnvironment,
+    WINDOPS_BACKEND_EXPECTED_COMMIT_SHA: undefined,
+  });
+  assert.equal(missingCommit.status, 500);
+  assert.equal((await missingCommit.json()).error.code, "INVALID_EXPECTED_COMMIT_SHA");
+
+  const placeholderCommit = await fetchWorker("/api/runtime", {
+    ...productionEnvironment,
+    WINDOPS_BACKEND_EXPECTED_COMMIT_SHA: "0".repeat(40),
+  });
+  assert.equal(placeholderCommit.status, 500);
+  assert.equal((await placeholderCommit.json()).error.code, "INVALID_EXPECTED_COMMIT_SHA");
+
   const placeholderDigest = await fetchWorker("/api/runtime", {
     ...productionEnvironment,
     WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST: `sha256:${"0".repeat(64)}`,
@@ -319,7 +423,7 @@ test("production shell and settings never render fixture operations state", asyn
   const response = await fetchWorker("/settings");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /WindOps Production/);
+  assert.match(html, /OpenVigil Production/);
   assert.match(html, /PostgreSQL/);
   assert.match(html, /持久事件通道/);
   assert.doesNotMatch(html, /D1 工作流/);
@@ -329,7 +433,7 @@ test("production shell and settings never render fixture operations state", asyn
     html,
     /本地演示运行中|SCADA 快照|D1 · R|WT-023 闭环|主轴承振动告警升级|下一窗口|林工/,
   );
-  assert.match(html, /生产运行模式/);
+  assert.match(html, /Production · (?:Ready|Degraded|Stale|Offline)/);
   assert.match(html, /PostgreSQL \/ TimescaleDB 权威数据/);
   assert.match(html, /Sites 委托身份/);
 });
@@ -363,7 +467,11 @@ test("every production workspace receives the production shell contract", async 
     const response = await fetchWorker(path);
     assert.equal(response.status, 200, `${path} did not render`);
     const html = await response.text();
-    assert.match(html, /生产运行模式/, `${path} did not receive the production shell`);
+    assert.match(
+      html,
+      /Production · (?:Ready|Degraded|Stale|Offline)/,
+      `${path} did not receive the production shell health contract`,
+    );
     assert.match(html, /Sites 委托身份/, `${path} did not expose the production identity mode`);
     assert.doesNotMatch(
       html,
@@ -377,11 +485,12 @@ test("production workspace shells never leak fixture drawer, approval, summary, 
   const missionsResponse = await fetchWorker("/missions");
   assert.equal(missionsResponse.status, 200);
   const missionsHtml = await missionsResponse.text();
-  assert.match(missionsHtml, /生产运行模式/);
+  assert.match(missionsHtml, /Production · (?:Ready|Degraded|Stale|Offline)/);
   // F3: 生产汇总区统计真实 Mission 数据；无已闭环 Mission 时显式空态。
   assert.doesNotMatch(missionsHtml, /4h 18m/);
   assert.doesNotMatch(missionsHtml, /较 7 日均值/);
-  assert.match(missionsHtml, /暂无已闭环 Mission，无法计算/);
+  assert.doesNotMatch(missionsHtml, /暂无已闭环 Mission，无法计算/);
+  assert.match(missionsHtml, /正在加载Mission 台账/);
 
   const diagnosisResponse = await fetchWorker("/diagnosis");
   assert.equal(diagnosisResponse.status, 200);
@@ -425,6 +534,7 @@ test("runtime readiness probes the Python backend without exposing configuration
     const backend = await runWithWorkerEnv(productionEnvironment, () => probeProductionBackend());
     const config = runWithWorkerEnv(productionEnvironment, () => requireProductionBackend());
     assert.equal(config.mode, "production");
+    assert.equal(config.expectedCommitSha, expectedCommitSha);
     assert.equal(backend.configured, true);
     assert.equal(backend.reachable, true);
     assert.equal(backend.status, 200);
@@ -462,6 +572,22 @@ test("readiness and request proxy fail closed on missing or mismatched backend r
     assert.equal(mismatch.errorCode, "BACKEND_RELEASE_MISMATCH");
     assert.equal(mismatch.release.imageDigest, `sha256:${"c".repeat(64)}`);
 
+    globalThis.fetch = async () =>
+      backendJson({
+        status: "ready",
+        release: {
+          release_id: expectedReleaseId,
+          commit_sha: "c".repeat(40),
+          image_digest: expectedImageDigest,
+        },
+      });
+    const wrongCommitProbe = await runWithWorkerEnv(productionEnvironment, () =>
+      probeProductionBackend(),
+    );
+    assert.equal(wrongCommitProbe.reachable, false);
+    assert.equal(wrongCommitProbe.errorCode, "BACKEND_RELEASE_MISMATCH");
+    assert.equal(wrongCommitProbe.release.commitSha, "c".repeat(40));
+
     globalThis.fetch = async () => Response.json({ data: [] });
     const missing = await runWithWorkerEnv(productionEnvironment, () =>
       proxyProductionBackendRequest(
@@ -491,6 +617,26 @@ test("readiness and request proxy fail closed on missing or mismatched backend r
     );
     assert.equal(wrongImage.status, 503);
     assert.equal((await wrongImage.json()).error.code, "BACKEND_RELEASE_MISMATCH");
+
+    globalThis.fetch = async () =>
+      Response.json(
+        { data: [] },
+        {
+          headers: {
+            "x-windops-release-id": expectedReleaseId,
+            "x-windops-commit-sha": "c".repeat(40),
+            "x-windops-image-digest": expectedImageDigest,
+          },
+        },
+      );
+    const wrongCommit = await runWithWorkerEnv(productionEnvironment, () =>
+      proxyProductionBackendRequest(
+        sitesRequest("https://windops.example/api/backend/turbines"),
+        "/api/v1/turbines",
+      ),
+    );
+    assert.equal(wrongCommit.status, 503);
+    assert.equal((await wrongCommit.json()).error.code, "BACKEND_RELEASE_MISMATCH");
   } finally {
     globalThis.fetch = originalFetch;
   }

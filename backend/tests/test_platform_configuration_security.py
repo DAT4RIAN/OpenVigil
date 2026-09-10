@@ -131,7 +131,7 @@ async def test_platform_configuration_schemas_are_strict_versioned_and_bounded(
                 "issuer": "https://identity.example.com",
                 "audience": "windops",
             },
-            "vault://windops/identity/client",
+            "vault://openvigil/identity/client",
         ),
         "model_governance": (
             {
@@ -251,13 +251,13 @@ async def test_platform_configuration_schemas_are_strict_versioned_and_bounded(
     "unsafe_reference",
     [
         "vault://user:password@windops/source",
-        "vault://windops/source?version=latest",
-        "vault://windops/source#fragment",
-        "vault://windops/%2e%2e/other",
-        "vault://windops/%252e%252e/other",
+        "vault://openvigil/source?version=latest",
+        "vault://openvigil/source#fragment",
+        "vault://openvigil/%2e%2e/other",
+        "vault://openvigil/%252e%252e/other",
         "vault://user%3Apassword@windops/source",
-        "vault://windops/source%3Fpassword%3Dfixture",
-        "vault://windops/source%253Fpassword%253Dfixture",
+        "vault://openvigil/source%3Fpassword%3Dfixture",
+        "vault://openvigil/source%253Fpassword%253Dfixture",
     ],
 )
 async def test_ingest_source_secret_reference_uses_the_strict_secret_manager_validator(
@@ -347,7 +347,7 @@ async def test_ingest_source_rotation_confirmation_closes_audit_without_echoing_
         f"/api/v1/platform/data-source-security-audits/{audit_id}/rotation-confirmation",
         headers={"Idempotency-Key": "source-rotation-confirm-001"},
         json={
-            "replacement_secret_reference": "vault://windops/source/rotated",
+            "replacement_secret_reference": "vault://openvigil/source/rotated",
             "rotation_evidence": "CHG-SOURCE-ROTATION-001 completed and revoked",
         },
     )
@@ -482,7 +482,7 @@ async def test_historical_secret_is_redacted_audited_and_requires_rotation(
         f"/api/v1/platform/configuration-security-audits/{audit_id}/rotation-confirmation",
         headers={"Idempotency-Key": "rotation-confirmation-001"},
         json={
-            "replacement_secret_reference": "vault://windops/platform/rotated-credential",
+            "replacement_secret_reference": "vault://openvigil/platform/rotated-credential",
             "rotation_evidence": "CHG-2026-0819 credential revoked and replacement activated",
         },
     )

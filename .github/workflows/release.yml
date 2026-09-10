@@ -31,6 +31,9 @@ jobs:
       RELEASE_ID: ${{ inputs.release_id }}
       IMAGE_REPOSITORY: ${{ vars.WINDOPS_IMAGE_REPOSITORY }}
       WINDOPS_ISOLATED_RELEASE_ENV_B64: ${{ secrets.WINDOPS_ISOLATED_RELEASE_ENV_B64 }}
+      WINDOPS_INDEPENDENT_EVIDENCE_URL: ${{ vars.WINDOPS_INDEPENDENT_EVIDENCE_URL }}
+      WINDOPS_INDEPENDENT_EVIDENCE_SHA256: ${{ vars.WINDOPS_INDEPENDENT_EVIDENCE_SHA256 }}
+      WINDOPS_INDEPENDENT_EVIDENCE_TOKEN: ${{ secrets.WINDOPS_INDEPENDENT_EVIDENCE_TOKEN }}
       WINDOPS_FAIL_ON_SKIPPED: "1"
     steps:
       - name: Check out the exact candidate commit
@@ -50,6 +53,10 @@ jobs:
           [[ ! "${RELEASE_ID,,}" =~ ^(development|unknown|unreleased)$ ]]
           [[ "${IMAGE_REPOSITORY}" =~ ^ghcr\.io/[a-z0-9._/-]+$ ]]
           test -n "${WINDOPS_ISOLATED_RELEASE_ENV_B64}"
+          [[ "${WINDOPS_INDEPENDENT_EVIDENCE_URL}" =~ ^https:// ]]
+          [[ "${WINDOPS_INDEPENDENT_EVIDENCE_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+          test -n "${WINDOPS_INDEPENDENT_EVIDENCE_TOKEN}"
+          echo "RELEASE_STARTED_AT=$(date --utc +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_ENV}"
           gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs" \
             --jq '.check_runs[]' \
             | python backend/scripts/verify_release_checks.py --sha "${GITHUB_SHA}"
@@ -127,6 +134,8 @@ jobs:
           test "${{ steps.build.outputs.digest }}" != "sha256:$(printf '0%.0s' {1..64})"
           echo "IMAGE_DIGEST=${{ steps.build.outputs.digest }}" >> "${GITHUB_ENV}"
           echo "IMAGE_REF=${IMAGE_REPOSITORY}@${{ steps.build.outputs.digest }}" >> "${GITHUB_ENV}"
+          evidence_set_digest="$(printf '%s\n%s\n%s\n' "${RELEASE_ID}" "${GITHUB_SHA}" "${{ steps.build.outputs.digest }}" | sha256sum | cut -d' ' -f1)"
+          echo "EVIDENCE_SET_ID=sha256:${evidence_set_digest}" >> "${GITHUB_ENV}"
 
       - name: Publish GitHub build provenance
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
@@ -189,26 +198,60 @@ jobs:
           --policy deploy/release-policy.json
           --report ../release-evidence/container-artifact.json
 
-      - name: Start digest-pinned isolated smoke dependencies
-        run: >-
-          docker compose
-          --project-name "windops-release-${GITHUB_RUN_ID}"
-          --file backend/docker-compose.yml
-          up --detach --wait postgres neo4j
+      - name: Load protected isolated production configuration
+        env:
+          WINDOPS_RELEASE_ENV_PATH: ${{ runner.temp }}/windops-release.env
+        run: |
+          set -euo pipefail
+          uv run --project backend python backend/scripts/load_release_environment.py
+          echo "WINDOPS_RELEASE_ID=${RELEASE_ID}" >> "${GITHUB_ENV}"
+          echo "WINDOPS_RELEASE_COMMIT_SHA=${GITHUB_SHA}" >> "${GITHUB_ENV}"
+          echo "WINDOPS_RELEASE_IMAGE_DIGEST=${IMAGE_DIGEST}" >> "${GITHUB_ENV}"
+          printf '%s\n' \
+            "WINDOPS_RELEASE_ID=${RELEASE_ID}" \
+            "WINDOPS_RELEASE_COMMIT_SHA=${GITHUB_SHA}" \
+            "WINDOPS_RELEASE_IMAGE_DIGEST=${IMAGE_DIGEST}" >> "${RUNNER_TEMP}/windops-release.env"
 
-      - name: Run migration and hardened health/readiness smoke from the image
+      - name: Run production migration and dependency readiness from the built image
         working-directory: backend
         run: >-
           uv run windops-release-smoke
           --image "${IMAGE_REF}"
-          --network "windops-release-${GITHUB_RUN_ID}_default"
-          --database-url "postgresql+asyncpg://windops:change-me@postgres:5432/windops"
-          --neo4j-uri "neo4j://neo4j:7687"
-          --neo4j-password "change-me-neo4j"
+          --network bridge
+          --environment-file "${RUNNER_TEMP}/windops-release.env"
           --release-id "${RELEASE_ID}"
           --commit-sha "${GITHUB_SHA}"
           --image-digest "${IMAGE_DIGEST}"
           --report ../release-evidence/release-image-smoke.json
+
+      - name: Run checkpoint, resume, and idempotency smoke in the built CARE workload
+        run: |
+          set -euo pipefail
+          smoke_dir="${RUNNER_TEMP}/windops-care-workload-smoke"
+          mkdir -p "${smoke_dir}"
+          sudo chown 10001:10001 "${smoke_dir}"
+          docker run --rm \
+            --user 10001:10001 \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=128m \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --env "WINDOPS_CARE_QUEUE=care-v6-offline" \
+            --env "WINDOPS_CARE_MAX_CONCURRENCY=1" \
+            --env "WINDOPS_CARE_MAX_ATTEMPTS=3" \
+            --env "WINDOPS_RELEASE_ID=${RELEASE_ID}" \
+            --env "WINDOPS_RELEASE_COMMIT_SHA=${GITHUB_SHA}" \
+            --env "WINDOPS_RELEASE_IMAGE_DIGEST=${IMAGE_DIGEST}" \
+            --volume "${GITHUB_WORKSPACE}/backend/src/windops_backend/benchmarks/care/smoke_fixture.csv:/care/source/smoke_fixture.csv:ro" \
+            --volume "${smoke_dir}:/care/work" \
+            "${IMAGE_REF}" windops-care-workload-smoke \
+            --source /care/source/smoke_fixture.csv \
+            --workspace /care/work/pipeline \
+            --requirements-lock /app/requirements.container.txt \
+            --report /care/work/care-execution-plane-smoke.json
+          cp "${smoke_dir}/care-execution-plane-smoke.json" release-evidence/
+          test "${smoke_dir}" = "${RUNNER_TEMP}/windops-care-workload-smoke"
+          rm -rf -- "${smoke_dir}"
 
       - name: Render and verify all Kubernetes workloads at the exact digest
         run: |
@@ -230,20 +273,6 @@ jobs:
           if rg -n 'registry\.invalid|sha256:0{64}|\b(unreleased|unknown)\b' release-evidence/rendered-manifests.yaml; then
             exit 1
           fi
-
-      - name: Load protected isolated production configuration
-        env:
-          WINDOPS_RELEASE_ENV_PATH: ${{ runner.temp }}/windops-release.env
-        run: |
-          set -euo pipefail
-          uv run --project backend python backend/scripts/load_release_environment.py
-          echo "WINDOPS_RELEASE_ID=${RELEASE_ID}" >> "${GITHUB_ENV}"
-          echo "WINDOPS_RELEASE_COMMIT_SHA=${GITHUB_SHA}" >> "${GITHUB_ENV}"
-          echo "WINDOPS_RELEASE_IMAGE_DIGEST=${IMAGE_DIGEST}" >> "${GITHUB_ENV}"
-          printf '%s\n' \
-            "WINDOPS_RELEASE_ID=${RELEASE_ID}" \
-            "WINDOPS_RELEASE_COMMIT_SHA=${GITHUB_SHA}" \
-            "WINDOPS_RELEASE_IMAGE_DIGEST=${IMAGE_DIGEST}" >> "${RUNNER_TEMP}/windops-release.env"
 
       - name: Run non-skipped isolated production dependency acceptance
         working-directory: backend
@@ -282,29 +311,126 @@ jobs:
         run: |
           printf '%s\n' \
             "WINDOPS_BACKEND_EXPECTED_RELEASE_ID=${RELEASE_ID}" \
+            "WINDOPS_BACKEND_EXPECTED_COMMIT_SHA=${GITHUB_SHA}" \
             "WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST=${IMAGE_DIGEST}" \
             > release-evidence/sites-release-bindings.env
 
-      - name: Record the commit-to-image-to-manifest-to-environment chain
+      - name: Stage content-addressed independently reviewed gates
         run: |
           set -euo pipefail
-          jq -n \
+          archive="${RUNNER_TEMP}/windops-independent-release-evidence.zip"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --header "Authorization: Bearer ${WINDOPS_INDEPENDENT_EVIDENCE_TOKEN}" \
+            --output "${archive}" \
+            "${WINDOPS_INDEPENDENT_EVIDENCE_URL}"
+          printf '%s  %s\n' "${WINDOPS_INDEPENDENT_EVIDENCE_SHA256}" "${archive}" \
+            | sha256sum --check --strict
+          uv run --project backend python backend/scripts/stage_independent_release_evidence.py \
+            --archive "${archive}" \
+            --evidence-dir release-evidence
+          rm -f -- "${archive}"
+
+      - name: Verify protected full-scale CARE acceptance for this image
+        run: >-
+          uv run --project backend windops-care-fullscale-acceptance
+          --evidence release-evidence/artifacts/care/care-full-scale-release-evidence.json
+          --evidence-root release-evidence
+          --storage-policy backend/deploy/care-minio-worker-policy.json
+          --release-id "${RELEASE_ID}"
+          --commit-sha "${GITHUB_SHA}"
+          --image-digest "${IMAGE_DIGEST}"
+          --report release-evidence/care-full-scale-acceptance.json
+
+      - name: Standardize image, supply-chain, deployment, and production-runtime reports
+        run: |
+          set -euo pipefail
+          approval_reference="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          completed_at="$(date --utc +%Y-%m-%dT%H:%M:%SZ)"
+          common=(
+            --evidence-dir release-evidence
+            --release-id "${RELEASE_ID}"
+            --commit-sha "${GITHUB_SHA}"
+            --image-digest "${IMAGE_DIGEST}"
+            --evidence-set-id "${EVIDENCE_SET_ID}"
+            --started-at "${RELEASE_STARTED_AT}"
+            --completed-at "${completed_at}"
+            --approved-by "github-actions/${GITHUB_ACTOR}"
+            --approval-reference "${approval_reference}"
+          )
+          uv run --project backend windops-release-evidence record "${common[@]}" \
+            --gate image_scan --target "${IMAGE_REF}" \
+            --tool-name trivy --tool-version b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 \
+            --artifact image-scan.json=application/json \
+            --artifact container-artifact.json=application/json \
+            --check immutable_digest_scanned=container-artifact.json,image-scan.json \
+            --check critical_findings_zero=image-scan.json \
+            --check high_findings_zero=image-scan.json
+          uv run --project backend windops-release-evidence record "${common[@]}" \
+            --gate sbom --target "${IMAGE_REF}" \
+            --tool-name trivy-cosign --tool-version 1 \
+            --artifact sbom.spdx.json=application/spdx+json \
+            --artifact sbom-attestation-verification.json=application/json \
+            --check immutable_digest_bound=sbom-attestation-verification.json \
+            --check components_present=sbom.spdx.json \
+            --check format_validated=sbom.spdx.json
+          uv run --project backend windops-release-evidence record "${common[@]}" \
+            --gate signature_verification --target "${IMAGE_REF}" \
+            --tool-name cosign --tool-version 3.10.0 \
+            --artifact signature-verification.json=application/json \
+            --check digest_verified=signature-verification.json \
+            --check signer_identity_verified=signature-verification.json \
+            --check signature_policy_verified=signature-verification.json
+          uv run --project backend windops-release-evidence record "${common[@]}" \
+            --gate deployment_policy --target kubernetes/production \
+            --tool-name windops-deployment-policy --tool-version 1 \
+            --artifact rendered-manifests.yaml=application/yaml \
+            --artifact deployment-policy.json=application/json \
+            --check rendered_manifests_validated=rendered-manifests.yaml,deployment-policy.json \
+            --check immutable_digest_bound=rendered-manifests.yaml,deployment-policy.json \
+            --check pod_security_validated=deployment-policy.json \
+            --check network_policy_validated=deployment-policy.json \
+            --check encrypted_backup_storage_validated=deployment-policy.json
+          uv run --project backend windops-release-evidence record "${common[@]}" \
+            --gate external_release --target isolated-production-candidate \
+            --tool-name windops-release-smoke --tool-version 2 \
+            --artifact release-image-smoke.json=application/json \
+            --artifact external-release-junit.xml=application/xml \
+            --artifact care-execution-plane-smoke.json=application/json \
+            --artifact care-full-scale-acceptance.json=application/json \
+            --artifact artifacts/care/care-full-scale-release-evidence.json=application/json \
+            --check dependency_readiness=release-image-smoke.json,external-release-junit.xml \
+            --check protected_metrics=external-release-junit.xml \
+            --check object_roundtrip=external-release-junit.xml \
+            --check embedding_provider=external-release-junit.xml \
+            --check reasoning_provider=external-release-junit.xml \
+            --check active_model_inference=external-release-junit.xml \
+            --check care_execution_plane_smoke=care-execution-plane-smoke.json \
+            --check care_full_scale_acceptance=care-full-scale-acceptance.json,artifacts/care/care-full-scale-release-evidence.json
+
+      - name: Assemble the exact eleven-gate release manifest
+        run: >-
+          uv run --project backend windops-release-evidence assemble
+          --evidence-dir release-evidence
+          --release-id "${RELEASE_ID}"
+          --commit-sha "${GITHUB_SHA}"
+          --image-digest "${IMAGE_DIGEST}"
+          --evidence-set-id "${EVIDENCE_SET_ID}"
+
+      - name: Qualify only through the final release verifier
+        run: |
+          set -euo pipefail
+          test ! -e release-evidence/release-qualification.json
+          uv run --project backend windops-release-gate \
+            --evidence-dir release-evidence \
+            --qualification-output release-evidence/release-qualification.json \
+            > release-evidence/release-verifier.json
+          jq -e \
             --arg release_id "${RELEASE_ID}" \
             --arg commit_sha "${GITHUB_SHA}" \
-            --arg image "${IMAGE_REF}" \
-            --arg manifest_sha256 "$(sha256sum release-evidence/rendered-manifests.yaml | cut -d' ' -f1)" \
-            --arg external_release_sha256 "$(sha256sum release-evidence/external-release-junit.xml | cut -d' ' -f1)" \
-            '{format_version:1,release_id:$release_id,commit_sha:$commit_sha,image:$image,rendered_manifest_sha256:$manifest_sha256,isolated_environment_junit_sha256:$external_release_sha256,status:"qualified"}' \
-            > release-evidence/release-chain.json
-          jq -e '.status == "qualified"' release-evidence/release-chain.json
-
-      - name: Stop isolated smoke dependencies
-        if: always()
-        run: >-
-          docker compose
-          --project-name "windops-release-${GITHUB_RUN_ID}"
-          --file backend/docker-compose.yml
-          down --volumes --remove-orphans
+            --arg image_digest "${IMAGE_DIGEST}" \
+            --arg evidence_set_id "${EVIDENCE_SET_ID}" \
+            '.status == "qualified" and .release_id == $release_id and .commit_sha == $commit_sha and .image_digest == $image_digest and .evidence_set_id == $evidence_set_id and .gate_count == 11' \
+            release-evidence/release-qualification.json
 
       - name: Remove decoded protected configuration
         if: always()

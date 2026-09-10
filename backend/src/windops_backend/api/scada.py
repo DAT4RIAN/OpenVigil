@@ -35,7 +35,7 @@ from windops_backend.schemas import (
     ScadaIngestRequest,
     ScadaIngestResponse,
 )
-from windops_backend.services.ingest import ingest_sample
+from windops_backend.services.ingest import ingest_samples
 from windops_backend.services.workflow import advance_mission_to_review
 
 router = APIRouter()
@@ -87,15 +87,12 @@ async def ingest_scada(
                 "message": "Credential is not authorized for this source",
             },
         )
-    results = []
-    for sample in payload.samples:
-        result = await ingest_sample(
-            session,
-            sample,
-            source_id=payload.source_id,
-            policy=policy,
-        )
-        results.append(result)
+    results = await ingest_samples(
+        session,
+        payload.samples,
+        source_id=payload.source_id,
+        policy=policy,
+    )
     mission_ids = list({item.mission_id for item in results if item.mission_id is not None})
     event_ids = await pending_events_for_missions(session, mission_ids)
     await session.commit()

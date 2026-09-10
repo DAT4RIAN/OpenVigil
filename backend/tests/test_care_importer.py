@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import func, select
 
+from care_trust import make_test_trust_anchor
 from windops_backend.benchmarks.care.importer import (
     MINIMAL_IMPORT_SCHEMA_VERSION,
     TRUTH_ACCESS_SCOPE,
@@ -25,6 +26,7 @@ from windops_backend.benchmarks.care.pipeline import (
     RetryableBenchmarkError,
 )
 from windops_backend.benchmarks.care.quality import build_quality_contract
+from windops_backend.benchmarks.care.trust import CareTrustAnchor
 from windops_backend.models import (
     BenchmarkDatasetVersion,
     BenchmarkEvent,
@@ -86,7 +88,11 @@ def _write_event(path: Path, mappings: list[dict[str, Any]], row_count: int) -> 
             )
 
 
-def _fixture(tmp_path: Path, *, row_count: int = 4_200) -> tuple[Path, Path, dict, dict]:
+def _fixture(
+    tmp_path: Path,
+    *,
+    row_count: int = 4_200,
+) -> tuple[Path, Path, dict, dict, CareTrustAnchor]:
     root = tmp_path / "CARE_To_Compare"
     archive = tmp_path / "CARE_To_Compare.zip"
     archive.write_bytes(b"immutable-care-v6-minimal-import-fixture")
@@ -199,11 +205,11 @@ def _fixture(tmp_path: Path, *, row_count: int = 4_200) -> tuple[Path, Path, dic
     }
     manifest = {**unsigned, "manifest_sha256": _canonical_hash(unsigned)}
     quality = build_quality_contract(manifest)
-    return root, archive, manifest, quality
+    return root, archive, manifest, quality, make_test_trust_anchor(manifest, quality)
 
 
 def _build(tmp_path: Path):
-    root, archive, manifest, quality = _fixture(tmp_path)
+    root, archive, manifest, quality, trust_anchor = _fixture(tmp_path)
     output = tmp_path / "derived"
     store = tmp_path / "object-store"
     result = build_a_minimal_import(
@@ -213,14 +219,15 @@ def _build(tmp_path: Path):
         output,
         source_archive_path=archive,
         artifact_store=LocalImmutableArtifactStore(store),
+        trust_anchor=trust_anchor,
     )
-    return root, archive, manifest, quality, output, store, result
+    return root, archive, manifest, quality, output, store, result, trust_anchor
 
 
 def test_a_minimal_import_is_wide_licensed_truth_isolated_and_deterministic(
     tmp_path: Path,
 ) -> None:
-    root, archive, manifest, quality, output, store, first = _build(tmp_path)
+    root, archive, manifest, quality, output, store, first, trust_anchor = _build(tmp_path)
     verify_minimal_import_manifest(first.manifest)
     assert first.replayed is False
     assert first.manifest["schema_version"] == MINIMAL_IMPORT_SCHEMA_VERSION
@@ -301,6 +308,7 @@ def test_a_minimal_import_is_wide_licensed_truth_isolated_and_deterministic(
         output,
         source_archive_path=archive,
         artifact_store=LocalImmutableArtifactStore(store),
+        trust_anchor=trust_anchor,
     )
     assert second.replayed is True
     assert second.manifest == first.manifest
@@ -316,7 +324,7 @@ async def test_a_minimal_import_registration_is_atomic_and_idempotent(
     app: FastAPI,
     tmp_path: Path,
 ) -> None:
-    _, _, manifest, quality, _, _, bundle = _build(tmp_path)
+    _, _, manifest, quality, _, _, bundle, trust_anchor = _build(tmp_path)
     async with app.state.session_factory() as session, session.begin():
         first = await register_a_minimal_import(
             session,
@@ -325,6 +333,7 @@ async def test_a_minimal_import_registration_is_atomic_and_idempotent(
             quality,
             tenant_id="tenant-east-china",
             subject="care-worker",
+            trust_anchor=trust_anchor,
         )
         assert first.created_count == 88
         assert first.replayed_count == 0
@@ -336,6 +345,7 @@ async def test_a_minimal_import_registration_is_atomic_and_idempotent(
             quality,
             tenant_id="tenant-east-china",
             subject="care-worker",
+            trust_anchor=trust_anchor,
         )
         assert second.created_count == 0
         assert second.replayed_count == 88
@@ -359,7 +369,7 @@ async def test_a_minimal_import_registration_is_atomic_and_idempotent(
 def test_cancelled_minimal_import_resumes_from_durable_chunk_without_final_manifest(
     tmp_path: Path,
 ) -> None:
-    root, archive, manifest, quality = _fixture(tmp_path)
+    root, archive, manifest, quality, trust_anchor = _fixture(tmp_path)
     output = tmp_path / "cancel-output"
     with pytest.raises(BenchmarkJobCancelled, match="durable chunk"):
         build_a_minimal_import(
@@ -369,6 +379,7 @@ def test_cancelled_minimal_import_resumes_from_durable_chunk_without_final_manif
             output,
             source_archive_path=archive,
             stop_after_chunks_by_event={0: 1},
+            trust_anchor=trust_anchor,
         )
     checkpoint = output / ".work/care-v6-a-event-0-import/checkpoint.json"
     final_manifest = output / "care/v6/reports/a-minimal-import/manifest.json"
@@ -382,6 +393,7 @@ def test_cancelled_minimal_import_resumes_from_durable_chunk_without_final_manif
         root,
         output,
         source_archive_path=archive,
+        trust_anchor=trust_anchor,
     )
     assert resumed.manifest["summary"]["event_count"] == 2
     assert not checkpoint.exists()
@@ -403,7 +415,7 @@ def test_object_store_failure_does_not_publish_bundle_or_leave_partial_files(
             del object_key, source, sha256, content_type
             raise RetryableBenchmarkError("fixture object store unavailable")
 
-    root, archive, manifest, quality = _fixture(tmp_path, row_count=24)
+    root, archive, manifest, quality, trust_anchor = _fixture(tmp_path, row_count=24)
     output = tmp_path / "failure-output"
     with pytest.raises(RetryableBenchmarkError, match="unavailable"):
         build_a_minimal_import(
@@ -413,39 +425,72 @@ def test_object_store_failure_does_not_publish_bundle_or_leave_partial_files(
             output,
             source_archive_path=archive,
             artifact_store=UnavailableStore(),
+            trust_anchor=trust_anchor,
         )
     assert not (output / "care/v6/reports/a-minimal-import/manifest.json").exists()
     assert not list(output.rglob("*.partial"))
 
 
-def test_minimal_import_rejects_resigned_wrong_truth_selection_and_mapping_count(
+def test_minimal_import_rejects_resigned_truth_policy_mapping_and_source_tampering(
     tmp_path: Path,
 ) -> None:
-    root, archive, manifest, _ = _fixture(tmp_path, row_count=24)
+    root, archive, manifest, _, trust_anchor = _fixture(tmp_path, row_count=24)
     wrong_truth = copy.deepcopy(manifest)
     wrong_truth["events"][1]["event_label"] = "anomaly"
     unsigned = {key: item for key, item in wrong_truth.items() if key != "manifest_sha256"}
     wrong_truth["manifest_sha256"] = _canonical_hash(unsigned)
-    with pytest.raises(CareMinimalImportError, match="one anomaly and one normal"):
+    with pytest.raises(CareMinimalImportError, match="signed approved root"):
         build_a_minimal_import(
             wrong_truth,
             build_quality_contract(wrong_truth),
             root,
             tmp_path / "wrong-truth",
             source_archive_path=archive,
+            trust_anchor=trust_anchor,
         )
 
     bad_mapping = copy.deepcopy(manifest)
     bad_mapping["farms"][0]["column_mappings"].pop()
     unsigned = {key: item for key, item in bad_mapping.items() if key != "manifest_sha256"}
     bad_mapping["manifest_sha256"] = _canonical_hash(unsigned)
-    with pytest.raises(CareMinimalImportError, match="all 81"):
+    with pytest.raises(CareMinimalImportError, match="signed approved root"):
         build_a_minimal_import(
             bad_mapping,
             build_quality_contract(bad_mapping),
             root,
             tmp_path / "bad-mapping",
             source_archive_path=archive,
+            trust_anchor=trust_anchor,
+        )
+
+    wrong_policy = build_quality_contract(manifest)
+    wrong_policy["zero_value_policy"]["global_zero_to_null"] = True
+    unsigned_quality = {
+        key: item for key, item in wrong_policy.items() if key != "quality_contract_sha256"
+    }
+    wrong_policy["quality_contract_sha256"] = _canonical_hash(unsigned_quality)
+    with pytest.raises(CareMinimalImportError, match="signed approved root"):
+        build_a_minimal_import(
+            manifest,
+            wrong_policy,
+            root,
+            tmp_path / "wrong-policy",
+            source_archive_path=archive,
+            trust_anchor=trust_anchor,
+        )
+
+    wrong_source = copy.deepcopy(manifest)
+    wrong_source["source"]["zip"]["sha256"] = "0" * 64
+    unsigned_source = {key: item for key, item in wrong_source.items() if key != "manifest_sha256"}
+    wrong_source["manifest_sha256"] = _canonical_hash(unsigned_source)
+    with pytest.raises(CareMinimalImportError, match="signed approved root"):
+        build_a_minimal_import(
+            wrong_source,
+            build_quality_contract(wrong_source),
+            root,
+            tmp_path / "wrong-source",
+            source_archive_path=archive,
+            trust_anchor=trust_anchor,
         )
 
     tampered_bundle = {

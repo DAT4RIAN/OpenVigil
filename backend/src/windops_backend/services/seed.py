@@ -35,7 +35,12 @@ AGENT_CATALOG: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
         "vibration_diagnosis_agent",
         "Vibration Diagnosis Agent",
         "vibration-diagnosis",
-        ("query_scada", "query_vibration", "calculate_health_score", "predict_rul"),
+        (
+            "query_scada",
+            "query_vibration",
+            "calculate_health_score",
+            "assess_condition_evidence",
+        ),
     ),
     (
         "knowledge_agent",
@@ -57,7 +62,7 @@ AGENT_CATALOG: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
             "query_weather",
             "query_maintenance_history",
             "calculate_health_score",
-            "predict_rul",
+            "assess_condition_evidence",
             "create_decision",
         ),
     ),

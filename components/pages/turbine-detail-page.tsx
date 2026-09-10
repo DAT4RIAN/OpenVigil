@@ -39,7 +39,7 @@ import {
   workOrders,
 } from "@/lib";
 import type { WindTurbine, WorkOrderStatus } from "@/lib/types";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
 import { buildGenericSubsystemAssessments } from "@/lib/generic-subsystem-data";
@@ -167,7 +167,7 @@ function OverviewTab({
         <p>
           {closed
             ? "现场检查与复测已经完成，振动及温升回落；结果已回写健康评估并形成知识案例。"
-            : "振动 RMS 持续升高并与温升、功率波动呈相关性。故障诊断 Agent 给出 87% 置信度。"}
+            : "振动 RMS 持续升高并与温升、功率波动呈相关性；四类证据已进入人工复核。"}
         </p>
         <div className="risk-stat-grid">
           <div>
@@ -193,13 +193,10 @@ function OverviewTab({
             />
           </div>
           <div>
-            <small>预计 RUL</small>
-            <strong>
-              {closed ? 126 : (bearing?.remainingUsefulLifeDays ?? 47)}
-              <span>天</span>
-            </strong>
+            <small>关联告警</small>
+            <strong>{closed ? 0 : (bearing?.activeAlarmCount ?? 2)}</strong>
             <span className="trend-label">
-              <TrendingDown size={12} /> {closed ? "复测后上调" : "持续下降"}
+              <TrendingDown size={12} /> {closed ? "现场复测已关闭" : "需联合核验"}
             </span>
           </div>
           <div>
@@ -278,8 +275,8 @@ function OverviewTab({
                 }
               />
               <div className="subsystem-item__footer">
-                <span>失效概率 {item.failureProbability30d}%</span>
-                <span>RUL {item.remainingUsefulLifeDays ?? "—"}d</span>
+                <span>异常分数 {item.anomalyScore.toFixed(2)}</span>
+                <span>告警 {item.activeAlarmCount}</span>
               </div>
             </div>
           ))}
@@ -304,7 +301,7 @@ function OverviewTab({
             </span>
             <span>
               <strong>多 Agent 诊断完成</strong>
-              <small>退化概率 87% · 今天 09:31</small>
+              <small>四类证据已汇总 · 今天 09:31</small>
             </span>
           </div>
           <div>
@@ -373,10 +370,10 @@ function HealthTab() {
         <CardHeader
           eyebrow="资产健康"
           title="子系统风险矩阵"
-          description="概率 × 后果的综合风险排序"
+          description="证据等级 × 后果的综合风险排序"
         />
         <div className="risk-matrix">
-          <div className="risk-axis risk-axis--y">失效概率 ↑</div>
+          <div className="risk-axis risk-axis--y">证据等级 ↑</div>
           {[5, 4, 3, 2, 1].flatMap((row) =>
             [1, 2, 3, 4, 5].map((column) => {
               const level =
@@ -514,7 +511,12 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
         eyebrow="数字资产"
         title={`${turbine.id} · ${turbine.model}`}
         description="机组实时状态、健康评估、告警与维护记录"
-        breadcrumb={["资产与监测", "风场", "华东海上风电场", turbine.id]}
+        breadcrumb={[
+          "资产与监测",
+          { label: "风场", href: "/wind-farms" },
+          "华东海上风电场",
+          turbine.id,
+        ]}
         meta={
           <>
             <StatusBadge
@@ -714,7 +716,7 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
           <CardHeader
             eyebrow="部件健康"
             title="子系统健康状态"
-            description="12 个子系统 · 健康 / 告警 / 30 天失效概率 / RUL · 确定性演示估计"
+            description="12 个子系统 · 健康评分 / 告警 / 状态 · 确定性演示映射"
           />
           <div className="subsystem-grid">
             {assessments.map((assessment) => {
@@ -747,16 +749,16 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
                       <strong>{assessment.alertCount}</strong>
                     </span>
                     <span>
-                      <small>30D 失效概率</small>
-                      <strong>{assessment.failureProbability30d}%</strong>
+                      <small>健康状态</small>
+                      <strong>{stateLabel(assessment.state)}</strong>
                     </span>
                     <span>
-                      <small>RUL</small>
-                      <strong>{assessment.rulDays} 天</strong>
+                      <small>证据来源</small>
+                      <strong>资产快照</strong>
                     </span>
                   </div>
                   <div className="subsystem-item__footer">
-                    <span>演示估算</span>
+                    <span>状态映射</span>
                     <span>{turbine.id}</span>
                   </div>
                 </div>
@@ -894,7 +896,12 @@ function FeaturedTurbineDetailPage() {
             ? "现场执行、结果验证和知识沉淀均已完成"
             : "主轴承异常已进入多 Agent 协同诊断与人工审批流程"
         }
-        breadcrumb={["资产与监测", "风场", "华东海上风电场", turbine023.id]}
+        breadcrumb={[
+          "资产与监测",
+          { label: "风场", href: "/wind-farms" },
+          "华东海上风电场",
+          turbine023.id,
+        ]}
         meta={
           <>
             <StatusBadge
@@ -998,7 +1005,7 @@ export function TurbineDetailPage({
   runtimeMode = "demo",
 }: {
   turbineId?: string;
-  runtimeMode?: WindOpsRuntimeMode;
+  runtimeMode?: OpenVigilRuntimeMode;
 }) {
   if (runtimeMode === "production") {
     return <ProductionTurbineDetailPage turbineId={turbineId} />;

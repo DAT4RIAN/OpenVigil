@@ -1,9 +1,11 @@
-# WindOps Multi-Agent Platform
+# OpenVigil Multi-Agent Platform
 
 > AI-Native Multi-Agent Operations Platform for Wind Farms  
 > 风电运维多智能体平台
 
-WindOps 是一个可运行的海上风电智能运维平台候选实现。它把风场态势、SCADA 时序、工业告警、设备健康、Multi-Agent Mission、可解释决策、人工审批、工单执行和知识反馈串成一条可追踪的业务闭环，并提供独立的 CARE v6 离线故障检测基准、受治理评估和平台回放链路。
+OpenVigil 是一个可运行的海上风电智能运维平台候选实现。它把风场态势、SCADA 时序、工业告警、设备健康、Multi-Agent Mission、可解释决策、人工审批、工单执行和知识反馈串成一条可追踪的业务闭环，并提供独立的 CARE v6 离线故障检测基准、受治理评估和平台回放链路。
+
+名称 **OpenVigil** 由 **Open + Vigil** 构成：Open 代表开放架构、接口、模型生态和数据接入；Vigil 代表对设备微弱、缓慢异常信号的持续守望。为避免品牌迁移破坏既有生产集成，Python 包 `windops_backend`、`WINDOPS_*` 环境变量、`x-windops-*` HTTP 头、数据库/图谱对象、对象存储 bucket、遥测与告警规则标识、实时协议仍保留为稳定的兼容命名空间。
 
 首页不是聊天框，而是回答两个问题：**整个风场正在发生什么，以及 AI 正在处理什么。**
 
@@ -59,7 +61,7 @@ Cloudflare Sites 只托管 Worker 网关，不托管 `backend/` Python 服务。
 
 ## Screenshot
 
-![WindOps Operations Command Center](./public/windops-command-center.png)
+![OpenVigil Operations Command Center](./public/openvigil-command-center.png)
 
 首页把全场 KPI、健康矩阵、告警态势、Agent 活动和 WT-023 主故事放在同一运营视图中。上图是仓库现有的静态预览，可能滞后于当前界面，不作为本轮视觉验收或生产部署证明。
 
@@ -97,7 +99,7 @@ D1 服务器基线从“高风险方案待人工选择与审批、工单草稿�
 
 ```mermaid
 flowchart TB
-  repo["WindOps repository"] --> demo["Sites Worker/D1 product demo"]
+  repo["OpenVigil repository"] --> demo["Sites Worker/D1 product demo"]
   repo --> platform["backend/ · Python 3.12 production candidate"]
   repo --> care["CARE v6 governed benchmark"]
 
@@ -155,19 +157,20 @@ flowchart TB
 
 当前已验证候选的事实边界如下：
 
-| 项目       | 当前合同 / 结果                                                                                                                               |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 数据合同   | A/B/C 为 `22 / 15 / 58` 个事件，按 A→C→B 导入；信号映射分别为 `81 / 252 / 952`，默认模型输入 Avg 特征为 `54 / 63 / 238`                       |
-| 存储       | 全信号保留为分区宽表 Parquet；不把约 8.77 亿标量值展开写入 TimescaleDB，在线库只接收经过选择的有界回放窗口                                    |
-| 质量与真值 | 原值不改写，异常质量写独立 mask；预测先冻结，再由最终 evaluator 打开 truth；训练、校准、在线推理和普通浏览权限不能读取真值                    |
-| 评估       | `within-farm-leave-one-turbine-out-v1` 覆盖 36 fold / 95 events / 281,249 prediction points；12 个候选通过、24 个候选失败，失败结果仍完整登记 |
-| 跨场结论   | 明确禁用；只有建立版本化跨场 ontology 并取得人工审核记录后才能启用，当前结果不得宣传为跨场泛化                                                |
-| 平台闭环   | 受治理目录和评估进入 Data/Model/Diagnosis 页面；选定事件可回放到 TimescaleDB，串联 prediction、Alarm、Mission、Decision 和受控导出            |
-| 许可       | 数据集及其受许可约束的派生分发制品遵循 CC BY-SA 4.0、归属、许可链接和 ShareAlike 复核；WindOps 自有源码仍为 MIT                               |
+| 项目       | 当前合同 / 结果                                                                                                                                    |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 数据合同   | A/B/C 为 `22 / 15 / 58` 个事件，按 A→C→B 导入；信号映射分别为 `81 / 252 / 952`，默认模型输入 Avg 特征为 `54 / 63 / 238`                            |
+| 存储       | 全信号保留为分区宽表 Parquet；不把约 8.77 亿标量值展开写入 TimescaleDB，在线库只接收经过选择的有界回放窗口                                         |
+| 质量与真值 | 原值不改写，异常质量写独立 mask；预测先冻结，再由最终 evaluator 打开 truth；训练、校准、在线推理和普通浏览权限不能读取真值                         |
+| 评估       | `within-farm-leave-one-turbine-out-v1` 覆盖 36 fold / 95 events / 281,249 prediction points；12 个候选通过、24 个候选失败，失败结果仍完整登记      |
+| 跨场结论   | 明确禁用；只有建立版本化跨场 ontology 并取得人工审核记录后才能启用，当前结果不得宣传为跨场泛化                                                     |
+| 平台闭环   | 受治理目录和评估进入 Data/Model/Diagnosis 页面；选定事件可回放到 TimescaleDB，串联 prediction、Alarm、Mission、Decision 和受控导出                 |
+| 许可       | 数据集及其受许可约束的派生分发制品遵循 CC BY-SA 4.0、归属、许可链接和 ShareAlike 复核；OpenVigil 自有源码仍为 MIT                                  |
+| 官方复验   | MIT 许可的 EnergyFaultDetector v0.6.2 以 commit `a338b6e…` 的 submodule 固定；CI 对 commit/tree/source/license hash 与评分 golden vectors 失败关闭 |
 
 全量候选在 2026-08-27 完成 `5,242,948` 行导入，实测 693.52 rows/s、进程峰值 521,977,856 bytes；36-fold 评估耗时 125.83 s、进程峰值 235,524,096 bytes。2026-08-29 再次使用当前 verifier 对全部 95 个事件、36 个 fold 和引用制品做只读复算并通过。这些是本地候选证据，不等于生产 registry 签名、SBOM、集群准入或现场系统验收。
 
-实现方案、不可变制品治理和运维步骤分别见 [`docs/adr/0001-care-v6-columnar-pipeline.md`](docs/adr/0001-care-v6-columnar-pipeline.md)、[`docs/runbooks/care-artifact-governance.md`](docs/runbooks/care-artifact-governance.md) 与 [`docs/runbooks/care-full-scale-operations.md`](docs/runbooks/care-full-scale-operations.md)。
+实现方案、不可变制品治理和运维步骤分别见 [`docs/adr/0001-care-v6-columnar-pipeline.md`](docs/adr/0001-care-v6-columnar-pipeline.md)、[`docs/runbooks/care-artifact-governance.md`](docs/runbooks/care-artifact-governance.md) 与 [`docs/runbooks/care-full-scale-operations.md`](docs/runbooks/care-full-scale-operations.md)。干净克隆使用 `git clone --recurse-submodules`；`backend/scripts/verify_care_reference.py` 会输出内容寻址复验证据，缺少 submodule 或任何身份漂移都会失败。
 
 ## Worker API 与确定性数据接口
 
@@ -294,7 +297,7 @@ SCADA ingest → Alarm/Mission + transactional outbox → Redis/Dramatiq
 → governed ordered field tasks → measured health/alarm/mission closure → knowledge case
 ```
 
-FastAPI 提供 `/api/v1` 路由，Pydantic 校验线协议，SQLAlchemy async 负责持久化。生产配置要求 PostgreSQL/asyncpg、TimescaleDB hypertable、pgvector `Vector(1536)` + HNSW cosine index、Redis/Dramatiq、MinIO 与 LiteLLM。单一连续 Alembic 链当前 head 为 `0026_schema_contract_alignment`；迁移建立领域/时序/向量模型、审计与 Outbox、资产范围授权、平台配置秘密治理、有界集合索引、委托写请求防重放、主体级命令幂等，以及 CARE 数据集/事件/评估/回放、结构化 anomaly prediction 与双告警来源边界，并区分点级可评分事件和可能缺少总体 CARE score 的单类评估 fold，最终对 PostgreSQL 必填时间戳与 ORM 索引合同执行数据安全的 schema 对齐，同时对遗留 ingest 凭据提供严格引用校验与隔离审计。`backend/scripts/verify_migration_head.py` 会同时校验真实 head 与本声明，防止文档静默漂移。
+FastAPI 提供 `/api/v1` 路由，Pydantic 校验线协议，SQLAlchemy async 负责持久化。生产配置要求 PostgreSQL/asyncpg、TimescaleDB hypertable、pgvector `Vector(1536)` + HNSW cosine index、Redis/Dramatiq、MinIO 与 LiteLLM。单一连续 Alembic 链当前 head 为 `0028_read_audit_pipeline`；迁移建立领域/时序/向量模型、审计与 Outbox、资产范围授权、平台配置秘密治理、有界集合索引、委托写请求防重放、主体级命令幂等，以及 CARE 数据集/事件/评估/回放、结构化 anomaly prediction 与双告警来源边界，并区分点级可评分事件和可能缺少总体 CARE score 的单类评估 fold，最终对 PostgreSQL 必填时间戳与 ORM 索引合同执行数据安全的 schema 对齐，把 canonical CARE 质量身份与 append-only minimal/full-scale 阶段制品分离，同时把最小化读审计通过有界 Redis stream 批量写入月分区、压缩归档并按明确保留期清理。`backend/scripts/verify_migration_head.py` 会同时校验真实 head 与本声明，防止文档静默漂移。
 
 ### Python 11-tool 真实语义
 
@@ -520,15 +523,13 @@ alembic upgrade head --sql
 
 ### 本地验证 CARE
 
-CARE 的 PyArrow/scikit-learn 依赖是独立可选组，不会被普通 API import 自动加载。需要运行 CARE 命令时再安装：
+CARE 的 PyArrow/scikit-learn 依赖是独立可选组，不会被普通 API import 自动加载；标准生产镜像和收集 CARE 验收的 required CI job 会从 `uv.lock` 安装该组，并以 `requirements.container.txt` 的哈希锁和 CLI closure 失败关闭。需要在本地运行 CARE 命令时：
 
 ```powershell
 cd C:\coding\project\wind-agent\backend
-python -m pip install -e ".[benchmark,test,dev]"
-python -m pytest tests -q -k "care and not external_release"
-windops-care-contract --help
-windops-care-quality --help
-windops-care-full-scale --help
+uv sync --frozen --extra benchmark --extra test --extra dev
+uv run windops-care-dependency-closure --requirements-lock requirements.container.txt --uv-lock uv.lock
+uv run python -m pytest tests -q -k "care and not external_release"
 ```
 
 合同、质量、最小导入、离线评估和全量任务必须使用显式的只读数据源与项目内输出目录；不要把原始 CARE 数据复制进仓库，也不要把本地 filesystem adapter 的成功写成生产 MinIO 发布。全量资源预算、恢复、取消、登记和 verifier 命令见 [CARE 全量运行手册](docs/runbooks/care-full-scale-operations.md)。
@@ -574,11 +575,11 @@ flowchart LR
 
 ## 许可证
 
-WindOps 自有源码以 [MIT License](./LICENSE) 发布。CARE v6 数据集 **不是 MIT 资产，也不随本仓库分发**；数据集及受其许可约束的派生分发制品遵循 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)，需要保留来源归属、许可链接、变更说明和 ShareAlike。数据集引用为 Christian Gück、Cyriana M. A. Roelofs / Fraunhofer IEE，Zenodo DOI [`10.5281/zenodo.15846963`](https://doi.org/10.5281/zenodo.15846963)。第三方项目、依赖、名称和商标仍遵循各自许可证与权利边界；完整归属、审计提交、许可证链接和 clean-room 声明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+OpenVigil 自有源码以 [MIT License](./LICENSE) 发布。CARE v6 数据集 **不是 MIT 资产，也不随本仓库分发**；数据集及受其许可约束的派生分发制品遵循 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)，需要保留来源归属、许可链接、变更说明和 ShareAlike。数据集引用为 Christian Gück、Cyriana M. A. Roelofs / Fraunhofer IEE，Zenodo DOI [`10.5281/zenodo.15846963`](https://doi.org/10.5281/zenodo.15846963)。第三方项目、依赖、名称和商标仍遵循各自许可证与权利边界；完整归属、审计提交、许可证链接和 clean-room 声明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
 ## 开源参考与致谢
 
-WindOps 以 clean-room 方式研究并重新实现通用产品模式：
+OpenVigil 以 clean-room 方式研究并重新实现通用产品模式：
 
 | 项目                                                                                       | 审计提交                                   | 许可证               | 研究范围                                           |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------ | -------------------- | -------------------------------------------------- |
@@ -589,6 +590,6 @@ WindOps 以 clean-room 方式研究并重新实现通用产品模式：
 
 [Grafana](https://github.com/grafana/grafana) 仅作为时序图、阈值、Tooltip、告警和 Dashboard Grid 的概念参考；本地参考集中没有 Grafana checkout，因此不声称审计或固定了本地提交。其默认项目许可证为 AGPL-3.0-only，并有上游记录的目录级例外。
 
-这些项目仅用于领域信息架构、交互模式与视觉原则研究。WindOps 不是它们的 Fork，也不声称原创了这些通用模式。仓库中的业务代码、组件、样式、文案与模拟数据均为独立实现，**未复制、改编或合入 PyScada、NetBird、Grafana 等 AGPL 项目的源代码**。
+这些项目仅用于领域信息架构、交互模式与视觉原则研究。OpenVigil 不是它们的 Fork，也不声称原创了这些通用模式。仓库中的业务代码、组件、样式、文案与模拟数据均为独立实现，**未复制、改编或合入 PyScada、NetBird、Grafana 等 AGPL 项目的源代码**。
 
-完整的本地审计范围、提交、许可证链接与 clean-room 声明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。项目名称及商标归各自权利人所有；列出参考项目不代表其作者或维护者为 WindOps 背书。
+完整的本地审计范围、提交、许可证链接与 clean-room 声明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。项目名称及商标归各自权利人所有；列出参考项目不代表其作者或维护者为 OpenVigil 背书。

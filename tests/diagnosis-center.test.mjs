@@ -50,7 +50,7 @@ test("diagnosis API returns a deterministic read-only 64 turbine differential di
 
   for (const record of first.data) {
     assert.equal(
-      record.candidates.reduce((total, candidate) => total + candidate.probabilityPercent, 0),
+      record.candidates.reduce((total, candidate) => total + candidate.supportScorePercent, 0),
       100,
     );
     assert.ok(record.candidates.every((candidate) => candidate.counterEvidence.length > 0));
@@ -70,7 +70,7 @@ test("WT-023 diagnosis reflects the canonical under-review D1 workflow without p
   assert.equal(featured.status, "awaiting-review");
   assert.equal(featured.missionId, "MISSION-2026-0823");
   assert.equal(featured.candidates[0].faultMode, "主轴承外圈早期退化");
-  assert.equal(featured.candidates[0].probabilityPercent, 87);
+  assert.equal(featured.candidates[0].supportScorePercent, 87);
   assert.equal(featured.gate.state, "locked");
   assert.equal(featured.gate.decisionStatus, "under-review");
   assert.equal(featured.gate.workOrderStatus, "draft");

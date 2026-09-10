@@ -35,7 +35,7 @@ test("CARE data center uses bounded production APIs and never fetches raw CSV", 
     [...pageSource.matchAll(/\.csv/gi)].map((match) => match[0]),
     [".csv"],
   );
-  assert.match(pageSource, /filename: "windops-data-catalog\.csv"/);
+  assert.match(pageSource, /filename: "openvigil-data-catalog\.csv"/);
   assert.match(gatewaySource, /proxyProductionBackendRequest/);
   assert.match(gatewaySource, /`\/api\/v1\/\$\{path/);
   assert.match(productionRuntimeSource, /api\\\/v1\\\/benchmarks/);
@@ -52,7 +52,7 @@ test("CARE data center implements disabled, loading, empty, error, stale, and pe
   ]) {
     assert.match(pageSource, new RegExp(marker));
   }
-  assert.match(pageSource, /instanceof WindOpsApiError/);
+  assert.match(pageSource, /instanceof OpenVigilApiError/);
   assert.match(pageSource, /status === 403/);
   assert.match(pageSource, /placeholderData: \(previous\) => previous/);
 });

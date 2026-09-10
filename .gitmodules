@@ -1,0 +1,3 @@
+[submodule "tmp/external/EnergyFaultDetector-v0.6.2"]
+	path = tmp/external/EnergyFaultDetector-v0.6.2
+	url = https://github.com/AEFDI/EnergyFaultDetector.git

@@ -70,7 +70,14 @@ export function Progress({
   label?: string;
 }) {
   return (
-    <div className="progress-wrap" aria-label={label ?? `进度 ${value}%`}>
+    <div
+      className="progress-wrap"
+      role="progressbar"
+      aria-label={label ?? `进度 ${value}%`}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.max(0, Math.min(100, value))}
+    >
       <div className="progress-track">
         <span
           className={cn("progress-value", `progress-value--${tone}`)}
@@ -124,16 +131,19 @@ export function EmptyState({
   icon,
   title,
   description,
+  action,
 }: {
   icon: ReactNode;
   title: string;
   description: string;
+  action?: ReactNode;
 }) {
   return (
     <div className="empty-state">
       <div className="empty-state__icon">{icon}</div>
       <strong>{title}</strong>
       <p>{description}</p>
+      {action ? <div className="empty-state__action">{action}</div> : null}
     </div>
   );
 }

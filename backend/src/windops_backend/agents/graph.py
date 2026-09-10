@@ -25,7 +25,7 @@ from windops_backend.services.events import append_domain_event
 NodeOperation = Callable[[PublicWorkflowState], Awaitable[dict[str, Any]]]
 
 
-class WindOpsWorkflowGraph:
+class OpenVigilWorkflowGraph:
     """LangGraph orchestration that emits public artifacts, never model chain-of-thought."""
 
     def __init__(
@@ -393,7 +393,7 @@ class WindOpsWorkflowGraph:
             profile = self._analysis_profile(current)
             turbine_status = await self.tools.get_turbine_status(current["turbine_id"])
             weather = await self.tools.query_weather(str(turbine_status["wind_farm_id"]))
-            rul = await self.tools.predict_rul(
+            condition_evidence = await self.tools.assess_condition_evidence(
                 current["turbine_id"],
                 str(profile["component"]),
                 str(profile["primary_variable"]),
@@ -406,7 +406,7 @@ class WindOpsWorkflowGraph:
                     "analysis_profile": profile,
                     "diagnosis": current.get("diagnosis", {}),
                     "weather": weather,
-                    "rul": rul,
+                    "condition_evidence": condition_evidence,
                 },
             )
             alternatives = [item.model_dump() for item in bundle.alternatives]
@@ -416,7 +416,7 @@ class WindOpsWorkflowGraph:
                 alternatives,
                 str(recommended["alternative_id"]),
                 (
-                    "Engineering, safety, RUL, weather, and production impact favor "
+                    "Engineering, condition evidence, safety, weather, and production impact favor "
                     "the governed controlled-intervention option."
                 ),
                 [

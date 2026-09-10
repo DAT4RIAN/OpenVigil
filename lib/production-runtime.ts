@@ -1,10 +1,10 @@
 import { getWorkerEnv } from "./worker-env.ts";
 import { asText } from "./utils.ts";
 
-export const WINDOPS_RUNTIME_MODES = ["demo", "production"] as const;
-export type WindOpsRuntimeMode = (typeof WINDOPS_RUNTIME_MODES)[number];
-export const WINDOPS_BACKEND_AUTH_MODES = ["sites_delegation", "service_token"] as const;
-export type WindOpsBackendAuthMode = (typeof WINDOPS_BACKEND_AUTH_MODES)[number];
+export const OPENVIGIL_RUNTIME_MODES = ["demo", "production"] as const;
+export type OpenVigilRuntimeMode = (typeof OPENVIGIL_RUNTIME_MODES)[number];
+export const OPENVIGIL_BACKEND_AUTH_MODES = ["sites_delegation", "service_token"] as const;
+export type OpenVigilBackendAuthMode = (typeof OPENVIGIL_BACKEND_AUTH_MODES)[number];
 
 const DEFAULT_BACKEND_TIMEOUT_MS = 8_000;
 const MIN_BACKEND_TIMEOUT_MS = 1_000;
@@ -37,6 +37,8 @@ const allowedGatewayPaths = [
   /^\/api\/v1\/platform\/(?:configuration-security-audits|data-source-security-audits)\/[^/]+\/rotation-confirmation$/,
   /^\/api\/v1\/knowledge\/(?:documents(?:\/uploads\/presign|\/[^/]+)?|cases)$/,
   /^\/api\/v1\/models(?:\/uploads\/presign|\/deployments\/[^/]+\/activate|\/[^/]+(?:\/deployments|\/rollback)?)?$/,
+  /^\/api\/v1\/models\/deployments\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/anomaly-predictions\/run$/,
+  /^\/api\/v1\/model-predictions\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/alert-evaluation$/,
   /^\/api\/v1\/predictive-assessments(?:\/run)?$/,
   /^\/api\/v1\/agents(?:\/[^/]+\/(?:commands|releases))?$/,
   /^\/api\/v1\/agent-tools$/,
@@ -89,13 +91,14 @@ export class ProductionRuntimeError extends Error {
 }
 
 export interface ProductionBackendConfig {
-  readonly mode: WindOpsRuntimeMode;
-  readonly authMode: WindOpsBackendAuthMode;
+  readonly mode: OpenVigilRuntimeMode;
+  readonly authMode: OpenVigilBackendAuthMode;
   readonly baseUrl: string | null;
   readonly apiToken: string | null;
   readonly delegationSecret: string | null;
   readonly timeoutMs: number;
   readonly expectedReleaseId: string | null;
+  readonly expectedCommitSha: string | null;
   readonly expectedImageDigest: string | null;
 }
 
@@ -115,27 +118,27 @@ function configuredValue(name: keyof ReturnType<typeof getWorkerEnv>): string | 
   return typeof workerValue === "string" ? workerValue : processValue(String(name));
 }
 
-function runtimeMode(value: string | undefined): WindOpsRuntimeMode {
+function runtimeMode(value: string | undefined): OpenVigilRuntimeMode {
   const normalized = value?.trim().toLowerCase() || "demo";
-  if (!WINDOPS_RUNTIME_MODES.includes(normalized as WindOpsRuntimeMode)) {
+  if (!OPENVIGIL_RUNTIME_MODES.includes(normalized as OpenVigilRuntimeMode)) {
     throw new ProductionRuntimeError(
       "INVALID_RUNTIME_MODE",
-      `WINDOPS_RUNTIME_MODE must be one of ${WINDOPS_RUNTIME_MODES.join(", ")}.`,
+      `WINDOPS_RUNTIME_MODE must be one of ${OPENVIGIL_RUNTIME_MODES.join(", ")}.`,
       500,
     );
   }
-  return normalized as WindOpsRuntimeMode;
+  return normalized as OpenVigilRuntimeMode;
 }
 
 function backendAuthMode(
   value: string | undefined,
-  runtime: WindOpsRuntimeMode,
-): WindOpsBackendAuthMode {
+  runtime: OpenVigilRuntimeMode,
+): OpenVigilBackendAuthMode {
   const normalized = value?.trim().toLowerCase() || "sites_delegation";
-  if (!WINDOPS_BACKEND_AUTH_MODES.includes(normalized as WindOpsBackendAuthMode)) {
+  if (!OPENVIGIL_BACKEND_AUTH_MODES.includes(normalized as OpenVigilBackendAuthMode)) {
     throw new ProductionRuntimeError(
       "INVALID_BACKEND_AUTH_MODE",
-      `WINDOPS_BACKEND_AUTH_MODE must be one of ${WINDOPS_BACKEND_AUTH_MODES.join(", ")}.`,
+      `WINDOPS_BACKEND_AUTH_MODE must be one of ${OPENVIGIL_BACKEND_AUTH_MODES.join(", ")}.`,
       500,
     );
   }
@@ -146,7 +149,7 @@ function backendAuthMode(
       500,
     );
   }
-  return normalized as WindOpsBackendAuthMode;
+  return normalized as OpenVigilBackendAuthMode;
 }
 
 function backendTimeout(value: string | undefined): number {
@@ -169,7 +172,10 @@ function backendTimeout(value: string | undefined): number {
   return parsed;
 }
 
-function normalizedBackendUrl(value: string | undefined, mode: WindOpsRuntimeMode): string | null {
+function normalizedBackendUrl(
+  value: string | undefined,
+  mode: OpenVigilRuntimeMode,
+): string | null {
   const candidate = value?.trim();
   if (!candidate) return null;
   let url: URL;
@@ -207,8 +213,8 @@ function normalizedBackendUrl(value: string | undefined, mode: WindOpsRuntimeMod
 
 function normalizedToken(
   value: string | undefined,
-  mode: WindOpsRuntimeMode,
-  authMode: WindOpsBackendAuthMode,
+  mode: OpenVigilRuntimeMode,
+  authMode: OpenVigilBackendAuthMode,
 ): string | null {
   const token = value?.trim() || null;
   if (
@@ -227,8 +233,8 @@ function normalizedToken(
 
 function normalizedDelegationSecret(
   value: string | undefined,
-  mode: WindOpsRuntimeMode,
-  authMode: WindOpsBackendAuthMode,
+  mode: OpenVigilRuntimeMode,
+  authMode: OpenVigilBackendAuthMode,
 ): string | null {
   const secret = value?.trim() || null;
   if (
@@ -247,7 +253,7 @@ function normalizedDelegationSecret(
 
 function normalizedExpectedReleaseId(
   value: string | undefined,
-  mode: WindOpsRuntimeMode,
+  mode: OpenVigilRuntimeMode,
 ): string | null {
   const releaseId = value?.trim() || null;
   if (
@@ -267,7 +273,7 @@ function normalizedExpectedReleaseId(
 
 function normalizedExpectedImageDigest(
   value: string | undefined,
-  mode: WindOpsRuntimeMode,
+  mode: OpenVigilRuntimeMode,
 ): string | null {
   const digest = value?.trim() || null;
   if (
@@ -283,6 +289,26 @@ function normalizedExpectedImageDigest(
   return digest;
 }
 
+function normalizedExpectedCommitSha(
+  value: string | undefined,
+  mode: OpenVigilRuntimeMode,
+): string | null {
+  const commitSha = value?.trim() || null;
+  if (
+    mode === "production" &&
+    (!commitSha ||
+      !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commitSha) ||
+      /^(?:0{40}|0{64})$/.test(commitSha))
+  ) {
+    throw new ProductionRuntimeError(
+      "INVALID_EXPECTED_COMMIT_SHA",
+      "Production mode requires the approved full backend commit SHA.",
+      500,
+    );
+  }
+  return commitSha;
+}
+
 export function getProductionBackendConfig(): ProductionBackendConfig {
   const mode = runtimeMode(configuredValue("WINDOPS_RUNTIME_MODE"));
   const authMode = backendAuthMode(configuredValue("WINDOPS_BACKEND_AUTH_MODE"), mode);
@@ -296,6 +322,10 @@ export function getProductionBackendConfig(): ProductionBackendConfig {
   const timeoutMs = backendTimeout(configuredValue("WINDOPS_BACKEND_REQUEST_TIMEOUT_MS"));
   const expectedReleaseId = normalizedExpectedReleaseId(
     configuredValue("WINDOPS_BACKEND_EXPECTED_RELEASE_ID"),
+    mode,
+  );
+  const expectedCommitSha = normalizedExpectedCommitSha(
+    configuredValue("WINDOPS_BACKEND_EXPECTED_COMMIT_SHA"),
     mode,
   );
   const expectedImageDigest = normalizedExpectedImageDigest(
@@ -317,6 +347,7 @@ export function getProductionBackendConfig(): ProductionBackendConfig {
     delegationSecret,
     timeoutMs,
     expectedReleaseId,
+    expectedCommitSha,
     expectedImageDigest,
   };
 }
@@ -347,6 +378,13 @@ export function isAllowedProductionGatewayPath(path: string): boolean {
 
 export function isAllowedProductionGatewayRequest(method: string, path: string): boolean {
   if (!isAllowedProductionGatewayPath(path)) return false;
+  if (
+    /^\/api\/v1\/(?:models\/deployments\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/anomaly-predictions\/run|model-predictions\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/alert-evaluation)$/.test(
+      path,
+    )
+  ) {
+    return method.toUpperCase() === "POST";
+  }
   if (/^\/api\/v1\/benchmarks\/evaluations\/[^/]+\/exports$/.test(path)) {
     return method.toUpperCase() === "POST";
   }
@@ -554,6 +592,7 @@ function releaseMismatch(
 ): boolean {
   return (
     observed.releaseId !== config.expectedReleaseId ||
+    observed.commitSha !== config.expectedCommitSha ||
     observed.imageDigest !== config.expectedImageDigest
   );
 }
@@ -592,6 +631,35 @@ export async function proxyProductionBackendRequest(
         404,
       ),
     );
+  }
+
+  if (
+    /^\/api\/v1\/(?:models\/deployments\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/anomaly-predictions\/run|model-predictions\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/alert-evaluation)$/.test(
+      backendPath,
+    )
+  ) {
+    const idempotencyKey = request.headers.get("idempotency-key")?.trim() ?? "";
+    if (
+      backendPath.endsWith("/anomaly-predictions/run") &&
+      request.headers.get("content-type")?.split(";", 1)[0]?.trim() !== "application/json"
+    ) {
+      return errorResponse(
+        new ProductionRuntimeError(
+          "INVALID_ANOMALY_COMMAND_CONTENT_TYPE",
+          "Governed anomaly commands require an application/json request body.",
+          415,
+        ),
+      );
+    }
+    if (idempotencyKey.length < 8 || idempotencyKey.length > 128) {
+      return errorResponse(
+        new ProductionRuntimeError(
+          "INVALID_ANOMALY_COMMAND_IDEMPOTENCY_KEY",
+          "Governed anomaly commands require an Idempotency-Key of 8 to 128 characters.",
+          400,
+        ),
+      );
+    }
   }
 
   let config: ReturnType<typeof requireProductionBackend>;

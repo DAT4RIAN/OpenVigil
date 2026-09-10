@@ -153,9 +153,9 @@ async def test_business_collections_and_details_are_filtered_at_the_database_bou
                 )
             ).all()
         )
-    recorded_scopes = {tuple(row.query["_authorization"]["turbine_ids"]) for row in audits}
-    assert ("wt-023",) in recorded_scopes
-    assert ("wt-999",) in recorded_scopes
+    recorded_scopes = {row.query["authorization"]["scope_fingerprint_sha256"] for row in audits}
+    assert len(recorded_scopes) == 2
+    assert {row.query["authorization"]["turbine_count"] for row in audits} == {1}
 
 
 async def test_scoped_counts_aggregates_and_related_rows_do_not_leak_other_tenant_data(

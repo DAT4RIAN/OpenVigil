@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
+import { useOpenVigilIdentity } from "@/components/providers/identity-provider";
+import { QueryStateNotice, RuntimeHealthBadge } from "@/components/ui/query-state";
 import { Button, Card, CardHeader, KeyValue } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { decisions, evidenceItems, featuredDecision, weatherWindows } from "@/lib";
@@ -40,8 +42,17 @@ import {
   localizedStatusLabel,
 } from "@/lib/ui-localization";
 import { cn } from "@/lib/utils";
+import { deriveQueryViewState, latestValidTimestamp, queryRuntimeHealth } from "@/lib/query-state";
+import type { ApprovalAction } from "@/lib/types";
+import type { OpenVigilCapability } from "@/lib/identity-session";
 
 const solutionIcons = [ShieldCheck, Scale, Zap];
+const approvalCapabilities: Readonly<Record<ApprovalAction, OpenVigilCapability>> = {
+  approve: "mission.approve",
+  reject: "mission.reject",
+  "request-revision": "mission.request_revision",
+  escalate: "mission.escalate",
+};
 
 function AlternativeCard({
   option,
@@ -125,6 +136,7 @@ function AlternativeCard({
 
 export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
   const productionMode = runtimeMode === "production";
+  const { can } = useOpenVigilIdentity();
   const [activeDecisionId, setActiveDecisionId] = useState(
     productionMode ? "" : featuredDecision.id,
   );
@@ -138,13 +150,36 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
   const [showAllEvidence, setShowAllEvidence] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [approvalError, setApprovalError] = useState<string | null>(null);
-  const approvalWritable = productionMode || workflow.writable;
   const decisionQuery = useQuery({
     queryKey: ["decisions", runtimeMode],
     queryFn: ({ signal }) =>
       apiGet<{ readonly data: readonly Decision[] }>("/api/decisions", signal),
     initialData: productionMode ? undefined : { data: decisions },
+    retry: false,
+    staleTime: 60_000,
   });
+  const decisionState = deriveQueryViewState({
+    data: decisionQuery.data?.data,
+    dataUpdatedAt: decisionQuery.dataUpdatedAt,
+    error: decisionQuery.error,
+    isError: decisionQuery.isError,
+    isFetching: decisionQuery.isFetching,
+    isPending: decisionQuery.isPending,
+    isStale: decisionQuery.isStale,
+    isEmpty: (data) => data.length === 0,
+    sourceUpdatedAt: productionMode
+      ? latestValidTimestamp(decisionQuery.data?.data.map((decision) => decision.updatedAt) ?? [])
+      : null,
+    staleAfterMs: 60_000,
+  });
+  const pageHealth = queryRuntimeHealth(decisionState, "决策台账");
+  const queryWritable =
+    decisionState.lifecycle === "success-data" && decisionState.health === "ready";
+  const approvalWritable = productionMode
+    ? queryWritable && Object.values(approvalCapabilities).some((capability) => can(capability))
+    : workflow.writable;
+  const canSubmitApproval = (action: ApprovalAction) =>
+    productionMode ? queryWritable && can(approvalCapabilities[action]) : workflow.writable;
   const decisionItems = useMemo(() => decisionQuery.data?.data ?? [], [decisionQuery.data?.data]);
   const currentDecision =
     decisionItems.find((decision) => decision.id === activeDecisionId) ?? decisionItems[0];
@@ -189,8 +224,12 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
     return () => window.clearTimeout(timer);
   }, [activeDecisionId, currentDecision, decisionItems, selectedId]);
 
-  async function submitApproval(action: "approve" | "reject" | "request-revision" | "escalate") {
+  async function submitApproval(action: ApprovalAction) {
     if (!currentDecision || !selected) return;
+    if (!canSubmitApproval(action)) {
+      setApprovalError("当前身份或数据状态不允许执行此审批动作。");
+      return;
+    }
     if (productionMode) {
       if (!currentDecision.missionRevision) {
         setApprovalError("当前决策缺少 Mission 修订号，无法安全提交审批。");
@@ -243,30 +282,35 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
 
   if (!currentDecision) {
     return (
-      <AppShell runtimeMode={runtimeMode} activePath="/decisions">
+      <AppShell runtimeMode={runtimeMode} activePath="/decisions" pageHealth={pageHealth}>
         <PageHeader
           eyebrow="AI 运营"
           title="决策中心"
           description="基于安全、成本、停机损失、天气与资源的可解释运维决策"
           breadcrumb={["AI 运营", "决策中心"]}
+          meta={productionMode ? <RuntimeHealthBadge health={pageHealth} /> : undefined}
         />
-        <Card>
-          <CardHeader
-            eyebrow={productionMode ? "生产数据" : "审核队列"}
-            title={decisionQuery.isLoading ? "正在加载决策…" : "当前没有待处理决策"}
-            description={
-              decisionQuery.error instanceof Error
-                ? decisionQuery.error.message
-                : "新 Mission 完成分析与多 Agent 复核后，决策会进入这里。"
-            }
-          />
-        </Card>
+        <QueryStateNotice
+          state={decisionState}
+          target="决策台账"
+          impact="审批队列和审批动作"
+          onRetry={() => void decisionQuery.refetch()}
+        />
+        {decisionState.lifecycle === "success-empty" ? (
+          <Card>
+            <CardHeader
+              eyebrow={productionMode ? "生产数据" : "审核队列"}
+              title="当前没有待处理决策"
+              description="新 Mission 完成分析与多 Agent 复核后，决策会进入这里。"
+            />
+          </Card>
+        ) : null}
       </AppShell>
     );
   }
 
   return (
-    <AppShell runtimeMode={runtimeMode} activePath="/decisions">
+    <AppShell runtimeMode={runtimeMode} activePath="/decisions" pageHealth={pageHealth}>
       <PageHeader
         eyebrow="AI 运营"
         title="决策中心"
@@ -274,6 +318,7 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
         breadcrumb={["AI 运营", "决策中心"]}
         meta={
           <>
+            {productionMode ? <RuntimeHealthBadge health={pageHealth} /> : null}
             <StatusBadge
               value={isFeaturedDecision ? workflow.decisionStatus : currentDecision.status}
               label={localizedStatusLabel(
@@ -309,6 +354,13 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
             </Button>
           </>
         }
+      />
+
+      <QueryStateNotice
+        state={decisionState}
+        target="决策台账"
+        impact="审批队列和依赖最新 revision 的审批动作"
+        onRetry={() => void decisionQuery.refetch()}
       />
 
       <section className="decision-layout">
@@ -628,7 +680,7 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
                     variant="secondary"
                     onClick={() => void submitApproval("reject")}
                     disabled={
-                      !approvalWritable ||
+                      !canSubmitApproval("reject") ||
                       submitting ||
                       (productionMode && comment.trim().length < 3)
                     }
@@ -639,7 +691,7 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
                     variant="secondary"
                     onClick={() => void submitApproval("request-revision")}
                     disabled={
-                      !approvalWritable ||
+                      !canSubmitApproval("request-revision") ||
                       submitting ||
                       (productionMode && comment.trim().length < 3)
                     }
@@ -650,7 +702,7 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
                     variant="secondary"
                     onClick={() => void submitApproval("escalate")}
                     disabled={
-                      !approvalWritable ||
+                      !canSubmitApproval("escalate") ||
                       submitting ||
                       (productionMode && comment.trim().length < 3)
                     }
@@ -663,7 +715,7 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
                     disabled={
                       !comment.trim() ||
                       (productionMode && comment.trim().length < 3) ||
-                      !approvalWritable ||
+                      !canSubmitApproval("approve") ||
                       submitting
                     }
                   >

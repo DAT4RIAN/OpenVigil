@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from windops_backend.errors import ConflictError
 from windops_backend.models import (
     Alarm,
     AnomalyAlertPolicyState,
@@ -17,8 +18,10 @@ from windops_backend.models import (
     BenchmarkEventResult,
     BenchmarkFeatureMap,
     BenchmarkMetricSnapshot,
+    BenchmarkQualityArtifact,
     BenchmarkQualityReport,
     BenchmarkReplayRun,
+    DomainEvent,
     ModelDeployment,
     ModelPrediction,
     RegisteredModel,
@@ -137,6 +140,8 @@ def _quality_report_request() -> BenchmarkQualityReportCreateRequest:
         event_id="care-v6-event-0",
         quality_rule_version="care-v6-quality-v1",
         feature_set_version="care-v6-avg-v1",
+        canonical_content_sha256=SHA_C,
+        artifact_stage="minimal-import",
         status="completed",
         artifact_uri="minio://care/quality/event-0-report.json",
         artifact_sha256=SHA_A,
@@ -144,6 +149,101 @@ def _quality_report_request() -> BenchmarkQualityReportCreateRequest:
         mask_sha256=SHA_B,
         summary={"raw_values_preserved": True},
     )
+
+
+@pytest.mark.asyncio
+async def test_quality_registration_preserves_stage_artifacts_and_canonical_identity(
+    app: FastAPI,
+) -> None:
+    minimal = _quality_report_request()
+    full_scale = minimal.model_copy(
+        update={
+            "artifact_stage": "full-scale-import",
+            "artifact_uri": "minio://care/full-scale/quality/event-0-report.json",
+            "artifact_sha256": SHA_B,
+            "mask_uri": "minio://care/full-scale/quality/event-0-mask.json",
+            "mask_sha256": SHA_A,
+        }
+    )
+    async with app.state.session_factory() as session, session.begin():
+        await register_dataset_version(session, _dataset_request(), subject="care-minimal-worker")
+        await register_benchmark_file(session, _file_request())
+        await register_benchmark_event(session, _event_request())
+        canonical, minimal_replayed = await register_quality_report(
+            session,
+            minimal,
+            subject="care-minimal-worker",
+        )
+        upgraded, full_scale_replayed = await register_quality_report(
+            session,
+            full_scale,
+            subject="care-full-scale-worker",
+        )
+        assert canonical.id == upgraded.id
+        assert minimal_replayed is False
+        assert full_scale_replayed is False
+        assert canonical.canonical_content_sha256 == SHA_C
+        assert canonical.artifact_sha256 == SHA_A
+
+    async with app.state.session_factory() as session, session.begin():
+        _, replayed = await register_quality_report(
+            session,
+            full_scale,
+            subject="care-full-scale-retry",
+        )
+        assert replayed is True
+
+    async with app.state.session_factory() as session:
+        artifacts = list(
+            (
+                await session.scalars(
+                    select(BenchmarkQualityArtifact).order_by(
+                        BenchmarkQualityArtifact.artifact_stage
+                    )
+                )
+            ).all()
+        )
+        assert [artifact.artifact_stage for artifact in artifacts] == [
+            "full-scale-import",
+            "minimal-import",
+        ]
+        assert {artifact.audit_subject for artifact in artifacts} == {
+            "care-full-scale-worker",
+            "care-minimal-worker",
+        }
+        events = list(
+            (
+                await session.scalars(
+                    select(DomainEvent).where(
+                        DomainEvent.event_type == "benchmark.transform.quality.completed"
+                    )
+                )
+            ).all()
+        )
+        assert len(events) == 2
+        assert {event.payload["artifact_stage"] for event in events} == {
+            "minimal-import",
+            "full-scale-import",
+        }
+        assert {event.payload["requested_by"] for event in events} == {
+            "care-minimal-worker",
+            "care-full-scale-worker",
+        }
+
+    conflicting = minimal.model_copy(
+        update={
+            "artifact_stage": "conflicting-import",
+            "canonical_content_sha256": SHA_A,
+        }
+    )
+    async with app.state.session_factory() as session:
+        with pytest.raises(ConflictError, match="different content"):
+            async with session.begin():
+                await register_quality_report(
+                    session,
+                    conflicting,
+                    subject="care-conflicting-worker",
+                )
 
 
 def _evaluation_request() -> BenchmarkEvaluationRunCreateRequest:

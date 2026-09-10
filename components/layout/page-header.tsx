@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 
+type BreadcrumbItem = string | { readonly label: string; readonly href: string };
+
 export function PageHeader({
   eyebrow,
   title,
@@ -13,21 +15,29 @@ export function PageHeader({
   title: string;
   description: string;
   actions?: ReactNode;
-  breadcrumb?: string[];
+  breadcrumb?: BreadcrumbItem[];
   meta?: ReactNode;
 }) {
   return (
     <header className="page-header">
       {breadcrumb?.length ? (
         <nav className="breadcrumb" aria-label="面包屑导航">
-          {breadcrumb.map((item, index) => (
-            <span key={`${item}-${index}`}>
-              {index > 0 ? <ChevronRight size={13} aria-hidden="true" /> : null}
-              <span aria-current={index === breadcrumb.length - 1 ? "page" : undefined}>
-                {item}
+          {breadcrumb.map((item, index) => {
+            const label = typeof item === "string" ? item : item.label;
+            const current = index === breadcrumb.length - 1;
+            return (
+              <span key={`${label}-${index}`}>
+                {index > 0 ? <ChevronRight size={13} aria-hidden="true" /> : null}
+                {typeof item === "string" ? (
+                  <span aria-current={current ? "page" : undefined}>{label}</span>
+                ) : (
+                  <a href={item.href} aria-label={`返回${label}`}>
+                    {label}
+                  </a>
+                )}
               </span>
-            </span>
-          ))}
+            );
+          })}
         </nav>
       ) : null}
       <div className="page-header__row">

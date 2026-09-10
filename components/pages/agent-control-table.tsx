@@ -104,7 +104,7 @@ export function AgentControlTable({
         },
       ]}
       csvExport={{
-        filename: "windops-agents.csv",
+        filename: "openvigil-agents.csv",
         columns: [
           { label: "Agent ID", value: (row) => row.agent.id },
           { label: "名称", value: (row) => agentDisplayName(row.agent.id, row.agent.name) },

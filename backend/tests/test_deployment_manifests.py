@@ -54,6 +54,8 @@ def test_runtime_image_is_non_root_and_excludes_development_context() -> None:
     assert 'org.opencontainers.image.revision="${WINDOPS_COMMIT_SHA}"' in dockerfile
     assert "--require-hashes --wheel-dir /wheels -r requirements.container.txt" in dockerfile
     assert "--no-index --find-links=/wheels --require-hashes" in dockerfile
+    assert "windops-care-dependency-closure" in dockerfile
+    assert "--report /app/care-benchmark-dependency-closure.json" in dockerfile
     for excluded in (".venv", "tests", ".test-tmp", "docker-compose.yml"):
         assert excluded in dockerignore
 
@@ -65,6 +67,14 @@ def test_container_requirements_are_hash_locked_to_uv_versions() -> None:
     blocks = re.split(r"(?m)(?=^[a-z0-9][a-z0-9._-]*==)", requirements)
     assert all("--hash=sha256:" in block for block in blocks if block.strip())
     assert not re.search(r"(?m)^(?:pytest|mypy|ruff|bandit|pip-audit)==", requirements)
+    assert {
+        "joblib",
+        "numpy",
+        "pyarrow",
+        "scikit-learn",
+        "scipy",
+        "threadpoolctl",
+    }.issubset({name for name, _version in headers})
 
     lock = tomllib.loads((BACKEND_ROOT / "uv.lock").read_text(encoding="utf-8"))
     locked = {(package["name"], package["version"]) for package in lock["package"]}
@@ -77,6 +87,35 @@ def test_container_requirements_are_hash_locked_to_uv_versions() -> None:
     assert project["project"]["scripts"]["windops-deployment-policy"] == (
         "windops_backend.operations.deployment_policy:main"
     )
+    assert project["project"]["scripts"]["windops-care-dependency-closure"] == (
+        "windops_backend.benchmarks.care.dependency_closure:main"
+    )
+    exporter = (BACKEND_ROOT / "scripts/export_container_requirements.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"connectors"' in exporter
+    assert '"benchmark"' in exporter
+
+
+def test_required_ci_and_release_image_verify_the_same_benchmark_closure() -> None:
+    repository_root = BACKEND_ROOT.parent
+    workflow = (repository_root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "uv sync --frozen --all-extras --all-groups" in workflow
+    assert "uv sync --frozen --extra test --extra benchmark" in workflow
+    assert workflow.count("windops-care-dependency-closure") >= 2
+    assert workflow.count("care-benchmark-dependency-closure.json") >= 4
+    assert 'python -m pip install -e ".[test]"' not in workflow
+
+    dockerfile = (BACKEND_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "windops-care-dependency-closure" in dockerfile
+    assert "/app/requirements.container.txt" in dockerfile
+    assert "/app/care-benchmark-dependency-closure.json" in dockerfile
+
+    artifact_verifier = (
+        BACKEND_ROOT / "src/windops_backend/operations/container_artifact.py"
+    ).read_text(encoding="utf-8")
+    assert "CARE benchmark dependency closure drifted after image build" in artifact_verifier
+    assert '"care_benchmark_dependency_closure"' in artifact_verifier
 
 
 def test_workloads_are_digest_pinned_hardened_and_resource_bounded() -> None:
@@ -89,15 +128,23 @@ def test_workloads_are_digest_pinned_hardened_and_resource_bounded() -> None:
         "windops-api",
         "windops-worker",
         "windops-outbox-relay",
+        "windops-read-audit-worker",
         "windops-migrate-release",
         "windops-backup",
+        "windops-read-audit-maintenance",
+        "windops-care-full-scale",
     }
     for workload in workloads:
         container = _container(workload)
         assert "@sha256:" in container["image"]
         assert container["image"].endswith(PLACEHOLDER_DIGEST)
         assert ":latest" not in container["image"]
-        assert container["envFrom"] == [{"secretRef": {"name": "windops-runtime"}}]
+        secret_name = (
+            "windops-care-runtime"
+            if workload["metadata"]["name"] == "windops-care-full-scale"
+            else "windops-runtime"
+        )
+        assert container["envFrom"] == [{"secretRef": {"name": secret_name}}]
         assert set(container["resources"]) == {"requests", "limits"}
         assert set(container["resources"]["requests"]) == {
             "cpu",
@@ -150,6 +197,51 @@ def test_migration_backup_and_network_boundaries_are_explicit() -> None:
     ]
     backup_claim = _named("PersistentVolumeClaim", "windops-backups")
     assert backup_claim["spec"]["storageClassName"] == "windops-encrypted-backup"
+    read_audit_worker = _named("Deployment", "windops-read-audit-worker")
+    assert read_audit_worker["spec"]["replicas"] == 1
+    assert _container(read_audit_worker)["command"] == ["windops-read-audit-worker"]
+    read_audit_maintenance = _named("CronJob", "windops-read-audit-maintenance")
+    assert read_audit_maintenance["spec"]["concurrencyPolicy"] == "Forbid"
+    assert _container(read_audit_maintenance)["command"] == ["windops-read-audit-maintenance"]
+    care = _named("CronJob", "windops-care-full-scale")
+    care_spec = care["spec"]
+    assert care_spec["suspend"] is True
+    assert care_spec["concurrencyPolicy"] == "Forbid"
+    assert (
+        care_spec["jobTemplate"]["spec"]
+        | {
+            "parallelism": 1,
+            "completions": 1,
+            "backoffLimit": 2,
+            "activeDeadlineSeconds": 72000,
+        }
+        == care_spec["jobTemplate"]["spec"]
+    )
+    care_pod = care_spec["jobTemplate"]["spec"]["template"]["spec"]
+    assert care_pod["serviceAccountName"] == "windops-care-worker"
+    assert care_pod["automountServiceAccountToken"] is False
+    care_container = _container(care)
+    assert care_container["envFrom"] == [{"secretRef": {"name": "windops-care-runtime"}}]
+    care_env = {item["name"]: item["value"] for item in care_container["env"]}
+    assert care_env == {
+        "WINDOPS_CARE_QUEUE": "care-v6-offline",
+        "WINDOPS_CARE_MAX_CONCURRENCY": "1",
+        "WINDOPS_CARE_MAX_ATTEMPTS": "3",
+    }
+    assert (
+        next(mount for mount in care_container["volumeMounts"] if mount["name"] == "care-source")[
+            "readOnly"
+        ]
+        is True
+    )
+    assert (
+        _named("PersistentVolumeClaim", "windops-care-source")["spec"]["storageClassName"]
+        == "windops-encrypted-care-source"
+    )
+    assert (
+        _named("PersistentVolumeClaim", "windops-care-workspace")["spec"]["storageClassName"]
+        == "windops-encrypted-care-workspace"
+    )
     default_deny = _named("NetworkPolicy", "windops-default-deny")
     assert default_deny["spec"]["podSelector"] == {}
     assert set(default_deny["spec"]["policyTypes"]) == {"Ingress", "Egress"}
@@ -157,6 +249,11 @@ def test_migration_backup_and_network_boundaries_are_explicit() -> None:
     selector = ingress["spec"]["ingress"][0]["from"][0]["namespaceSelector"]["matchLabels"]
     assert selector == {"windops.openai.com/gateway-access": "true"}
     egress = _named("NetworkPolicy", "windops-runtime-egress")
+    assert egress["spec"]["podSelector"]["matchExpressions"][0] == {
+        "key": "app.kubernetes.io/component",
+        "operator": "NotIn",
+        "values": ["care-worker"],
+    }
     assert all(rule.get("to") for rule in egress["spec"]["egress"])
     dependency_peer = egress["spec"]["egress"][1]["to"][0]
     assert dependency_peer == {
@@ -164,5 +261,14 @@ def test_migration_backup_and_network_boundaries_are_explicit() -> None:
             "matchLabels": {"windops.openai.com/runtime-dependency-access": "true"}
         },
         "podSelector": {"matchLabels": {"windops.openai.com/runtime-dependency-access": "true"}},
+    }
+    care_egress = _named("NetworkPolicy", "windops-care-egress")
+    assert care_egress["spec"]["podSelector"] == {
+        "matchLabels": {"app.kubernetes.io/component": "care-worker"}
+    }
+    assert {port["port"] for rule in care_egress["spec"]["egress"] for port in rule["ports"]} == {
+        53,
+        5432,
+        9000,
     }
     assert not any(document["kind"] == "Secret" for document in _documents())

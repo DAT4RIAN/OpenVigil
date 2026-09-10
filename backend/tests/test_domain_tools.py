@@ -55,7 +55,7 @@ def test_catalog_is_the_exact_seventeen_public_domain_tools() -> None:
         "query_maintenance_history",
         "query_similar_failures",
         "calculate_health_score",
-        "predict_rul",
+        "assess_condition_evidence",
         "create_decision",
         "create_work_order",
         "query_manual",
@@ -150,9 +150,12 @@ async def test_sql_read_and_compute_tools_report_real_empty_and_baseline_state(
         health = await adapter.calculate_health_score("WT-023")
         assert health["health_score"] == 100
         assert health["persisted"] is False
-        rul = await adapter.predict_rul("WT-023", "main_bearing")
-        assert rul["estimated_rul_days"] > 30
-        assert rul["inputs"] == {"anomaly_score": 0.0, "trend_pct": 0.0}
+        condition = await adapter.assess_condition_evidence("WT-023", "main_bearing")
+        assert condition["evidence_band"] == 1
+        assert condition["condition"] == "stable"
+        assert condition["inputs"] == {"anomaly_score": 0.0, "trend_pct": 0.0}
+        assert "estimated_rul_days" not in condition
+        assert "failure_probability_30d" not in condition
 
 
 @pytest.mark.asyncio

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
 import time
-from collections.abc import AsyncIterator, Mapping
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator, Mapping
+from contextlib import asynccontextmanager, contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -14,8 +16,9 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from pydantic import SecretStr
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from windops_backend.benchmarks.care.anomaly import (
     ActivationGateEvidence,
@@ -29,7 +32,11 @@ from windops_backend.benchmarks.care.evaluation import (
     EVALUATION_SUITE_PROTOCOL,
     register_offline_evaluations,
 )
-from windops_backend.benchmarks.care.fullscale import MIN_REPLAY_WRITE_ROWS_PER_SECOND
+from windops_backend.benchmarks.care.fullscale import (
+    MIN_REPLAY_WRITE_ROWS_PER_SECOND,
+    register_full_scale_evaluation,
+    register_full_scale_import,
+)
 from windops_backend.benchmarks.care.importer import register_a_minimal_import
 from windops_backend.benchmarks.care.online import (
     CareJsonPackageInferenceClient,
@@ -39,7 +46,7 @@ from windops_backend.benchmarks.care.online import (
     replay_variables_from_import,
     select_online_window,
 )
-from windops_backend.benchmarks.care.quality import QUALITY_RULE_VERSION
+from windops_backend.benchmarks.care.quality import FEATURE_SET_VERSION, QUALITY_RULE_VERSION
 from windops_backend.benchmarks.care.replay import (
     CARE_REPLAY_SOURCE_ID,
     BenchmarkReplayRun,
@@ -61,6 +68,8 @@ from windops_backend.models import (
     AgentExecution,
     Alarm,
     AnomalyAlertPolicyState,
+    BenchmarkQualityArtifact,
+    BenchmarkQualityReport,
     CommandReceipt,
     Decision,
     DomainEvent,
@@ -75,10 +84,14 @@ from windops_backend.models import (
 from windops_backend.models import (
     BenchmarkReplayRun as PersistedReplayRun,
 )
-from windops_backend.schemas import BenchmarkReplayRunCreateRequest
+from windops_backend.schemas import (
+    BenchmarkQualityReportCreateRequest,
+    BenchmarkReplayRunCreateRequest,
+)
 from windops_backend.services.benchmark_metadata import (
     build_benchmark_trace,
     persist_replay_run_progress,
+    register_quality_report,
     register_replay_run,
 )
 from windops_backend.services.events import append_domain_event
@@ -96,10 +109,53 @@ pytestmark = [
 ]
 
 SUBJECT = "integration-test-system"
+FULL_SCALE_SUBJECT = "care-full-scale-stage-upgrade"
 TARGET_ID = "care-json-package"
 ANOMALY_RUN_ID = "h5a00001"
 NORMAL_RUN_ID = "h5n00001"
 ISOLATED_RUN_ID = "h5a00002"
+MAX_REPLAY_WRITE_SQL_STATEMENTS_PER_BATCH = 40
+
+
+@dataclass
+class _SqlProfile:
+    statement_count: int = 0
+    elapsed_seconds: float = 0.0
+
+
+@contextmanager
+def _capture_sql_profile(engine: AsyncEngine) -> Iterator[_SqlProfile]:
+    profile = _SqlProfile()
+
+    def before_cursor_execute(
+        _connection: Any,
+        _cursor: Any,
+        _statement: Any,
+        _parameters: Any,
+        context: Any,
+        _executemany: Any,
+    ) -> None:
+        context._windops_profile_started = time.perf_counter()
+
+    def after_cursor_execute(
+        _connection: Any,
+        _cursor: Any,
+        _statement: Any,
+        _parameters: Any,
+        context: Any,
+        _executemany: Any,
+    ) -> None:
+        profile.statement_count += 1
+        profile.elapsed_seconds += time.perf_counter() - context._windops_profile_started
+
+    sync_engine = engine.sync_engine
+    event.listen(sync_engine, "before_cursor_execute", before_cursor_execute)
+    event.listen(sync_engine, "after_cursor_execute", after_cursor_execute)
+    try:
+        yield profile
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", before_cursor_execute)
+        event.remove(sync_engine, "after_cursor_execute", after_cursor_execute)
 
 
 def _database_url() -> str:
@@ -117,6 +173,13 @@ def _artifact_root() -> Path:
     value = os.getenv("WINDOPS_CARE_REAL_ARTIFACT_ROOT", "").strip()
     if not value:
         raise RuntimeError("WINDOPS_CARE_REAL_ARTIFACT_ROOT is required")
+    return Path(value).resolve(strict=True)
+
+
+def _full_scale_root() -> Path:
+    value = os.getenv("WINDOPS_CARE_FULL_SCALE_ROOT", "").strip()
+    if not value:
+        raise RuntimeError("WINDOPS_CARE_FULL_SCALE_ROOT is required")
     return Path(value).resolve(strict=True)
 
 
@@ -246,6 +309,7 @@ async def _process_row(
     model_version: str,
     threshold_policy: Mapping[str, Any],
     ingest_timings: list[float],
+    ingest_sql_profiles: list[_SqlProfile],
     retry: bool = False,
 ) -> tuple[BenchmarkReplayRun, dict[str, Any], dict[str, Any]]:
     samples = [
@@ -258,16 +322,18 @@ async def _process_row(
         for variable in run.selected_variables
     ]
     assert len(samples) == 54
-    ingest_started = time.perf_counter()
-    ingest = await client.post(
-        "/api/v1/scada/ingest",
-        headers=_headers(
-            "scada_ingestor",
-            subject=f"ingest-source:{CARE_REPLAY_SOURCE_ID}",
-        ),
-        json={"source_id": CARE_REPLAY_SOURCE_ID, "samples": samples},
-    )
+    with _capture_sql_profile(app.state.engine) as sql_profile:
+        ingest_started = time.perf_counter()
+        ingest = await client.post(
+            "/api/v1/scada/ingest",
+            headers=_headers(
+                "scada_ingestor",
+                subject=f"ingest-source:{CARE_REPLAY_SOURCE_ID}",
+            ),
+            json={"source_id": CARE_REPLAY_SOURCE_ID, "samples": samples},
+        )
     ingest_timings.append(time.perf_counter() - ingest_started)
+    ingest_sql_profiles.append(sql_profile)
     assert ingest.status_code == 202, ingest.text
     assert ingest.json()["accepted"] == 54
     assert ingest.json()["quarantined"] == 0
@@ -421,6 +487,7 @@ async def test_real_postgres_care_replay_alert_mission_diagnosis_vertical_slice(
     inference_client = CareJsonPackageInferenceClient(package)
     threshold_policy: Mapping[str, Any]
     ingest_timings: list[float] = []
+    ingest_sql_profiles: list[_SqlProfile] = []
     anomaly_run: BenchmarkReplayRun
     normal_run: BenchmarkReplayRun
     isolated_run: BenchmarkReplayRun
@@ -660,6 +727,7 @@ async def test_real_postgres_care_replay_alert_mission_diagnosis_vertical_slice(
             model_version=str(model["model_version"]),
             threshold_policy=threshold_policy,
             ingest_timings=ingest_timings,
+            ingest_sql_profiles=ingest_sql_profiles,
             retry=True,
         )
         assert first_prediction["output"]["binary_prediction"] is True
@@ -680,6 +748,7 @@ async def test_real_postgres_care_replay_alert_mission_diagnosis_vertical_slice(
                 model_version=str(model["model_version"]),
                 threshold_policy=threshold_policy,
                 ingest_timings=ingest_timings,
+                ingest_sql_profiles=ingest_sql_profiles,
             )
             anomaly_predictions.append(prediction)
             anomaly_alerts.append(alert)
@@ -699,6 +768,7 @@ async def test_real_postgres_care_replay_alert_mission_diagnosis_vertical_slice(
                 model_version=str(model["model_version"]),
                 threshold_policy=threshold_policy,
                 ingest_timings=ingest_timings,
+                ingest_sql_profiles=ingest_sql_profiles,
             )
             normal_predictions.append(prediction)
             normal_alerts.append(alert)
@@ -722,6 +792,7 @@ async def test_real_postgres_care_replay_alert_mission_diagnosis_vertical_slice(
             model_version=str(model["model_version"]),
             threshold_policy=threshold_policy,
             ingest_timings=ingest_timings,
+            ingest_sql_profiles=ingest_sql_profiles,
         )
         assert isolated_prediction["output"]["binary_prediction"] is True
         assert isolated_alert["action"] == "none"
@@ -1149,6 +1220,7 @@ async def test_real_postgres_care_replay_alert_mission_diagnosis_vertical_slice(
                 }
 
     assert len(ingest_timings) == 7
+    assert len(ingest_sql_profiles) == 7
     replay_write_rows_per_second = (7 * 54) / sum(ingest_timings)
     record_testsuite_property("care.ingested_samples", str(7 * 54))
     record_testsuite_property("care.replay_write_elapsed_seconds", f"{sum(ingest_timings):.6f}")
@@ -1160,8 +1232,28 @@ async def test_real_postgres_care_replay_alert_mission_diagnosis_vertical_slice(
         "care.replay_write_rows_per_second", f"{replay_write_rows_per_second:.3f}"
     )
     record_testsuite_property(
+        "care.replay_write_sql_statements",
+        ",".join(str(profile.statement_count) for profile in ingest_sql_profiles),
+    )
+    record_testsuite_property(
+        "care.replay_write_sql_seconds",
+        ",".join(f"{profile.elapsed_seconds:.6f}" for profile in ingest_sql_profiles),
+    )
+    record_testsuite_property(
+        "care.replay_write_max_batch_sql_statements",
+        str(max(profile.statement_count for profile in ingest_sql_profiles)),
+    )
+    record_testsuite_property(
+        "care.replay_write_db_elapsed_seconds",
+        f"{sum(profile.elapsed_seconds for profile in ingest_sql_profiles):.6f}",
+    )
+    record_testsuite_property(
         "care.replay_write_min_rows_per_second",
         f"{MIN_REPLAY_WRITE_ROWS_PER_SECOND:.3f}",
+    )
+    assert all(
+        profile.statement_count <= MAX_REPLAY_WRITE_SQL_STATEMENTS_PER_BATCH
+        for profile in ingest_sql_profiles
     )
     assert replay_write_rows_per_second >= MIN_REPLAY_WRITE_ROWS_PER_SECOND
     record_testsuite_property("care.dataset_version", "v6")
@@ -1204,3 +1296,188 @@ async def test_real_postgres_care_replay_alert_mission_diagnosis_vertical_slice(
     record_testsuite_property("care.export_json_count", "1")
     record_testsuite_property("care.export_idempotent", "true")
     record_testsuite_property("care.export_sharealike_gate_enforced", "true")
+
+
+@pytest.mark.asyncio
+async def test_same_database_stage_upgrade_is_append_only_and_concurrently_idempotent(
+    record_testsuite_property: Any,
+) -> None:
+    """Append full-scale evidence to the database populated by the vertical slice."""
+
+    base_root = _artifact_root()
+    full_root = _full_scale_root()
+    source_manifest = _read_json(base_root / "contract/manifest.json")
+    quality = _read_json(base_root / "quality/quality-contract.json")
+    minimal_import = _read_json(
+        base_root / "minimal-import/care/v6/reports/a-minimal-import/manifest.json"
+    )
+    full_import = _read_json(full_root / "care/v6/reports/full-import/manifest.json")
+    full_evaluation = _read_json(full_root / "care/v6/reports/full-evaluation/manifest.json")
+    metric_count = sum(
+        5
+        + sum(
+            summary.get(name) is not None
+            for name in (
+                "care_score",
+                "normal_event_false_positive_rate",
+                "event_detection_rate",
+            )
+        )
+        for summary in full_evaluation["fold_summaries"]
+    )
+    expected_evaluation_records = 3 + 36 + 95 + metric_count
+
+    settings = Settings(
+        environment=Environment.TEST,
+        database_url=_database_url(),
+        schema_bootstrap=False,
+        demo_seed=True,
+        test_auth_bypass_enabled=True,
+        knowledge_graph_backend="memory",
+    )
+    app = create_app(settings)
+    async with app.router.lifespan_context(app):
+        first_full_event = next(event for event in full_import["events"] if event["event_id"] == 0)
+        first_full_quality = first_full_event["quality"]
+        first_full_quality_request = BenchmarkQualityReportCreateRequest(
+            quality_report_id="care-v6-quality-a-0",
+            event_id="care-v6-event-a-0",
+            quality_rule_version=QUALITY_RULE_VERSION,
+            feature_set_version=FEATURE_SET_VERSION,
+            canonical_content_sha256=str(first_full_quality["source_quality_report_sha256"]),
+            artifact_stage="full-scale-import",
+            status="completed",
+            artifact_uri=str(first_full_quality["report"]["artifact_uri"]),
+            artifact_sha256=str(first_full_quality["report"]["file_sha256"]),
+            mask_uri=str(first_full_quality["mask"]["artifact_uri"]),
+            mask_sha256=str(first_full_quality["mask"]["file_sha256"]),
+            summary={
+                "row_count": first_full_event["row_count"],
+                "feature_summary_count": first_full_quality["feature_summary_count"],
+                "mask_count": first_full_quality["mask_count"],
+                "raw_values_modified": False,
+            },
+        )
+
+        async def register_first_quality_stage() -> bool:
+            async with app.state.session_factory() as session, session.begin():
+                _row, replayed = await register_quality_report(
+                    session,
+                    first_full_quality_request,
+                    subject=FULL_SCALE_SUBJECT,
+                )
+            return replayed
+
+        assert sorted(
+            await asyncio.gather(
+                register_first_quality_stage(),
+                register_first_quality_stage(),
+            )
+        ) == [False, True]
+
+        async def register_all() -> tuple[Any, Any]:
+            async with app.state.session_factory() as session, session.begin():
+                imported = await register_full_scale_import(
+                    session,
+                    full_import,
+                    source_manifest,
+                    quality,
+                    artifact_root=full_root,
+                    tenant_id="tenant-east-china",
+                    subject=FULL_SCALE_SUBJECT,
+                )
+                evaluated = await register_full_scale_evaluation(
+                    session,
+                    full_evaluation,
+                    full_import,
+                    artifact_root=full_root,
+                    subject=FULL_SCALE_SUBJECT,
+                )
+            return imported, evaluated
+
+        imported, evaluated = await register_all()
+        assert (imported.created_count, imported.replayed_count) == (1484, 87)
+        assert (evaluated.created_count, evaluated.replayed_count) == (
+            expected_evaluation_records,
+            0,
+        )
+        assert await asyncio.gather(
+            register_first_quality_stage(),
+            register_first_quality_stage(),
+        ) == [True, True]
+
+        async with app.state.session_factory() as session:
+            quality_reports = list((await session.scalars(select(BenchmarkQualityReport))).all())
+            quality_artifacts = list(
+                (await session.scalars(select(BenchmarkQualityArtifact))).all()
+            )
+            quality_events = list(
+                (
+                    await session.scalars(
+                        select(DomainEvent).where(
+                            DomainEvent.event_type == "benchmark.transform.quality.completed"
+                        )
+                    )
+                ).all()
+            )
+            assert len(quality_reports) == 95
+            assert all(row.canonical_content_sha256 is not None for row in quality_reports)
+            assert len(quality_artifacts) == 97
+            assert sum(row.artifact_stage == "minimal-import" for row in quality_artifacts) == 2
+            assert sum(row.artifact_stage == "full-scale-import" for row in quality_artifacts) == 95
+            assert sum(row.audit_subject == SUBJECT for row in quality_artifacts) == 2
+            assert sum(row.audit_subject == FULL_SCALE_SUBJECT for row in quality_artifacts) == 95
+            assert len(quality_events) == 97
+            assert sum(event.payload["requested_by"] == SUBJECT for event in quality_events) == 2
+            assert (
+                sum(event.payload["requested_by"] == FULL_SCALE_SUBJECT for event in quality_events)
+                == 95
+            )
+
+            artifacts_by_report: dict[str, list[BenchmarkQualityArtifact]] = {}
+            for artifact in quality_artifacts:
+                artifacts_by_report.setdefault(artifact.quality_report_id, []).append(artifact)
+            minimal_quality_by_report = {
+                f"care-v6-quality-{str(minimal_import['farm']).lower()}-{event['event_id']}": event[
+                    "quality"
+                ]
+                for event in minimal_import["events"]
+            }
+            reports_by_id = {report.id: report for report in quality_reports}
+            for report_id, minimal_quality in minimal_quality_by_report.items():
+                report = reports_by_id[report_id]
+                assert (
+                    report.canonical_content_sha256
+                    == minimal_quality["source_quality_report_sha256"]
+                )
+                assert report.artifact_sha256 == minimal_quality["report"]["file_sha256"]
+                assert report.mask_sha256 == minimal_quality["mask"]["file_sha256"]
+                assert {artifact.artifact_stage for artifact in artifacts_by_report[report_id]} == {
+                    "minimal-import",
+                    "full-scale-import",
+                }
+
+            assert int(await session.scalar(select(func.count()).select_from(Alarm)) or 0) == 1
+            assert int(await session.scalar(select(func.count()).select_from(Mission)) or 0) == 1
+            assert int(await session.scalar(select(func.count()).select_from(Decision)) or 0) == 1
+
+    record_testsuite_property("care.stage_upgrade.import_created", "1484")
+    record_testsuite_property("care.stage_upgrade.import_preexisting_replayed", "87")
+    record_testsuite_property(
+        "care.stage_upgrade.evaluation_records", str(expected_evaluation_records)
+    )
+    record_testsuite_property("care.stage_upgrade.quality_parent_count", "95")
+    record_testsuite_property("care.stage_upgrade.quality_artifact_count", "97")
+    record_testsuite_property("care.stage_upgrade.concurrent_create_exact", "true")
+    record_testsuite_property("care.stage_upgrade.concurrent_replay_exact", "true")
+    record_testsuite_property(
+        "care.stage_upgrade.full_import_manifest_sha256", full_import["manifest_sha256"]
+    )
+    record_testsuite_property(
+        "care.stage_upgrade.full_evaluation_manifest_sha256",
+        full_evaluation["manifest_sha256"],
+    )
+    record_testsuite_property(
+        "care.stage_upgrade.approved_root_sha256",
+        full_evaluation["care_approval"]["approved_root_sha256"],
+    )

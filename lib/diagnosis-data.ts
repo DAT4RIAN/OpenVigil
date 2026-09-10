@@ -53,7 +53,7 @@ export interface DiagnosisCandidate {
   readonly id: string;
   readonly faultMode: string;
   readonly subsystem: string;
-  readonly probabilityPercent: number;
+  readonly supportScorePercent: number;
   readonly confidencePercent: number;
   readonly supportingEvidenceIds: readonly string[];
   readonly supportingSummary: readonly string[];
@@ -174,7 +174,7 @@ const featuredCitationIds = [
   "EV-023-HISTORY-006",
   "EV-023-MAINT-007",
   "EV-023-MANUAL-008",
-  "EV-023-RUL-011",
+  "EV-023-ANOMALY-011",
 ] as const;
 
 const featuredCitations: readonly DiagnosisCitation[] = featuredCitationIds.map((id) => {
@@ -196,7 +196,7 @@ const featuredCandidates: readonly DiagnosisCandidate[] = [
     id: "DX-023-CANDIDATE-01",
     faultMode: "主轴承外圈早期退化",
     subsystem: "主轴承",
-    probabilityPercent: 87,
+    supportScorePercent: 87,
     confidencePercent: 89,
     supportingEvidenceIds: [
       "EV-023-VIB-001",
@@ -216,7 +216,7 @@ const featuredCandidates: readonly DiagnosisCandidate[] = [
     id: "DX-023-CANDIDATE-02",
     faultMode: "润滑状态劣化或污染",
     subsystem: "主轴承润滑系统",
-    probabilityPercent: 9,
+    supportScorePercent: 9,
     confidencePercent: 72,
     supportingEvidenceIds: ["EV-023-TEMP-002", "EV-023-MAINT-007"],
     supportingSummary: ["Q2 巡检记录润滑脂颜色变深", "温升可由摩擦或润滑膜异常解释"],
@@ -227,7 +227,7 @@ const featuredCandidates: readonly DiagnosisCandidate[] = [
     id: "DX-023-CANDIDATE-03",
     faultMode: "转子不平衡或对中偏差",
     subsystem: "传动链",
-    probabilityPercent: 4,
+    supportScorePercent: 4,
     confidencePercent: 64,
     supportingEvidenceIds: ["EV-023-VIB-001"],
     supportingSummary: ["振动与功率波动存在同步偏离"],
@@ -286,11 +286,11 @@ const featuredCollaboration: readonly DiagnosisAgentStep[] = [
     agentName: agentName("agent-failure-diagnosis"),
     role: "证据融合与差分诊断",
     status: "complete",
-    publicOutput: "形成 3 个候选故障模式；主轴承外圈早期退化概率 87%，仍需现场取证确认。",
+    publicOutput: "形成 3 个候选故障模式；主候选证据支持分 87%，仍需现场取证确认。",
     evidenceIds: ["EV-023-VIB-001", "EV-023-TEMP-002", "EV-023-SPECTRUM-005", "EV-023-HISTORY-006"],
     toolResults: [
       { tool: "calculate_health_score", result: "主轴承健康评分 63 / 100" },
-      { tool: "predict_rul", result: "RUL 点估计 47 天；90% 区间 31–66 天" },
+      { tool: "score_anomaly", result: "异常分数 0.86；告警阈值 0.65；不输出寿命或故障概率" },
     ],
     completedAt: "2026-08-13T02:14:41+08:00",
   },
@@ -302,7 +302,7 @@ const featuredCollaboration: readonly DiagnosisAgentStep[] = [
     role: "风险复核与 HITL 门禁",
     status: "waiting-human",
     publicOutput: "高风险降载与海上检查需人工授权；当前只允许查看证据和现有 Mission。",
-    evidenceIds: ["EV-023-MANUAL-008", "EV-023-RUL-011"],
+    evidenceIds: ["EV-023-MANUAL-008", "EV-023-ANOMALY-011"],
     toolResults: [{ tool: "create_decision", result: "DECISION-2026-0823 已提交人工复核" }],
     completedAt: null,
   },
@@ -424,7 +424,7 @@ function genericCandidates(number: number, risk: RiskLevel): readonly DiagnosisC
     id: `DX-${String(number).padStart(3, "0")}-CANDIDATE-0${index + 1}`,
     faultMode,
     subsystem,
-    probabilityPercent: probabilities[index],
+    supportScorePercent: probabilities[index],
     confidencePercent: Math.max(52, 82 - index * 11 - (number % 4)),
     supportingEvidenceIds: [`DX-EV-${String(number).padStart(3, "0")}-HEALTH`],
     supportingSummary: [
@@ -452,7 +452,7 @@ function genericCitations(
     {
       id: `DX-EV-${turbineId.slice(3)}-HEALTH`,
       title: `${turbineId} 健康评分快照`,
-      sourceLabel: "WindOps Fleet Health",
+      sourceLabel: "OpenVigil Fleet Health",
       sourceType: "health-assessment",
       observedAt: assessedAt,
       summary: finding,
@@ -462,7 +462,7 @@ function genericCitations(
     {
       id: `DX-EV-${turbineId.slice(3)}-ASSET`,
       title: `${turbineId} 数字资产上下文`,
-      sourceLabel: "WindOps Asset Registry",
+      sourceLabel: "OpenVigil Asset Registry",
       sourceType: "asset-context",
       observedAt: assessedAt,
       summary: "型号、运行状态、健康度与当前 Mission 关联。",
@@ -474,7 +474,7 @@ function genericCitations(
     citations.push({
       id: `DX-EV-${turbineId.slice(3)}-ALARMS`,
       title: `${turbineId} 活跃告警上下文`,
-      sourceLabel: "WindOps 告警中心",
+      sourceLabel: "OpenVigil 告警中心",
       sourceType: "alarm-correlation",
       observedAt: assessedAt,
       summary: `${activeAlarmCount} 条活跃告警参与异常接入。`,

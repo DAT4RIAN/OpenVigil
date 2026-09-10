@@ -1,5 +1,5 @@
 /**
- * Shared domain contracts for the WindOps demo data layer.
+ * Shared domain contracts for the OpenVigil demo data layer.
  *
  * Dates are ISO-8601 strings on purpose: the fixtures are serializable and can
  * be used by server components, route handlers, and client components alike.
@@ -97,8 +97,6 @@ export interface SubsystemHealth {
   readonly state: HealthState;
   readonly trend: TrendDirection;
   readonly activeAlarmCount: number;
-  readonly failureProbability30d: number;
-  readonly remainingUsefulLifeDays: number | null;
   readonly anomalyScore: number;
   readonly primaryFinding: string;
   readonly assessedAt: ISODateTime;
@@ -112,8 +110,6 @@ export interface HealthAssessment {
   readonly state: HealthState;
   readonly trend: TrendDirection;
   readonly riskLevel: RiskLevel;
-  readonly failureProbability30d: number;
-  readonly remainingUsefulLifeDays: number;
   readonly anomalyScore: number;
   readonly primaryFinding: string;
   readonly assessedAt: ISODateTime;

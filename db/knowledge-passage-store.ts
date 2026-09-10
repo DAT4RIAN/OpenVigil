@@ -8,7 +8,9 @@ import type { KnowledgeDocument } from "../lib/types";
 
 export type KnowledgePassagePersistence = "d1" | "fixture";
 export type KnowledgePassageRetrievalMode =
-  "deterministic-d1-passage-retrieval" | "fixture-passage-fallback";
+  | "deterministic-d1-passage-retrieval"
+  | "fixture-passage-fallback"
+  | "production-pgvector-neo4j-hybrid";
 
 export interface GroundedKnowledgePassage extends KnowledgePassage {
   readonly documentTitle: string;

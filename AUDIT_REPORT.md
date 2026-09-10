@@ -1,342 +1,407 @@
-# 当前项目重新审核报告
+# OpenVigil Technical Audit Report
 
-审核日期：2026-08-31  
-审核范围：当前工作树、CARE v6 源码与制品、前后端回归、CI、迁移、真实 PostgreSQL/TimescaleDB 集成路径  
-审核依据：`AGENTS.md`、原 `AUDIT_REPORT.md`、`EXECUTION_PROGRESS.md`、`EXECUTION_GOAL.md`、项目实际代码、当前制品和本轮独立测试结果
+本报告只记录产品落地背后的技术实现、架构、数据、API、安全、并发、性能、测试和发布问题。纯视觉或交互问题以 `UI_AUDIT_REPORT.md` 为主；跨层问题通过 `Related UI Issue` / `Related Technical Issue` 双向引用。
 
-## 审核结论
+---
 
-**当前状态：NOT ACCEPTED。旧报告并未真正全部落实。**
+## 1. Audit Metadata
 
-本轮不采信 `EXECUTION_PROGRESS.md` 或旧报告中的 `DONE`，而是从当前代码、制品和测试重新验证。当前仍有：
+- **Stage:** LEAD
+- **Reviewer:** Lead-Reviewer
+- **Audit Date:** 2026-09-04
+- **Code Baseline:** Git `HEAD 8fd126672776aff6c52328a621391e4f8747627a` 与本轮开始时工作树
+- **Inputs:** `AGENTS.md`、`PRODUCT_REQUIREMENTS.md`、`UI_UX_SPEC.md`、原 `ARCHITECTURE.md`、`UI_AUDIT_REPORT.md`、原 `AUDIT_REPORT.md`、`EXECUTION_GOAL.md`、`EXECUTION_PROGRESS.md`、完整代码/迁移/测试/CI/发布/部署配置
+- **Change Boundary:** 本轮未修改业务代码；只更新架构与审核文档
+
+本轮以代码、配置和可重复验证为准，不把旧报告或进度文件中的 `DONE` 直接视为验收证据。开始审核时，四份产品/架构/UI 文档和 `docs/ui/` 仍是未跟踪文件；在进入发布基线前必须纳入受审版本控制。
+
+---
+
+## 2. Executive Conclusion
+
+**审计基线状态：NOT ACCEPTED。**
+
+**整改实现状态（2026-09-04）：16 / 16 `DONE`；First Full Recheck、Adversarial Review、Final Global Validation 与连续 `Final Audit Pass = 2 / 2` 已通过，最终项目状态为 `ACCEPTED`。**
+
+代码库已经形成清晰的 Demo / Production 双运行时边界、PostgreSQL 权威账本、事务 outbox、服务端身份/权限和结构化错误体系。当前常规前后端测试也大体健康。然而，以下缺口仍会直接破坏产品真实性、CARE 可信性或生产发布闭环：
 
 - 3 个 Critical；
-- 6 个 High；
-- 其中 `CARE-C001`、`CARE-C003`、`CARE-C005` 是旧 Critical 的实质性未完成或假完成；
-- 旧 `CARE-M004` 所声称的全量性能与运行验收也未成立，现以 High 问题重新登记；
-- 普通单元测试、覆盖率、类型检查和前端构建大体健康，但这些结果没有覆盖下述生产语义和发布路径，不能支持“CARE 全部完成”的结论。
+- 9 个 High；
+- 4 个 Medium；
+- 共 16 个未关闭技术 Issue。
 
-本报告只保留当前仍需处理的问题，不再列出已经关闭的历史问题。
+最严重的阻断项是：CARE 根契约可被重新自签、B/C 质量规则未进入实际模型语义、异常模型没有可用的生产 HTTP 控制路径、生产 UI 会把未完成/失败查询呈现为健康零值、发布 workflow 自行声明 `qualified` 却没有执行仓库定义的最终门禁。
 
-## 当前问题登记
+---
 
-| ID | 严重度 | 状态 | 当前结论 |
-| --- | --- | --- | --- |
-| CARE-C001 | Critical | REOPENED | CARE 根契约只有可重算的自哈希，没有可信锚点；重新签名后的真值和质量策略篡改会被接受 |
-| CARE-C003 | Critical | REOPENED | B/C 状态连续性和信号佐证在生产全量路径从未计算，声明的过滤分支实际不可达 |
-| CARE-C005 | Critical | REOPENED | 异常模型没有可用的生产 HTTP 激活/回滚成功路径；测试通过内部函数注入授权制造成功 |
-| CARE-H006 | High | OPEN | 全量训练和预测忽略 7,386,831 条质量 mask，且没有声明“使用或忽略”策略及影响证据 |
-| CARE-H007 | High | OPEN | 最小/离线阶段无法在同一权威数据库自然升级到全量阶段，注册身份发生内容冲突 |
-| CARE-H008 | High | OPEN | CI 安装集合缺少 `benchmark` 依赖；干净 CI 等价环境中的 CARE 测试直接缺少 PyArrow |
-| CARE-H009 | High | OPEN | 三条 CARE PostgreSQL 外部测试未进入 CI，普通全量测试中的 skip 不能形成发布证据 |
-| CARE-H010 | High | OPEN | CARE 实现和测试未被当前提交追踪，制品记录的提交与依赖根也已分叉，无法从干净克隆复现 |
-| CARE-H011 | High | OPEN | 真实 PostgreSQL 竖向回放吞吐和全量目录查询性能门槛可重复失败 |
+## 3. Actual Architecture Summary
 
-## CARE-C001 — 根契约可被重新签名后篡改
+本轮已按实现重建 `ARCHITECTURE.md`。真实系统不是单一前后端，而是两个有意隔离的运行时：
 
-### 现状与证据
+1. **Demo runtime:** vinext/React + OpenAI Sites Worker + D1 + 确定性 fixture/workflow。
+2. **Production runtime:** 同一页面层经 Sites Worker 的生产边界、路径 allowlist 和逐请求 delegated JWT 调用 FastAPI。
+3. **Authoritative backend:** FastAPI 模块化单体；PostgreSQL/TimescaleDB/pgvector 为权威数据，Redis/Dramatiq 执行异步工作，MinIO 保存制品，Neo4j 仅为可重建投影。
+4. **Durability:** 业务写与 outbox 同事务；relay/worker 使用 lease、fencing、幂等命令和乐观 revision。
+5. **Deployment:** Kubernetes 基线包含 API、通用 worker、outbox relay、migration Job 和 backup CronJob；外部依赖由受管服务提供。
 
-- `backend/src/windops_backend/benchmarks/care/contract.py:147-154` 的 `verify_care_contract()` 只删除 `manifest_sha256` 后重算同一文档的哈希。
-- `backend/src/windops_backend/benchmarks/care/quality.py:353-359` 的 `verify_quality_contract()` 同样只验证文档自哈希。
-- `backend/src/windops_backend/benchmarks/care/fullscale.py:367-370` 只确认两个自哈希文档互相引用；没有批准根哈希、可信签名或从只读源重建后的精确比较。
-- `backend/src/windops_backend/benchmarks/care/fullscale.py:963` 和 `:1439` 直接把来源 manifest 中的 `event_label` 作为下游真值，没有在边界处重新读取并核对 `event_info.csv`。
-- 本轮对当前真实 manifest 做了对抗性验证：交换一个 anomaly 和一个 normal 的标签，保持官方 ZIP SHA-256 `ca61379e...4194f1`、45/50 汇总数量和所有源文件身份不变，然后重算 manifest 与 quality contract 自哈希；`build_full_scale_plan()` 接受了该文档。
-- 本轮再把 `global_zero_to_null` 质量策略翻转并重算 quality contract 自哈希，`build_full_scale_plan()` 仍然接受。
-- 对抗性探针结果为：`truth_tamper_accepted=true`、`quality_policy_tamper_accepted=true`、`zip_sha256_unchanged=true`、`anomaly_total_unchanged=true`。
+架构边界本身总体合理。当前失败集中在“边界之间是否真正接通”和“发布证据是否覆盖真实生产路径”，而不是目录是否分层。
 
-### 影响
+---
 
-任何能够替换控制 JSON 的错误流程或攻击者，都可以在不改变官方 ZIP 身份和汇总数量的情况下重写真值或质量语义，随后污染全量计划、评分、激活证据和数据库。当前“哈希一致”只证明文档和它自己一致，不证明它来自批准的数据根。
+## 4. Issue Index
 
-### Required Changes
+| ID | Severity | Status | Title | Related UI Issue |
+| --- | --- | --- | --- | --- |
+| CARE-C001 | Critical | DONE | CARE 根契约只有可重算自哈希，没有可信锚点 | N/A |
+| CARE-C003 | Critical | DONE | B/C 连续性与信号佐证分支未进入全量模型路径 | N/A |
+| CARE-C005 | Critical | DONE | 异常模型没有可用的生产 HTTP 激活/回滚闭环 | N/A |
+| CARE-H006 | High | DONE | 全量训练与预测忽略质量 mask | N/A |
+| CARE-H007 | High | DONE | CARE 阶段制品无法在同一权威数据库升级 | N/A |
+| CARE-H008 | High | DONE | 标准 CI 与生产镜像缺少 benchmark 依赖 | N/A |
+| CARE-H009 | High | DONE | CARE PostgreSQL 验收未进入 required CI | N/A |
+| CARE-H010 | High | DONE | 官方 CARE 参考实现是无映射 gitlink，干净克隆无法复验 | N/A |
+| CARE-H011 | High | DONE | CARE PostgreSQL 吞吐与目录查询性能门槛可重复失败 | N/A |
+| TECH-H001 | High | DONE | Production 查询 pending/error 被呈现为健康零值或空状态 | UI-H-002、UI-H-003 |
+| TECH-H002 | High | DONE | Release workflow 绕过最终证据门禁并自行声明 qualified | N/A |
+| TECH-H003 | High | DONE | 没有可部署的 CARE 独立执行平面 | N/A |
+| TECH-M002 | Medium | DONE | Production release identity 解析 commit 却不校验 commit | N/A |
+| TECH-M003 | Medium | DONE | UI 自动化覆盖不足以证明验收矩阵 | UI-M-002 |
+| TECH-M004 | Medium | DONE | 每次业务 GET 同步提交无保留策略的读审计记录 | N/A |
+| TECH-M005 | Medium | DONE | 仓库跟踪 334 MB 生成缓存与二进制工具制品 | N/A |
 
-1. 为 CARE 根契约引入不可由当前输入自行生成的可信锚点，例如受保护配置/数据库中的批准根哈希或由受信密钥生成的分离签名。
-2. 在导入和全量注册边界，从只读官方 ZIP 重新读取 `event_info.csv`、schema、header、行数和文件哈希，重建 canonical source manifest，并与批准文档逐字段精确比较。
-3. 从批准 source manifest 和实际审计结果重建 quality contract；不能只接受调用方提供的 `source_manifest_sha256` 与自哈希。
-4. 将批准根 ID、签名/根哈希和完整 lineage 写入下游 import、evaluation、model、activation 与数据库记录。
-5. 增加重新哈希后的真值交换、质量策略翻转、列映射替换、来源引用替换等对抗性测试。
+---
 
-### Acceptance Criteria
+## 5. Critical Findings
 
-- 修改任一真值、质量策略、映射或来源引用后，即使重算全部下游自哈希，也必须在任何写入发生前失败。
-- 从同一批准 ZIP 和同一实现重建的 canonical manifest/quality contract 必须字节级确定；非批准根不得进入全量计划、评估或注册。
-- 外部 PostgreSQL 验收必须证明数据库中的 event truth 与重新读取的 `event_info.csv` 完全一致，而不是只检查 45/50 汇总数量。
+### CARE-C001 — CARE 根契约只有可重算自哈希，没有可信锚点
 
-## CARE-C003 — B/C 状态过滤生产分支不可达
+**Category:** Data integrity / security
+**Related Requirement:** CARE 数据真实性、制品 lineage、发布可复验性
+**Related UI Issue:** N/A
 
-### 现状与证据
+#### Problem and Evidence
 
-- `backend/src/windops_backend/benchmarks/care/quality.py:223-247` 声明：B/C 非可信状态只有在连续长度至少 3 且有版本化信号佐证时才无效。
-- 同一函数默认 `disagreement_run_length=1`、`corroborated_by_signal=False`；`backend/src/windops_backend/benchmarks/care/scoring.py:385-393` 的 `PredictionPoint` 也使用同样默认值。
-- 生产全量预测在 `backend/src/windops_backend/benchmarks/care/fullscale.py:1816-1847` 只读取 timestamp、row ID、split、status 和 feature score，构造 `PredictionPoint` 时没有计算或传入连续长度与信号佐证。
-- 对当前 `full-scale-v5` 的 73 个 B/C 预测制品（230,656 个点）重新扫描：
-  - 23,930 个非可信状态点全部标为 `bc-short-status-disagreement-retained`；
-  - 所有点的 `disagreement_run_length` 都是 1；
-  - `corroborated_by_signal=true` 为 0；
-  - `valid_point_mask=false` 为 0；
-  - 独立按状态序列计算，B 有 4,906 个点位于长度至少 3 的连续段，最大连续段 955；C 有 17,667 个点位于长度至少 3 的连续段，最大连续段 1,270。
-- `backend/tests/test_care_scoring.py:60-78` 由测试直接注入连续长度和佐证值，因此只证明评分器在收到人工字段后工作。
-- `backend/tests/test_care_fullscale.py:90-121` 的全量 fixture 所有 status 都是 `0`，没有覆盖生产路径如何从 B/C 原始状态与信号产生这些字段。
+- `backend/src/windops_backend/benchmarks/care/contract.py:147` 的 `verify_care_contract()` 与 `quality.py:353` 的 quality verifier 都只删除文档内的 hash 字段后重算同一文档；验证的是“文档与自己一致”，不是“文档来自批准数据根”。
+- 下游 full-scale 在 `fullscale.py:963`、`:1439` 接受 manifest 中的事件标签和质量策略，没有以独立的受信根重新核对只读 ZIP 内 `event_info.csv`、schema 和源文件身份。
+- 旧审计的对抗性探针交换真值或翻转质量策略后重算所有自哈希，两个篡改版本仍被接受，且官方 ZIP hash 和汇总数量不变。
 
-### 影响
+#### Impact
 
-旧报告声称已实现的状态连续性语义在真实全量路径中没有发生。当前所有 B/C prediction 点都有效，评分、事件结果和激活指标使用的是一条与声明协议不一致的路径；单元测试通过不能证明生产算法存在。
+可替换控制 JSON 的错误流程或攻击者可以重写真值/质量语义并生成一条自洽但不可信的 lineage，污染训练、评分、激活与数据库证据。
 
-### Required Changes
+#### Required Change / Acceptance
 
-1. 在预测冻结前按 event、资产和源顺序计算连续非可信状态长度，明确事件边界和缺口处理。
-2. 实现版本化、可审计的信号佐证算法，记录输入列、规则版本、证据值和结果；若产品决定不做佐证，应删除不可达分支并重新冻结协议，而不是保留永远为 false 的字段。
-3. 由 verifier 从原始 status、信号和规则重新计算 `disagreement_run_length`、`corroborated_by_signal`、reason 与 `valid_point_mask`，拒绝调用方伪造字段。
-4. 重新生成受影响的 prediction、evaluation、score、model/activation 与数据库制品。
-5. 增加含短段、长段、跨 batch、缺口、事件边界和有/无佐证信号的 B/C 全量路径测试。
+- 在当前输入之外保存批准根哈希或分离签名，并在任何写入前验证。
+- 从只读官方来源重建 canonical source/quality contract，逐字段与批准根比较。
+- 将批准根、签名和完整 lineage 绑定 import、evaluation、model、activation 与数据库记录。
+- 增加“篡改后重新哈希”的真值、策略、列映射和来源替换负向测试；这些用例必须 fail closed。
 
-### Acceptance Criteria
+---
 
-- 生产全量 fixture 必须证明：短时 disagreement 保留；满足冻结条件的持续且被佐证 disagreement 被屏蔽；跨 batch 计算结果稳定。
-- verifier 对手工修改连续长度、佐证值或 mask 的制品必须失败。
-- 真实全量制品中这些字段必须由可追溯算法生成，不能全部停留在 dataclass 默认值；重新评分结果必须有差异说明和批准记录。
+### CARE-C003 — B/C 连续性与信号佐证分支未进入全量模型路径
 
-## CARE-C005 — 异常模型不存在生产激活成功路径
+**Category:** Model/data semantics
+**Related Requirement:** CARE B/C 状态规则、真值隔离、可解释质量处理
+**Related UI Issue:** N/A
 
-### 现状与证据
+#### Problem and Evidence
 
-- `backend/src/windops_backend/services/models.py:247-279` 要求 anomaly 模型激活必须收到服务器签发的 `AnomalyActivationAuthorization`，缺失时 fail closed。
-- 公开激活端点 `backend/src/windops_backend/api/model_registry.py:375-406` 调用 `activate_deployment()` 时没有加载评估证据、执行 `evaluate_activation_gate()` 或传入授权。
-- rollback 端点 `backend/src/windops_backend/api/model_registry.py:409-434` 也没有 anomaly 授权路径。
-- 前端 `components/pages/model-management-page.tsx:424-443` 只发送 `traffic_percent` 和 `reason`，并在 `:801-808` 对所有非 active deployment 展示同一激活按钮。
-- `backend/tests/test_care_anomaly.py:620-624` 先明确断言 HTTP 激活失败；随后在 `:626-654` 由测试自身构造授权并直接调用内部 `activate_deployment()`，把内部函数成功当成垂直切片成功。
-- 真实 PostgreSQL 竖向测试在 `backend/tests/external/test_postgres_care_vertical_slice.py:511-536` 采用相同的内部调用方式，没有经过生产 API。
-- `evaluate_activation_gate()` 在生产 API/service 中没有调用点，当前调用点来自测试或离线构造逻辑。
+- `backend/src/windops_backend/benchmarks/care/quality.py:225-247` 的 `status_decision()` 定义了 sustained disagreement 与 corroboration 分支。
+- 实际 evaluation 在 `evaluation.py:354` 只用 `np.isin(status, trusted_statuses)` 一类静态状态判断；full-scale 也没有跨 batch 维护连续长度。
+- 旧审计扫描真实 prediction 制品时，非可信状态点的 run length / corroboration 仍是默认值，生产路径没有证明该分支可达。
 
-### 影响
+#### Impact
 
-真实 UI/API 用户无法激活 anomaly deployment，也无法按同一安全语义回滚。当前测试既证明公开路径失败，又绕过公开路径制造成功，属于假完成；服务层的 fail-closed 防线本身正确，但产品工作流没有接通。
+冻结协议声称会屏蔽的持续且被佐证 B/C 分歧仍进入模型；测试通过直接构造决策字段验证辅助函数，不能证明生产全量语义。
 
-### Required Changes
+#### Required Change / Acceptance
 
-1. 在服务器端为激活/回滚实现一条完整事务：锁定 deployment，加载权威 evaluation run、metric snapshots、model package、批准和审计事件，验证制品哈希与 invalidation 状态，执行冻结 gate，再原子切换流量。
-2. 授权必须由服务器从权威状态生成并立即消费；不得接受客户端提供的 capability 或客户端声称的指标。
-3. 为缺失证据、制品漂移、评估失效、指标不达标、错误 model/deployment 绑定、并发激活和 rollback 定义稳定错误与审计事件。
-4. 前端按模型类型展示 gate 状态和阻断原因，并只调用公开 HTTP 路径。
+- 在同一 canonical 数据边界计算并持久化跨 batch、跨缺口、事件边界安全的连续长度与佐证。
+- verifier 必须从原始状态与信号重算字段，拒绝调用方伪造。
+- 用真实全量 fixture 证明短时分歧保留、满足冻结条件的持续分歧被屏蔽，并重新生成受影响制品。
 
-### Acceptance Criteria
+---
 
-- HTTP + 真实 PostgreSQL 测试可以在不直接调用 `activate_deployment(..., anomaly_authorization=...)` 的情况下完成 anomaly 激活和允许的 rollback。
-- 所有负向条件和并发条件均 fail closed，并证明没有部分流量切换。
-- UI 端到端测试使用公开 API 完成成功和失败流程；测试代码不得自行签发生产授权来替代服务器流程。
+### CARE-C005 — 异常模型没有可用的生产 HTTP 激活/回滚闭环
 
-## CARE-H006 — 质量 mask 未进入模型语义
+**Category:** API / authorization / workflow
+**Related Requirement:** 模型治理、异常模型激活、回滚、公开生产路径
+**Related UI Issue:** N/A
 
-### 现状与证据
+#### Problem and Evidence
 
-- 当前全量 import manifest 的 73 个 B/C event 全部含非空 mask，共 7,386,831 条 mask 记录；mask JSON 合计约 3,231,531,488 bytes。
-- `backend/src/windops_backend/benchmarks/care/fullscale.py:1653-1708` 的训练统计只读取 Parquet feature、split 和 status，以 finite 值计算 moments，没有加载质量 mask。
-- `backend/src/windops_backend/benchmarks/care/fullscale.py:1795-1847` 的预测同样只对非 finite 值做均值填补，没有加载质量 mask。
-- 当前 model/fold/prediction 制品记录 quality contract 身份，但没有冻结 `quality_mask_policy=apply|ignore`、实际使用的 mask hash/count 或忽略影响分析。
-- `docs/care-v6-integration-development-plan.md:329-336` 明确要求模型训练声明如何使用或忽略质量掩码；当前实现没有满足该要求。
+- `backend/src/windops_backend/services/models.py:247-293` 对 anomaly 激活正确地要求服务器签发的 `AnomalyActivationAuthorization`。
+- `backend/src/windops_backend/api/model_registry.py:385`、`:427` 的公开 activate 与 rollback endpoint 调用 service 时没有加载权威评估证据、执行 activation gate 或传入该授权。
+- 当前成功测试由测试代码构造授权并直接调用内部 service；这绕过了待验收的 HTTP 边界。
+- Sites 生产 gateway allowlist 还拒绝 `/models/deployments/{id}/anomaly-predictions/run` 和 `/model-predictions/{id}/alert-evaluation`；静态路由探针两个结果均为 `false`。
 
-### 影响
+#### Impact
 
-大量被质量规则标记为疑似缺失的零段仍直接影响训练均值、标准差和 max-z score。即使最终选择“忽略 mask”，当前也没有显式协议、敏感性比较或批准证据，无法证明评估结果稳健。
+真实 Production UI/API 用户不能完成 anomaly activation/rollback 与后续 alert evaluation。服务层 fail closed 是正确防线，但产品闭环未接通。
 
-### Required Changes
+#### Required Change / Acceptance
 
-1. 冻结每个模型族的 mask 策略：应用时定义 feature/row 级语义、训练和预测填补；忽略时提供量化敏感性分析和批准依据。
-2. 每个 fold/model/prediction 记录实际读取的 mask 制品哈希、规则版本、命中计数、处理计数和最终策略。
-3. verifier 必须确认宣称应用的 mask 确实影响输入，宣称忽略时对应影响报告存在且绑定同一 source/feature set。
-4. 重新训练和评估，并解释指标与阈值变化。
+- 服务器在一个受治理事务中锁定 deployment、加载权威 evaluation/metrics/artifact/approval，执行 gate，签发并立即消费授权，再原子切流。
+- 定义制品漂移、评估失效、绑定错误、并发激活与 rollback 的稳定错误和审计事件。
+- 将所需 endpoint 纳入最小生产 allowlist，并保留 method/path/body/idempotency 约束。
+- 真实 PostgreSQL + Sites gateway + HTTP 测试不得直接注入内部授权，必须覆盖成功、失败、并发和无部分切流。
 
-### Acceptance Criteria
+---
 
-- 含 B/C 长零段的生产路径测试能证明 apply 与 ignore 的确定性差异，并与冻结策略一致。
-- 任意替换 mask、漏读 mask 或伪造计数都被 verifier 拒绝。
-- 最终制品和数据库可以回答每个 fold 使用了哪个 mask、如何处理、影响了多少输入。
+## 6. High Findings
 
-## CARE-H007 — 阶段制品不能在同一数据库升级
+### CARE-H006 — 全量训练与预测忽略质量 mask
 
-### 现状与证据
+**Category:** Data quality / model correctness
+**Related Issue:** CARE-C003
+**Related UI Issue:** N/A
 
-- `backend/src/windops_backend/services/benchmark_metadata.py:304-323` 把 quality report 身份固定为 `event_id + quality_rule_version + feature_set_version`；同一身份只允许 artifact、mask 和 summary 全部相同。
-- 对 event A/0，最小和全量制品的底层 `source_quality_report_sha256` 完全相同，均为 `442c208b...8baa1`，但阶段包装后的 report file SHA 分别为 `6bac1793...ac52` 和 `0f8e2fdb...2261`，mask file SHA 分别为 `a1215ee7...70c3` 和 `d3e73044...dace`。
-- 本轮在一个全新、迁移到 `0026_schema_contract_alignment` 的数据库中先运行最小/离线注册，阶段 1 成功；随后运行全量注册，稳定失败于 `ConflictError: quality-report identity already exists with different content`。
-- 此前把 offline、vertical、full-scale 测试按真实顺序放入同一库时，还会因 `RegisteredModel` 不可变身份包含 `created_by`，而测试中的不同 worker subject 冲突。当前测试通过各用干净库掩盖了阶段组合问题。
+`backend/src/windops_backend/benchmarks/care/fullscale.py:903-933` 为 B/C 事件生成并引用 mask，但训练 moments 与预测只按 split、status 和 finite value 取数，没有读取 mask。模型制品只引用 quality contract 身份，没有冻结 `apply|ignore` 策略、实际 mask hash、处理数量或忽略影响报告。
 
-### 影响
+**Acceptance:** 为每个模型族冻结 mask 策略；模型/fold/prediction 记录实际 mask lineage 与计数；verifier 证明 mask 真正影响输入，或绑定经批准的忽略敏感性报告；重新训练评估并解释指标变化。
 
-真实部署不能从最小接入、离线评估和竖向验证自然扩展到最终 95 event，而必须清库、换库或绕过不可变身份；这破坏发布升级和幂等语义。
+---
 
-### Required Changes
+### CARE-H007 — CARE 阶段制品无法在同一权威数据库升级
 
-1. 明确 canonical 质量报告与阶段包装制品的身份：相同底层审计应复用同一 canonical 记录，或把 producer/stage/artifact kind 纳入明确版本化身份和查询语义。
-2. 审查 `created_by` 是否应属于 RegisteredModel 的不可变业务身份；将审计主体与模型内容身份分离，或保证所有阶段使用同一受治理主体。
-3. 如需 schema/unique constraint 调整，提供兼容迁移、既有数据回填和并发行为证明。
-4. 增加单库阶段序列测试，不得在阶段之间 drop、truncate 或替换数据库。
+**Category:** Database / identity / idempotency
+**Related Issue:** CARE-H006
+**Related UI Issue:** N/A
 
-### Acceptance Criteria
+minimal/offline 与 full-scale 使用相同 dataset/event/quality 业务身份，却生成不同阶段包装 artifact hash。`backend/src/windops_backend/services/benchmark_metadata.py:304-350` 将相同 identity 的内容差异视为冲突。旧审计在同一新库依次注册时稳定得到 `quality-report identity already exists with different content`；各测试使用独立空库掩盖了真实升级顺序。
 
-- 同一新库可依次执行 minimal import → offline evaluation → vertical slice → full-scale import/evaluation，全部成功且引用同一 canonical lineage。
-- 完整序列再次运行时所有写入精确幂等；并发运行时不产生重复或内容冲突。
-- 旧阶段记录在升级后仍可查询和审计，不通过清理历史数据达成通过。
+**Acceptance:** 分离 canonical 内容身份、阶段制品身份与审计主体；提供兼容迁移/回填；同一新库完成 minimal → offline → vertical → full-scale，重复与并发运行精确幂等且不清理历史。
 
-## CARE-H008 — CI 依赖闭包缺少 benchmark extra
+---
 
-### 现状与证据
+### CARE-H008 — 标准 CI 与生产镜像缺少 benchmark 依赖
 
-- `backend/pyproject.toml:47-49` 只在 `benchmark` extra 中声明 PyArrow 和 scikit-learn。
-- `.github/workflows/ci.yml:189-190` 的主后端 job 安装 `.[test,dev]`；PostgreSQL job 在 `:289-290` 只安装 `.[test]`，两者都没有 `benchmark`。
-- 当前本地 `.venv` 已预装 benchmark 依赖，因此普通本地全量测试通过，不能代表干净 CI。
-- 本轮使用 CI 等价干净环境执行：
-  - `uv run --isolated --extra test --extra dev --no-dev pytest tests/test_care_importer.py::test_a_minimal_import_is_wide_licensed_truth_isolated_and_deterministic`
-  - 结果失败于 `ModuleNotFoundError: No module named 'pyarrow'`，随后抛出 `CarePipelineError: CARE pipeline requires the optional dependency group`。
+**Category:** Build / dependency closure
+**Related Issue:** CARE-H009、TECH-H003
+**Related UI Issue:** N/A
 
-### 影响
+`backend/pyproject.toml:47` 只在 `benchmark` extra 声明 PyArrow/scikit-learn；`.github/workflows/ci.yml:190` 的主 CI 安装 `.[test,dev]`，PostgreSQL job 安装 `.[test]`，`backend/scripts/export_container_requirements.py` 的容器 exporter 只启用 `connectors`。因此本地已有包可让测试通过，但干净 CI 和标准生产镜像不能导入 CARE pipeline。
 
-一旦当前未追踪 CARE 文件进入提交，主 CI 不能按现有安装步骤执行已收集的 CARE 单元测试。当前“本地通过”依赖工作站残留环境，不是可复现的 CI 证据。
+**Acceptance:** 为收集 CARE 测试的 required job 和实际 CARE 运行镜像安装锁定的 benchmark closure；增加干净环境 import/CLI smoke，并记录 lock hash。
 
-### Required Changes
+---
 
-1. 在负责收集 CARE 测试的 job 安装锁定的 `benchmark,test,dev` 完整集合，或把 CARE 测试拆到显式 benchmark job。
-2. 让 CI 安装方式与受审 `uv.lock` 一致，避免工作站已有包掩盖依赖缺口。
-3. 增加干净环境 import/collection smoke，验证 PyArrow、scikit-learn 和 CARE CLI/worker 入口。
+### CARE-H009 — CARE PostgreSQL 验收未进入 required CI
 
-### Acceptance Criteria
+**Category:** Test coverage / release evidence
+**Related Issue:** CARE-H007、CARE-H008、CARE-H011
+**Related UI Issue:** N/A
 
-- 从无项目虚拟环境和无预装包的 runner，按 workflow 原样安装后，CARE 单元测试可收集并执行。
-- CI 中记录实际依赖锁哈希；移除 `benchmark` extra 后测试必须按预期失败，证明门槛有效。
+`.github/workflows/ci.yml:293-301` 的 PostgreSQL job 只显式运行 migration、concurrency、service resilience 和 prediction lock 四类外部测试；三个 `test_postgres_care_*.py` 文件完全未被收集。`FAIL_ON_SKIPPED` 无法发现命令中根本不存在的测试。
 
-## CARE-H009 — CARE PostgreSQL 验收未进入 CI
+**Acceptance:** required/scheduled release job 显式收集三个 CARE PostgreSQL 文件并校验预期测试数量；skip 为 0；保留同库阶段序列、性能属性、JUnit、根哈希、镜像 digest 和迁移 head。
 
-### 现状与证据
+---
 
-- 后端全量测试本轮收集 393 项：369 通过、24 skip、0 失败；3 条 CARE PostgreSQL 测试因没有外部环境而在这 24 条中跳过。
-- 三个文件分别在以下位置通过环境变量 skip：
-  - `backend/tests/external/test_postgres_care_offline_evaluation.py:27-30`；
-  - `backend/tests/external/test_postgres_care_vertical_slice.py:90-93`；
-  - `backend/tests/external/test_postgres_care_fullscale.py:35-38`。
-- `.github/workflows/ci.yml:293-300` 的 PostgreSQL job 虽设置 `WINDOPS_FAIL_ON_SKIPPED=1`，但只显式收集 migrations、concurrency、service resilience 和 prediction lock 四个文件；三个 CARE 文件根本没有被收集。
-- 对全部 workflow 搜索，没有任何 `test_postgres_care_offline_evaluation.py`、`test_postgres_care_vertical_slice.py` 或 `test_postgres_care_fullscale.py` 引用。
-- 本轮手工启用这些测试后，暴露了阶段冲突和两类可重复性能失败，证明省略不是无害的覆盖差异。
+### CARE-H010 — 官方 CARE 参考实现是无映射 gitlink，干净克隆无法复验
 
-### 影响
+**Category:** Supply chain / reproducibility
+**Related Requirement:** 官方算法等价、clean-clone reproducibility
+**Related UI Issue:** N/A
 
-CI 的 `FAIL_ON_SKIPPED` 只能约束被收集的测试，无法发现完全未列入命令的验收文件。旧报告把手工、分库运行结果当成持续发布证据，属于测试证据不完整。
+本轮修正旧证据：当前 CARE 业务源码已进入 `HEAD`，旧报告中“全部未跟踪”的描述不再成立。但官方参考目录 `tmp/external/EnergyFaultDetector-v0.6.2` 被记录为 mode `160000`、commit `a338b6…` 的 gitlink，仓库没有对应 `.gitmodules` 映射；`git archive HEAD tmp/external` 只包含空目录。`tmp/verify_care_reference.py` 依赖该本地嵌套仓库，CI 也没有重新执行官方等价验证。
 
-### Required Changes
+**Impact:** 干净克隆无法取得制品所依据的官方参考实现，也无法独立复验算法等价性；本地残留目录不是可发布供应链证据。
 
-1. 在 CI 中显式收集三条 CARE PostgreSQL 测试，并校验预期文件/测试数量，防止以后再次静默遗漏。
-2. 为可提交的小型 fixture 建立每次变更运行的 job；真实大制品建立受保护的 scheduled/release job，并保存 JUnit、根哈希和性能属性。
-3. 同时保留隔离单项测试和 CARE-H007 要求的单库阶段序列测试。
-4. CARE 发布 job 必须 fail on skip、missing artifact、根哈希漂移和性能门槛失败。
+**Acceptance:** 以合法且不可变的 submodule 映射或受许可 vendor 内容提供参考源，绑定 commit/hash/license；clean clone CI 获取并执行 reference comparison，或验证同等强度的内容寻址证据；产品/架构/审核 source-of-truth 文档也必须在发布前进入受审提交。
 
-### Acceptance Criteria
+---
 
-- Workflow 日志和 JUnit 明确包含三个 CARE PostgreSQL 文件，预期测试数与实际一致，skip 为 0。
-- 删除或重命名任一验收文件会使 CI 失败，而不是减少收集数量后继续成功。
-- 当前 CARE-H007/H011 的复现用例在修复前能使该 job 失败，修复后才转绿。
+### CARE-H011 — CARE PostgreSQL 吞吐与目录查询性能门槛可重复失败
 
-## CARE-H010 — 发布来源不可复现
+**Category:** Performance / capacity
+**Related Issue:** CARE-H009
+**Related UI Issue:** N/A
 
-### 现状与证据
+2026-08-31 独立审核在固定 TimescaleDB/pgvector 镜像和全新迁移数据库上得到：
 
-- 当前 HEAD 为 `e70788b8fe040603fb3be718568db9da44eacbb1`。
-- `git ls-files` 对 CARE 源码、CARE 单元测试和 CARE PostgreSQL 测试返回 0 个已追踪路径；当前至少 30 个相关文件仍是 untracked。
-- 当前提交的 tree 中不存在这套 CARE 实现，但批准 manifest 与全量制品的 `generator.git_commit` 都记录上述 HEAD。
-- `backend/src/windops_backend/benchmarks/care/contract.py:749-794` 只读取 `.git/HEAD`/ref，未检查 dirty/untracked tree，也未记录实际源码 tree 或 diff 哈希。
-- 当前 `backend/uv.lock` SHA-256 为 `d6f55ffa...393de`；批准 `contract/manifest.json` 记录旧依赖锁 `27909000...c2c3`，manifest SHA 为 `ccf14bf3...f974b`。
-- `contract/manifest-current-20260828.json` 记录当前锁，manifest SHA 为 `7d609d1c...7fe6a`；但 `full-scale-v5` 仍引用旧 source manifest `ccf14bf3...f974b`。当前同时存在两个根，最终制品没有沿用最新候选根。
+- vertical replay：`20.514`、`13.775 rows/s`，低于 `50 rows/s` 门槛；
+- full-scale 目录查询最大 p95：`504.507 ms`、幂等重跑 `1194.824 ms`，高于 `500 ms` 门槛。
 
-### 影响
+本轮本地没有外部 PostgreSQL 服务，因此没有用 SQLite/skip 结果覆盖上述未关闭证据。
 
-干净克隆到制品声称的提交后，没有生成这些制品的 CARE 代码和测试；同一提交号也不能区分当前大量未提交修改。依赖锁与 source root 分叉后，现有 lineage 不能支持可复现发布或事故追责。
+**Acceptance:** profile 写入事务/outbox 固定开销与目录 SQL；固定资源、预热、规模和次数；至少三次独立新库均达到 ≥50 rows/s 且各目录 p95 ≤500 ms；进入 fail-on-skip CARE release job，不以放宽门槛替代修复。
 
-### Required Changes
+---
 
-1. 把最终 CARE 源码、测试、迁移和 workflow 作为逻辑完整变更纳入版本控制；不得把未追踪工作树当作发布实现。
-2. 发布生成器对 dirty/untracked tree fail closed，或记录并批准实际 source tree digest；仅记录 HEAD 不足够。
-3. 选择唯一 canonical source manifest，绑定实际提交、依赖锁和工具版本，随后重建 quality、import、evaluation、model、prediction、activation 与数据库证据。
-4. 增加 clean-clone reproducibility job，从记录的 commit + lock 重建并比较关键哈希。
+### TECH-H001 — Production 查询 pending/error 被呈现为健康零值或空状态
 
-### Acceptance Criteria
+**Category:** Frontend data flow / error handling / product truth
+**Related Requirement:** `PRD-001`、`PRD-002`、`PRD-003`、Product-Level State Requirements
+**Related UI Issue:** `UI-H-002`、`UI-H-003`
 
-- 在干净克隆中 checkout 制品记录的 commit 后，所有 CARE 生成器和测试均存在，依赖锁哈希精确匹配。
-- 发布运行时 `git status --porcelain` 为空，或有受批准且进入 provenance 的 source tree digest；任意未追踪/dirty 代码会阻断发布。
-- 从干净克隆重建的 canonical manifest、quality contract 和选定关键制品哈希与发布证据一致，且只有一个批准根。
+#### Problem and Evidence
 
-## CARE-H011 — 真实 PostgreSQL 性能门槛可重复失败
+- `components/pages/dashboard-page.tsx:284-286` 只在 `isError` 时降级；pending 时 badge 显示“生产数据已连接”。
+- `snapshot` 未定义时，指标用 `0`/空数组回退；`:433-449` 的 `!snapshot?.alarms.length` 等表达式同时成立，因而显示“没有未关闭告警”等业务结论。
+- error banner 出现后，零值 KPI 与空状态仍继续渲染。
+- Mission、工单和预测页面也存在 `query.data ?? []` 后直接进入 empty state 的同类模式。
+- 143 个 Node tests 和当前少量 E2E 没有对这些页面建立 pending/error/empty 的状态真值矩阵。
 
-### 现状与证据
+#### Impact
 
-- 本轮使用固定 digest 的 TimescaleDB/pgvector 镜像，在各自全新数据库迁移到唯一 head `0026_schema_contract_alignment` 后单独运行测试；测试结束后临时容器和数据库已移除。
-- 通用 100k 行 bounded collection 性能测试在无竞争负载下通过，因此没有把第一次并发运行的 963ms 误报为项目回归。
-- CARE 竖向测试在两次全新数据库上均完成所有功能断言，但最终吞吐门槛失败：
-  - 第一次 378 samples / 18.426745s = 20.514 rows/s；
-  - 第二次 378 samples / 27.441022s = 13.775 rows/s；
-  - 测试门槛为 50 rows/s。
-- CARE 全量注册和目录功能断言完成后，查询 p95 在两次运行中均超过 500ms 门槛：
-  - 第一次最大 p95 504.507ms；
-  - 同库幂等重跑最大 p95 1,194.824ms，最慢为 `/api/v1/benchmarks/evaluations?limit=32&offset=32`。
-- 证据保存在 `.artifacts/current-audit/postgres-care-vertical-isolated*.xml` 和 `.artifacts/current-audit/postgres-care-fullscale-isolated*.xml`。
+首次加载或后端故障会被解释为“生产健康、0 告警、无任务”，可能让运营人员漏判事件；这也是 UI 报告中两项 High 的共同技术根因。
 
-### 影响
+#### Required Change / Acceptance
 
-旧报告声称的全量性能与运行门槛不能复现，而且结果波动显著。当前外部测试若真正进入发布 CI 会失败；如果继续省略，则无法知道生产目录和回放写入是否满足容量目标。
+- 统一以显式 query state machine 表达 `initial-loading | refreshing | success-empty | success-data | error-stale | error-no-data`。
+- 健康/连接状态只能由成功且新鲜的权威响应得出；错误时禁止用默认零值形成业务结论。
+- 为 Dashboard、Mission、工单、预测至少覆盖 pending、empty、403、5xx、network、stale refresh 与恢复 E2E。
 
-### Required Changes
+---
 
-1. 对回放写入逐批 profile，减少每批事务、幂等、outbox 或 inline drain 的固定开销，并保持真实审计语义。
-2. 对 evaluation 列表执行 `EXPLAIN (ANALYZE, BUFFERS)`，检查分页、关联加载、排序和索引；避免每页重复加载大 JSON 或 N+1 查询。
-3. 固定性能测试环境、数据规模、预热、重复次数和资源预算，保存逐路径分位数而非只保存最终最大值。
-4. 不得通过放宽门槛或缩小数据规模掩盖失败；任何门槛调整必须有容量模型和明确批准。
+### TECH-H002 — Release workflow 绕过最终证据门禁并自行声明 qualified
 
-### Acceptance Criteria
+**Category:** Build / deployment / release integrity
+**Related Requirement:** `PRD-006`、Release Acceptance、`ARCHITECTURE.md` release invariant
+**Related UI Issue:** N/A
 
-- 至少 3 次独立新库运行均达到回放写入 ≥50 rows/s，并有合理余量。
-- 全量五个目录路径各自 p95 均 ≤500ms，连续运行和幂等重跑均满足门槛，无单页尾延迟尖峰。
-- 上述测试进入 CARE CI/release job，fail on skip，并保存数据规模、镜像 digest、迁移 head 和逐路径性能属性。
+#### Problem and Evidence
 
-## 本轮验证矩阵
+- `backend/src/windops_backend/operations/release_gate.py:12-28` 要求 11 类 content-addressed evidence：image scan、SBOM、signature、deployment、migration、external、DR、DAST、accessibility/visual、SLO、Sites post-deploy。
+- `.github/workflows/release.yml` 没有组装 `release-evidence.json`/digest，也没有调用 `windops-release-gate`。
+- workflow 在缺少 DAST、UI/a11y、SLO、Sites post-deploy、迁移回滚与完整 DR gate 时，于 `release.yml:295-299` 直接写 `release-chain.json` 的 `status:"qualified"` 再断言该字段。
+- built-image smoke 通过 `backend/src/windops_backend/operations/release_smoke.py:35` 强制设置 `WINDOPS_ENVIRONMENT=development`；受保护外部测试运行的是 source/uv 环境，不是已构建生产镜像。
 
-| 验证 | 结果 | 说明 |
+#### Impact
+
+CI 的“qualified”不是仓库最终门禁的结果，候选制品可能在未证明生产配置、外部依赖、回滚、UI 与 SLO 的情况下被当作可发布。
+
+#### Required Change / Acceptance
+
+- 每项门禁生成标准化、内容寻址、绑定同一 commit/image/release 的报告。
+- workflow 最后必须调用唯一 release verifier；只有 verifier 输出可以生成 qualified 状态。
+- built image 以生产配置连接受控 PostgreSQL/Redis/MinIO/Neo4j，或提供严格证明等价的生产 boot evidence。
+- 任一报告缺失、过期、身份不一致或失败时，artifact promotion 必须 fail closed。
+
+---
+
+### TECH-H003 — 没有可部署的 CARE 独立执行平面
+
+**Category:** Architecture / operations / capacity isolation
+**Related Requirement:** CARE batch/offline independent worker
+**Related Issue:** CARE-H008、CARE-H009
+**Related UI Issue:** N/A
+
+CARE pipeline 明确需要独立 worker 和 benchmark 依赖，但 Kubernetes 只有 API、通用 Dramatiq worker、outbox relay、migration 与 backup；没有 CARE Job/CronJob/worker、队列路由、资源/超时/重试/checkpoint 策略，也没有对应最小权限 MinIO identity。标准镜像又未包含 benchmark extra。
+
+**Acceptance:** 提供可部署、digest-pinned 的 CARE image/workload；隔离队列和资源，定义 checkpoint/retry/idempotency、超时、并发与 scoped storage credentials；CI/release 在实际 workload 上执行小型 smoke 和受保护全量验收。
+
+---
+
+## 7. Medium Findings
+
+### TECH-M002 — Production release identity 解析 commit 却不校验 commit
+
+**Category:** Runtime provenance
+**Related UI Issue:** N/A
+
+Worker 在 `lib/production-runtime.ts:536-548` 解析并验证 `x-windops-commit-sha` 格式，但 `releaseMismatch()`（`:551-558`）只比较 release ID 与 image digest；Sites 配置也没有 expected commit。若 release metadata 被错误组合，commit 头只被转发而不参与信任决定。
+
+**Acceptance:** 将 expected commit 纳入 Sites release record 与 mismatch 判定并增加错配测试；或者明确删除该字段作为安全契约，并证明 digest 到 commit 的受签名、可查询映射是唯一可信来源。
+
+---
+
+### TECH-M003 — UI 自动化覆盖不足以证明验收矩阵
+
+**Category:** Testing / accessibility / responsive behavior
+**Related Requirement:** `UI_UX_SPEC.md` 11–13、Release Acceptance
+**Related UI Issue:** `UI-M-002`
+
+Playwright 只有一个 Chromium/1440×900 project 和一个 390px 为主的场景文件；没有覆盖 22 条路由的桌面/1280/tablet/mobile 矩阵，也没有自动化 axe 类可访问性、完整 200% zoom、reduced-motion 和全页视觉基线。当前 `6 passed / 1 skipped` 只能证明有限身份/移动场景。
+
+**Acceptance:** 建立按风险分层的 route × viewport × state × role 矩阵；关键页面加入可访问性、键盘、200% zoom、reduced-motion 和稳定视觉基线；required release job 对关键用例 fail on skip。
+
+---
+
+### TECH-M004 — 每次业务 GET 同步提交无保留策略的读审计记录
+
+**Category:** Database / performance / operations
+**Related UI Issue:** N/A
+
+`backend/src/windops_backend/api/deps.py:522-557` 的 `require_read_access()` 在实际业务查询之前插入 `ReadAccessAudit` 并单独 `commit()`；Dashboard 还会每 15 秒轮询。`models.py:596-606` 只为 subject/accessed_at 建索引，仓库未发现 retention、partition、archive 或清理策略。
+
+**Impact:** 高频读取被转换为同步写放大，审计表无限增长；审计库写延迟/故障还会阻断本可服务的读取，并保存完整 query string 增加数据治理负担。
+
+**Acceptance:** 明确保留、分区、归档和字段最小化策略；量化典型并发下写放大与 p95；在不丢失合规审计的前提下采用可恢复的异步/批处理或隔离写路径；覆盖审计存储故障和背压行为。
+
+---
+
+### TECH-M005 — 仓库跟踪 334 MB 生成缓存与二进制工具制品
+
+**Category:** Repository hygiene / supply chain / CI performance
+**Related UI Issue:** N/A
+
+`git ls-files .codex_tmp` 返回 7,852 个文件、334,379,011 bytes，包含 `node_modules`、可执行依赖、PPT/render 中间物等；`.gitignore` 未排除该目录。这些文件不在产品 lock/SBOM 的常规审计边界内，却增加 clone、checkout、扫描和 CI 成本。
+
+**Acceptance:** 从当前版本树移除可再生缓存/二进制依赖并加入 ignore；只在受控 artifact storage 或明确的受审 fixture 目录保存必要输出；对必须保留的大制品记录来源、license、hash 和扫描证据。
+
+---
+
+## 8. Cross-Layer Mapping with UI Audit
+
+| Technical Root Cause | UI Issue | Ownership |
 | --- | --- | --- |
-| 后端全量 pytest + coverage | PASS WITH SKIPS | 393 collected；369 pass；24 external skip；0 failure；总覆盖率 75.82%，门槛 68% |
-| CARE 定向 pytest | PASS WITH SKIPS | 110 selected；106 pass；4 external skip；无法替代真实 PostgreSQL 验收 |
-| Ruff format/lint | PASS | 192 个 Python 文件格式检查通过，lint 通过 |
-| mypy strict | PASS | 92 个 source 文件通过 |
-| Bandit / pip-audit | PASS | 无阻断发现；editable project 被 pip-audit 按工具行为跳过 |
-| uv lock / container requirements / Alembic head | PASS | lock 校验、容器依赖导出、唯一迁移 head 均通过 |
-| 前端 lint / typecheck / Prettier / production build | PASS | 全部通过 |
-| 前端 Node tests | PASS | 143/143 |
-| 前端 coverage | PASS | lines 90.34%、branches 51.31%、functions 33.09%，均超过 89/49/32 门槛 |
-| 浏览器 E2E | PASS WITH SKIP | 6 pass、1 个环境依赖用例 skip |
-| pnpm production audit | PASS | 未发现 production vulnerability |
-| 干净 CI 依赖闭包 | FAIL | `test,dev` 环境缺少 PyArrow，CARE importer 失败；见 CARE-H008 |
-| 根契约对抗性重签名 | FAIL | 真值交换和质量策略翻转重算自哈希后均被接受；见 CARE-C001 |
-| B/C 真实 prediction 语义扫描 | FAIL | 23,930 个非可信点全部保留，连续长度/佐证字段全为默认值；见 CARE-C003 |
-| PostgreSQL offline evaluation（独立新库） | PASS | 注册与幂等路径通过 |
-| PostgreSQL minimal/offline → full-scale（同一新库） | FAIL | quality-report identity 内容冲突；见 CARE-H007 |
-| PostgreSQL CARE vertical（两次独立新库） | FAIL | 20.514、13.775 rows/s，低于 50；见 CARE-H011 |
-| PostgreSQL CARE full-scale（独立库 + 幂等重跑） | FAIL | 最大 p95 504.507、1194.824ms，高于 500ms；见 CARE-H011 |
-| PostgreSQL 通用 100k 性能（独立空载） | PASS | 证明第一次并发负载下的失败不是单独登记依据 |
+| `TECH-H001` | `UI-H-002` | 技术报告负责 query state、数据新鲜度与健康判定；UI 报告负责矛盾状态的可见表达 |
+| `TECH-H001` | `UI-H-003` | 技术报告负责状态机与数据流；UI 报告负责 loading/empty/error 呈现 |
+| `TECH-M003` | `UI-M-002` | 技术报告负责测试基础设施与门禁；UI 报告负责未被证明的视觉/无障碍验收范围 |
 
-## 测试有效性结论
+其他 UI Issue 当前未发现需要单独登记的技术根因，仍以 `UI_AUDIT_REPORT.md` 为唯一主记录。
 
-当前测试数量和覆盖率本身不低，但对本轮问题存在系统性盲区：
+---
 
-1. 自哈希测试只验证“修改后不重算哈希会失败”，没有验证“修改后重新哈希仍必须失败”。
-2. 状态规则测试直接注入生产路径本应计算的字段；全量 fixture 又全部使用可信状态。
-3. anomaly 激活测试先证明 HTTP 失败，再直接调用内部 service 并注入授权，绕过待验收边界。
-4. PostgreSQL CARE tests 默认 skip，且 CI PostgreSQL job 根本不收集这些文件。
-5. 各阶段使用独立干净数据库，掩盖同库升级冲突。
-6. 本地已安装 benchmark extra，掩盖 workflow 的干净依赖缺口。
+## 9. Validation Matrix
 
-因此，`369 pass`、`143/143` 和覆盖率门槛通过都是真实结果，但不能证明 CARE 根契约、生产状态语义、激活路径、阶段升级、可复现发布和性能验收已经完成。
+| Validation | Result | Evidence / Boundary |
+| --- | --- | --- |
+| `pnpm test` | PASS | production build、bundle budget、143/143 Node tests |
+| `pnpm run typecheck` | PASS | TypeScript |
+| `pnpm run lint` | PASS | ESLint |
+| `pnpm test:e2e` | PASS WITH SKIP | 6 passed / 1 个真实跨层环境用例 skipped |
+| `pnpm run format:check` | PASS | 全仓 Prettier check |
+| Backend full `pytest` | PASS WITH SKIPS | 393 collected；369 passed / 24 skipped / 0 failed |
+| Backend Ruff format/lint | PASS | 192 files formatted；lint 无问题 |
+| Backend strict mypy | PASS | 92 source files |
+| Backend Bandit | PASS WITH WARNINGS | 无阻断 finding；存在既有 nosec/comment 解析警告 |
+| Backend lock / container requirements | PASS | `uv lock --check` 与 exporter `--check` |
+| Alembic heads | PASS | 唯一 head `0026_schema_contract_alignment` |
+| Production gateway route probe | FAIL | 两个 anomaly 执行 endpoint 不在 allowlist；见 `CARE-C005` |
+| Official reference clean-clone check | FAIL | 无 `.gitmodules` 的 mode 160000 gitlink；见 `CARE-H010` |
+| Release-gate wiring inspection | FAIL | workflow 未调用 final gate，却写 `status:"qualified"`；见 `TECH-H002` |
+| Repository tracked-artifact inventory | FAIL | `.codex_tmp`: 7,852 files / 334,379,011 bytes；见 `TECH-M005` |
+| CARE PostgreSQL performance | OPEN FAILURE | 沿用 2026-08-31 独立新库证据；本轮未用 SQLite 结果替代 |
 
-## 完成门槛
+通过的常规测试是真实信号，但它们不覆盖本报告的关键生产边界，因此不能抵消 FAIL/OPEN 项。
 
-只有在以下条件全部满足后，才能重新声明 CARE 当前任务完成：
+---
 
-1. `CARE-C001`、`CARE-C003`、`CARE-C005` 与 `CARE-H006` 至 `CARE-H011` 均按各自 Acceptance Criteria 完成；
-2. 从唯一批准根重新生成全部受影响制品和数据库证据；
-3. 干净克隆、锁定依赖、单库阶段序列和隔离 PostgreSQL 测试全部通过；
-4. CARE 外部验收进入 CI/release workflow，预期测试文件明确收集且 skip 为 0；
-5. `EXECUTION_PROGRESS.md` 只能在实现与验证之后更新，不得继续沿用本轮已经证伪的 DONE 结论。
+## 10. Product and Technical Coverage Conclusion
+
+- **产品需求落地:** 22 个产品路由和主要 domain flow 已存在，但状态真实性、异常模型闭环、CARE execution plane 与 release acceptance 未达到 PRD。
+- **架构边界:** Demo/Production、权威库/投影、API/service/worker 边界总体清楚；缺口主要是部署与控制面未接通。
+- **前后端数据流/API:** delegated identity、allowlist、结构化错误和幂等 POST 设计较强；anomaly control path 与 query state 仍阻断。
+- **数据库/并发/幂等:** migrations 单 head、outbox/lease/fencing/command receipt 设计健全；CARE 跨阶段 identity 与同步读审计仍有风险。
+- **权限/安全:** 服务端角色、scope、global-role 与 delegated replay 防护总体完整；CARE trusted root 和 release provenance 仍不可信。
+- **性能:** 前端 bundle budget 通过；CARE PostgreSQL 已有未关闭门槛失败，读审计存在未量化写放大。
+- **测试:** 单元/类型/lint 基础健康；真实 PostgreSQL CARE、完整 UI 状态/viewport/a11y、官方 reference 和最终 release gate 证据缺失。
+- **Build/Deployment:** 常规构建成功；标准镜像没有 CARE 依赖/工作负载，release workflow 的 qualified 结论不可采信。
+
+---
+
+## 11. Release Decision and Remediation Order
+
+当前不得标记为 release-ready。建议按以下顺序整改：
+
+1. 关闭 `CARE-C001`、`CARE-C003`、`CARE-C005`，从唯一可信根重建所有受影响证据。
+2. 关闭 `CARE-H006`、`CARE-H007`，证明同库升级、质量 mask 与模型语义一致。
+3. 补齐 `CARE-H008`、`CARE-H009`、`CARE-H010`、`TECH-H003`，使 clean clone、CI、参考复验和生产 CARE workload 成为同一可重复闭环。
+4. 关闭 `TECH-H001`、`TECH-H002`，让产品状态和发布状态都只能由成功的权威证据产生。
+5. 复验 `CARE-H011`，再关闭 release identity、UI matrix、读审计和仓库卫生 Medium 项。
+6. 所有 Critical/High 关闭后，使用同一 commit、image digest、migration head 和 evidence root 执行最终 release gate；同时独立满足 `UI_AUDIT_REPORT.md` 的 High 验收项。
+
+`EXECUTION_PROGRESS.md` 只能在实现并验证后更新，不能把本轮已经证伪的历史 `DONE` 继续作为完成依据。

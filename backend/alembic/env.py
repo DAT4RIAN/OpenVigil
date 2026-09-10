@@ -19,13 +19,23 @@ settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 _TIMESCALE_MANAGED_INDEXES = frozenset({"scada_samples_observed_at_idx"})
+_READ_AUDIT_PARTITION_PREFIX = "read_access_audits_"
 
 
 def include_object(object_, name, type_, reflected, compare_to) -> bool:
-    """Exclude only indexes that TimescaleDB creates and owns automatically."""
+    """Exclude physical storage children managed below the ORM table boundary."""
 
-    del object_, compare_to
-    return not (type_ == "index" and reflected and name in _TIMESCALE_MANAGED_INDEXES)
+    del compare_to
+    if type_ == "index" and reflected and name in _TIMESCALE_MANAGED_INDEXES:
+        return False
+    table_name = getattr(getattr(object_, "table", None), "name", None)
+    return not (
+        reflected
+        and (
+            (type_ == "table" and name.startswith(_READ_AUDIT_PARTITION_PREFIX))
+            or (isinstance(table_name, str) and table_name.startswith(_READ_AUDIT_PARTITION_PREFIX))
+        )
+    )
 
 
 def run_migrations_offline() -> None:

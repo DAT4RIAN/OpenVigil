@@ -997,6 +997,7 @@ async def benchmark_evaluation_page(
                     )
                     .where(BenchmarkMetricSnapshot.evaluation_run_id.in_(evaluation_ids))
                     .group_by(BenchmarkMetricSnapshot.evaluation_run_id)
+                    .execution_options(skip_windops_access_control=True)
                 )
             ).all()
         }
@@ -1033,6 +1034,7 @@ async def benchmark_evaluation_page(
                 select(ranked_metrics)
                 .where(ranked_metrics.c.position <= BENCHMARK_EVALUATION_METRICS_MAX)
                 .order_by(ranked_metrics.c.evaluation_run_id, ranked_metrics.c.position)
+                .execution_options(skip_windops_access_control=True)
             )
         ).mappings():
             metric_rows[str(metric["evaluation_run_id"])].append(

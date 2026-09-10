@@ -11,7 +11,7 @@
   border-radius: 7px;
   color: var(--foreground);
   font: inherit;
-  font-size: 10px;
+  font-size: var(--font-secondary);
   height: 34px;
   outline: none;
   padding: 0 10px;
@@ -69,7 +69,7 @@
   align-items: center;
   color: var(--foreground-muted);
   display: flex;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   gap: 6px;
   letter-spacing: 0.04em;
@@ -84,7 +84,7 @@
 .metric small {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .retrieval {
@@ -105,7 +105,7 @@
   color: var(--foreground);
   flex: 1;
   font: inherit;
-  font-size: 10px;
+  font-size: var(--font-secondary);
   min-width: 0;
   outline: none;
   padding: 0 11px;
@@ -126,16 +126,16 @@
 
 .retrievalHint {
   color: var(--foreground-subtle);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .retrievalError {
   color: var(--critical);
-  font-size: 9px;
+  font-size: var(--font-secondary);
 }
 
 .retrievalResult > p {
-  font-size: 10px;
+  font-size: var(--font-secondary);
   margin: 0 0 10px;
 }
 
@@ -161,11 +161,11 @@
 .retrievalMeta {
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .matchGrid strong {
-  font-size: 9px;
+  font-size: var(--font-secondary);
   overflow-wrap: anywhere;
 }
 
@@ -213,7 +213,7 @@
   background: var(--primary-soft);
   border-radius: 999px;
   color: var(--primary);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   padding: 4px 7px;
   width: fit-content;
@@ -241,11 +241,11 @@
 
 .properties dt {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .properties dd {
-  font-size: 8px;
+  font-size: var(--font-metadata);
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -260,7 +260,7 @@
   align-items: center;
   color: var(--foreground-muted);
   display: flex;
-  font-size: 7px;
+  font-size: var(--font-metadata);
   gap: 4px;
 }
 

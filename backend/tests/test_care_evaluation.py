@@ -50,9 +50,16 @@ def _canonical_hash(value: object) -> str:
 
 
 def _build_evaluations(tmp_path: Path):
-    _, _, source_manifest, quality, import_root, _, imported = build_minimal_import_fixture(
-        tmp_path
-    )
+    (
+        _,
+        _,
+        source_manifest,
+        quality,
+        import_root,
+        _,
+        imported,
+        trust_anchor,
+    ) = build_minimal_import_fixture(tmp_path)
     output_root = tmp_path / "evaluation-output"
     result = build_offline_evaluations(
         imported.manifest,
@@ -60,8 +67,9 @@ def _build_evaluations(tmp_path: Path):
         import_root,
         output_root,
         created_at=CREATED_AT,
+        trust_anchor=trust_anchor,
     )
-    return source_manifest, quality, imported, import_root, output_root, result
+    return source_manifest, quality, imported, import_root, output_root, result, trust_anchor
 
 
 def _load_artifact(output_root: Path, reference: dict[str, Any]) -> dict[str, Any]:
@@ -79,7 +87,9 @@ def _truths(artifact: dict[str, Any]) -> list[CareEventTruth]:
 def test_offline_baselines_freeze_truth_free_predictions_and_reproduce(
     tmp_path: Path,
 ) -> None:
-    _, quality, imported, import_root, output_root, first = _build_evaluations(tmp_path)
+    _, quality, imported, import_root, output_root, first, trust_anchor = _build_evaluations(
+        tmp_path
+    )
     assert first.replayed is False
     assert first.manifest["suite_protocol"] == EVALUATION_SUITE_PROTOCOL
     assert first.manifest["component_generalization_protocol"] == (
@@ -138,6 +148,7 @@ def test_offline_baselines_freeze_truth_free_predictions_and_reproduce(
         import_root,
         output_root,
         created_at=CREATED_AT,
+        trust_anchor=trust_anchor,
     )
     assert replay.replayed is True
     assert replay.manifest == first.manifest
@@ -153,6 +164,7 @@ def test_offline_baselines_freeze_truth_free_predictions_and_reproduce(
         import_root,
         fresh_output,
         created_at=CREATED_AT,
+        trust_anchor=trust_anchor,
     )
     fresh_identities = []
     for model in fresh.manifest["models"]:
@@ -183,13 +195,14 @@ def test_offline_baselines_freeze_truth_free_predictions_and_reproduce(
             import_root,
             fresh_output,
             created_at=CREATED_AT,
+            trust_anchor=trust_anchor,
         )
 
 
 def test_suite_counts_failures_and_unscorable_events_and_rejects_omission(
     tmp_path: Path,
 ) -> None:
-    _, _, _, _, output_root, built = _build_evaluations(tmp_path)
+    _, _, _, _, output_root, built, _ = _build_evaluations(tmp_path)
     model = built.manifest["models"][0]
     evaluation = _load_artifact(output_root, model["evaluation_artifact"])
     predictions = evaluation["predictions"]
@@ -255,7 +268,7 @@ def test_suite_counts_failures_and_unscorable_events_and_rejects_omission(
 def test_offline_suite_is_accepted_only_by_structured_server_activation_gate(
     tmp_path: Path,
 ) -> None:
-    _, _, _, _, output_root, built = _build_evaluations(tmp_path)
+    _, _, _, _, output_root, built, _ = _build_evaluations(tmp_path)
     model = built.manifest["models"][0]
     artifact = _load_artifact(output_root, model["evaluation_artifact"])
     prediction = artifact["predictions"][0]
@@ -306,7 +319,7 @@ async def test_offline_registration_is_atomic_complete_and_exactly_idempotent(
     app: FastAPI,
     tmp_path: Path,
 ) -> None:
-    source_manifest, quality, imported, _, _, built = _build_evaluations(tmp_path)
+    source_manifest, quality, imported, _, _, built, trust_anchor = _build_evaluations(tmp_path)
     async with app.state.session_factory() as session, session.begin():
         await register_a_minimal_import(
             session,
@@ -315,12 +328,14 @@ async def test_offline_registration_is_atomic_complete_and_exactly_idempotent(
             quality,
             tenant_id="tenant-east-china",
             subject="care-worker",
+            trust_anchor=trust_anchor,
         )
         first = await register_offline_evaluations(
             session,
             built.manifest,
             artifact_root=built.manifest_path.parents[4],
             subject="care-worker",
+            trust_anchor=trust_anchor,
         )
     expected_records = sum(2 + 2 + len(model["metrics"]) for model in built.manifest["models"])
     assert first.created_count == expected_records
@@ -332,6 +347,7 @@ async def test_offline_registration_is_atomic_complete_and_exactly_idempotent(
             built.manifest,
             artifact_root=built.manifest_path.parents[4],
             subject="care-worker",
+            trust_anchor=trust_anchor,
         )
     assert replay.created_count == 0
     assert replay.replayed_count == expected_records
@@ -403,4 +419,5 @@ async def test_offline_registration_is_atomic_complete_and_exactly_idempotent(
                     conflicting,
                     artifact_root=built.manifest_path.parents[4],
                     subject="care-worker",
+                    trust_anchor=trust_anchor,
                 )

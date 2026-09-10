@@ -99,8 +99,6 @@ export function AssetHealthPage({ runtimeMode }: { runtimeMode: "demo" | "produc
               state: "watch" as const,
               trend: "improving" as const,
               riskLevel: "medium" as const,
-              failureProbability30d: 12,
-              remainingUsefulLifeDays: 126,
               anomalyScore: 0.42,
               primaryFinding: "现场复测后振动与温升回落，继续趋势观察",
             }
@@ -150,7 +148,7 @@ export function AssetHealthPage({ runtimeMode }: { runtimeMode: "demo" | "produc
     ["critical", "high"].includes(assessment.riskLevel),
   ).length;
   const declining = assessments.filter((assessment) => assessment.trend === "declining").length;
-  const predictionCoverage = assessments.filter(
+  const anomalyCoverage = assessments.filter(
     (assessment) => assessment.predictionAvailable !== false,
   ).length;
 
@@ -227,11 +225,11 @@ export function AssetHealthPage({ runtimeMode }: { runtimeMode: "demo" | "produc
           <span className="health-kpi__icon health-kpi__icon--ai">
             <Sparkles size={17} />
           </span>
-          <small>AI 覆盖率</small>
+          <small>异常证据覆盖</small>
           <strong>
-            {predictionCoverage} / {assessments.length}
+            {anomalyCoverage} / {assessments.length}
           </strong>
-          <em>{runtimeMode === "production" ? "已接通在线预测" : "在线健康评估"}</em>
+          <em>{runtimeMode === "production" ? "已接通状态评估" : "Demo 状态证据"}</em>
         </Card>
       </section>
 
@@ -307,8 +305,8 @@ export function AssetHealthPage({ runtimeMode }: { runtimeMode: "demo" | "produc
                   <strong>{assessment.healthScore}</strong>
                   <small>
                     {assessment.predictionAvailable === false
-                      ? "未预测"
-                      : `${assessment.failureProbability30d}%`}
+                      ? "无异常证据"
+                      : `异常 ${assessment.anomalyScore.toFixed(2)}`}
                   </small>
                 </button>
               ))}
@@ -346,36 +344,28 @@ export function AssetHealthPage({ runtimeMode }: { runtimeMode: "demo" | "produc
           </div>
           <div className="health-selected-metrics">
             <div>
-              <small>30 天失效概率</small>
-              <strong>
-                {selected.predictionAvailable === false
-                  ? "—"
-                  : `${selected.failureProbability30d}%`}
-              </strong>
-              {selected.predictionAvailable === false ? (
-                <em>未部署在线预测模型</em>
-              ) : (
-                <Progress
-                  value={selected.failureProbability30d}
-                  tone={selected.failureProbability30d >= 25 ? "critical" : "warning"}
-                />
-              )}
-            </div>
-            <div>
-              <small>预计剩余寿命</small>
-              <strong>
-                {selected.predictionAvailable === false
-                  ? "—"
-                  : `${selected.remainingUsefulLifeDays} d`}
-              </strong>
-              <em>{selected.predictionAvailable === false ? "未部署在线预测模型" : "模型估计"}</em>
-            </div>
-            <div>
               <small>异常分数</small>
               <strong>
                 {selected.predictionAvailable === false ? "—" : selected.anomalyScore.toFixed(2)}
               </strong>
-              <em>{selected.predictionAvailable === false ? "未接通模型输出" : "模型输出"}</em>
+              {selected.predictionAvailable === false ? (
+                <em>未接通状态评估</em>
+              ) : (
+                <Progress
+                  value={selected.anomalyScore * 100}
+                  tone={selected.anomalyScore >= 0.65 ? "critical" : "warning"}
+                />
+              )}
+            </div>
+            <div>
+              <small>健康评分</small>
+              <strong>{selected.healthScore}</strong>
+              <em>可追溯健康评估 / 100</em>
+            </div>
+            <div>
+              <small>评估状态</small>
+              <strong>{stateLabel[selected.state]}</strong>
+              <em>{trendLabel[selected.trend]}趋势</em>
             </div>
             <div>
               <small>活动告警</small>
@@ -417,7 +407,7 @@ export function AssetHealthPage({ runtimeMode }: { runtimeMode: "demo" | "produc
           <CardHeader
             eyebrow="风险分布"
             title="全场风险分布"
-            description="Probability × Consequence 综合等级"
+            description="证据等级 × 运营后果综合等级"
           />
           <div className="health-risk-bars">
             {riskCounts.map(({ risk, count }) => (

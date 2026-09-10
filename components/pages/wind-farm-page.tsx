@@ -43,7 +43,7 @@ import {
 } from "@/lib/client-workflow-overlays";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { apiGet } from "@/lib/api-client";
-import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 
 type ViewMode = "cards" | "list" | "topology" | "map";
 
@@ -328,7 +328,7 @@ function TurbineDrawer({
   );
 }
 
-export function WindFarmPage({ runtimeMode }: { readonly runtimeMode: WindOpsRuntimeMode }) {
+export function WindFarmPage({ runtimeMode }: { readonly runtimeMode: OpenVigilRuntimeMode }) {
   const workflow = useDemoWorkflow();
   const isProduction = runtimeMode === "production";
   const [view, setView] = useState<ViewMode>("cards");
@@ -835,7 +835,7 @@ export function WindFarmPage({ runtimeMode }: { readonly runtimeMode: WindOpsRun
             ]}
             columns={columns}
             csvExport={{
-              filename: "windops-turbines.csv",
+              filename: "openvigil-turbines.csv",
               columns: [
                 { label: "风机", value: (row) => row.id },
                 { label: "状态", value: (row) => statusMeta[row.status].label },

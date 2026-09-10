@@ -14,6 +14,8 @@ EXPORT_ARGS = [
     "--no-dev",
     "--extra",
     "connectors",
+    "--extra",
+    "benchmark",
     "--no-emit-project",
     "--no-annotate",
     "--no-header",

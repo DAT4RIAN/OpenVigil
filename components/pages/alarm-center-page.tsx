@@ -24,7 +24,7 @@ import Link from "next/link";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
-import { useWindOpsIdentity } from "@/components/providers/identity-provider";
+import { useOpenVigilIdentity } from "@/components/providers/identity-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, KeyValue } from "@/components/ui/primitives";
 import { StatusBadge, type StatusTone } from "@/components/data-display/status-badge";
@@ -160,7 +160,7 @@ const alarmColumns: readonly LegacyColumnDef<Alarm, unknown>[] = [
 ];
 
 const alarmCsvExport = {
-  filename: "windops-alarms.csv",
+  filename: "openvigil-alarms.csv",
   columns: [
     { label: "告警 ID", value: (alarm: Alarm) => alarm.id },
     { label: "严重度", value: (alarm: Alarm) => severityLabel[alarm.severity] },
@@ -982,7 +982,7 @@ function AlarmDrawer({
 }
 
 export function AlarmCenterPage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
-  const { can } = useWindOpsIdentity();
+  const { can } = useOpenVigilIdentity();
   const canCommandAlarms = runtimeMode === "demo" || can("alarm.command");
   const queryClient = useQueryClient();
   const workflow = useDemoWorkflow();

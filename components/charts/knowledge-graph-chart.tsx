@@ -64,8 +64,8 @@ export function KnowledgeGraphChart({
 
   useEffect(() => {
     const handleTheme = () => setThemeRevision((value) => value + 1);
-    window.addEventListener("windops-theme-change", handleTheme);
-    return () => window.removeEventListener("windops-theme-change", handleTheme);
+    window.addEventListener("openvigil-theme-change", handleTheme);
+    return () => window.removeEventListener("openvigil-theme-change", handleTheme);
   }, []);
 
   useEffect(() => {
@@ -77,7 +77,7 @@ export function KnowledgeGraphChart({
       tooltip: {
         backgroundColor: css("--surface", "#fff"),
         borderColor: css("--border", "#dfe4e7"),
-        textStyle: { color: css("--foreground", "#182025"), fontSize: 10 },
+        textStyle: { color: css("--foreground", "#182025"), fontSize: 12 },
         formatter: (params: { dataType?: string; data?: { name?: string; value?: string } }) =>
           params.dataType === "edge"
             ? (params.data?.value ?? "关系")
@@ -106,7 +106,7 @@ export function KnowledgeGraphChart({
             label: {
               show: node.uid === rootUid || node.type === "FailureMode" || node.uid === selectedUid,
               color: css("--foreground", "#182025"),
-              fontSize: 9,
+              fontSize: 11,
               position: "right",
               formatter:
                 node.entityId.length > 24 ? `${node.entityId.slice(0, 22)}…` : node.entityId,

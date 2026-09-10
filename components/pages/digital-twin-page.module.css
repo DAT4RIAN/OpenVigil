@@ -21,7 +21,7 @@
 
 .assetSelector span {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -32,7 +32,7 @@
   border: 0;
   color: var(--foreground);
   font: inherit;
-  font-size: 9px;
+  font-size: var(--font-secondary);
   font-weight: 700;
   min-width: 140px;
   outline: 0;
@@ -57,7 +57,7 @@
   align-items: center;
   color: var(--foreground-muted);
   display: flex;
-  font-size: 8px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   gap: 6px;
   text-transform: uppercase;
@@ -71,7 +71,7 @@
 .kpis strong small,
 .kpis em {
   color: var(--foreground-subtle);
-  font-size: 8px;
+  font-size: var(--font-secondary);
   font-style: normal;
   font-weight: 600;
 }
@@ -80,7 +80,7 @@
   align-items: center;
   color: var(--primary);
   display: flex;
-  font-size: 8px;
+  font-size: var(--font-secondary);
   gap: 4px;
 }
 
@@ -125,7 +125,7 @@
   margin: 0;
   padding: 10px 14px;
   color: var(--critical);
-  font-size: 10px;
+  font-size: var(--font-secondary);
 }
 
 .viewerMeta {
@@ -136,7 +136,7 @@
   padding: 9px 14px;
   color: var(--foreground-subtle);
   font-family: var(--font-geist-mono);
-  font-size: 8px;
+  font-size: var(--font-metadata);
 }
 
 .schematic {
@@ -220,7 +220,7 @@
 .modelTag {
   bottom: 14px;
   color: var(--primary);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   left: 14px;
   padding: 6px 8px;
 }
@@ -235,7 +235,7 @@
 
 .modelHealth small {
   color: var(--foreground-subtle);
-  font-size: 6px;
+  font-size: var(--font-metadata);
 }
 
 .modelHealth strong {
@@ -247,7 +247,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
   font-weight: 700;
   padding: 4px 7px;
   position: absolute;
@@ -318,12 +318,12 @@
 }
 
 .subsystemList button > span:first-child strong {
-  font-size: 8px;
+  font-size: var(--font-secondary);
 }
 
 .subsystemList button > span:first-child small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-secondary);
 }
 
 .subsystemList button > span:last-child b {
@@ -346,7 +346,7 @@
 }
 .healthFocus > div:first-child small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 
 .riskMetrics {
@@ -371,7 +371,7 @@
 }
 .riskMetrics small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 .riskMetrics strong {
   font-size: 12px;
@@ -391,7 +391,7 @@
   border-radius: 6px;
   color: var(--foreground-muted);
   display: flex;
-  font-size: 8px;
+  font-size: var(--font-secondary);
   gap: 5px;
   justify-content: center;
   padding: 8px;
@@ -423,18 +423,18 @@
 }
 .signalGrid span {
   color: var(--foreground-muted);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 .signalGrid strong {
   font-size: 14px;
 }
 .signalGrid strong small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-secondary);
 }
 .signalGrid em {
   color: var(--success);
-  font-size: 6px;
+  font-size: var(--font-metadata);
   font-style: normal;
 }
 
@@ -462,11 +462,11 @@
 }
 .contextList small {
   color: var(--foreground-subtle);
-  font-size: 7px;
+  font-size: var(--font-metadata);
 }
 .contextList strong {
   font-family: var(--font-geist-mono);
-  font-size: 8px;
+  font-size: var(--font-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -475,7 +475,7 @@
   background: var(--info-soft);
   border-top: 1px solid var(--border);
   color: var(--foreground-muted);
-  font-size: 7.5px;
+  font-size: var(--font-metadata);
   line-height: 1.6;
   margin: 0;
   padding: 12px 13px;

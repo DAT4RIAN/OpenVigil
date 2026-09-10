@@ -22,33 +22,73 @@ def _run(command: list[str], *, capture: bool = True) -> str:
     return completed.stdout if capture else ""
 
 
-def _runtime_environment(
+def _validate_production_environment_file(
+    path: Path,
     *,
-    database_url: str,
-    neo4j_uri: str,
-    neo4j_password: str,
     release_id: str,
     commit_sha: str,
     image_digest: str,
-) -> list[str]:
-    values = {
-        "WINDOPS_ENVIRONMENT": "development",
-        "WINDOPS_DATABASE_URL": database_url,
-        "WINDOPS_NEO4J_URI": neo4j_uri,
-        "WINDOPS_NEO4J_USER": "neo4j",
-        "WINDOPS_NEO4J_PASSWORD": neo4j_password,
-        "WINDOPS_BIND_HOST": "0.0.0.0",  # nosec B104
+) -> str:
+    if not path.is_file() or path.is_symlink():
+        raise ContainerArtifactError(
+            "release smoke production environment file is missing or unsafe"
+        )
+    values: dict[str, str] = {}
+    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            raise ContainerArtifactError(f"release smoke environment line {line_number} is invalid")
+        name, value = line.split("=", 1)
+        if re.fullmatch(r"WINDOPS_[A-Z0-9_]+", name) is None or name in values:
+            raise ContainerArtifactError(
+                f"release smoke environment line {line_number} is duplicate or invalid"
+            )
+        values[name] = value
+    expected = {
+        "WINDOPS_ENVIRONMENT": "production",
         "WINDOPS_RELEASE_ID": release_id,
         "WINDOPS_RELEASE_COMMIT_SHA": commit_sha,
         "WINDOPS_RELEASE_IMAGE_DIGEST": image_digest,
     }
-    return [argument for name, value in values.items() for argument in ("--env", f"{name}={value}")]
+    for name, value in expected.items():
+        if values.get(name) != value:
+            raise ContainerArtifactError(f"release smoke environment has the wrong {name}")
+    required_dependencies = {
+        "WINDOPS_DATABASE_URL",
+        "WINDOPS_REDIS_URL",
+        "WINDOPS_MINIO_ENDPOINT",
+        "WINDOPS_NEO4J_URI",
+    }
+    missing = required_dependencies - values.keys()
+    if missing:
+        raise ContainerArtifactError(
+            "release smoke environment is missing production dependencies: "
+            + ", ".join(sorted(missing))
+        )
+    try:
+        trusted_hosts = json.loads(values.get("WINDOPS_TRUSTED_HOSTS", ""))
+    except json.JSONDecodeError as exc:
+        raise ContainerArtifactError(
+            "release smoke environment has invalid WINDOPS_TRUSTED_HOSTS"
+        ) from exc
+    if (
+        not isinstance(trusted_hosts, list)
+        or not trusted_hosts
+        or not isinstance(trusted_hosts[0], str)
+        or not trusted_hosts[0]
+    ):
+        raise ContainerArtifactError(
+            "release smoke environment must declare a production trusted Host"
+        )
+    return trusted_hosts[0]
 
 
-def _request(path: str, port: int) -> tuple[dict[str, Any], dict[str, str]]:
+def _request(path: str, port: int, trusted_host: str) -> tuple[dict[str, Any], dict[str, str]]:
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
     try:
-        connection.request("GET", path)
+        connection.request("GET", path, headers={"Host": trusted_host})
         response = connection.getresponse()
         if response.status != 200:
             raise OSError(f"release smoke endpoint returned HTTP {response.status}")
@@ -63,9 +103,7 @@ def smoke_release_image(
     *,
     image: str,
     network: str,
-    database_url: str,
-    neo4j_uri: str,
-    neo4j_password: str,
+    environment_file: Path,
     release_id: str,
     commit_sha: str,
     image_digest: str,
@@ -73,19 +111,18 @@ def smoke_release_image(
 ) -> dict[str, Any]:
     if re.fullmatch(r"sha256:[0-9a-f]{64}", image_digest) is None:
         raise ContainerArtifactError("release smoke requires a SHA-256 image digest")
+    trusted_host = _validate_production_environment_file(
+        environment_file,
+        release_id=release_id,
+        commit_sha=commit_sha,
+        image_digest=image_digest,
+    )
     container_name = "windops-release-image-smoke"
     if _run(
         ["docker", "ps", "-a", "--filter", f"name=^{container_name}$", "--format", "{{.Names}}"]
     ):
         raise ContainerArtifactError(f"refusing to replace existing container {container_name}")
-    environment = _runtime_environment(
-        database_url=database_url,
-        neo4j_uri=neo4j_uri,
-        neo4j_password=neo4j_password,
-        release_id=release_id,
-        commit_sha=commit_sha,
-        image_digest=image_digest,
-    )
+    environment = ["--env-file", str(environment_file.resolve())]
     hardened = [
         "--read-only",
         "--tmpfs",
@@ -134,8 +171,8 @@ def smoke_release_image(
         last_error = "API did not answer"
         while time.monotonic() < deadline:
             try:
-                health, _ = _request("/api/v1/healthz", port)
-                ready, _ = _request("/api/v1/readyz", port)
+                health, _ = _request("/api/v1/healthz", port, trusted_host)
+                ready, _ = _request("/api/v1/readyz", port, trusted_host)
                 break
             except (OSError, json.JSONDecodeError) as exc:
                 last_error = str(exc)
@@ -147,6 +184,23 @@ def smoke_release_image(
             )
         if health != {"status": "ok"} or ready.get("status") != "ready":
             raise ContainerArtifactError("release image health or readiness response is invalid")
+        if ready.get("release") != {
+            "release_id": release_id,
+            "commit_sha": commit_sha,
+            "image_digest": image_digest,
+        }:
+            raise ContainerArtifactError(
+                "release image readiness identity does not match the candidate"
+            )
+        if ready.get("dependencies") != {
+            "postgresql": "ready",
+            "redis": "ready",
+            "minio": "ready",
+            "knowledge_graph": "neo4j",
+        }:
+            raise ContainerArtifactError(
+                "release image did not connect every production dependency"
+            )
         health_deadline = time.monotonic() + 45
         while time.monotonic() < health_deadline:
             health_state = json.loads(
@@ -160,13 +214,15 @@ def smoke_release_image(
         else:
             raise ContainerArtifactError("Docker health check did not become healthy")
         return {
-            "format_version": 1,
+            "format_version": 2,
             "gate": "release_image_smoke",
             "status": "passed",
             "image": image,
             "release_id": release_id,
             "commit_sha": commit_sha,
             "image_digest": image_digest,
+            "environment": "production",
+            "dependencies": ready["dependencies"],
             "checks": [
                 "migration_from_image",
                 "read_only_non_root_runtime",
@@ -174,6 +230,8 @@ def smoke_release_image(
                 "readiness_endpoint",
                 "docker_healthcheck",
                 "release_configuration_injected",
+                "production_configuration_validated",
+                "postgresql_redis_minio_neo4j_ready",
             ],
         }
     finally:
@@ -207,9 +265,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run migration and API smoke from a release image")
     parser.add_argument("--image", required=True)
     parser.add_argument("--network", required=True)
-    parser.add_argument("--database-url", required=True)
-    parser.add_argument("--neo4j-uri", required=True)
-    parser.add_argument("--neo4j-password", required=True)
+    parser.add_argument("--environment-file", type=Path, required=True)
     parser.add_argument("--release-id", required=True)
     parser.add_argument("--commit-sha", required=True)
     parser.add_argument("--image-digest", required=True)
@@ -220,9 +276,7 @@ def main() -> None:
         report = smoke_release_image(
             image=args.image,
             network=args.network,
-            database_url=args.database_url,
-            neo4j_uri=args.neo4j_uri,
-            neo4j_password=args.neo4j_password,
+            environment_file=args.environment_file,
             release_id=args.release_id,
             commit_sha=args.commit_sha,
             image_digest=args.image_digest,

@@ -12,7 +12,7 @@ export default function ErrorBoundary({
   return (
     <main className="route-state" role="alert">
       <span className="route-state__brand">
-        <Wind size={22} /> WindOps
+        <Wind size={22} /> OpenVigil
       </span>
       <div className="route-state__icon route-state__icon--critical">
         <TriangleAlert size={25} />
