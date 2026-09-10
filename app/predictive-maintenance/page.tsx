@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { PredictiveMaintenancePage } from "@/components/pages/predictive-maintenance-page";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "预测性维护",
@@ -7,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <PredictiveMaintenancePage />;
+  return <PredictiveMaintenancePage runtimeMode={getProductionBackendConfig().mode} />;
 }

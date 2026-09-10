@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -10,11 +11,18 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from windops_backend.config import Settings
 from windops_backend.enums import ExecutionStatus
+from windops_backend.knowledge_graph.projection import ProjectionLimits
+from windops_backend.knowledge_graph.service import project_authoritative_graph
+from windops_backend.knowledge_graph.store import KnowledgeGraphStore
 from windops_backend.models import AgentExecution
 from windops_backend.storage import OutboxEvent
 
 MISSION_ANALYSIS_REQUESTED = "mission.analysis.requested"
+KNOWLEDGE_GRAPH_PROJECTION_REQUESTED = "knowledge-graph.projection.requested"
 OUTBOX_LEASE = timedelta(minutes=5)
+# Redis delivery is considered visible for one lease window.  A relay that
+# sent an event but never sees the worker claim it must get another chance.
+OUTBOX_DISPATCH_VISIBILITY = timedelta(minutes=5)
 
 
 class OutboxLeaseLostError(RuntimeError):
@@ -27,6 +35,34 @@ def enqueue_mission_analysis(session: AsyncSession, mission_id: str) -> OutboxEv
         aggregate_type="mission",
         aggregate_id=mission_id,
         payload={"mission_id": mission_id},
+    )
+    session.add(event)
+    return event
+
+
+def enqueue_knowledge_graph_projection(
+    session: AsyncSession,
+    *,
+    aggregate_type: str,
+    aggregate_id: str,
+    reason: str,
+) -> OutboxEvent:
+    """Request an idempotent rebuild of the derived graph projection.
+
+    The row is committed in the same PostgreSQL transaction as the authoritative
+    business mutation. Replaying it is safe because the projector replaces the
+    named Neo4j projection from current SQL state.
+    """
+
+    event = OutboxEvent(
+        event_type=KNOWLEDGE_GRAPH_PROJECTION_REQUESTED,
+        aggregate_type=aggregate_type,
+        aggregate_id=aggregate_id,
+        payload={
+            "aggregate_type": aggregate_type,
+            "aggregate_id": aggregate_id,
+            "reason": reason,
+        },
     )
     session.add(event)
     return event
@@ -137,6 +173,8 @@ async def persist_failure_audit(
                         "source": "not_available_after_failure",
                     },
                 ),
+                evaluation_result=context.get("evaluation_result", {}),
+                degradation_policy=context.get("degradation_policy", {}),
                 error_code=str(context.get("error_code", type(error).__name__)),
                 completed_at=datetime.now(UTC),
             )
@@ -166,7 +204,7 @@ async def mark_event_failed(
         return getattr(result, "rowcount", 0) == 1
 
 
-async def _assert_current_claim(session: AsyncSession, event_id: str, claim_token: str) -> None:
+async def assert_current_claim(session: AsyncSession, event_id: str, claim_token: str) -> None:
     event = await session.scalar(
         select(OutboxEvent)
         .where(OutboxEvent.id == event_id, OutboxEvent.status == "processing")
@@ -203,7 +241,13 @@ async def process_outbox_event(
         try:
             async with session.begin():
                 await handler(session, settings, mission_id)
-                await _assert_current_claim(session, event_id, claim_token)
+                await assert_current_claim(session, event_id, claim_token)
+        except asyncio.CancelledError:
+            # Cancellation means the worker is shutting down or the lease
+            # holder lost its execution slot. Leave the row as `processing`
+            # so the lease reaper can reclaim it instead of recording a false
+            # terminal failure.
+            raise
         except OutboxLeaseLostError:
             return False
         except BaseException as exc:
@@ -212,6 +256,48 @@ async def process_outbox_event(
                 await persist_failure_audit(
                     factory, mission_id=mission_id, node="workflow", error=exc
                 )
+            raise
+    return await mark_event_succeeded(factory, event_id, claim_token)
+
+
+async def process_knowledge_graph_projection_event(
+    factory: async_sessionmaker[AsyncSession],
+    event_id: str,
+    store: KnowledgeGraphStore,
+    limits: ProjectionLimits | None = None,
+) -> bool:
+    """Project the latest authoritative SQL state into Neo4j under a fenced lease."""
+
+    async with factory() as session:
+        async with session.begin():
+            event = await claim_event(session, event_id)
+        if event is None:
+            return False
+        claim_token = event.claim_token
+        if claim_token is None:  # pragma: no cover - protected by claim update
+            raise RuntimeError("claimed outbox event has no fencing token")
+        if event.event_type != KNOWLEDGE_GRAPH_PROJECTION_REQUESTED:
+            error = ValueError(f"unexpected graph projection event type: {event.event_type}")
+            await mark_event_failed(factory, event_id, claim_token, error)
+            raise error
+        try:
+            async with session.begin():
+                created_at = event.created_at
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=UTC)
+                await project_authoritative_graph(
+                    session,
+                    store,
+                    projection_sequence=f"{created_at.isoformat()}:{event.id}",
+                    limits=limits,
+                )
+                await assert_current_claim(session, event_id, claim_token)
+        except asyncio.CancelledError:
+            raise
+        except OutboxLeaseLostError:
+            return False
+        except BaseException as exc:
+            await mark_event_failed(factory, event_id, claim_token, exc)
             raise
     return await mark_event_succeeded(factory, event_id, claim_token)
 
@@ -248,13 +334,62 @@ async def pending_event_ids(
         )
 
 
+async def pending_event_ids_by_type(
+    factory: async_sessionmaker[AsyncSession], event_type: str, limit: int = 100
+) -> list[str]:
+    async with factory() as session:
+        return list(
+            (
+                await session.scalars(
+                    select(OutboxEvent.id)
+                    .where(
+                        OutboxEvent.status == "pending",
+                        OutboxEvent.event_type == event_type,
+                    )
+                    .order_by(OutboxEvent.created_at)
+                    .limit(limit)
+                )
+            ).all()
+        )
+
+
+async def pending_events(
+    factory: async_sessionmaker[AsyncSession], limit: int = 100
+) -> list[tuple[str, str]]:
+    stale_before = datetime.now(UTC) - OUTBOX_DISPATCH_VISIBILITY
+    async with factory() as session:
+        rows = (
+            await session.execute(
+                select(OutboxEvent.id, OutboxEvent.event_type)
+                .where(
+                    or_(
+                        OutboxEvent.status == "pending",
+                        (
+                            (OutboxEvent.status == "dispatched")
+                            & or_(
+                                OutboxEvent.dispatched_at <= stale_before,
+                                OutboxEvent.dispatched_at.is_(None),
+                            )
+                        ),
+                    )
+                )
+                .order_by(OutboxEvent.created_at)
+                .limit(limit)
+            )
+        ).all()
+        return [(str(event_id), str(event_type)) for event_id, event_type in rows]
+
+
 async def mark_dispatched(factory: async_sessionmaker[AsyncSession], event_ids: list[str]) -> None:
     if not event_ids:
         return
     async with factory() as session, session.begin():
         await session.execute(
             update(OutboxEvent)
-            .where(OutboxEvent.id.in_(event_ids), OutboxEvent.status == "pending")
+            .where(
+                OutboxEvent.id.in_(event_ids),
+                OutboxEvent.status.in_(("pending", "dispatched")),
+            )
             .values(status="dispatched", dispatched_at=datetime.now(UTC))
         )
 

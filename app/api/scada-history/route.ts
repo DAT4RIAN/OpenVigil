@@ -1,8 +1,13 @@
 import { SCADA_HISTORY_RANGES, getScadaHistory, type ScadaHistoryRange } from "@/lib/scada-history";
+import { productionScadaHistoryResponse } from "@/lib/production-domain-adapter";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 import { jsonResponse } from "../_shared";
 
-export function GET(request: Request): Response {
+export function GET(request: Request): Response | Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return productionScadaHistoryResponse(request);
+  }
   const url = new URL(request.url);
   const rawRange = (url.searchParams.get("range") ?? "24H").trim().toUpperCase();
   const turbineId = (url.searchParams.get("turbineId") ?? "WT-023").trim().toUpperCase();

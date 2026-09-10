@@ -13,7 +13,7 @@ export default function NotFound() {
       <h1>没有找到该运行对象</h1>
       <p>机组或 Mission ID 不存在。可返回指挥中心重新检索。</p>
       <Link className="button button--primary button--md" href="/">
-        返回 Operations Center
+        返回运营指挥中心
       </Link>
     </main>
   );

@@ -23,12 +23,12 @@ export interface ScadaHistorySnapshot {
     readonly count: number;
     readonly pointCount: number;
     readonly turbineId: string;
-    readonly range: ScadaHistoryRange;
+    readonly range: ScadaHistoryRange | "CUSTOM";
     readonly interval: string;
     readonly startsAt: string;
     readonly endsAt: string;
     readonly snapshotAt: string;
-    readonly deterministic: true;
+    readonly deterministic: boolean;
   };
 }
 
@@ -109,7 +109,7 @@ export function getScadaHistory(
         Array.from({ length: config.samples }, (_, index) => {
           const ratio = config.samples === 1 ? 1 : index / (config.samples - 1);
           const sourceIndex = Math.round(ratio * (series.points.length - 1));
-          const source = series.points[sourceIndex]!;
+          const source = series.points[sourceIndex];
           const timestamp = new Date(
             startMs + ratio * config.durationMinutes * 60_000,
           ).toISOString();

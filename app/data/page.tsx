@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 
 import { DataCenterPage } from "@/components/pages/data-center-page";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "数据中心",
@@ -8,5 +11,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <DataCenterPage />;
+  return <DataCenterPage runtimeMode={getProductionBackendConfig().mode} />;
 }

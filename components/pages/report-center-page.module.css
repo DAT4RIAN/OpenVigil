@@ -56,6 +56,45 @@
   box-shadow: var(--shadow-sm);
 }
 
+.generationPanel {
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) 170px 140px minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--primary-soft) 28%, var(--surface));
+}
+
+.generationPanel > div,
+.reasonField {
+  display: grid;
+  gap: 5px;
+}
+
+.generationPanel > div small,
+.reasonField span {
+  color: var(--foreground-subtle);
+  font-size: 9px;
+}
+
+.reasonField input {
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--foreground);
+}
+
+.generationError {
+  grid-column: 1 / -1;
+  color: var(--danger);
+  font-size: 10px;
+}
+
 .searchField {
   display: flex;
   height: 36px;

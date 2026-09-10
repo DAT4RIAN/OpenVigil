@@ -431,6 +431,346 @@
   color: var(--warning);
 }
 
+.benchmarkPanel {
+  margin-bottom: 14px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.benchmarkPanel > div:first-child {
+  padding: 16px;
+}
+
+.benchmarkBody {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px 16px;
+}
+
+.benchmarkState {
+  align-items: center;
+  background: var(--surface-subtle);
+  border-top: 1px solid var(--border);
+  color: var(--foreground-muted);
+  display: flex;
+  font-size: 9px;
+  gap: 10px;
+  min-height: 64px;
+  padding: 14px 16px;
+}
+
+.benchmarkState > span {
+  display: grid;
+  gap: 3px;
+}
+
+.benchmarkState strong {
+  color: var(--foreground);
+  font-size: 10px;
+}
+
+.benchmarkState small {
+  color: var(--foreground-muted);
+  font-size: 8px;
+}
+
+.benchmarkState[data-state="error"],
+.benchmarkState[data-state="permission"] {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.benchmarkToolbar,
+.benchmarkSubheader {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 0.8fr) auto;
+}
+
+.benchmarkToolbar label,
+.benchmarkSubheader label {
+  display: grid;
+  gap: 4px;
+}
+
+.benchmarkToolbar label > span,
+.benchmarkSubheader label > span {
+  color: var(--foreground-subtle);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.benchmarkToolbar input,
+.benchmarkToolbar select,
+.benchmarkSubheader select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  font-size: 9px;
+  height: 32px;
+  padding: 0 8px;
+  width: 100%;
+}
+
+.paginationControls {
+  display: flex;
+  gap: 6px;
+}
+
+.paginationControls button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground-muted);
+  cursor: pointer;
+  font-size: 8px;
+  height: 32px;
+  padding: 0 10px;
+}
+
+.paginationControls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.staleBanner {
+  background: var(--warning-soft);
+  border: 1px solid color-mix(in srgb, var(--warning) 24%, var(--border));
+  border-radius: 6px;
+  color: var(--warning);
+  font-size: 8px;
+  padding: 8px 10px;
+}
+
+.benchmarkIdentity {
+  align-items: start;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.benchmarkIdentity > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.benchmarkIdentity small,
+.benchmarkIdentity p {
+  color: var(--foreground-muted);
+  font-size: 8px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.benchmarkTitleLine {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.benchmarkTitleLine strong {
+  font-size: 14px;
+}
+
+.benchmarkLinks {
+  align-items: flex-end;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 5px;
+  justify-items: end;
+}
+
+.benchmarkLinks a {
+  align-items: center;
+  color: var(--primary);
+  display: inline-flex;
+  font-size: 8px;
+  font-weight: 700;
+  gap: 4px;
+}
+
+.benchmarkMetrics {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.benchmarkMetrics > div {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.benchmarkMetrics small,
+.benchmarkMetrics em {
+  color: var(--foreground-muted);
+  font-size: 7.5px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.benchmarkMetrics strong {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+}
+
+.benchmarkDetailGrid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.benchmarkDetailGrid > div {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.benchmarkDetailGrid h3 {
+  font-size: 9px;
+  margin: 0 0 8px;
+}
+
+.benchmarkDetailGrid dl {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.benchmarkDetailGrid dl > div {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.benchmarkDetailGrid dt,
+.benchmarkDetailGrid dd {
+  font-size: 7.5px;
+  margin: 0;
+}
+
+.benchmarkDetailGrid dt {
+  color: var(--foreground-muted);
+}
+
+.benchmarkDetailGrid dd {
+  font-family: var(--font-geist-mono), monospace;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.benchmarkSubsection {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.benchmarkSubheader {
+  background: var(--surface-subtle);
+  padding: 10px;
+}
+
+.benchmarkSubheader > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.benchmarkSubheader strong {
+  font-size: 9px;
+}
+
+.benchmarkSubheader small {
+  color: var(--foreground-muted);
+  font-size: 7.5px;
+}
+
+.benchmarkEventList {
+  display: grid;
+}
+
+.benchmarkEventList article {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(120px, 0.7fr) minmax(150px, 0.8fr) auto;
+  padding: 9px 10px;
+}
+
+.benchmarkEventList article > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.benchmarkEventList strong {
+  font-size: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.benchmarkEventList small,
+.benchmarkEventList em {
+  color: var(--foreground-muted);
+  font-size: 7px;
+  font-style: normal;
+}
+
+.curvePanel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.curvePanel svg {
+  background: linear-gradient(to bottom, var(--surface-subtle), var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  height: 160px;
+  width: 100%;
+}
+
+.curvePanel polyline {
+  fill: none;
+  stroke: var(--primary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.curvePanel > span {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.curvePanel strong {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8px;
+}
+
+.curvePanel small {
+  color: var(--foreground-muted);
+  font-size: 7px;
+}
+
 @media (max-width: 1100px) {
   .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -439,13 +779,35 @@
   .topGrid {
     grid-template-columns: 1fr;
   }
+
+  .benchmarkMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .benchmarkDetailGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
   .kpis,
   .subsystemGrid,
-  .toolbar {
+  .toolbar,
+  .benchmarkToolbar,
+  .benchmarkSubheader,
+  .benchmarkMetrics,
+  .benchmarkEventList article {
     grid-template-columns: 1fr;
+  }
+
+  .benchmarkIdentity,
+  .curvePanel > span {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .benchmarkLinks {
+    justify-items: start;
   }
 
   .treeBranch {

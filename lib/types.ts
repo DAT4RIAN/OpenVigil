@@ -117,6 +117,10 @@ export interface HealthAssessment {
   readonly anomalyScore: number;
   readonly primaryFinding: string;
   readonly assessedAt: ISODateTime;
+  readonly turbineModel?: string;
+  readonly activeAlarmCount?: number;
+  readonly predictionAvailable?: boolean;
+  readonly missionId?: string | null;
 }
 
 export type AlarmSeverity = "critical" | "major" | "minor" | "warning" | "info";
@@ -142,8 +146,11 @@ export interface Alarm {
   readonly currentValue: number | null;
   readonly threshold: number | null;
   readonly unit: string | null;
+  readonly sourceVariable?: string | null;
   readonly missionId: string | null;
   readonly evidenceIds: readonly string[];
+  readonly revision?: number;
+  readonly updatedAt?: ISODateTime;
 }
 
 export type AgentLayer = "decision" | "review" | "execution";
@@ -161,6 +168,9 @@ export interface AgentMetrics {
 
 export interface Agent {
   readonly id: string;
+  readonly definitionId?: string;
+  readonly agentKey?: string;
+  readonly catalogVersionId?: string;
   readonly name: string;
   readonly shortName: string;
   readonly layer: AgentLayer;
@@ -176,7 +186,7 @@ export interface Agent {
   readonly tools: readonly string[];
   readonly knowledgeSourceIds: readonly string[];
   readonly metrics: AgentMetrics;
-  readonly lastActiveAt: ISODateTime;
+  readonly lastActiveAt: ISODateTime | null;
 }
 
 export type MissionStatus =
@@ -187,6 +197,7 @@ export type MissionStatus =
   | "under-review"
   | "approved"
   | "executing"
+  | "rejected"
   | "completed";
 
 export interface Mission {
@@ -298,6 +309,7 @@ export interface HumanApproval {
 export interface Decision {
   readonly id: string;
   readonly missionId: string;
+  readonly missionRevision?: number;
   readonly turbineId: string;
   readonly incident: string;
   readonly diagnosis: string;
@@ -325,6 +337,8 @@ export interface WorkOrderTask {
   readonly title: string;
   readonly completed: boolean;
   readonly completionNote: string | null;
+  readonly schemaVersion?: string;
+  readonly measurementSchema?: Readonly<Record<string, unknown>>;
 }
 
 export interface WorkOrderPart {
@@ -333,6 +347,14 @@ export interface WorkOrderPart {
   readonly quantity: number;
   readonly available: number;
   readonly reserved: number;
+}
+
+export interface ExternalWorkOrderSync {
+  readonly provider: string | null;
+  readonly externalId: string | null;
+  readonly syncStatus: string;
+  readonly externalUpdatedAt: ISODateTime | null;
+  readonly updatedAt: ISODateTime | null;
 }
 
 export interface WorkOrder {
@@ -355,6 +377,7 @@ export interface WorkOrder {
   readonly requiredTools: readonly string[];
   readonly spareParts: readonly WorkOrderPart[];
   readonly safetyProcedures: readonly string[];
+  readonly eam?: ExternalWorkOrderSync | null;
   readonly createdAt: ISODateTime;
   readonly updatedAt: ISODateTime;
 }
@@ -412,11 +435,13 @@ export interface ScadaPoint {
   readonly quality: "good" | "uncertain" | "bad";
   readonly isAnomaly: boolean;
   readonly aiEvent: string | null;
+  readonly late?: boolean;
 }
 
 export interface ScadaSeries {
   readonly id: string;
   readonly turbineId: string;
+  readonly sourceId?: string;
   readonly metric: ScadaMetric;
   readonly label: string;
   readonly unit: string;
@@ -432,12 +457,17 @@ export interface ScadaMeasurement {
   readonly id: string;
   readonly sequence: number;
   readonly turbineId: string;
+  readonly sourceId?: string;
+  readonly sourceEventId?: string;
   readonly metric: ScadaMetric;
   readonly label: string;
   readonly timestamp: ISODateTime;
   readonly value: number;
   readonly unit: string;
   readonly quality: ScadaPoint["quality"];
+  readonly qualityCode?: string | null;
+  readonly receivedAt?: ISODateTime;
+  readonly late?: boolean;
   readonly isAnomaly: boolean;
 }
 
@@ -515,6 +545,11 @@ export interface KnowledgeDocument {
   readonly summary: string;
   readonly relatedTurbineIds: readonly string[];
   readonly relatedMissionIds: readonly string[];
+  readonly ingestionStatus?: string;
+  readonly embeddingProvider?: string | null;
+  readonly embeddingModel?: string | null;
+  readonly artifactUri?: string | null;
+  readonly artifactSha256?: string | null;
 }
 
 export type ResourceAvailability = "available" | "reserved" | "assigned" | "maintenance";
@@ -544,6 +579,7 @@ export interface MaintenanceCrew {
   readonly memberCount: number;
   readonly availability: ResourceAvailability;
   readonly assignedWorkOrderId: string | null;
+  readonly assignedMissionId?: string | null;
   readonly certifications: readonly string[];
   readonly currentLocation: string;
 }
@@ -554,6 +590,7 @@ export interface ServiceVessel {
   readonly vesselType: "CTV" | "SOV" | "jack-up";
   readonly availability: ResourceAvailability;
   readonly assignedWorkOrderId: string | null;
+  readonly assignedMissionId?: string | null;
   readonly capacity: number;
   readonly maxWaveHeightM: number;
   readonly berth: string;
@@ -566,6 +603,7 @@ export interface MaintenanceTool {
   readonly category: string;
   readonly availability: ResourceAvailability;
   readonly assignedWorkOrderId: string | null;
+  readonly assignedMissionId?: string | null;
   readonly calibrationDueAt: ISODateTime;
   readonly location: string;
 }

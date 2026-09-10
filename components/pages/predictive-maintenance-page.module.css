@@ -887,6 +887,74 @@
   font-size: 9px;
 }
 
+.errorBanner,
+.inferenceProvenance {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+}
+
+.errorBanner {
+  background: var(--critical-soft);
+  color: var(--critical);
+  font-size: 9px;
+}
+
+.inferenceProvenance {
+  background: var(--surface);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.6fr);
+}
+
+.inferenceProvenance > div {
+  display: grid;
+  gap: 4px;
+}
+
+.inferenceProvenance span,
+.inferenceProvenance dt {
+  color: var(--foreground-subtle);
+  font-size: 8px;
+}
+
+.inferenceProvenance h3,
+.inferenceProvenance p,
+.inferenceProvenance dl,
+.inferenceProvenance dd {
+  margin: 0;
+}
+
+.inferenceProvenance h3 {
+  font-size: 13px;
+}
+
+.inferenceProvenance p {
+  color: var(--foreground-muted);
+  font-size: 9px;
+}
+
+.inferenceProvenance dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inferenceProvenance dl div {
+  background: var(--surface-subtle);
+  border-radius: 6px;
+  display: grid;
+  gap: 3px;
+  padding: 9px;
+}
+
+.inferenceProvenance dd {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1180px) {
   .modelNotice {
     grid-template-columns: auto 1fr;

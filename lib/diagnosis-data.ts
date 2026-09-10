@@ -1,4 +1,5 @@
 import { agents } from "./agent-data";
+import { agentDisplayName } from "./agent-control-meta";
 import { turbines } from "./farm-data";
 import { healthAssessments } from "./health-data";
 import { evidenceItems, missions } from "./operations-data";
@@ -149,7 +150,10 @@ const riskWeight: Readonly<Record<RiskLevel, number>> = {
   low: 1,
 };
 
-const agentName = (id: string): string => agents.find((agent) => agent.id === id)?.shortName ?? id;
+const agentName = (id: string): string => {
+  const agent = agents.find((item) => item.id === id);
+  return agentDisplayName(id, agent?.shortName ?? id);
+};
 
 const sourceHref = (sourceId: string | null): string => {
   if (!sourceId) return "/missions/MISSION-2026-0823#evidence";
@@ -240,7 +244,7 @@ const featuredCollaboration: readonly DiagnosisAgentStep[] = [
     agentName: agentName("agent-scada-analysis"),
     role: "异常接入与信号相关",
     status: "complete",
-    publicOutput: "确认振动、温度与功率残差在同一时间窗联合偏离，数据质量为 good。",
+    publicOutput: "确认振动、温度与功率残差在同一时间窗联合偏离，数据质量良好。",
     evidenceIds: ["EV-023-VIB-001", "EV-023-TEMP-002"],
     toolResults: [
       { tool: "query_scada", result: "读取 24H 窗口；44 个连续上升采样点" },
@@ -271,7 +275,7 @@ const featuredCollaboration: readonly DiagnosisAgentStep[] = [
     evidenceIds: ["EV-023-HISTORY-006", "EV-023-MANUAL-008"],
     toolResults: [
       { tool: "query_similar_failures", result: "12 个案例；最高相似度 0.91" },
-      { tool: "query_manual", result: "命中 GW165 O&M §8.4.3" },
+      { tool: "query_manual", result: "命中 GW165 运维手册 §8.4.3" },
     ],
     completedAt: "2026-08-13T02:14:22+08:00",
   },
@@ -420,7 +424,7 @@ function genericCandidates(number: number, risk: RiskLevel): readonly DiagnosisC
     id: `DX-${String(number).padStart(3, "0")}-CANDIDATE-0${index + 1}`,
     faultMode,
     subsystem,
-    probabilityPercent: probabilities[index]!,
+    probabilityPercent: probabilities[index],
     confidencePercent: Math.max(52, 82 - index * 11 - (number % 4)),
     supportingEvidenceIds: [`DX-EV-${String(number).padStart(3, "0")}-HEALTH`],
     supportingSummary: [
@@ -470,7 +474,7 @@ function genericCitations(
     citations.push({
       id: `DX-EV-${turbineId.slice(3)}-ALARMS`,
       title: `${turbineId} 活跃告警上下文`,
-      sourceLabel: "WindOps Alarm Center",
+      sourceLabel: "WindOps 告警中心",
       sourceType: "alarm-correlation",
       observedAt: assessedAt,
       summary: `${activeAlarmCount} 条活跃告警参与异常接入。`,
@@ -567,8 +571,8 @@ function genericSignals(
 }
 
 function genericRecord(index: number): DiagnosisRecord {
-  const turbine = turbines[index]!;
-  const assessment = healthAssessments[index]!;
+  const turbine = turbines[index];
+  const assessment = healthAssessments[index];
   const number = index + 1;
   const mission = missions.find((item) => item.turbineId === turbine.id) ?? null;
   const status = genericStatus(assessment.riskLevel, mission?.id ?? null, number);
@@ -637,14 +641,14 @@ const featuredSignals: readonly DiagnosisSignal[] = [
     label: "BPFO 频带能量",
     value: 19,
     baseline: 0,
-    unit: "% over baseline",
+    unit: "% 超出基线",
     deltaPercent: 19,
     abnormal: true,
   },
 ];
 
 function featuredRecord(workflow: DiagnosisWorkflowOverlay): DiagnosisRecord {
-  const turbine = turbines[22]!;
+  const turbine = turbines[22];
   return {
     id: "DIAG-WT-023-20260813",
     turbineId: turbine.id,

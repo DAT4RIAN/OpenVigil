@@ -1,0 +1,33 @@
+{
+  "name": "string-split-by",
+  "version": "1.0.0",
+  "description": "Split string by any separator excluding brackets, quotes and escaped characters",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dy/string-split-by.git"
+  },
+  "keywords": [
+    "split-string",
+    "string-split",
+    "split-stirng-words",
+    "space",
+    "string",
+    "split"
+  ],
+  "author": "Dmitry Yv <dfcreative@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/dy/string-split-by/issues"
+  },
+  "homepage": "https://github.com/dy/string-split-by#readme",
+  "dependencies": {
+    "parenthesis": "^3.1.5"
+  },
+  "devDependencies": {
+    "tape": "^4.9.0"
+  }
+}

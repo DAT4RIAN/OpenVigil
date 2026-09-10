@@ -33,7 +33,8 @@ import { DataTable } from "@/components/data-display/data-table";
 import { HealthBadge, StatusBadge } from "@/components/data-display/status-badge";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { apiGet } from "@/lib/api-client";
+import { Button, EmptyState } from "@/components/ui/primitives";
+import { apiGet, apiPost } from "@/lib/api-client";
 import { scadaSeries } from "@/lib";
 import type { DemoWorkflowState } from "@/lib/demo-workflow";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
@@ -45,14 +46,30 @@ const windows = ["24H", "7D", "30D", "90D"] as const;
 type TimeWindow = (typeof windows)[number];
 type RiskFilter = "all" | RiskLevel;
 type TrendFilter = "all" | TrendDirection;
+type PredictiveAssessmentView = PredictiveAssessment & {
+  readonly modelId?: string;
+  readonly deploymentId?: string;
+  readonly featureObservedAt?: string;
+  readonly latencyMs?: number;
+};
 
 type PredictiveResponse = {
-  data: PredictiveAssessment[];
+  data: PredictiveAssessmentView[];
   meta: {
     count: number;
     total: number;
     filteredTotal: number;
-    model: typeof predictiveModelMeta;
+    model: {
+      id: string;
+      label: string;
+      mode: string;
+      horizonDays: number;
+      evaluatedAt: string;
+      deterministic: boolean;
+      readOnly: boolean;
+      performsRealInference: boolean;
+      notice: string;
+    };
   };
 };
 
@@ -109,17 +126,17 @@ const assessmentColumns: readonly LegacyColumnDef<PredictiveAssessment, unknown>
     cell: ({ row }) => (
       <span>
         <strong>{row.original.failureProbability30d}%</strong>
-        <small>Band {row.original.probabilityBand}/5</small>
+        <small>区间 {row.original.probabilityBand}/5</small>
       </span>
     ),
   },
   {
     accessorKey: "remainingUsefulLifeDays",
-    header: "Estimated RUL",
+    header: "预计剩余寿命",
     cell: ({ row }) => (
       <span>
         <strong>{row.original.remainingUsefulLifeDays} d</strong>
-        <small>±12 days</small>
+        <small>±12 天</small>
       </span>
     ),
   },
@@ -152,10 +169,10 @@ const dateLabel = (date: Date, window: TimeWindow): string =>
     ? date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })
     : `${date.getMonth() + 1}/${date.getDate()}`;
 
-function withWorkflowState(
-  assessment: PredictiveAssessment,
+function withWorkflowState<T extends PredictiveAssessment>(
+  assessment: T,
   workflow: DemoWorkflowState,
-): PredictiveAssessment {
+): T {
   if (assessment.turbineId !== "WT-023" || workflow.workOrderStatus !== "completed") {
     return assessment;
   }
@@ -301,19 +318,14 @@ function matrixCellRisk(probability: number, consequence: number): RiskLevel {
   return matrixRiskFor(probability, consequence);
 }
 
-export function PredictiveMaintenancePage() {
+export function PredictiveMaintenancePage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
   const workflow = useDemoWorkflow();
-  const [selectedId, setSelectedId] = useState("WT-023");
+  const [selectedId, setSelectedId] = useState(runtimeMode === "demo" ? "WT-023" : "");
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("30D");
   const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
   const [trendFilter, setTrendFilter] = useState<TrendFilter>("all");
-
-  useEffect(() => {
-    const turbineId = new URLSearchParams(window.location.search).get("turbineId")?.toUpperCase();
-    if (!turbineId || !predictiveAssessments.some((item) => item.turbineId === turbineId)) return;
-    const timer = window.setTimeout(() => setSelectedId(turbineId), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+  const [runningInference, setRunningInference] = useState(false);
+  const [inferenceError, setInferenceError] = useState<string | null>(null);
 
   const endpoint = useMemo(() => {
     const params = new URLSearchParams({ limit: "64", sort: "risk-desc" });
@@ -325,47 +337,69 @@ export function PredictiveMaintenancePage() {
   const assessmentsQuery = useQuery({
     queryKey: ["predictive-assessments", endpoint],
     queryFn: ({ signal }) => apiGet<PredictiveResponse>(endpoint, signal),
-    initialData: {
-      data: [...predictiveAssessments],
-      meta: {
-        count: predictiveAssessments.length,
-        total: predictiveAssessments.length,
-        filteredTotal: predictiveAssessments.length,
-        model: predictiveModelMeta,
-      },
-    },
+    initialData:
+      runtimeMode === "demo"
+        ? {
+            data: [...predictiveAssessments],
+            meta: {
+              count: predictiveAssessments.length,
+              total: predictiveAssessments.length,
+              filteredTotal: predictiveAssessments.length,
+              model: predictiveModelMeta,
+            },
+          }
+        : undefined,
     initialDataUpdatedAt: 0,
     staleTime: 0,
   });
 
-  const fleet = useMemo(
-    () =>
-      predictiveAssessments
-        .map((assessment) => withWorkflowState(assessment, workflow))
-        .sort(byPriority),
-    [workflow],
-  );
+  const fleet = useMemo(() => {
+    const source = assessmentsQuery.data?.data ?? [];
+    return (
+      runtimeMode === "demo"
+        ? source.map((assessment) => withWorkflowState(assessment, workflow))
+        : [...source]
+    ).sort(byPriority);
+  }, [assessmentsQuery.data?.data, runtimeMode, workflow]);
+
+  useEffect(() => {
+    if (!fleet.length) return;
+    const requested = new URLSearchParams(window.location.search).get("turbineId")?.toUpperCase();
+    const next =
+      (requested && fleet.some((item) => item.turbineId === requested) ? requested : null) ??
+      (fleet.some((item) => item.turbineId === selectedId) ? selectedId : fleet[0].turbineId);
+    if (next === selectedId) return;
+    const timer = window.setTimeout(() => setSelectedId(next), 0);
+    return () => window.clearTimeout(timer);
+  }, [fleet, selectedId]);
+
   const visible = useMemo(() => {
-    return assessmentsQuery.data.data
-      .map((assessment) => withWorkflowState(assessment, workflow))
+    return fleet
       .filter(
         (assessment) =>
           (riskFilter === "all" || assessment.matrixRisk === riskFilter) &&
           (trendFilter === "all" || assessment.trend === trendFilter),
       )
       .sort(byPriority);
-  }, [assessmentsQuery.data.data, riskFilter, trendFilter, workflow]);
-  const selected = fleet.find((assessment) => assessment.turbineId === selectedId) ?? fleet[0]!;
-  const closedLoop = selected.turbineId === "WT-023" && workflow.workOrderStatus === "completed";
-  const recommendation =
-    selected.turbineId === "WT-023"
+  }, [fleet, riskFilter, trendFilter]);
+  const selected =
+    fleet.find((assessment) => assessment.turbineId === selectedId) ?? fleet[0] ?? null;
+  const closedLoop = Boolean(
+    runtimeMode === "demo" &&
+    selected?.turbineId === "WT-023" &&
+    workflow.workOrderStatus === "completed",
+  );
+  const recommendation = selected
+    ? runtimeMode === "demo" && selected.turbineId === "WT-023"
       ? workflowRecommendation(workflow)
       : {
           title: "按风险优先级安排维护",
           detail: `${selected.component} 当前为 ${riskLabels[selected.matrixRisk]}风险，建议结合 RUL 与资源窗口持续评估。`,
-        };
+        }
+    : null;
   const trendData = useMemo(
-    () => createTrendData(selected, timeWindow, closedLoop),
+    () =>
+      selected ? createTrendData(selected, timeWindow, closedLoop) : { health: [], anomaly: [] },
     [closedLoop, selected, timeWindow],
   );
   const matrix = useMemo(
@@ -392,41 +426,100 @@ export function PredictiveMaintenancePage() {
   const fleetHighRisk = fleet.filter((assessment) =>
     ["critical", "high"].includes(assessment.matrixRisk),
   ).length;
-  const fleetRul = Math.min(...fleet.map((assessment) => assessment.remainingUsefulLifeDays));
+  const fleetRul = fleet.length
+    ? Math.min(...fleet.map((assessment) => assessment.remainingUsefulLifeDays))
+    : null;
+  const modelMeta = assessmentsQuery.data?.meta.model ?? predictiveModelMeta;
+
+  const runOnlineInference = async () => {
+    if (!selected) return;
+    setRunningInference(true);
+    setInferenceError(null);
+    try {
+      await apiPost("/api/backend/predictive-assessments/run", {
+        turbine_ids: [selected.turbineId],
+      });
+      await assessmentsQuery.refetch();
+    } catch (error) {
+      setInferenceError(error instanceof Error ? error.message : "在线评估失败。");
+    } finally {
+      setRunningInference(false);
+    }
+  };
+
+  if (!selected || !recommendation) {
+    return (
+      <AppShell runtimeMode={runtimeMode} activePath="/predictive-maintenance">
+        <PageHeader
+          eyebrow="智能运维"
+          title="预测性维护"
+          description="在线预测结果仅来自通过治理门禁的模型部署。"
+          breadcrumb={["智能运维", "预测性维护"]}
+        />
+        <EmptyState
+          icon={<CircleGauge size={22} />}
+          title={assessmentsQuery.isError ? "生产预测服务不可用" : "尚无成功的在线预测"}
+          description={
+            assessmentsQuery.isError
+              ? "请求已失败关闭，未显示任何演示评估。"
+              : "请在模型管理中登记并激活模型，然后运行在线评估。"
+          }
+        />
+      </AppShell>
+    );
+  }
 
   return (
-    <AppShell activePath="/predictive-maintenance">
+    <AppShell runtimeMode={runtimeMode} activePath="/predictive-maintenance">
       <PageHeader
         eyebrow="智能运维"
         title="预测性维护"
-        description="用失效概率、剩余寿命与风险后果对 64 台机组进行可解释的维护排序"
+        description={`用失效概率、剩余寿命与风险后果对 ${fleet.length} 台已有在线结果的机组进行可解释排序`}
         breadcrumb={["智能运维", "预测性维护"]}
         meta={
           <>
-            <StatusBadge value="info" label="FIXTURE MODEL" />
-            <span className="page-meta-text">评估快照 2026-08-13 10:30 CST</span>
+            <StatusBadge
+              value={runtimeMode}
+              label={runtimeMode === "production" ? "在线推理" : "演示模型"}
+              tone={runtimeMode === "production" ? "success" : "info"}
+            />
+            <span className="page-meta-text">评估时间 {modelMeta.evaluatedAt}</span>
           </>
         }
         actions={
-          <Link className="button button--secondary button--md" href="/health">
-            <Activity size={15} /> 设备健康
-          </Link>
+          <>
+            {runtimeMode === "production" ? (
+              <Button onClick={() => void runOnlineInference()} disabled={runningInference}>
+                <RefreshCcw size={15} /> {runningInference ? "评估中…" : "运行在线评估"}
+              </Button>
+            ) : null}
+            <Link className="button button--secondary button--md" href="/health">
+              <Activity size={15} /> 设备健康
+            </Link>
+          </>
         }
       />
+
+      {inferenceError ? (
+        <div className={styles.errorBanner} role="alert">
+          {inferenceError}
+        </div>
+      ) : null}
 
       <section className={styles.modelNotice} aria-label="模型说明">
         <div className={styles.modelIcon}>
           <Sparkles size={18} aria-hidden="true" />
         </div>
         <div>
-          <strong>{predictiveModelMeta.label}</strong>
-          <p>{predictiveModelMeta.notice}</p>
+          <strong>{modelMeta.label}</strong>
+          <p>{modelMeta.notice}</p>
         </div>
         <span>
-          <Database size={13} /> 131,072 SCADA fixture points
+          <Database size={13} /> {fleet.length} 台机组的最新良好质量特征
         </span>
         <span>
-          <BadgeCheck size={13} /> Deterministic · Read only
+          <BadgeCheck size={13} />
+          {runtimeMode === "production" ? "Schema 已校验 · 结果已持久化" : "确定性数据 · 只读"}
         </span>
       </section>
 
@@ -459,8 +552,8 @@ export function PredictiveMaintenancePage() {
         <div className={styles.snapshotState}>
           <span className={styles.liveDot} />
           <div>
-            <small>ASSESSMENT STATE</small>
-            <strong>{closedLoop ? "POST-MAINTENANCE" : "MONITORING"}</strong>
+            <small>评估状态</small>
+            <strong>{closedLoop ? "维护后" : "监测中"}</strong>
           </div>
         </div>
       </section>
@@ -469,7 +562,7 @@ export function PredictiveMaintenancePage() {
         <article className={styles.assetHero}>
           <div className={styles.assetHeroTop}>
             <div>
-              <span className={styles.eyebrow}>SELECTED COMPONENT</span>
+              <span className={styles.eyebrow}>已选部件</span>
               <h2>{selected.turbineId}</h2>
               <p>
                 {selected.component} · {selected.primaryFinding}
@@ -490,7 +583,7 @@ export function PredictiveMaintenancePage() {
               <small>/ 100</small>
             </div>
             <div>
-              <span>COMPONENT HEALTH</span>
+              <span>部件健康度</span>
               <strong>{trendLabels[selected.trend]}</strong>
               <small>
                 {closedLoop ? "现场复测已回写" : `最近评估 ${selected.assessedAt.slice(11, 16)}`}
@@ -511,29 +604,29 @@ export function PredictiveMaintenancePage() {
             <div className={styles.metricIconCritical}>
               <TrendingUp size={16} />
             </div>
-            <span>FAILURE PROBABILITY</span>
+            <span>失效概率</span>
             <strong>
               {selected.failureProbability30d}
               <small>%</small>
             </strong>
-            <p>未来 30 天 · Band {selected.probabilityBand}/5</p>
+            <p>未来 30 天 · 区间 {selected.probabilityBand}/5</p>
           </article>
           <article className={styles.metricCard}>
             <div className={styles.metricIconInfo}>
               <Clock3 size={16} />
             </div>
-            <span>ESTIMATED RUL</span>
+            <span>预计剩余寿命</span>
             <strong>
               {selected.remainingUsefulLifeDays}
-              <small> days</small>
+              <small> 天</small>
             </strong>
-            <p>确定性点估计 · 区间 ±12 天</p>
+            <p>{runtimeMode === "production" ? "在线模型点估计" : "确定性点估计 · 区间 ±12 天"}</p>
           </article>
           <article className={styles.metricCard}>
             <div className={styles.metricIconWarning}>
               <CircleGauge size={16} />
             </div>
-            <span>ANOMALY SCORE</span>
+            <span>异常分数</span>
             <strong>{selected.anomalyScore.toFixed(2)}</strong>
             <p>预警阈值 0.65</p>
           </article>
@@ -541,64 +634,92 @@ export function PredictiveMaintenancePage() {
             <div className={styles.metricIconSuccess}>
               <Wrench size={16} />
             </div>
-            <span>FLEET PRIORITY</span>
+            <span>全场优先级</span>
             <strong>#{fleet.findIndex((item) => item.turbineId === selected.turbineId) + 1}</strong>
             <p>
-              {fleetHighRisk} 台高风险 · 最短 RUL {fleetRul}d
+              {fleetHighRisk} 台高风险 · 最短 RUL {fleetRul ?? "—"}d
             </p>
           </article>
         </div>
       </section>
 
-      <section className={styles.chartGrid}>
-        <article className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <div>
-              <span>HEALTH TREND</span>
-              <h3>{selected.component} 健康趋势</h3>
-              <p>{timeWindow} 窗口 · 低于 75 进入退化区</p>
+      {runtimeMode === "demo" ? (
+        <section className={styles.chartGrid}>
+          <article className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <div>
+                <span>健康趋势</span>
+                <h3>{selected.component} 健康趋势</h3>
+                <p>{timeWindow} 窗口 · 低于 75 进入退化区</p>
+              </div>
+              <span className={styles.trendPill} data-trend={selected.trend}>
+                {selected.trend === "improving" ? (
+                  <TrendingUp size={13} />
+                ) : (
+                  <TrendingDown size={13} />
+                )}
+                {trendLabels[selected.trend]}
+              </span>
             </div>
-            <span className={styles.trendPill} data-trend={selected.trend}>
-              {selected.trend === "improving" ? (
-                <TrendingUp size={13} />
-              ) : (
-                <TrendingDown size={13} />
-              )}
-              {trendLabels[selected.trend]}
-            </span>
-          </div>
-          <TimeSeriesChart
-            data={trendData.health}
-            height={250}
-            unit="pts"
-            threshold={75}
-            primaryName="Health score"
-          />
-        </article>
-        <article className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <div>
-              <span>ANOMALY TRAJECTORY</span>
-              <h3>异常分数与 AI 事件</h3>
-              <p>WT-023 的 24H 视图复用 SCADA anomaly-score 测点</p>
+            <TimeSeriesChart
+              data={trendData.health}
+              height={250}
+              unit="pts"
+              threshold={75}
+              primaryName="健康分数"
+            />
+          </article>
+          <article className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <div>
+                <span>异常轨迹</span>
+                <h3>异常分数与 AI 事件</h3>
+                <p>WT-023 的 24H 视图复用 SCADA anomaly-score 测点</p>
+              </div>
+              <StatusBadge value={selected.anomalyScore >= 0.65 ? "warning" : "normal"} />
             </div>
-            <StatusBadge value={selected.anomalyScore >= 0.65 ? "warning" : "normal"} />
+            <TimeSeriesChart
+              data={trendData.anomaly}
+              height={250}
+              unit="score"
+              threshold={0.65}
+              primaryName="异常分数"
+            />
+          </article>
+        </section>
+      ) : (
+        <section className={styles.inferenceProvenance}>
+          <div>
+            <span>推理证据</span>
+            <h3>权威在线预测记录</h3>
+            <p>生产模式不生成合成趋势；这里只展示已持久化的本次推理来源。</p>
           </div>
-          <TimeSeriesChart
-            data={trendData.anomaly}
-            height={250}
-            unit="score"
-            threshold={0.65}
-            primaryName="Anomaly score"
-          />
-        </article>
-      </section>
+          <dl>
+            <div>
+              <dt>模型</dt>
+              <dd>{selected.modelId ?? modelMeta.id}</dd>
+            </div>
+            <div>
+              <dt>部署</dt>
+              <dd>{selected.deploymentId ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>特征时点</dt>
+              <dd>{selected.featureObservedAt ?? selected.assessedAt}</dd>
+            </div>
+            <div>
+              <dt>推理延迟</dt>
+              <dd>{selected.latencyMs ?? 0} ms</dd>
+            </div>
+          </dl>
+        </section>
+      )}
 
       <section className={styles.analysisGrid}>
         <article className={styles.panel}>
           <div className={styles.panelHeader}>
             <div>
-              <span>PROBABILITY × CONSEQUENCE</span>
+              <span>概率 × 后果</span>
               <h3>全场部件风险矩阵</h3>
               <p>每个点代表一台机组的首要风险部件；点击点切换分析对象</p>
             </div>
@@ -609,7 +730,7 @@ export function PredictiveMaintenancePage() {
             </div>
           </div>
           <div className={styles.matrixLayout}>
-            <span className={styles.yAxis}>CONSEQUENCE →</span>
+            <span className={styles.yAxis}>后果 →</span>
             <div className={styles.matrixGrid}>
               {matrix.flat().map((cell) => (
                 <div
@@ -641,14 +762,14 @@ export function PredictiveMaintenancePage() {
                 </div>
               ))}
             </div>
-            <span className={styles.xAxis}>FAILURE PROBABILITY →</span>
+            <span className={styles.xAxis}>失效概率 →</span>
           </div>
         </article>
 
         <aside className={styles.panel}>
           <div className={styles.panelHeader}>
             <div>
-              <span>RISK EXPLAINABILITY</span>
+              <span>风险可解释性</span>
               <h3>{selected.turbineId} 评分依据</h3>
               <p>结构化指标，不展示隐藏推理过程</p>
             </div>
@@ -685,7 +806,7 @@ export function PredictiveMaintenancePage() {
               <div>
                 <strong>异常证据</strong>
                 <p>
-                  Anomaly {selected.anomalyScore.toFixed(2)}；30 天失效概率{" "}
+                  异常分数 {selected.anomalyScore.toFixed(2)}；30 天失效概率{" "}
                   {selected.failureProbability30d}%
                 </p>
               </div>
@@ -709,8 +830,8 @@ export function PredictiveMaintenancePage() {
       <section className={styles.rankingPanel}>
         <div className={styles.rankingHeader}>
           <div>
-            <span>FLEET RISK RANKING</span>
-            <h3>64 台机组维护优先级</h3>
+            <span>全场风险排名</span>
+            <h3>{fleet.length} 台机组维护优先级</h3>
             <p>默认按风险优先分排序；所有筛选均请求只读 API</p>
           </div>
           <div className={styles.syncState}>
@@ -768,7 +889,9 @@ export function PredictiveMaintenancePage() {
                     <option value="improving">改善</option>
                   </select>
                 </label>
-                <span>{visible.length} / 64 turbines</span>
+                <span>
+                  {visible.length} / {fleet.length} 台风机
+                </span>
               </>
             }
             bulkActions={[
@@ -807,19 +930,26 @@ export function PredictiveMaintenancePage() {
         <div>
           <CalendarClock size={15} />
           <span>
-            <strong>固定评估时点</strong>2026-08-13 10:30 CST
+            <strong>{runtimeMode === "production" ? "最近评估" : "固定评估时点"}</strong>
+            {modelMeta.evaluatedAt}
           </span>
         </div>
         <div>
           <Database size={15} />
           <span>
-            <strong>数据来源</strong>SCADA、告警、健康与维护 fixture
+            <strong>数据来源</strong>
+            {runtimeMode === "production"
+              ? "良好质量 SCADA、告警、资产健康与受治理外部推理"
+              : "SCADA、告警、健康与维护演示数据"}
           </span>
         </div>
         <div>
           <ShieldCheck size={15} />
           <span>
-            <strong>运行边界</strong>无真实推理、无自动控制、只读 API
+            <strong>运行边界</strong>
+            {runtimeMode === "production"
+              ? "真实推理、无自动控制、输出契约失败关闭"
+              : "无真实推理、无自动控制、只读 API"}
           </span>
         </div>
       </footer>

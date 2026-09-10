@@ -6,6 +6,11 @@ import {
 } from "@/db/alarm-runtime-store";
 import { overlayWorkflowAlarms } from "@/lib/server-workflow-overlays";
 import { getWorkerEnv } from "@/lib/worker-env";
+import { productionAlarmsResponse } from "@/lib/production-domain-adapter";
+import {
+  getProductionBackendConfig,
+  proxyProductionBackendRequest,
+} from "@/lib/production-runtime";
 
 import { collectionResponse, errorResponse, jsonResponse } from "../_shared";
 import { readWorkflowForApi } from "../_workflow";
@@ -16,6 +21,9 @@ const nonEmpty = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
 export async function GET(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return productionAlarmsResponse(request);
+  }
   const requestedScope = new URL(request.url).searchParams.get("scope");
   if (requestedScope !== null && requestedScope !== "live" && requestedScope !== "archive") {
     return errorResponse(
@@ -38,6 +46,49 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    let raw: unknown;
+    try {
+      raw = await request.json();
+    } catch {
+      return errorResponse("INVALID_JSON", "The request body must contain valid JSON.", 400);
+    }
+    if (
+      !isRecord(raw) ||
+      !nonEmpty(raw.alarmId) ||
+      !nonEmpty(raw.action) ||
+      !["acknowledge", "assign"].includes(raw.action) ||
+      !nonEmpty(raw.correlationId) ||
+      !nonEmpty(raw.idempotencyKey) ||
+      !Number.isInteger(raw.expectedRevision) ||
+      Number(raw.expectedRevision) < 1 ||
+      (raw.reason !== undefined && !nonEmpty(raw.reason))
+    ) {
+      return errorResponse(
+        "INVALID_ALARM_COMMAND",
+        "alarmId, action, correlationId, idempotencyKey, and expectedRevision are required.",
+        400,
+      );
+    }
+    const action = raw.action === "assign" && raw.assignee === null ? "unassign" : raw.action;
+    const headers = new Headers(request.headers);
+    headers.set("content-type", "application/json");
+    headers.set("idempotency-key", raw.idempotencyKey);
+    headers.set("x-correlation-id", raw.correlationId);
+    const upstreamRequest = new Request(request.url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        action,
+        expected_revision: raw.expectedRevision,
+        ...(nonEmpty(raw.reason) ? { reason: raw.reason.trim() } : {}),
+      }),
+    });
+    return proxyProductionBackendRequest(
+      upstreamRequest,
+      `/api/v1/alarms/${encodeURIComponent(raw.alarmId.trim())}`,
+    );
+  }
   const database = getWorkerEnv().DB;
   if (!database) {
     return errorResponse(

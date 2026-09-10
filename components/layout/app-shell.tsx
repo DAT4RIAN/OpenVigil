@@ -53,6 +53,8 @@ import {
 import { cn } from "@/lib/utils";
 import { hydrateDemoWorkflow, useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
+import { useWindOpsIdentity } from "@/components/providers/identity-provider";
+import type { WindOpsCapability } from "@/lib/identity-session";
 import {
   deriveWorkflowKpis,
   overlayClientAgents,
@@ -67,7 +69,10 @@ type NavigationItem = {
   icon: LucideIcon;
   badge?: string;
   disabled?: boolean;
+  capability?: WindOpsCapability;
 };
+
+type RuntimeMode = "demo" | "production";
 
 type NavigationGroup = {
   label: string;
@@ -87,20 +92,32 @@ const snapshotTime = new Date(windFarm.lastUpdatedAt).toLocaleTimeString("zh-CN"
   timeZone: windFarm.timezone,
 });
 const nextWeatherWindow =
-  weatherWindows.find((window) => window.suitability === "suitable") ?? weatherWindows[0]!;
+  weatherWindows.find((window) => window.suitability === "suitable") ?? weatherWindows[0];
 
 const navigation: NavigationGroup[] = [
   {
     label: "概览",
-    items: [{ label: "Operations Center", href: "/", icon: LayoutDashboard }],
+    items: [
+      {
+        label: "运营指挥中心",
+        href: "/",
+        icon: LayoutDashboard,
+        capability: "view.dashboard",
+      },
+    ],
   },
   {
     label: "资产与监测",
     items: [
-      { label: "风场", href: "/wind-farms", icon: Wind },
-      { label: "风机", href: "/turbines/WT-023", icon: TowerControl },
-      { label: "实时监测", href: "/scada", icon: Activity },
-      { label: "设备健康", href: "/health", icon: HeartPulse },
+      { label: "风场", href: "/wind-farms", icon: Wind, capability: "view.assets" },
+      {
+        label: "风机",
+        href: "/turbines/WT-023",
+        icon: TowerControl,
+        capability: "view.assets",
+      },
+      { label: "实时监测", href: "/scada", icon: Activity, capability: "view.telemetry" },
+      { label: "设备健康", href: "/health", icon: HeartPulse, capability: "view.assets" },
     ],
   },
   {
@@ -111,71 +128,110 @@ const navigation: NavigationGroup[] = [
         href: "/alarms",
         icon: AlarmTriangle,
         badge: String(visibleAlarmCount),
+        capability: "view.alarms",
       },
-      { label: "智能诊断", href: "/diagnosis", icon: BrainCircuit },
-      { label: "预测性维护", href: "/predictive-maintenance", icon: CircleGauge },
+      {
+        label: "智能诊断",
+        href: "/diagnosis",
+        icon: BrainCircuit,
+        capability: "view.missions",
+      },
+      {
+        label: "预测性维护",
+        href: "/predictive-maintenance",
+        icon: CircleGauge,
+        capability: "view.models",
+      },
     ],
   },
   {
-    label: "AI Operations",
+    label: "AI 运营",
     items: [
       {
-        label: "Agent Control",
+        label: "Agent 控制中心",
         href: "/agents",
         icon: Bot,
         badge: String(activeAgentCount),
+        capability: "view.agents",
       },
       {
-        label: "Mission Center",
+        label: "Mission 中心",
         href: "/missions",
         icon: GitBranch,
         badge: String(windFarm.activeMissionCount),
+        capability: "view.missions",
       },
-      { label: "Decision Center", href: "/decisions", icon: ShieldCheck, badge: "2" },
+      {
+        label: "决策中心",
+        href: "/decisions",
+        icon: ShieldCheck,
+        badge: "2",
+        capability: "view.decisions",
+      },
     ],
   },
   {
     label: "运维执行",
     items: [
-      { label: "工单中心", href: "/work-orders", icon: ClipboardCheck },
-      { label: "维护计划", href: "/maintenance", icon: Wrench },
-      { label: "运维资源", href: "/resources", icon: PackageSearch },
+      {
+        label: "工单中心",
+        href: "/work-orders",
+        icon: ClipboardCheck,
+        capability: "view.work_orders",
+      },
+      {
+        label: "维护计划",
+        href: "/maintenance",
+        icon: Wrench,
+        capability: "view.work_orders",
+      },
+      {
+        label: "运维资源",
+        href: "/resources",
+        icon: PackageSearch,
+        capability: "view.resources",
+      },
     ],
   },
   {
     label: "知识与数据",
     items: [
-      { label: "知识库", href: "/knowledge", icon: Library },
-      { label: "数字孪生", href: "/digital-twin", icon: Monitor },
-      { label: "故障知识图谱", href: "#graph", icon: Boxes, disabled: true },
-      { label: "数据中心", href: "/data", icon: Database },
-      { label: "运维报告", href: "/reports", icon: FileBarChart },
+      { label: "知识库", href: "/knowledge", icon: Library, capability: "view.knowledge" },
+      { label: "数字孪生", href: "/digital-twin", icon: Monitor, capability: "view.assets" },
+      {
+        label: "故障知识图谱",
+        href: "/knowledge-graph",
+        icon: Boxes,
+        capability: "view.knowledge",
+      },
+      { label: "数据中心", href: "/data", icon: Database, capability: "view.platform" },
+      { label: "运维报告", href: "/reports", icon: FileBarChart, capability: "view.reports" },
     ],
   },
   {
     label: "系统",
     items: [
-      { label: "模型管理", href: "/models", icon: Archive },
-      { label: "系统设置", href: "/settings", icon: Settings2 },
+      { label: "模型管理", href: "/models", icon: Archive, capability: "view.models" },
+      { label: "系统设置", href: "/settings", icon: Settings2, capability: "view.platform" },
     ],
   },
 ];
 
 const primaryCommands = [
   {
-    label: "Open Mission Center",
+    label: "打开 Mission 中心",
     description: "查看全部 Mission，并支持机组范围筛选",
     href: "/missions",
     icon: GitBranch,
   },
   {
-    label: "Create Work Order · 只读受控入口",
+    label: "创建工单 · 只读受控入口",
     description: "打开 WT-023 工单工作台并说明写入边界；此命令不会创建工单",
     href: "/work-orders?turbineId=WT-023&intent=create",
     icon: ClipboardCheck,
   },
   {
-    label: "Start Diagnosis · 只读诊断入口",
+    label: "启动诊断 · 只读诊断入口",
     description: "仅打开 WT-023 现有 Mission 诊断视图；不会启动新 Agent 或写入诊断",
     href: "/missions?turbineId=WT-023&intent=diagnosis",
     icon: BrainCircuit,
@@ -224,7 +280,7 @@ const primaryCommands = [
   },
   {
     label: "打开运维报告",
-    description: "六类报告 · Preview · PDF · DOCX",
+    description: "六类报告 · 预览 · PDF · DOCX",
     href: "/reports",
     icon: FileBarChart,
   },
@@ -260,7 +316,7 @@ const primaryCommands = [
     icon: Wind,
   },
   {
-    label: "查看 Agent Control",
+    label: "查看 Agent 控制中心",
     description: `${activeAgentCount} 个 Agent 正在工作`,
     href: "/agents",
     icon: Bot,
@@ -301,6 +357,18 @@ const domainCommands = [
 ];
 
 const commands = [...primaryCommands, ...domainCommands];
+
+const productionCommands = navigation.flatMap((group) =>
+  group.items
+    .filter((item) => !item.disabled)
+    .map((item) => ({
+      label: `打开${item.label}`,
+      description: `进入${group.label}的${item.label}权威数据视图`,
+      href: item.href === "/turbines/WT-023" ? "/wind-farms" : item.href,
+      icon: item.icon,
+      capability: item.capability,
+    })),
+);
 
 function ThemeControl() {
   const [theme, setTheme] = useState<"light" | "dark" | "system">("light");
@@ -362,18 +430,32 @@ function ThemeControl() {
   );
 }
 
-function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+function CommandPalette({
+  open,
+  onClose,
+  runtimeMode,
+}: {
+  open: boolean;
+  onClose: () => void;
+  runtimeMode: RuntimeMode;
+}) {
+  const { can } = useWindOpsIdentity();
   const dialogRef = useAccessibleDialog<HTMLDivElement>(onClose, open);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const results = useMemo(() => {
     const normalized = query.trim().toLowerCase();
+    const permittedProductionCommands = productionCommands.filter(
+      (command) => !command.capability || can(command.capability),
+    );
+    const catalog = runtimeMode === "production" ? permittedProductionCommands : commands;
+    const defaults = runtimeMode === "production" ? permittedProductionCommands : primaryCommands;
     return normalized
-      ? commands.filter((command) =>
+      ? catalog.filter((command) =>
           `${command.label} ${command.description}`.toLowerCase().includes(normalized),
         )
-      : primaryCommands;
-  }, [query]);
+      : defaults;
+  }, [can, query, runtimeMode]);
 
   if (!open) return null;
 
@@ -464,15 +546,31 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
 export function AppShell({
   children,
   activePath = "/",
+  runtimeMode,
 }: {
   children: ReactNode;
   activePath?: string;
+  runtimeMode: RuntimeMode;
 }) {
+  const isProduction = runtimeMode === "production";
+  const { session, can } = useWindOpsIdentity();
   const workflow = useDemoWorkflow();
-  const displayAlarms = useMemo(() => overlayClientAlarms(alarms, workflow), [workflow]);
-  const displayDecisions = useMemo(() => overlayClientDecisions(decisions, workflow), [workflow]);
-  const displayMissions = useMemo(() => overlayClientMissions(missions, workflow), [workflow]);
-  const displayAgents = useMemo(() => overlayClientAgents(agents, workflow), [workflow]);
+  const displayAlarms = useMemo(
+    () => (isProduction ? [] : overlayClientAlarms(alarms, workflow)),
+    [isProduction, workflow],
+  );
+  const displayDecisions = useMemo(
+    () => (isProduction ? [] : overlayClientDecisions(decisions, workflow)),
+    [isProduction, workflow],
+  );
+  const displayMissions = useMemo(
+    () => (isProduction ? [] : overlayClientMissions(missions, workflow)),
+    [isProduction, workflow],
+  );
+  const displayAgents = useMemo(
+    () => (isProduction ? [] : overlayClientAgents(agents, workflow)),
+    [isProduction, workflow],
+  );
   const workflowKpis = useMemo(
     () => deriveWorkflowKpis(turbines, displayAlarms, displayMissions, displayAgents),
     [displayAgents, displayAlarms, displayMissions],
@@ -489,9 +587,21 @@ export function AppShell({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState("--:--:--");
+  const visibleNavigation = useMemo(
+    () =>
+      navigation
+        .map((group) => ({
+          ...group,
+          items: group.items.filter(
+            (item) => !isProduction || !item.capability || can(item.capability),
+          ),
+        }))
+        .filter((group) => group.items.length > 0),
+    [can, isProduction],
+  );
 
   useEffect(() => {
-    hydrateDemoWorkflow();
+    if (!isProduction) hydrateDemoWorkflow();
 
     const updateClock = () =>
       setCurrentTime(
@@ -521,7 +631,7 @@ export function AppShell({
       window.clearInterval(clockTimer);
       window.removeEventListener("keydown", handleKeyboard);
     };
-  }, []);
+  }, [isProduction]);
 
   return (
     <div className={cn("app-shell", collapsed && "app-shell--collapsed")}>
@@ -540,7 +650,7 @@ export function AppShell({
             </span>
             <span className="brand-copy">
               <strong>WindOps</strong>
-              <small>Industrial AI</small>
+              <small>工业智能</small>
             </span>
           </Link>
           <Button
@@ -559,20 +669,22 @@ export function AppShell({
             <TowerControl size={17} />
           </span>
           <span className="farm-switcher__copy">
-            <small>当前风场</small>
-            <strong>华东海上风电场</strong>
+            <small>{isProduction ? "生产资产范围" : "当前风场"}</small>
+            <strong>{isProduction ? "风场目录" : "华东海上风电场"}</strong>
           </span>
           <ChevronDown size={14} />
         </Link>
 
         <nav className="sidebar__nav" aria-label="主导航">
-          {navigation.map((group) => (
+          {visibleNavigation.map((group) => (
             <div className="nav-group" key={group.label}>
               <span className="nav-group__label">{group.label}</span>
               <div className="nav-group__items">
                 {group.items.map((item) => {
                   const Icon = item.icon;
-                  const active = item.href === "/" ? activePath === "/" : activePath === item.href;
+                  const href =
+                    isProduction && item.href === "/turbines/WT-023" ? "/wind-farms" : item.href;
+                  const active = href === "/" ? activePath === "/" : activePath === href;
                   if (item.disabled) {
                     return (
                       <span
@@ -583,20 +695,20 @@ export function AppShell({
                       >
                         <Icon size={17} />
                         <span>{item.label}</span>
-                        <small>SOON</small>
+                        <small>即将开放</small>
                       </span>
                     );
                   }
                   return (
                     <a
                       className={cn("nav-item", active && "nav-item--active")}
-                      href={item.href}
+                      href={href}
                       key={item.label}
                       title={collapsed ? item.label : undefined}
                     >
                       <Icon size={17} />
                       <span>{item.label}</span>
-                      {item.badge ? (
+                      {item.badge && !isProduction ? (
                         <small>
                           {item.href === "/alarms"
                             ? workflowKpis.activeAlarmCount
@@ -623,9 +735,11 @@ export function AppShell({
               <Zap size={16} />
             </span>
             <span>
-              <strong>AI 系统正常</strong>
+              <strong>{isProduction ? "生产服务" : "AI 系统正常"}</strong>
               <small>
-                {workflowKpis.onlineAgentCount} / {displayAgents.length} Agents online
+                {isProduction
+                  ? "状态以就绪探针为准"
+                  : `${workflowKpis.onlineAgentCount} / ${displayAgents.length} Agent 在线`}
               </small>
             </span>
             <span className="system-health__pulse" />
@@ -654,54 +768,71 @@ export function AppShell({
               <Menu size={19} />
             </Button>
             <div className="live-context" aria-live="polite">
-              <StatusBadge value="running" label="DEMO LIVE" tone="success" pulse compact />
-              <span>SCADA 快照 {snapshotTime}</span>
+              <StatusBadge
+                value="running"
+                label={isProduction ? "生产运行模式" : "本地演示运行中"}
+                tone="success"
+                pulse
+                compact
+              />
+              <span>
+                {isProduction ? "PostgreSQL / TimescaleDB 权威数据" : `SCADA 快照 ${snapshotTime}`}
+              </span>
               <time dateTime={currentTime === "--:--:--" ? undefined : currentTime}>
                 {currentTime}
               </time>
-              <span
-                title={
-                  workflow.lastSyncError ??
-                  `WT-023 server workflow revision ${workflow.serverRevision}`
-                }
-              >
-                <StatusBadge
-                  value={workflow.syncStatus}
-                  label={
-                    workflow.syncStatus === "loading"
-                      ? "SYNC"
-                      : workflow.syncStatus === "saving"
-                        ? "SAVING"
-                        : workflow.syncStatus === "error"
-                          ? "OFFLINE"
+              {isProduction ? (
+                <StatusBadge value="ready" label="持久事件账本" tone="success" compact />
+              ) : (
+                <span
+                  title={
+                    workflow.lastSyncError ?? `WT-023 服务端工作流修订 ${workflow.serverRevision}`
+                  }
+                >
+                  <StatusBadge
+                    value={workflow.syncStatus}
+                    label={
+                      workflow.syncStatus === "loading"
+                        ? "同步中"
+                        : workflow.syncStatus === "saving"
+                          ? "保存中"
+                          : workflow.syncStatus === "error"
+                            ? "离线"
+                            : !workflow.writable
+                              ? "只读"
+                              : workflow.persistence === "d1"
+                                ? `D1 · R${workflow.serverRevision}`
+                                : "内存"
+                    }
+                    tone={
+                      workflow.syncStatus === "error"
+                        ? "critical"
+                        : workflow.syncStatus === "loading" || workflow.syncStatus === "saving"
+                          ? "info"
                           : !workflow.writable
-                            ? "READ ONLY"
+                            ? "warning"
                             : workflow.persistence === "d1"
-                              ? `D1 · R${workflow.serverRevision}`
-                              : "MEMORY"
-                  }
-                  tone={
-                    workflow.syncStatus === "error"
-                      ? "critical"
-                      : workflow.syncStatus === "loading" || workflow.syncStatus === "saving"
-                        ? "info"
-                        : !workflow.writable
-                          ? "warning"
-                          : workflow.persistence === "d1"
-                            ? "success"
-                            : "warning"
-                  }
-                  compact
-                />
-              </span>
+                              ? "success"
+                              : "warning"
+                    }
+                    compact
+                  />
+                </span>
+              )}
             </div>
           </div>
           <div className="topbar__right">
             <div className="weather-chip">
               <CloudSun size={17} />
               <span>
-                <strong>{nextWeatherWindow.windSpeedMps} m/s</strong>
-                <small>下一窗口 · {nextWeatherWindow.temperatureC}°C</small>
+                <strong>
+                  {isProduction ? "气象窗口" : `${nextWeatherWindow.windSpeedMps} m/s`}
+                </strong>
+                <small>
+                  {isProduction
+                    ? "见维护计划与资源台账"
+                    : `下一窗口 · ${nextWeatherWindow.temperatureC}°C`}
+                </small>
               </span>
             </div>
             <button className="global-search" onClick={() => setPaletteOpen(true)}>
@@ -719,68 +850,114 @@ export function AppShell({
                 aria-label="通知"
               >
                 <Bell size={17} />
-                <span className="notification-dot" />
+                {!isProduction ? <span className="notification-dot" /> : null}
               </Button>
               {notificationsOpen ? (
                 <div className="notification-popover">
                   <div className="notification-popover__header">
                     <strong>最新动态</strong>
-                    <span>3 条未读</span>
+                    <span>{isProduction ? "权威事件入口" : "3 条未读"}</span>
                   </div>
-                  <Link href="/missions/MISSION-2026-0823">
-                    <span className="notification-icon notification-icon--warning">
-                      <ShieldCheck size={15} />
-                    </span>
-                    <span>
-                      <strong>
-                        {workflow.missionStatus === "completed"
-                          ? "WT-023 闭环已完成"
-                          : workflow.decisionStatus === "under-review"
-                            ? "WT-023 等待人工审批"
-                            : workflow.workOrderStatus === "in-progress"
-                              ? "WT-023 现场任务执行中"
-                              : "作业资源等待最终确认"}
-                      </strong>
-                      <small>
-                        {workflow.missionStatus.replaceAll("-", " ")} · {workflow.missionProgress}%
-                      </small>
-                    </span>
-                  </Link>
-                  <a href="/alarms">
-                    <span className="notification-icon notification-icon--critical">
-                      <AlarmTriangle size={15} />
-                    </span>
-                    <span>
-                      <strong>主轴承振动告警升级</strong>
-                      <small>ALARM-0031 · 9 分钟前</small>
-                    </span>
-                  </a>
-                  <a href="/agents">
-                    <span className="notification-icon notification-icon--info">
-                      <Bot size={15} />
-                    </span>
-                    <span>
-                      <strong>诊断 Agent 已完成分析</strong>
-                      <small>置信度 87% · 14 分钟前</small>
-                    </span>
-                  </a>
+                  {isProduction ? (
+                    <>
+                      <Link href="/alarms">
+                        <span className="notification-icon notification-icon--critical">
+                          <AlarmTriangle size={15} />
+                        </span>
+                        <span>
+                          <strong>打开告警中心</strong>
+                          <small>查看当前权威告警与处置状态</small>
+                        </span>
+                      </Link>
+                      <Link href="/missions">
+                        <span className="notification-icon notification-icon--info">
+                          <GitBranch size={15} />
+                        </span>
+                        <span>
+                          <strong>打开 Mission 中心</strong>
+                          <small>查看持久化事件与 Agent 执行进度</small>
+                        </span>
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <Link href="/missions/MISSION-2026-0823">
+                        <span className="notification-icon notification-icon--warning">
+                          <ShieldCheck size={15} />
+                        </span>
+                        <span>
+                          <strong>
+                            {workflow.missionStatus === "completed"
+                              ? "WT-023 闭环已完成"
+                              : workflow.decisionStatus === "under-review"
+                                ? "WT-023 等待人工审批"
+                                : workflow.workOrderStatus === "in-progress"
+                                  ? "WT-023 现场任务执行中"
+                                  : "作业资源等待最终确认"}
+                          </strong>
+                          <small>
+                            {workflow.missionStatus.replaceAll("-", " ")} ·{" "}
+                            {workflow.missionProgress}%
+                          </small>
+                        </span>
+                      </Link>
+                      <a href="/alarms">
+                        <span className="notification-icon notification-icon--critical">
+                          <AlarmTriangle size={15} />
+                        </span>
+                        <span>
+                          <strong>主轴承振动告警升级</strong>
+                          <small>ALARM-0031 · 9 分钟前</small>
+                        </span>
+                      </a>
+                      <a href="/agents">
+                        <span className="notification-icon notification-icon--info">
+                          <Bot size={15} />
+                        </span>
+                        <span>
+                          <strong>诊断 Agent 已完成分析</strong>
+                          <small>置信度 87% · 14 分钟前</small>
+                        </span>
+                      </a>
+                    </>
+                  )}
                 </div>
               ) : null}
             </div>
-            <div className="user-menu">
-              <Avatar label="林 工" tone="slate" size="sm" />
-              <span>
-                <strong>林工</strong>
-                <small>值班工程师</small>
-              </span>
-              <ChevronDown size={14} />
-            </div>
+            {isProduction && session ? (
+              <a
+                className="user-menu"
+                href={session.signOutPath}
+                title="安全退出 WindOps"
+                data-authenticated-subject={session.subject}
+              >
+                <Avatar label={session.displayName} tone="slate" size="sm" />
+                <span>
+                  <strong>{session.displayName}</strong>
+                  <small>{session.roles.join(" · ")} · Sites 委托身份</small>
+                </span>
+                <ChevronDown size={14} />
+              </a>
+            ) : (
+              <div className="user-menu">
+                <Avatar label="林 工" tone="slate" size="sm" />
+                <span>
+                  <strong>林工</strong>
+                  <small>值班工程师</small>
+                </span>
+                <ChevronDown size={14} />
+              </div>
+            )}
           </div>
         </header>
         <main className="app-main">{children}</main>
       </div>
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        runtimeMode={runtimeMode}
+      />
     </div>
   );
 }

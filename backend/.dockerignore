@@ -1,0 +1,14 @@
+.git
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.test-tmp
+.venv
+__pycache__
+*.py[cod]
+*.sqlite*
+tests
+ops
+deploy
+docker-compose.yml
+minio-cors.xml

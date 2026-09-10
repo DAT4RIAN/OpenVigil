@@ -2,7 +2,7 @@
 # deployment manifest (no service TLS, secret manager, or network policy).
 services:
   postgres:
-    image: timescale/timescaledb-ha:pg16
+    image: timescale/timescaledb-ha@sha256:df8eaa04de65fbe238df8dbc356e79108bcb8166d3458833536a3ff745abb2be
     environment:
       POSTGRES_DB: windops
       POSTGRES_USER: windops
@@ -18,7 +18,7 @@ services:
       - windops-postgres:/home/postgres/pgdata/data
 
   redis:
-    image: redis:8-alpine
+    image: redis:8-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "127.0.0.1:6379:6379"
@@ -31,7 +31,7 @@ services:
       - windops-redis:/data
 
   minio:
-    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z@sha256:d249d1fb6966de4d8ad26c04754b545205ff15a62e4fd19ebd0f26fa5baacbc0
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: windops
@@ -47,7 +47,48 @@ services:
     volumes:
       - windops-minio:/data
 
+  minio-init:
+    image: minio/mc:RELEASE.2025-07-21T05-28-08Z@sha256:fb8f773eac8ef9d6da0486d5dec2f42f219358bcb8de579d1623d518c9ebd4cc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        mc alias set local http://minio:9000 windops change-me-now
+        for bucket in \
+          windops-field-evidence \
+          windops-knowledge-documents \
+          windops-model-artifacts \
+          windops-twin-artifacts \
+          windops-care-benchmarks; do
+          mc mb --ignore-existing "local/$${bucket}"
+        done
+        mc version enable local/windops-care-benchmarks
+        mc ilm import local/windops-care-benchmarks < /config/care-minio-lifecycle.json
+    volumes:
+      - ./deploy/care-minio-lifecycle.json:/config/care-minio-lifecycle.json:ro
+    restart: "no"
+
+  neo4j:
+    image: neo4j:2026.06.0@sha256:42fd5b9ead4dd4211f6f91bd831c358e4e2117367d04633fbf88682ca4792b30
+    environment:
+      NEO4J_AUTH: neo4j/change-me-neo4j
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p change-me-neo4j 'RETURN 1' || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+    volumes:
+      - windops-neo4j:/data
+
 volumes:
   windops-postgres:
   windops-redis:
   windops-minio:
+  windops-neo4j:

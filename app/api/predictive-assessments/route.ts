@@ -1,5 +1,7 @@
 import { jsonResponse } from "@/app/api/_shared";
 import { readWorkflowForApi } from "@/app/api/_workflow";
+import { productionPredictiveAssessmentsResponse } from "@/lib/production-domain-adapter";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 import {
   predictiveAssessments,
@@ -55,6 +57,9 @@ const sortAssessments = (
   });
 
 export async function GET(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return productionPredictiveAssessmentsResponse(request);
+  }
   const url = new URL(request.url);
   const turbineId = url.searchParams.get("turbineId")?.trim().toUpperCase() ?? null;
   const risk = url.searchParams.get("risk")?.trim().toLowerCase() ?? null;

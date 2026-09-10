@@ -357,6 +357,150 @@
   margin-top: 12px;
 }
 
+.deployments {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 11px;
+}
+
+.deployments > div,
+.deployments article,
+.deployments article > div {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.deployments h3,
+.deployments p {
+  font-size: 9px;
+  margin: 0;
+}
+
+.deployments p,
+.deployments small {
+  color: var(--foreground-muted);
+}
+
+.deployments article {
+  background: var(--surface-subtle);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.deployments article > span {
+  display: grid;
+  gap: 3px;
+}
+
+.deployments strong {
+  font-size: 9px;
+}
+
+.deployments small {
+  font-size: 8px;
+}
+
+.dialogBackdrop {
+  align-items: center;
+  background: color-mix(in srgb, var(--background) 35%, transparent);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 100;
+}
+
+.registrationDialog {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  display: grid;
+  gap: 14px;
+  max-height: calc(100vh - 48px);
+  max-width: 920px;
+  overflow: auto;
+  padding: 18px;
+  width: 100%;
+}
+
+.registrationDialog header,
+.registrationDialog footer {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.registrationDialog header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.registrationDialog header strong {
+  font-size: 13px;
+}
+
+.registrationDialog header p {
+  color: var(--foreground-muted);
+  font-size: 9px;
+  margin: 0;
+}
+
+.registrationDialog header > button {
+  background: transparent;
+  border: 0;
+  color: var(--foreground-muted);
+  cursor: pointer;
+}
+
+.registrationGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.registrationGrid label {
+  display: grid;
+  gap: 5px;
+}
+
+.registrationGrid label > span {
+  color: var(--foreground-muted);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.registrationGrid input,
+.registrationGrid textarea {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 9px;
+  padding: 8px;
+}
+
+.registrationGrid textarea {
+  font-family: var(--font-mono);
+  resize: vertical;
+}
+
+.wideField {
+  grid-column: 1 / -1;
+}
+
+.registrationDialog footer {
+  justify-content: flex-end;
+}
+
 .errorBanner,
 .loadingState {
   color: var(--foreground-muted);
@@ -371,6 +515,236 @@
   border-radius: 7px;
   color: var(--warning);
   margin-bottom: 12px;
+}
+
+.benchmarkGovernance {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 11px;
+  margin-top: 15px;
+  padding-top: 15px;
+}
+
+.benchmarkHeader,
+.resultHeader {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.benchmarkHeader > div,
+.resultHeader > div {
+  display: grid;
+  gap: 3px;
+}
+
+.benchmarkHeader span,
+.benchmarkHeader p,
+.resultHeader small {
+  color: var(--foreground-muted);
+  font-size: 8px;
+  margin: 0;
+}
+
+.benchmarkHeader h3,
+.resultHeader strong {
+  font-size: 11px;
+  margin: 0;
+}
+
+.benchmarkState {
+  align-items: center;
+  background: var(--surface-subtle);
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  color: var(--foreground-muted);
+  display: flex;
+  font-size: 8.5px;
+  gap: 7px;
+  justify-content: center;
+  min-height: 52px;
+  padding: 12px;
+  text-align: center;
+}
+
+.benchmarkState[data-tone="error"] {
+  background: var(--critical-soft);
+  border-color: color-mix(in srgb, var(--critical) 28%, var(--border));
+  color: var(--critical);
+}
+
+.evaluationTabs {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.evaluationTabs button {
+  align-items: start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--foreground);
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-width: 0;
+  padding: 9px;
+  text-align: left;
+}
+
+.evaluationTabs button[data-selected="true"] {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+
+.evaluationTabs strong {
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.evaluationTabs small {
+  color: var(--foreground-muted);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.evaluationFacts,
+.accountingGrid,
+.metricTable {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.evaluationFacts > span,
+.accountingGrid > span,
+.metricTable > span {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.evaluationFacts small,
+.accountingGrid small,
+.metricTable small,
+.metricTable em {
+  color: var(--foreground-muted);
+  font-size: 7px;
+  font-style: normal;
+}
+
+.evaluationFacts strong,
+.accountingGrid strong,
+.metricTable strong {
+  font-size: 8.5px;
+  overflow-wrap: anywhere;
+}
+
+.accountingGrid > span[data-alert="true"],
+.metricTable > span[data-failed="true"] {
+  background: var(--critical-soft);
+  border-color: color-mix(in srgb, var(--critical) 25%, var(--border));
+  color: var(--critical);
+}
+
+.releaseGate {
+  align-items: center;
+  background: var(--critical-soft);
+  border: 1px solid color-mix(in srgb, var(--critical) 25%, var(--border));
+  border-radius: 7px;
+  color: var(--critical);
+  display: flex;
+  gap: 8px;
+  padding: 9px;
+}
+
+.releaseGate[data-passed="true"] {
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 25%, var(--border));
+  color: var(--success);
+}
+
+.releaseGate span {
+  display: grid;
+  gap: 2px;
+}
+
+.releaseGate strong {
+  font-size: 8.5px;
+}
+
+.releaseGate small {
+  color: var(--foreground-muted);
+  font-size: 7px;
+}
+
+.artifactStatus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.artifactStatus span {
+  background: var(--success-soft);
+  border: 1px solid color-mix(in srgb, var(--success) 20%, var(--border));
+  border-radius: 999px;
+  color: var(--success);
+  font-size: 7px;
+  padding: 4px 7px;
+}
+
+.artifactStatus span[data-missing="true"] {
+  background: var(--critical-soft);
+  border-color: color-mix(in srgb, var(--critical) 22%, var(--border));
+  color: var(--critical);
+}
+
+.eventResults {
+  display: grid;
+  gap: 6px;
+}
+
+.eventResults article {
+  align-items: center;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(100px, 0.8fr) minmax(130px, 1fr) minmax(100px, 0.8fr);
+  padding: 8px;
+}
+
+.eventResults article[data-status="failed"],
+.eventResults article[data-status="unscorable"] {
+  border-color: color-mix(in srgb, var(--critical) 28%, var(--border));
+}
+
+.eventResults span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.eventResults strong {
+  font-size: 8px;
+  overflow-wrap: anywhere;
+}
+
+.eventResults small {
+  color: var(--foreground-muted);
+  font-size: 7px;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 1050px) {
@@ -400,7 +774,23 @@
 
   .boundaries,
   .ioGrid,
-  .metrics > div {
+  .metrics > div,
+  .registrationGrid,
+  .evaluationTabs,
+  .evaluationFacts,
+  .accountingGrid,
+  .metricTable,
+  .eventResults article {
     grid-template-columns: 1fr;
+  }
+
+  .benchmarkHeader,
+  .resultHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .wideField {
+    grid-column: auto;
   }
 }

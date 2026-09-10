@@ -24,10 +24,17 @@ import { healthAssessments, subsystemHealth, turbines, windFarm } from "@/lib";
 import type { HealthAssessment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
+import { localizedStatusLabel } from "@/lib/ui-localization";
 
 type HealthResponse = {
   data: readonly HealthAssessment[];
-  meta: { count: number; total: number; snapshotAt: string };
+  meta: {
+    count: number;
+    total: number;
+    snapshotAt: string;
+    predictionProvider?: string | null;
+    deterministic?: boolean;
+  };
 };
 
 const trendLabel = {
@@ -45,37 +52,47 @@ const stateLabel = {
   offline: "离线",
 } as const;
 
-export function AssetHealthPage() {
+export function AssetHealthPage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
   const workflow = useDemoWorkflow();
-  const [selectedId, setSelectedId] = useState("WT-023");
+  const [selectedId, setSelectedId] = useState(runtimeMode === "demo" ? "WT-023" : "");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "at-risk" | "declining">("all");
   const healthQuery = useQuery({
-    queryKey: ["health-assessments"],
+    queryKey: ["health-assessments", runtimeMode],
     queryFn: ({ signal }) => apiGet<HealthResponse>("/api/health-assessments", signal),
-    initialData: {
-      data: healthAssessments,
-      meta: {
-        count: healthAssessments.length,
-        total: healthAssessments.length,
-        snapshotAt: windFarm.lastUpdatedAt,
-      },
-    },
+    initialData:
+      runtimeMode === "demo"
+        ? {
+            data: healthAssessments,
+            meta: {
+              count: healthAssessments.length,
+              total: healthAssessments.length,
+              snapshotAt: windFarm.lastUpdatedAt,
+            },
+          }
+        : undefined,
     initialDataUpdatedAt: 0,
     staleTime: 0,
   });
 
   useEffect(() => {
     const turbineId = new URLSearchParams(window.location.search).get("turbineId")?.toUpperCase();
-    if (!turbineId || !healthAssessments.some((item) => item.turbineId === turbineId)) return;
-    const timer = window.setTimeout(() => setSelectedId(turbineId), 0);
+    const available = healthQuery.data?.data ?? [];
+    const nextId =
+      turbineId && available.some((item) => item.turbineId === turbineId)
+        ? turbineId
+        : available[0]?.turbineId;
+    if (!nextId) return;
+    const timer = window.setTimeout(() => setSelectedId(nextId), 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [healthQuery.data]);
 
   const assessments = useMemo(
     () =>
-      healthQuery.data.data.map((assessment) =>
-        assessment.turbineId === "WT-023" && workflow.workOrderStatus === "completed"
+      (healthQuery.data?.data ?? []).map((assessment) =>
+        runtimeMode === "demo" &&
+        assessment.turbineId === "WT-023" &&
+        workflow.workOrderStatus === "completed"
           ? {
               ...assessment,
               healthScore: workflow.turbineHealthScore,
@@ -89,7 +106,7 @@ export function AssetHealthPage() {
             }
           : assessment,
       ),
-    [healthQuery.data.data, workflow.turbineHealthScore, workflow.workOrderStatus],
+    [healthQuery.data, runtimeMode, workflow.turbineHealthScore, workflow.workOrderStatus],
   );
 
   const visible = useMemo(() => {
@@ -107,16 +124,35 @@ export function AssetHealthPage() {
   }, [assessments, filter, query]);
 
   const selected =
-    assessments.find((assessment) => assessment.turbineId === selectedId) ??
-    assessments[0] ??
-    healthAssessments[22]!;
-  const selectedTurbine = turbines.find((turbine) => turbine.id === selected.turbineId)!;
+    assessments.find((assessment) => assessment.turbineId === selectedId) ?? assessments[0];
+  if (!selected) {
+    return (
+      <AppShell runtimeMode={runtimeMode} activePath="/health">
+        <EmptyState
+          icon={<HeartPulse size={24} />}
+          title={healthQuery.isLoading ? "正在读取设备健康" : "设备健康数据不可用"}
+          description={
+            healthQuery.isError
+              ? "权威健康服务当前不可用，生产模式不会回退到演示评估。"
+              : "当前资产台账没有可展示的健康评估。"
+          }
+        />
+      </AppShell>
+    );
+  }
+  const selectedTurbine =
+    runtimeMode === "demo" ? turbines.find((turbine) => turbine.id === selected.turbineId) : null;
+  const selectedModel = selected.turbineModel ?? selectedTurbine?.model ?? "型号未登记";
+  const activeAlarmCount = selected.activeAlarmCount ?? selectedTurbine?.activeAlarmCount ?? 0;
   const average =
     assessments.reduce((sum, assessment) => sum + assessment.healthScore, 0) / assessments.length;
   const highRisk = assessments.filter((assessment) =>
     ["critical", "high"].includes(assessment.riskLevel),
   ).length;
   const declining = assessments.filter((assessment) => assessment.trend === "declining").length;
+  const predictionCoverage = assessments.filter(
+    (assessment) => assessment.predictionAvailable !== false,
+  ).length;
 
   const riskCounts = (["critical", "high", "medium", "low"] as const).map((risk) => ({
     risk,
@@ -124,19 +160,30 @@ export function AssetHealthPage() {
   }));
 
   return (
-    <AppShell activePath="/health">
+    <AppShell runtimeMode={runtimeMode} activePath="/health">
       <PageHeader
         eyebrow="资产与监测"
         title="设备健康"
-        description="64 台机组健康矩阵、失效风险与剩余寿命的统一评估视图"
+        description={`${assessments.length} 台机组健康矩阵、告警风险与现场核验状态`}
         breadcrumb={["资产与监测", "设备健康"]}
         meta={
           <>
             <StatusBadge
               value={healthQuery.isError ? "degraded" : "healthy"}
-              label={healthQuery.isError ? "FALLBACK SNAPSHOT" : "ASSESSMENTS CURRENT"}
+              label={
+                healthQuery.isError
+                  ? runtimeMode === "production"
+                    ? "权威健康服务不可用"
+                    : "降级快照"
+                  : "评估数据已更新"
+              }
             />
-            <span className="page-meta-text">评估于 2026-08-13 10:30</span>
+            <span className="page-meta-text">
+              评估于{" "}
+              {new Date(healthQuery.data?.meta.snapshotAt ?? selected.assessedAt).toLocaleString(
+                "zh-CN",
+              )}
+            </span>
           </>
         }
         actions={
@@ -156,7 +203,7 @@ export function AssetHealthPage() {
           <span className="health-kpi__icon health-kpi__icon--good">
             <HeartPulse size={17} />
           </span>
-          <small>FLEET HEALTH</small>
+          <small>全场健康度</small>
           <strong>{average.toFixed(1)}</strong>
           <em>全场平均 / 100</em>
         </Card>
@@ -164,7 +211,7 @@ export function AssetHealthPage() {
           <span className="health-kpi__icon health-kpi__icon--risk">
             <ShieldAlert size={17} />
           </span>
-          <small>HIGH RISK</small>
+          <small>高风险</small>
           <strong>{highRisk}</strong>
           <em>需要优先处置</em>
         </Card>
@@ -172,7 +219,7 @@ export function AssetHealthPage() {
           <span className="health-kpi__icon health-kpi__icon--trend">
             <TrendingDown size={17} />
           </span>
-          <small>DECLINING</small>
+          <small>健康下降</small>
           <strong>{declining}</strong>
           <em>趋势持续下降</em>
         </Card>
@@ -180,9 +227,11 @@ export function AssetHealthPage() {
           <span className="health-kpi__icon health-kpi__icon--ai">
             <Sparkles size={17} />
           </span>
-          <small>AI COVERAGE</small>
-          <strong>64 / 64</strong>
-          <em>在线健康评估</em>
+          <small>AI 覆盖率</small>
+          <strong>
+            {predictionCoverage} / {assessments.length}
+          </strong>
+          <em>{runtimeMode === "production" ? "已接通在线预测" : "在线健康评估"}</em>
         </Card>
       </section>
 
@@ -213,7 +262,7 @@ export function AssetHealthPage() {
             下降趋势 <span>{declining}</span>
           </button>
         </div>
-        <span className="toolbar-result">{visible.length} Turbines</span>
+        <span className="toolbar-result">{visible.length} 台风机</span>
         <Button
           variant="secondary"
           disabled={filter === "all" && !query}
@@ -229,8 +278,8 @@ export function AssetHealthPage() {
       <section className="health-dashboard-grid">
         <Card className="fleet-health-map">
           <CardHeader
-            eyebrow="FLEET HEATMAP"
-            title="64 台风机健康矩阵"
+            eyebrow="全场热力图"
+            title={`${assessments.length} 台风机健康矩阵`}
             description="颜色与评分使用全平台统一健康语义；点击机组查看评估"
             action={
               <span className="health-map-legend">
@@ -256,7 +305,11 @@ export function AssetHealthPage() {
                 >
                   <span>{assessment.turbineId.replace("WT-", "")}</span>
                   <strong>{assessment.healthScore}</strong>
-                  <small>{assessment.failureProbability30d}%</small>
+                  <small>
+                    {assessment.predictionAvailable === false
+                      ? "未预测"
+                      : `${assessment.failureProbability30d}%`}
+                  </small>
                 </button>
               ))}
             </div>
@@ -271,16 +324,16 @@ export function AssetHealthPage() {
 
         <Card className="health-selected-panel">
           <CardHeader
-            eyebrow="SELECTED ASSET"
+            eyebrow="已选资产"
             title={selected.turbineId}
-            description={`${selectedTurbine.model} · ${selected.primaryFinding}`}
+            description={`${selectedModel} · ${selected.primaryFinding}`}
             action={<HealthBadge score={selected.healthScore} />}
           />
           <div className="health-selected-status">
             <StatusBadge value={selected.state} label={stateLabel[selected.state]} />
             <StatusBadge
               value={selected.riskLevel}
-              label={`${selected.riskLevel.toUpperCase()} RISK`}
+              label={`${selected.riskLevel === "critical" ? "严重" : selected.riskLevel === "high" ? "高" : selected.riskLevel === "medium" ? "中" : "低"}风险`}
             />
             <span className={cn("health-trend", `health-trend--${selected.trend}`)}>
               {selected.trend === "improving" ? (
@@ -293,30 +346,48 @@ export function AssetHealthPage() {
           </div>
           <div className="health-selected-metrics">
             <div>
-              <small>30 DAY FAILURE</small>
-              <strong>{selected.failureProbability30d}%</strong>
-              <Progress
-                value={selected.failureProbability30d}
-                tone={selected.failureProbability30d >= 25 ? "critical" : "warning"}
-              />
+              <small>30 天失效概率</small>
+              <strong>
+                {selected.predictionAvailable === false
+                  ? "—"
+                  : `${selected.failureProbability30d}%`}
+              </strong>
+              {selected.predictionAvailable === false ? (
+                <em>未部署在线预测模型</em>
+              ) : (
+                <Progress
+                  value={selected.failureProbability30d}
+                  tone={selected.failureProbability30d >= 25 ? "critical" : "warning"}
+                />
+              )}
             </div>
             <div>
-              <small>ESTIMATED RUL</small>
-              <strong>{selected.remainingUsefulLifeDays} d</strong>
-              <em>模型区间 ±12 天</em>
+              <small>预计剩余寿命</small>
+              <strong>
+                {selected.predictionAvailable === false
+                  ? "—"
+                  : `${selected.remainingUsefulLifeDays} d`}
+              </strong>
+              <em>{selected.predictionAvailable === false ? "未部署在线预测模型" : "模型估计"}</em>
             </div>
             <div>
-              <small>ANOMALY SCORE</small>
-              <strong>{selected.anomalyScore.toFixed(2)}</strong>
-              <em>阈值 0.65</em>
+              <small>异常分数</small>
+              <strong>
+                {selected.predictionAvailable === false ? "—" : selected.anomalyScore.toFixed(2)}
+              </strong>
+              <em>{selected.predictionAvailable === false ? "未接通模型输出" : "模型输出"}</em>
             </div>
             <div>
-              <small>ACTIVE ALARMS</small>
-              <strong>{selectedTurbine.activeAlarmCount}</strong>
-              <em>{selectedTurbine.status}</em>
+              <small>活动告警</small>
+              <strong>{activeAlarmCount}</strong>
+              <em>
+                {runtimeMode === "demo" && selectedTurbine
+                  ? localizedStatusLabel(selectedTurbine.status)
+                  : stateLabel[selected.state]}
+              </em>
             </div>
           </div>
-          {selected.turbineId === "WT-023" ? (
+          {runtimeMode === "demo" && selected.turbineId === "WT-023" ? (
             <div className="health-subsystem-list">
               {subsystemHealth.slice(0, 6).map((subsystem) => {
                 const score =
@@ -344,7 +415,7 @@ export function AssetHealthPage() {
       <section className="health-secondary-grid">
         <Card>
           <CardHeader
-            eyebrow="RISK DISTRIBUTION"
+            eyebrow="风险分布"
             title="全场风险分布"
             description="Probability × Consequence 综合等级"
           />
@@ -352,7 +423,7 @@ export function AssetHealthPage() {
             {riskCounts.map(({ risk, count }) => (
               <div key={risk}>
                 <span>
-                  <StatusBadge value={risk} label={risk.toUpperCase()} compact />
+                  <StatusBadge value={risk} compact />
                   <strong>{count}</strong>
                 </span>
                 <Progress
@@ -369,30 +440,46 @@ export function AssetHealthPage() {
             ))}
           </div>
         </Card>
-        <Card className="health-featured-story">
-          <CardHeader
-            eyebrow="CLOSED-LOOP CASE"
-            title="WT-023 主轴承退化"
-            description="同一事件贯穿 SCADA、告警、Mission、审批、工单与知识沉淀"
-          />
-          <div className="health-story-flow">
-            <span>0.86 异常</span>
-            <ArrowRight size={13} />
-            <span>87% 诊断</span>
-            <ArrowRight size={13} />
-            <span>方案 B</span>
-            <ArrowRight size={13} />
-            <span>{workflow.workOrderStatus === "completed" ? "已闭环" : "待执行"}</span>
-          </div>
-          <p>
-            {workflow.workOrderStatus === "completed"
-              ? `健康度已恢复至 ${workflow.turbineHealthScore}，${workflow.knowledgeCaseId} 已形成。`
-              : "审批后由 WO-20260823-017 执行五项现场任务并回写评估。"}
-          </p>
-          <Link href="/missions/MISSION-2026-0823">
-            查看完整 Mission <ArrowRight size={14} />
-          </Link>
-        </Card>
+        {runtimeMode === "demo" ? (
+          <Card className="health-featured-story">
+            <CardHeader
+              eyebrow="闭环案例"
+              title="WT-023 主轴承退化"
+              description="同一事件贯穿 SCADA、告警、Mission、审批、工单与知识沉淀"
+            />
+            <div className="health-story-flow">
+              <span>0.86 异常</span>
+              <ArrowRight size={13} />
+              <span>87% 诊断</span>
+              <ArrowRight size={13} />
+              <span>方案 B</span>
+              <ArrowRight size={13} />
+              <span>{workflow.workOrderStatus === "completed" ? "已闭环" : "待执行"}</span>
+            </div>
+            <p>
+              {workflow.workOrderStatus === "completed"
+                ? `健康度已恢复至 ${workflow.turbineHealthScore}，${workflow.knowledgeCaseId} 已形成。`
+                : "审批后由 WO-20260823-017 执行五项现场任务并回写评估。"}
+            </p>
+            <Link href="/missions/MISSION-2026-0823">
+              查看完整 Mission <ArrowRight size={14} />
+            </Link>
+          </Card>
+        ) : (
+          <Card className="health-featured-story">
+            <CardHeader
+              eyebrow="权威健康记录"
+              title={selected.turbineId}
+              description="健康评分来自资产状态与已验证现场闭环；预测指标未接通时明确留空。"
+            />
+            <p>{selected.primaryFinding}</p>
+            {selected.missionId ? (
+              <Link href={`/missions/${selected.missionId}`}>
+                查看关联 Mission <ArrowRight size={14} />
+              </Link>
+            ) : null}
+          </Card>
+        )}
       </section>
     </AppShell>
   );

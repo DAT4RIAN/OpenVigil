@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   TriangleAlert as AlarmTriangle,
@@ -24,6 +24,7 @@ import Link from "next/link";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
+import { useWindOpsIdentity } from "@/components/providers/identity-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, KeyValue } from "@/components/ui/primitives";
 import { StatusBadge, type StatusTone } from "@/components/data-display/status-badge";
@@ -39,10 +40,12 @@ import {
 import type { Alarm, AlarmSeverity } from "@/lib/types";
 import { apiGet, apiPost } from "@/lib/api-client";
 import { useRealtimeChannel } from "@/lib/use-realtime-channel";
-import { cn } from "@/lib/utils";
+import { useProductionEvents } from "@/lib/use-production-events";
+import { asText, cn } from "@/lib/utils";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { overlayClientAlarms } from "@/lib/client-workflow-overlays";
 import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
+import { localizedStatusLabel, localizedSubsystemLabel } from "@/lib/ui-localization";
 
 const severityTone: Record<AlarmSeverity, StatusTone> = {
   critical: "critical",
@@ -51,18 +54,33 @@ const severityTone: Record<AlarmSeverity, StatusTone> = {
   warning: "warning",
   info: "info",
 };
+const productionAlarmEventTypes = [
+  "alarm.opened",
+  "alarm.acknowledged",
+  "alarm.assigned",
+  "alarm.unassigned",
+  "alarm.resolved",
+  "mission.created",
+  "mission.review_ready",
+  "mission.approval.approve",
+  "mission.approval.reject",
+  "mission.approval.request_revision",
+  "mission.approval.escalate",
+  "work_order.created",
+  "work_order.completed",
+] as const;
 const severityLabel: Record<AlarmSeverity, string> = {
-  critical: "CRITICAL",
-  major: "MAJOR",
-  minor: "MINOR",
-  warning: "WARNING",
-  info: "INFO",
+  critical: "严重",
+  major: "重要",
+  minor: "次要",
+  warning: "警告",
+  info: "信息",
 };
 
 const alarmColumns: readonly LegacyColumnDef<Alarm, unknown>[] = [
   {
     accessorKey: "severity",
-    header: "Severity",
+    header: "严重度",
     cell: ({ row }) => (
       <StatusBadge
         value={row.original.severity}
@@ -74,22 +92,22 @@ const alarmColumns: readonly LegacyColumnDef<Alarm, unknown>[] = [
   },
   {
     accessorKey: "turbineId",
-    header: "Wind Turbine",
+    header: "风机",
     cell: ({ row }) => <strong className="mono">{row.original.turbineId}</strong>,
   },
   {
     accessorKey: "subsystem",
-    header: "Subsystem",
-    cell: ({ row }) => row.original.subsystem.replaceAll("-", " "),
+    header: "子系统",
+    cell: ({ row }) => localizedSubsystemLabel(row.original.subsystem),
   },
   {
     accessorKey: "code",
-    header: "Alarm Code",
+    header: "告警代码",
     cell: ({ row }) => <span className="mono">{row.original.code}</span>,
   },
   {
     accessorKey: "title",
-    header: "Alarm",
+    header: "告警",
     cell: ({ row }) => (
       <span className="alarm-title-cell">
         <strong>{row.original.title}</strong>
@@ -100,7 +118,7 @@ const alarmColumns: readonly LegacyColumnDef<Alarm, unknown>[] = [
   },
   {
     accessorKey: "triggeredAt",
-    header: "Triggered At",
+    header: "触发时间",
     cell: ({ row }) =>
       new Date(row.original.triggeredAt).toLocaleString("zh-CN", {
         month: "2-digit",
@@ -112,17 +130,17 @@ const alarmColumns: readonly LegacyColumnDef<Alarm, unknown>[] = [
   },
   {
     accessorKey: "durationMinutes",
-    header: "Duration",
+    header: "持续时间",
     cell: ({ row }) => duration(row.original.durationMinutes),
   },
   {
     accessorKey: "status",
-    header: "Status",
+    header: "状态",
     cell: ({ row }) => <StatusBadge value={row.original.status} compact />,
   },
   {
     accessorKey: "aiStatus",
-    header: "AI Status",
+    header: "AI 状态",
     cell: ({ row }) => (
       <span
         className={cn(
@@ -130,13 +148,13 @@ const alarmColumns: readonly LegacyColumnDef<Alarm, unknown>[] = [
           row.original.aiStatus === "analyzing" && "ai-status-cell--working",
         )}
       >
-        <Bot size={13} /> {row.original.aiStatus}
+        <Bot size={13} /> {localizedStatusLabel(row.original.aiStatus)}
       </span>
     ),
   },
   {
     accessorKey: "assignee",
-    header: "Assignee",
+    header: "负责人",
     cell: ({ row }) => row.original.assignee ?? <span className="muted">未指派</span>,
   },
 ];
@@ -144,16 +162,16 @@ const alarmColumns: readonly LegacyColumnDef<Alarm, unknown>[] = [
 const alarmCsvExport = {
   filename: "windops-alarms.csv",
   columns: [
-    { label: "Alarm ID", value: (alarm: Alarm) => alarm.id },
-    { label: "Severity", value: (alarm: Alarm) => alarm.severity },
-    { label: "Wind Turbine", value: (alarm: Alarm) => alarm.turbineId },
-    { label: "Subsystem", value: (alarm: Alarm) => alarm.subsystem },
-    { label: "Alarm Code", value: (alarm: Alarm) => alarm.code },
-    { label: "Alarm", value: (alarm: Alarm) => alarm.title },
-    { label: "Triggered At", value: (alarm: Alarm) => alarm.triggeredAt },
-    { label: "Status", value: (alarm: Alarm) => alarm.status },
-    { label: "AI Status", value: (alarm: Alarm) => alarm.aiStatus },
-    { label: "Assignee", value: (alarm: Alarm) => alarm.assignee },
+    { label: "告警 ID", value: (alarm: Alarm) => alarm.id },
+    { label: "严重度", value: (alarm: Alarm) => severityLabel[alarm.severity] },
+    { label: "风机", value: (alarm: Alarm) => alarm.turbineId },
+    { label: "子系统", value: (alarm: Alarm) => localizedSubsystemLabel(alarm.subsystem) },
+    { label: "告警代码", value: (alarm: Alarm) => alarm.code },
+    { label: "告警", value: (alarm: Alarm) => alarm.title },
+    { label: "触发时间", value: (alarm: Alarm) => alarm.triggeredAt },
+    { label: "状态", value: (alarm: Alarm) => localizedStatusLabel(alarm.status) },
+    { label: "AI 状态", value: (alarm: Alarm) => localizedStatusLabel(alarm.aiStatus) },
+    { label: "负责人", value: (alarm: Alarm) => alarm.assignee },
   ],
 } as const;
 
@@ -182,27 +200,138 @@ const subsystemTerms: Record<Alarm["subsystem"], string> = {
   electrical: "电气",
 };
 
+interface ProductionAlarmDetail {
+  readonly alarm_id: string;
+  readonly mission_id: string | null;
+  readonly evidence: Record<string, unknown> | null;
+}
+
+interface ProductionKnowledgeCaseCollection {
+  readonly count: number;
+  readonly cases: readonly {
+    readonly case_id: string;
+    readonly mission_id: string;
+    readonly work_order_id: string | null;
+    readonly turbine_id: string;
+    readonly title: string;
+  }[];
+}
+
+interface ProductionWorkOrderCollection {
+  readonly count: number;
+  readonly work_orders: readonly {
+    readonly work_order_id: string;
+    readonly title: string;
+    readonly status: string;
+    readonly assigned_team: string | null;
+    readonly estimated_duration_hours: number | null;
+  }[];
+}
+
+interface ProductionKnowledgeDocumentCollection {
+  readonly count: number;
+  readonly documents: readonly {
+    readonly document_id: string;
+    readonly title: string;
+    readonly document_version: string;
+  }[];
+}
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+/** Derive the only honest SCADA evidence available in production: the alarm's own persisted payload. */
+function productionScadaEvidence(alarm: Alarm, detail: ProductionAlarmDetail | undefined) {
+  const evidence = asRecord(detail?.evidence);
+  if (!evidence) return [];
+  const attributes = asRecord(evidence.attributes) ?? {};
+  const variable = typeof evidence.variable === "string" ? evidence.variable : "";
+  const unit = typeof evidence.unit === "string" ? evidence.unit : "";
+  const value = typeof evidence.value === "number" ? evidence.value : null;
+  const threshold = typeof attributes.threshold === "number" ? attributes.threshold : null;
+  if (value === null && !variable) return [];
+  return [
+    {
+      id: `${alarm.id}:evidence`,
+      title: variable || alarm.code,
+      summary: `当前值 ${value ?? "—"}${unit ? ` ${unit}` : ""} · 阈值 ${threshold ?? "—"}${unit ? ` ${unit}` : ""}`,
+      sourceLabel: "PostgreSQL 告警证据载荷",
+    },
+  ];
+}
+
 function AlarmDrawer({
   alarm,
+  production,
   onClose,
   onAcknowledge,
   onToggleAssignment,
+  commandsAllowed,
 }: {
   alarm: Alarm;
+  production: boolean;
   onClose: () => void;
   onAcknowledge: (alarmId: string) => void;
   onToggleAssignment: (alarm: Alarm) => void;
+  commandsAllowed: boolean;
 }) {
   const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
-  const featured = alarm.id === "ALARM-0031" || alarm.turbineId === "WT-023";
-  const canAcknowledge = alarm.status === "active";
-  const canAssign = alarm.status !== "resolved";
-  const relatedEvidence = evidenceItems.filter(
-    (item) =>
-      alarm.evidenceIds.includes(item.id) ||
-      (featured && alarm.missionId !== null && item.missionId === alarm.missionId),
-  );
-  const missionHref = alarm.missionId ? `/missions/${alarm.missionId}` : `/missions`;
+  // demo 分支保留特色告警故事；production 分支一律以权威后端数据为准，不渲染 fixture。
+  const featured = !production && (alarm.id === "ALARM-0031" || alarm.turbineId === "WT-023");
+  const canAcknowledge = commandsAllowed && alarm.status === "active";
+  const canAssign = commandsAllowed && alarm.status !== "resolved";
+  const detailQuery = useQuery({
+    queryKey: ["alarm-detail", alarm.id],
+    queryFn: ({ signal }) =>
+      apiGet<ProductionAlarmDetail>(`/api/backend/alarms/${encodeURIComponent(alarm.id)}`, signal),
+    enabled: production,
+    retry: false,
+  });
+  const missionId = production
+    ? (detailQuery.data?.mission_id ?? alarm.missionId)
+    : alarm.missionId;
+  const casesQuery = useQuery({
+    queryKey: ["alarm-knowledge-cases", missionId],
+    queryFn: ({ signal }) =>
+      apiGet<ProductionKnowledgeCaseCollection>(
+        `/api/backend/knowledge/cases?mission_id=${encodeURIComponent(missionId ?? "")}`,
+        signal,
+      ),
+    enabled: production && missionId !== null,
+    retry: false,
+  });
+  const workOrderQuery = useQuery({
+    queryKey: ["alarm-turbine-work-orders", alarm.turbineId],
+    queryFn: ({ signal }) =>
+      apiGet<ProductionWorkOrderCollection>(
+        `/api/backend/work-orders?turbine_id=${encodeURIComponent(alarm.turbineId)}&limit=20`,
+        signal,
+      ),
+    enabled: production,
+    retry: false,
+  });
+  const subsystemTerm = subsystemTerms[alarm.subsystem];
+  const documentQuery = useQuery({
+    queryKey: ["alarm-knowledge-documents", subsystemTerm],
+    queryFn: ({ signal }) =>
+      apiGet<ProductionKnowledgeDocumentCollection>(
+        `/api/backend/knowledge/documents?q=${encodeURIComponent(subsystemTerm)}&limit=20`,
+        signal,
+      ),
+    enabled: production,
+    retry: false,
+  });
+  const relatedEvidence = production
+    ? []
+    : evidenceItems.filter(
+        (item) =>
+          alarm.evidenceIds.includes(item.id) ||
+          (featured && alarm.missionId !== null && item.missionId === alarm.missionId),
+      );
+  const missionHref = missionId ? `/missions/${missionId}` : `/missions`;
+  const productionEvidence = productionScadaEvidence(alarm, detailQuery.data);
   const scadaEvidence = relatedEvidence.filter((item) =>
     ["scada-signal", "vibration-spectrum"].includes(item.type),
   );
@@ -210,20 +339,26 @@ function AlarmDrawer({
   const historicalEvidence = relatedEvidence.filter((item) => item.type === "historical-case");
   const maintenanceEvidence = relatedEvidence.filter((item) => item.type === "maintenance-record");
   const knowledgeEvidence = relatedEvidence.filter((item) => item.type === "knowledge-document");
-  const subsystemTerm = subsystemTerms[alarm.subsystem];
-  const similarCases = failureCases
-    .filter((item) => item.subsystem === alarm.subsystem)
-    .slice(0, featured ? 2 : 1);
-  const maintenanceRecords = historicalWorkOrders
-    .filter((item) => item.issue.includes(subsystemTerm))
-    .slice(0, featured ? 2 : 1);
-  const referencedKnowledge = knowledgeDocuments
-    .filter(
-      (document) =>
-        document.relatedTurbineIds.includes(alarm.turbineId) ||
-        (alarm.missionId !== null && document.relatedMissionIds.includes(alarm.missionId)),
-    )
-    .slice(0, featured ? 3 : 2);
+  const similarCases = production
+    ? []
+    : failureCases.filter((item) => item.subsystem === alarm.subsystem).slice(0, featured ? 2 : 1);
+  const maintenanceRecords = production
+    ? []
+    : historicalWorkOrders
+        .filter((item) => item.issue.includes(subsystemTerm))
+        .slice(0, featured ? 2 : 1);
+  const referencedKnowledge = production
+    ? []
+    : knowledgeDocuments
+        .filter(
+          (document) =>
+            document.relatedTurbineIds.includes(alarm.turbineId) ||
+            (alarm.missionId !== null && document.relatedMissionIds.includes(alarm.missionId)),
+        )
+        .slice(0, featured ? 3 : 2);
+  const productionCases = casesQuery.data?.cases ?? [];
+  const productionWorkOrders = workOrderQuery.data?.work_orders ?? [];
+  const productionDocuments = documentQuery.data?.documents ?? [];
   return (
     <>
       <button className="drawer-backdrop" onClick={onClose} aria-label="关闭告警详情" />
@@ -237,7 +372,7 @@ function AlarmDrawer({
       >
         <header className="detail-drawer__header">
           <div>
-            <span className="eyebrow">ALARM DETAIL</span>
+            <span className="eyebrow">告警详情</span>
             <h2>{alarm.code}</h2>
             <p>
               {alarm.turbineId} · {alarm.subsystem}
@@ -253,7 +388,7 @@ function AlarmDrawer({
             label={severityLabel[alarm.severity]}
             tone={severityTone[alarm.severity]}
           />
-          <StatusBadge value={alarm.status} label={alarm.status.toUpperCase()} />
+          <StatusBadge value={alarm.status} label={localizedStatusLabel(alarm.status)} />
           <span>持续 {duration(alarm.durationMinutes)}</span>
         </div>
         <section className="alarm-detail-hero">
@@ -294,7 +429,30 @@ function AlarmDrawer({
             </Link>
           </div>
           <div className="evidence-compact-list">
-            {scadaEvidence.length ? (
+            {production ? (
+              detailQuery.isPending ? (
+                <p className="no-evidence">正在读取权威告警证据…</p>
+              ) : detailQuery.isError ? (
+                <p className="no-evidence" role="alert">
+                  生产告警证据读取失败，已失败关闭，不回退演示数据。
+                </p>
+              ) : productionEvidence.length ? (
+                productionEvidence.map((item) => (
+                  <div key={item.id}>
+                    <span>
+                      <Activity size={14} />
+                    </span>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <small>{item.summary}</small>
+                      <small>{item.sourceLabel}</small>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="no-evidence">该告警未携带结构化 SCADA 证据载荷</p>
+              )
+            ) : scadaEvidence.length ? (
               scadaEvidence.map((item) => (
                 <div key={item.id}>
                   <span>
@@ -325,40 +483,81 @@ function AlarmDrawer({
               <History size={14} /> 历史相似事件
             </h3>
             <span className="record-count">
-              {historicalEvidence.length + similarCases.length} 项
+              {production
+                ? productionCases.length
+                : historicalEvidence.length + similarCases.length}{" "}
+              项
             </span>
           </div>
           <div className="evidence-compact-list evidence-compact-list--linked">
-            {historicalEvidence.map((item) => (
-              <Link href={`/knowledge?document=${item.sourceId ?? ""}`} key={item.id}>
-                <span>
-                  <FileSearch size={14} />
-                </span>
-                <div>
-                  <strong>{item.title}</strong>
-                  <small>{item.summary}</small>
-                </div>
-                <em>{item.value ?? "—"}</em>
-              </Link>
-            ))}
-            {similarCases.map((failureCase) => (
-              <Link
-                href={`/work-orders?workOrder=${failureCase.relatedWorkOrderId}`}
-                key={failureCase.id}
-              >
-                <span>
-                  <History size={14} />
-                </span>
-                <div>
-                  <strong>{failureCase.title}</strong>
-                  <small>
-                    {failureCase.turbineId} · {failureCase.failureMode} · 停机{" "}
-                    {failureCase.downtimeHours}h
-                  </small>
-                </div>
-                <StatusBadge value={failureCase.severity} compact />
-              </Link>
-            ))}
+            {production ? (
+              missionId === null ? (
+                <p className="no-evidence">当前告警未关联 Mission，暂无真实相似案例。</p>
+              ) : casesQuery.isPending ? (
+                <p className="no-evidence">正在读取生产知识案例…</p>
+              ) : casesQuery.isError ? (
+                <p className="no-evidence" role="alert">
+                  相似案例读取失败，已失败关闭，不回退演示案例。
+                </p>
+              ) : productionCases.length ? (
+                productionCases.map((item) => (
+                  <Link
+                    href={
+                      item.work_order_id
+                        ? `/work-orders?workOrder=${item.work_order_id}`
+                        : `/missions/${item.mission_id}`
+                    }
+                    key={item.case_id}
+                  >
+                    <span>
+                      <History size={14} />
+                    </span>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <small>
+                        {item.turbine_id} · {item.case_id} · 已沉淀闭环案例
+                      </small>
+                    </div>
+                    <ArrowRight size={13} />
+                  </Link>
+                ))
+              ) : (
+                <p className="no-evidence">生产知识库暂无该 Mission 的相似案例</p>
+              )
+            ) : (
+              <>
+                {historicalEvidence.map((item) => (
+                  <Link href={`/knowledge?document=${item.sourceId ?? ""}`} key={item.id}>
+                    <span>
+                      <FileSearch size={14} />
+                    </span>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <small>{item.summary}</small>
+                    </div>
+                    <em>{item.value ?? "—"}</em>
+                  </Link>
+                ))}
+                {similarCases.map((failureCase) => (
+                  <Link
+                    href={`/work-orders?workOrder=${failureCase.relatedWorkOrderId}`}
+                    key={failureCase.id}
+                  >
+                    <span>
+                      <History size={14} />
+                    </span>
+                    <div>
+                      <strong>{failureCase.title}</strong>
+                      <small>
+                        {failureCase.turbineId} · {failureCase.failureMode} · 停机{" "}
+                        {failureCase.downtimeHours}h
+                      </small>
+                    </div>
+                    <StatusBadge value={failureCase.severity} compact />
+                  </Link>
+                ))}
+              </>
+            )}
           </div>
         </section>
 
@@ -375,32 +574,66 @@ function AlarmDrawer({
             </Link>
           </div>
           <div className="evidence-compact-list evidence-compact-list--linked">
-            {maintenanceEvidence.map((item) => (
-              <Link href={`/knowledge?document=${item.sourceId ?? ""}`} key={item.id}>
-                <span>
-                  <FileSearch size={14} />
-                </span>
-                <div>
-                  <strong>{item.title}</strong>
-                  <small>{item.summary}</small>
-                </div>
-                <ArrowRight size={13} />
-              </Link>
-            ))}
-            {maintenanceRecords.map((workOrder) => (
-              <Link href={`/work-orders?workOrder=${workOrder.id}`} key={workOrder.id}>
-                <span>
-                  <Wrench size={14} />
-                </span>
-                <div>
-                  <strong>{workOrder.issue}</strong>
-                  <small>
-                    {workOrder.id} · {workOrder.assignedTeam} · {workOrder.estimatedDurationHours}h
-                  </small>
-                </div>
-                <StatusBadge value={workOrder.status} compact />
-              </Link>
-            ))}
+            {production ? (
+              workOrderQuery.isPending ? (
+                <p className="no-evidence">正在读取该机组的生产工单…</p>
+              ) : workOrderQuery.isError ? (
+                <p className="no-evidence" role="alert">
+                  维护记录读取失败，已失败关闭，不回退演示工单。
+                </p>
+              ) : productionWorkOrders.length ? (
+                productionWorkOrders.map((workOrder) => (
+                  <Link
+                    href={`/work-orders?workOrder=${workOrder.work_order_id}`}
+                    key={workOrder.work_order_id}
+                  >
+                    <span>
+                      <Wrench size={14} />
+                    </span>
+                    <div>
+                      <strong>{workOrder.title}</strong>
+                      <small>
+                        {workOrder.work_order_id} · {workOrder.assigned_team ?? "未分配"} ·{" "}
+                        {workOrder.estimated_duration_hours ?? "—"}h
+                      </small>
+                    </div>
+                    <StatusBadge value={workOrder.status.replaceAll("_", "-")} compact />
+                  </Link>
+                ))
+              ) : (
+                <p className="no-evidence">该机组暂无生产维护工单记录</p>
+              )
+            ) : (
+              <>
+                {maintenanceEvidence.map((item) => (
+                  <Link href={`/knowledge?document=${item.sourceId ?? ""}`} key={item.id}>
+                    <span>
+                      <FileSearch size={14} />
+                    </span>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <small>{item.summary}</small>
+                    </div>
+                    <ArrowRight size={13} />
+                  </Link>
+                ))}
+                {maintenanceRecords.map((workOrder) => (
+                  <Link href={`/work-orders?workOrder=${workOrder.id}`} key={workOrder.id}>
+                    <span>
+                      <Wrench size={14} />
+                    </span>
+                    <div>
+                      <strong>{workOrder.issue}</strong>
+                      <small>
+                        {workOrder.id} · {workOrder.assignedTeam} ·{" "}
+                        {workOrder.estimatedDurationHours}h
+                      </small>
+                    </div>
+                    <StatusBadge value={workOrder.status} compact />
+                  </Link>
+                ))}
+              </>
+            )}
           </div>
         </section>
 
@@ -417,36 +650,68 @@ function AlarmDrawer({
             </Link>
           </div>
           <div className="evidence-compact-list evidence-compact-list--linked">
-            {knowledgeEvidence.map((item) => (
-              <Link href={`/knowledge?document=${item.sourceId ?? ""}`} key={item.id}>
-                <span>
-                  <BookOpenText size={14} />
-                </span>
-                <div>
-                  <strong>{item.sourceLabel}</strong>
-                  <small>{item.summary}</small>
-                </div>
-                <ArrowRight size={13} />
-              </Link>
-            ))}
-            {referencedKnowledge
-              .filter(
-                (document) => !knowledgeEvidence.some((item) => item.sourceId === document.id),
+            {production ? (
+              documentQuery.isPending ? (
+                <p className="no-evidence">正在检索生产知识库文档…</p>
+              ) : documentQuery.isError ? (
+                <p className="no-evidence" role="alert">
+                  知识库引用读取失败，已失败关闭，不回退演示文档。
+                </p>
+              ) : productionDocuments.length ? (
+                productionDocuments.map((document) => (
+                  <Link
+                    href={`/knowledge?document=${document.document_id}`}
+                    key={document.document_id}
+                  >
+                    <span>
+                      <BookOpenText size={14} />
+                    </span>
+                    <div>
+                      <strong>{document.title}</strong>
+                      <small>
+                        {document.document_id} · v{document.document_version}
+                      </small>
+                    </div>
+                    <ArrowRight size={13} />
+                  </Link>
+                ))
+              ) : (
+                <p className="no-evidence">生产知识库暂无匹配「{subsystemTerm}」的文档</p>
               )
-              .map((document) => (
-                <Link href={`/knowledge?document=${document.id}`} key={document.id}>
-                  <span>
-                    <BookOpenText size={14} />
-                  </span>
-                  <div>
-                    <strong>{document.title}</strong>
-                    <small>
-                      {document.id} · {document.version} · {document.pageCount} 页
-                    </small>
-                  </div>
-                  <ArrowRight size={13} />
-                </Link>
-              ))}
+            ) : (
+              <>
+                {knowledgeEvidence.map((item) => (
+                  <Link href={`/knowledge?document=${item.sourceId ?? ""}`} key={item.id}>
+                    <span>
+                      <BookOpenText size={14} />
+                    </span>
+                    <div>
+                      <strong>{item.sourceLabel}</strong>
+                      <small>{item.summary}</small>
+                    </div>
+                    <ArrowRight size={13} />
+                  </Link>
+                ))}
+                {referencedKnowledge
+                  .filter(
+                    (document) => !knowledgeEvidence.some((item) => item.sourceId === document.id),
+                  )
+                  .map((document) => (
+                    <Link href={`/knowledge?document=${document.id}`} key={document.id}>
+                      <span>
+                        <BookOpenText size={14} />
+                      </span>
+                      <div>
+                        <strong>{document.title}</strong>
+                        <small>
+                          {document.id} · {document.version} · {document.pageCount} 页
+                        </small>
+                      </div>
+                      <ArrowRight size={13} />
+                    </Link>
+                  ))}
+              </>
+            )}
           </div>
         </section>
 
@@ -454,16 +719,69 @@ function AlarmDrawer({
           <div className="alarm-agent-analysis__label">
             <Bot size={14} />
             <h3 id="agent-analysis">Agent 分析</h3>
-            <span>Failure Diagnosis Agent</span>
+            <span>故障诊断 Agent</span>
           </div>
-          {featured ? (
+          {production ? (
+            detailQuery.isPending ? (
+              <div className="alarm-agent-analysis__pending">
+                <Bot size={17} />
+                <div>
+                  <strong>正在读取权威告警详情</strong>
+                  <p>生产模式不会展示演示诊断结论，Mission 关联以权威后端为准。</p>
+                </div>
+              </div>
+            ) : detailQuery.isError ? (
+              <div className="alarm-agent-analysis__pending" role="alert">
+                <Bot size={17} />
+                <div>
+                  <strong>告警详情读取失败</strong>
+                  <p>已失败关闭，不回退演示诊断；请检查生产后端连通性后重试。</p>
+                </div>
+              </div>
+            ) : missionId ? (
+              <div className="ai-diagnosis-card">
+                <div className="ai-diagnosis-card__header">
+                  <span>
+                    <Bot size={17} />
+                  </span>
+                  <div>
+                    <span className="eyebrow">AI 诊断</span>
+                    <h3>已关联诊断 Mission</h3>
+                  </div>
+                </div>
+                <p>
+                  该告警已关联持久化 Mission <span className="mono">{missionId}</span>
+                  ；诊断结论、证据与审批链路以权威 Mission 记录为准。
+                </p>
+                <a href={`/missions/${missionId}`}>
+                  打开完整诊断 Mission <ArrowRight size={13} />
+                </a>
+              </div>
+            ) : (
+              <div className="alarm-agent-analysis__pending">
+                <Bot size={17} />
+                <div>
+                  <strong>
+                    {alarm.aiStatus === "queued" || alarm.aiStatus === "analyzing"
+                      ? "关联分析进行中"
+                      : "尚未关联诊断 Mission"}
+                  </strong>
+                  <p>
+                    {alarm.aiStatus === "queued" || alarm.aiStatus === "analyzing"
+                      ? "Agent 正在校验趋势、历史案例和维护记录，完成后将生成可审批建议。"
+                      : "生产模式不会展示演示诊断结论；Mission 创建后将在此给出真实链接。"}
+                  </p>
+                </div>
+              </div>
+            )
+          ) : featured ? (
             <div className="ai-diagnosis-card">
               <div className="ai-diagnosis-card__header">
                 <span>
                   <Bot size={17} />
                 </span>
                 <div>
-                  <span className="eyebrow">AI DIAGNOSIS</span>
+                  <span className="eyebrow">AI 诊断</span>
                   <h3>主轴承早期退化</h3>
                 </div>
                 <strong>87%</strong>
@@ -529,7 +847,7 @@ function AlarmDrawer({
                 </span>
                 <p>
                   <strong>等待告警确认</strong>
-                  <small>当前状态 · ACTIVE</small>
+                  <small>当前状态 · 活动</small>
                 </p>
               </div>
             ) : null}
@@ -556,7 +874,7 @@ function AlarmDrawer({
                 </span>
                 <p>
                   <strong>告警已抑制</strong>
-                  <small>当前状态 · SUPPRESSED</small>
+                  <small>当前状态 · 已抑制</small>
                 </p>
               </div>
             ) : null}
@@ -572,7 +890,7 @@ function AlarmDrawer({
                   {alarm.aiStatus === "action-created" && "AI 已创建处置动作"}
                   {alarm.aiStatus === "not-required" && "无需 AI 分析"}
                 </strong>
-                <small>Failure Diagnosis Agent · {alarm.aiStatus}</small>
+                <small>故障诊断 Agent · {alarm.aiStatus}</small>
               </p>
             </div>
             <div>
@@ -591,7 +909,9 @@ function AlarmDrawer({
                 </span>
                 <p>
                   <strong>已指派负责人</strong>
-                  <small>{alarm.assignee} · 当前本地处置状态</small>
+                  <small>
+                    {alarm.assignee} · {production ? "权威告警状态" : "本地处置状态"}
+                  </small>
                 </p>
               </div>
             ) : null}
@@ -613,6 +933,11 @@ function AlarmDrawer({
           </div>
         </section>
         <footer className="detail-drawer__footer">
+          {!commandsAllowed ? (
+            <span role="status" data-capability="alarm.command">
+              当前角色可查看告警；确认和指派需要值班审批权限。
+            </span>
+          ) : null}
           <Button
             variant="secondary"
             disabled={!canAcknowledge}
@@ -637,18 +962,29 @@ function AlarmDrawer({
               ? "已解决 · 不可指派"
               : alarm.assignee
                 ? "取消指派"
-                : "指派值班工程师"}
+                : production
+                  ? "指派给我"
+                  : "指派值班工程师"}
           </Button>
-          <Link href={missionHref} className="button button--primary button--md">
-            进入 Mission <ArrowRight size={14} />
-          </Link>
+          {production ? (
+            <a href={missionHref} className="button button--primary button--md">
+              进入 Mission <ArrowRight size={14} />
+            </a>
+          ) : (
+            <Link href={missionHref} className="button button--primary button--md">
+              进入 Mission <ArrowRight size={14} />
+            </Link>
+          )}
         </footer>
       </aside>
     </>
   );
 }
 
-export function AlarmCenterPage() {
+export function AlarmCenterPage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
+  const { can } = useWindOpsIdentity();
+  const canCommandAlarms = runtimeMode === "demo" || can("alarm.command");
+  const queryClient = useQueryClient();
   const workflow = useDemoWorkflow();
   const [selectedAlarmId, setSelectedAlarmId] = useState<string | null>(null);
   const [severity, setSeverity] = useState<"all" | AlarmSeverity>("all");
@@ -663,7 +999,10 @@ export function AlarmCenterPage() {
         readonly data: readonly Alarm[];
         readonly meta: { readonly alarmMutationPersistence: string };
       }>("/api/alarms", signal),
-    initialData: { data: alarms, meta: { alarmMutationPersistence: "unavailable" } },
+    initialData:
+      runtimeMode === "demo"
+        ? { data: alarms, meta: { alarmMutationPersistence: "unavailable" } }
+        : undefined,
   });
   useEffect(() => {
     const parameters = new URLSearchParams(window.location.search);
@@ -671,33 +1010,64 @@ export function AlarmCenterPage() {
     const alarmId = parameters.get("alarm")?.toUpperCase();
     const timer = window.setTimeout(() => {
       if (turbineId) setTurbineScope(turbineId);
-      if (alarmId && alarms.some((alarm) => alarm.id === alarmId)) setSelectedAlarmId(alarmId);
+      if (alarmId && alarmQuery.data?.data.some((alarm) => alarm.id === alarmId)) {
+        setSelectedAlarmId(alarmId);
+      }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, []);
-  const alarmStream = useRealtimeChannel("alarms");
+  }, [alarmQuery.data?.data]);
+  const alarmStream = useRealtimeChannel("alarms", runtimeMode === "demo");
+  const productionStream = useProductionEvents({
+    enabled: runtimeMode === "production",
+    eventTypes: productionAlarmEventTypes,
+    cursorKey: "windops.production-events.alarms.v1",
+    onReady: () => void queryClient.invalidateQueries({ queryKey: ["alarms"] }),
+    onEvent: () => void queryClient.invalidateQueries({ queryKey: ["alarms"] }),
+  });
   const visibleAlarms = useMemo(
-    () => overlayClientAlarms(alarmQuery.data.data, workflow),
-    [alarmQuery.data.data, workflow],
+    () =>
+      runtimeMode === "demo"
+        ? overlayClientAlarms(alarmQuery.data?.data ?? [], workflow)
+        : (alarmQuery.data?.data ?? []),
+    [alarmQuery.data?.data, runtimeMode, workflow],
   );
   const mutateAlarm = useCallback(
     async (alarm: Alarm, action: "acknowledge" | "assign") => {
+      if (!canCommandAlarms) {
+        setMutationError("当前角色可查看告警，但没有确认或指派权限。");
+        return;
+      }
       const operationId = crypto.randomUUID();
       setMutationError(null);
       try {
         await apiPost("/api/alarms", {
           alarmId: alarm.id,
           action,
-          ...(action === "assign" ? { assignee: alarm.assignee ? null : "值班工程师" } : {}),
+          ...(action === "assign"
+            ? {
+                assignee: alarm.assignee ? null : runtimeMode === "demo" ? "值班工程师" : undefined,
+              }
+            : {}),
           correlationId: `alarm-${operationId}`,
           idempotencyKey: `alarm-${alarm.id}-${operationId}`,
+          ...(runtimeMode === "production"
+            ? {
+                expectedRevision: alarm.revision,
+                reason:
+                  action === "acknowledge"
+                    ? "Alarm Center operator acknowledgement"
+                    : alarm.assignee
+                      ? "Alarm Center operator self-unassignment"
+                      : "Alarm Center operator self-assignment",
+              }
+            : {}),
         });
         await alarmQuery.refetch();
       } catch (error) {
         setMutationError(error instanceof Error ? error.message : "告警持久化失败");
       }
     },
-    [alarmQuery],
+    [alarmQuery, canCommandAlarms, runtimeMode],
   );
   const selectedAlarm = visibleAlarms.find((alarm) => alarm.id === selectedAlarmId) ?? null;
   const featuredAlarm =
@@ -728,12 +1098,16 @@ export function AlarmCenterPage() {
     ["queued", "analyzing"].includes(alarm.aiStatus),
   ).length;
   const liveAlarmId =
-    alarmStream.frame?.event === "alarm-update" ? String(alarmStream.frame.data.id ?? "") : "";
+    runtimeMode === "production"
+      ? (productionStream.lastEvent?.aggregate_id ?? "")
+      : alarmStream.frame?.event === "alarm-update"
+        ? asText(alarmStream.frame.data.id)
+        : "";
   const hasFilters =
     turbineScope !== null || severity !== "all" || statusFilter !== "all" || timeWindowHours !== 0;
 
   return (
-    <AppShell activePath="/alarms">
+    <AppShell runtimeMode={runtimeMode} activePath="/alarms">
       <PageHeader
         eyebrow="智能运维"
         title="告警中心"
@@ -743,13 +1117,19 @@ export function AlarmCenterPage() {
           <>
             <StatusBadge
               value="critical"
-              label={`${counts.critical} CRITICAL`}
+              label={`${counts.critical} 条严重告警`}
               tone="critical"
               pulse
             />
             <span className="page-meta-text">
               {unresolvedCount} 个活跃告警 · {analyzingCount} 个正在 AI 分析 ·{" "}
-              {alarmStream.status === "connected" ? `WS LIVE ${liveAlarmId}` : "SNAPSHOT"}
+              {runtimeMode === "production"
+                ? productionStream.status === "connected"
+                  ? `SSE 实时 · 游标 ${productionStream.cursor ?? "同步中"}${liveAlarmId ? ` · ${liveAlarmId}` : ""}`
+                  : "SSE 正在重连 · 权威快照"
+                : alarmStream.status === "connected"
+                  ? `WS 实时 · ${liveAlarmId}`
+                  : "数据快照"}
               {mutationError ? ` · 写入失败：${mutationError}` : ""}
             </span>
           </>
@@ -765,7 +1145,7 @@ export function AlarmCenterPage() {
             <AlarmTriangle size={16} />
           </span>
           <span>
-            <small>Critical</small>
+            <small>严重</small>
             <strong>{counts.critical}</strong>
           </span>
           <em>需立即处理</em>
@@ -778,7 +1158,7 @@ export function AlarmCenterPage() {
             <ShieldAlert size={16} />
           </span>
           <span>
-            <small>Major</small>
+            <small>重要</small>
             <strong>{counts.major}</strong>
           </span>
           <em>重点关注</em>
@@ -791,7 +1171,7 @@ export function AlarmCenterPage() {
             <Activity size={16} />
           </span>
           <span>
-            <small>Warning</small>
+            <small>警告</small>
             <strong>{counts.warning}</strong>
           </span>
           <em>趋势观察</em>
@@ -801,7 +1181,7 @@ export function AlarmCenterPage() {
             <Bot size={16} />
           </span>
           <span>
-            <small>AI Diagnosed</small>
+            <small>AI 已诊断</small>
             <strong>{counts.diagnosed}</strong>
           </span>
           <em>已形成判断</em>
@@ -820,18 +1200,22 @@ export function AlarmCenterPage() {
         searchPlaceholder="搜索告警、机组或代码…"
         searchTextForRow={alarmSearchText}
         selectedRowId={selectedAlarmId ?? featuredAlarm?.id}
-        bulkActions={[
-          {
-            label: "确认所选活跃告警",
-            onActivate: (rows) => {
-              void Promise.all(
-                rows
-                  .filter((alarm) => alarm.status === "active")
-                  .map((alarm) => mutateAlarm(alarm, "acknowledge")),
-              );
-            },
-          },
-        ]}
+        bulkActions={
+          canCommandAlarms
+            ? [
+                {
+                  label: "确认所选活跃告警",
+                  onActivate: (rows: readonly Alarm[]) => {
+                    void Promise.all(
+                      rows
+                        .filter((alarm) => alarm.status === "active")
+                        .map((alarm) => mutateAlarm(alarm, "acknowledge")),
+                    );
+                  },
+                },
+              ]
+            : []
+        }
         filterControls={
           <>
             <Button
@@ -844,7 +1228,7 @@ export function AlarmCenterPage() {
                   "suppressed",
                   "resolved",
                 ];
-                setStatusFilter(options[(options.indexOf(statusFilter) + 1) % options.length]!);
+                setStatusFilter(options[(options.indexOf(statusFilter) + 1) % options.length]);
               }}
             >
               <Filter size={14} /> 状态 {statusFilter === "all" ? "全部" : statusFilter}{" "}
@@ -855,7 +1239,7 @@ export function AlarmCenterPage() {
               onClick={() => {
                 const options = [0, 1, 6, 24] as const;
                 setTimeWindowHours(
-                  options[(options.indexOf(timeWindowHours) + 1) % options.length]!,
+                  options[(options.indexOf(timeWindowHours) + 1) % options.length],
                 );
               }}
             >
@@ -885,9 +1269,11 @@ export function AlarmCenterPage() {
       {selectedAlarm ? (
         <AlarmDrawer
           alarm={selectedAlarm}
+          production={runtimeMode === "production"}
           onClose={() => setSelectedAlarmId(null)}
           onAcknowledge={() => void mutateAlarm(selectedAlarm, "acknowledge")}
           onToggleAssignment={(alarm) => void mutateAlarm(alarm, "assign")}
+          commandsAllowed={canCommandAlarms}
         />
       ) : null}
     </AppShell>

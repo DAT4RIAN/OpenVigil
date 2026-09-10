@@ -8,7 +8,7 @@ export default function Loading() {
           <Wind size={20} /> WindOps
         </span>
         <small>
-          <Bot size={13} /> Industrial AI Control Center
+          <Bot size={13} /> 工业智能控制中心
         </small>
       </span>
       <span className="sr-only">正在同步 SCADA、Mission、Agent 与工单关联数据。</span>

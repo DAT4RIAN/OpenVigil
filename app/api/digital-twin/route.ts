@@ -1,8 +1,13 @@
 import { jsonResponse } from "@/app/api/_shared";
 import { readWorkflowForApi } from "@/app/api/_workflow";
 import { buildDigitalTwinSnapshot } from "@/lib/digital-twin-data";
+import { productionDigitalTwinResponse } from "@/lib/production-domain-adapter";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 export async function GET(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return productionDigitalTwinResponse(request);
+  }
   const url = new URL(request.url);
   const turbineId = url.searchParams.get("turbineId")?.trim().toUpperCase() ?? "WT-023";
 

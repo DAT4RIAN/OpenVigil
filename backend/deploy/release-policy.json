@@ -1,0 +1,23 @@
+{
+  "format_version": 1,
+  "python_base_image": "python:3.12.11-slim-trixie@sha256:47ae396f09c1303b8653019811a8498470603d7ffefc29cb07c88f1f8cb3d19f",
+  "postgres_client_image": "timescale/timescaledb-ha@sha256:df8eaa04de65fbe238df8dbc356e79108bcb8166d3458833536a3ff745abb2be",
+  "postgres_client_major": 16,
+  "platform": "linux/amd64",
+  "approved_backup_storage_class": "windops-encrypted-backup",
+  "required_workloads": [
+    "windops-api",
+    "windops-worker",
+    "windops-outbox-relay",
+    "windops-migrate-release",
+    "windops-backup"
+  ],
+  "required_entrypoints": [
+    "windops-api",
+    "dramatiq",
+    "windops-outbox-relay",
+    "alembic",
+    "windops-backup",
+    "windops-restore"
+  ]
+}

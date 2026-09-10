@@ -8,6 +8,7 @@ import {
   overlayWorkflowWorkOrder,
 } from "./server-workflow-overlays";
 import type { ServerWorkflowSnapshot } from "./server-workflow-contract";
+import { localizedStatusLabel } from "./ui-localization";
 
 export const reportTypes = [
   "daily-operations",
@@ -53,8 +54,12 @@ export interface WindOpsReport {
   readonly metrics: readonly ReportMetric[];
   readonly sections: readonly ReportSection[];
   readonly linkedEntityIds: readonly string[];
+  readonly contentDigest?: string;
+  readonly generationReason?: string;
+  readonly createdBy?: string;
+  readonly persisted?: boolean;
   readonly workflow: {
-    readonly turbineId: "WT-023";
+    readonly turbineId: string;
     readonly missionStatus: ServerWorkflowSnapshot["mission"]["status"];
     readonly decisionStatus: ServerWorkflowSnapshot["decision"]["status"];
     readonly workOrderStatus: ServerWorkflowSnapshot["workOrder"]["status"];
@@ -119,20 +124,23 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
     (workOrder) => workOrder.id === snapshot.workOrder.id,
   )!;
   const generatedAt = snapshot.updatedAt;
+  const missionStatusLabel = localizedStatusLabel(snapshot.mission.status);
+  const decisionStatusLabel = localizedStatusLabel(snapshot.decision.status);
+  const workOrderStatusLabel = localizedStatusLabel(snapshot.workOrder.status);
   const workflowHeadline =
     snapshot.workOrder.status === "completed"
-      ? "WT-023 field work is closed and health verification is recorded"
+      ? "WT-023 现场作业已闭环并记录健康验证结果"
       : snapshot.workOrder.status === "in-progress"
-        ? `WT-023 field work is in progress (${snapshot.workOrder.completedTaskCount}/${snapshot.workOrder.totalTaskCount} tasks)`
+        ? `WT-023 现场作业执行中（${snapshot.workOrder.completedTaskCount}/${snapshot.workOrder.totalTaskCount} 项任务）`
         : snapshot.workOrder.status === "scheduled"
-          ? "WT-023 is approved and scheduled for field execution"
+          ? "WT-023 已批准并排入现场执行计划"
           : snapshot.decision.status === "rejected"
-            ? "WT-023 recommendation was rejected and remains locked"
+            ? "WT-023 建议已拒绝，执行保持锁定"
             : snapshot.decision.status === "revision-requested"
-              ? "WT-023 recommendation requires revision before execution"
+              ? "WT-023 建议须修订后方可执行"
               : snapshot.decision.status === "approved"
-                ? "WT-023 recommendation is approved; the work order is awaiting execution"
-                : "WT-023 remains at the human-review gate";
+                ? "WT-023 建议已批准；工单等待执行"
+                : "WT-023 当前处于人工审核门禁";
 
   const common = {
     generatedAt,
@@ -145,60 +153,60 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
       ...common,
       id: "RPT-DAILY-20260813",
       type: "daily-operations",
-      typeLabel: "Daily Operations",
-      title: "Daily Operations Report",
-      subtitle: "Fleet output, availability, alarms, and active operational work",
+      typeLabel: "运营日报",
+      title: "运营日报",
+      subtitle: "全场出力、可利用率、告警与活动作业",
       period: "daily",
-      periodLabel: "13 Aug 2026",
+      periodLabel: "2026 年 8 月 13 日",
       periodStart: "2026-08-13T00:00:00+08:00",
       periodEnd: "2026-08-13T23:59:59+08:00",
-      ownerAgent: "Operations Coordinator Agent",
-      assetScope: windFarm.nameEn,
-      highlight: `${windFarm.operatingTurbines}/${windFarm.turbineCount} turbines are producing ${windFarm.currentPowerMW.toFixed(1)} MW; ${workflowHeadline}.`,
-      tags: ["operations", "generation", "availability", "WT-023"],
+      ownerAgent: "运营协调 Agent",
+      assetScope: windFarm.name,
+      highlight: `${windFarm.operatingTurbines}/${windFarm.turbineCount} 台风机正在发电，当前出力 ${windFarm.currentPowerMW.toFixed(1)} MW；${workflowHeadline}。`,
+      tags: ["运营", "发电", "可利用率", "WT-023"],
       metrics: [
         {
-          label: "Current power",
+          label: "当前功率",
           value: `${windFarm.currentPowerMW.toFixed(1)} MW`,
-          context: `${windFarm.totalCapacityMW} MW installed`,
+          context: `装机容量 ${windFarm.totalCapacityMW} MW`,
           tone: "positive",
         },
         {
-          label: "Today generation",
+          label: "今日发电量",
           value: `${windFarm.todayGenerationGWh.toFixed(2)} GWh`,
-          context: "Deterministic SCADA snapshot",
+          context: "确定性 SCADA 快照",
           tone: "positive",
         },
         {
-          label: "Operating fleet",
+          label: "运行机组",
           value: `${windFarm.operatingTurbines}/${windFarm.turbineCount}`,
-          context: `${windFarm.maintenanceTurbines} maintenance / ${windFarm.offlineTurbines} offline`,
+          context: `${windFarm.maintenanceTurbines} 台维护 / ${windFarm.offlineTurbines} 台离线`,
           tone: "neutral",
         },
         {
-          label: "Open attention",
-          value: `${unresolvedAlarms.length} alarms`,
-          context: `${activeMissions.length} active missions`,
+          label: "待关注事项",
+          value: `${unresolvedAlarms.length} 条告警`,
+          context: `${activeMissions.length} 个活动 Mission`,
           tone: "attention",
         },
       ],
       sections: [
         {
-          heading: "Fleet operating position",
-          summary: "The wind farm is operational with the majority of assets producing normally.",
+          heading: "全场运行态势",
+          summary: "风场保持运行，多数资产正常发电。",
           findings: [
-            `${percentage(windFarm.operatingTurbines, windFarm.turbineCount)} of turbines are in an operating state.`,
-            `Fleet average health is ${windFarm.averageHealthScore.toFixed(1)} and mean availability is ${averageAvailability.toFixed(1)}%.`,
-            `Current output is ${windFarm.currentPowerMW.toFixed(1)} MW against ${windFarm.totalCapacityMW} MW installed capacity.`,
+            `${percentage(windFarm.operatingTurbines, windFarm.turbineCount)} 的风机处于运行状态。`,
+            `全场平均健康度为 ${windFarm.averageHealthScore.toFixed(1)}，平均可利用率为 ${averageAvailability.toFixed(1)}%。`,
+            `当前出力 ${windFarm.currentPowerMW.toFixed(1)} MW，装机容量 ${windFarm.totalCapacityMW} MW。`,
           ],
         },
         {
-          heading: "Operational attention",
-          summary: "Agent missions concentrate operational signals into reviewable work packages.",
+          heading: "运营关注事项",
+          summary: "Agent Mission 将运行信号汇总为可审核的作业包。",
           findings: [
-            `${unresolvedAlarms.length} unresolved alarms are linked to ${activeMissions.length} active missions.`,
-            `${missionStatuses["under-review"] ?? 0} missions are at human review and ${missionStatuses.executing ?? 0} are executing.`,
-            `WT-023 workflow is ${snapshot.mission.status}; decision ${snapshot.decision.status}; work order ${snapshot.workOrder.status}.`,
+            `${unresolvedAlarms.length} 条未解决告警关联 ${activeMissions.length} 个活动 Mission。`,
+            `${missionStatuses["under-review"] ?? 0} 个 Mission 等待人工审核，${missionStatuses.executing ?? 0} 个正在执行。`,
+            `WT-023 工作流状态为 ${missionStatusLabel}；决策 ${decisionStatusLabel}；工单 ${workOrderStatusLabel}。`,
           ],
         },
       ],
@@ -213,61 +221,60 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
       ...common,
       id: "RPT-ALARM-20260813",
       type: "alarm-analysis",
-      typeLabel: "Alarm Analysis",
-      title: "Alarm Analysis Report",
-      subtitle: "Severity distribution, unresolved queue, and alarm-to-mission traceability",
+      typeLabel: "告警分析",
+      title: "告警分析报告",
+      subtitle: "严重度分布、未解决队列与告警到 Mission 的追溯关系",
       period: "daily",
-      periodLabel: "13 Aug 2026",
+      periodLabel: "2026 年 8 月 13 日",
       periodStart: "2026-08-13T00:00:00+08:00",
       periodEnd: "2026-08-13T23:59:59+08:00",
-      ownerAgent: "SCADA Analysis Agent",
-      assetScope: `${windFarm.code} / fleet alarms`,
-      highlight: `${unresolvedAlarms.length} unresolved alarms remain; WT-023 has three correlated signals consolidated into one mission.`,
-      tags: ["alarms", "severity", "correlation", "WT-023"],
+      ownerAgent: "SCADA 分析 Agent",
+      assetScope: `${windFarm.code} / 全场告警`,
+      highlight: `仍有 ${unresolvedAlarms.length} 条未解决告警；WT-023 的三项关联信号已汇总到一个 Mission。`,
+      tags: ["告警", "严重度", "关联分析", "WT-023"],
       metrics: [
         {
-          label: "Unresolved",
+          label: "未解决",
           value: `${unresolvedAlarms.length}`,
-          context: `${alarms.length} live alarm records`,
+          context: `${alarms.length} 条实时告警记录`,
           tone: "attention",
         },
         {
-          label: "Critical / major",
+          label: "严重 / 重要",
           value: `${(alarmSeverities.critical ?? 0) + (alarmSeverities.major ?? 0)}`,
-          context: "Priority response queue",
+          context: "优先响应队列",
           tone: "critical",
         },
         {
-          label: "AI action created",
+          label: "AI 已创建行动",
           value: `${alarms.filter((alarm) => alarm.aiStatus === "action-created").length}`,
-          context: "Alarm-to-action conversion",
+          context: "告警到行动的转化",
           tone: "positive",
         },
         {
-          label: "WT-023 evidence",
+          label: "WT-023 证据",
           value: `${evidenceItems.filter((item) => item.turbineId === "WT-023").length}`,
-          context: "Traceable evidence items",
+          context: "可追溯证据项",
           tone: "neutral",
         },
       ],
       sections: [
         {
-          heading: "Severity and queue",
-          summary: "The live queue is dominated by actionable warning and major signals.",
+          heading: "严重度与队列",
+          summary: "实时队列主要由需要采取行动的警告和重要信号构成。",
           findings: [
-            `Severity counts: critical ${alarmSeverities.critical ?? 0}, major ${alarmSeverities.major ?? 0}, minor ${alarmSeverities.minor ?? 0}, warning ${alarmSeverities.warning ?? 0}.`,
-            `${alarms.filter((alarm) => alarm.status === "acknowledged").length} alarms have been acknowledged.`,
-            `${alarms.filter((alarm) => alarm.missionId !== null).length} alarm records retain a mission link.`,
+            `严重度统计：严重 ${alarmSeverities.critical ?? 0}，重要 ${alarmSeverities.major ?? 0}，次要 ${alarmSeverities.minor ?? 0}，警告 ${alarmSeverities.warning ?? 0}。`,
+            `${alarms.filter((alarm) => alarm.status === "acknowledged").length} 条告警已确认。`,
+            `${alarms.filter((alarm) => alarm.missionId !== null).length} 条告警记录保留 Mission 关联。`,
           ],
         },
         {
-          heading: "WT-023 correlation case",
-          summary:
-            "Vibration, temperature, and power fluctuation were correlated before a mission was opened.",
+          heading: "WT-023 关联案例",
+          summary: "创建 Mission 前已关联振动、温度与功率波动。",
           findings: [
-            "Main-bearing vibration reached 4.81 mm/s against a 4.50 mm/s threshold.",
-            "Temperature was 8.4 C above its normalized operating baseline.",
-            `The correlated case is controlled by ${snapshot.mission.id} at ${snapshot.mission.status}.`,
+            "主轴承振动达到 4.81 mm/s，超过 4.50 mm/s 阈值。",
+            "温度较归一化运行基线高 8.4°C。",
+            `关联案例由 ${snapshot.mission.id} 管理，当前状态为 ${missionStatusLabel}。`,
           ],
         },
       ],
@@ -277,62 +284,60 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
       ...common,
       id: "RPT-AI-WT023-20260813",
       type: "ai-diagnosis",
-      typeLabel: "AI Diagnosis",
-      title: "AI Diagnosis Report",
-      subtitle: "Evidence-backed multi-agent diagnosis and guarded recommendation",
+      typeLabel: "AI 诊断",
+      title: "AI 诊断报告",
+      subtitle: "基于证据的多 Agent 诊断与受控建议",
       period: "incident",
-      periodLabel: "WT-023 incident / 13 Aug 2026",
+      periodLabel: "WT-023 事件 / 2026 年 8 月 13 日",
       periodStart: featuredMission.createdAt,
       periodEnd: generatedAt,
-      ownerAgent: "Failure Diagnosis Agent",
+      ownerAgent: "故障诊断 Agent",
       assetScope: `WT-023 / ${snapshot.mission.id}`,
-      highlight: `Main-bearing early degradation is assessed at ${featuredMission.confidencePercent ?? 0}% confidence; high-risk execution remains bound to human approval.`,
-      tags: ["AI", "diagnosis", "evidence", "HITL", "WT-023"],
+      highlight: `主轴承早期退化诊断置信度为 ${featuredMission.confidencePercent ?? 0}%；高风险执行仍受人工审批约束。`,
+      tags: ["AI", "诊断", "证据", "人工门禁", "WT-023"],
       metrics: [
         {
-          label: "Diagnosis confidence",
+          label: "诊断置信度",
           value: `${featuredMission.confidencePercent ?? 0}%`,
-          context: "Featured mission assessment",
+          context: "重点 Mission 评估",
           tone: "attention",
         },
         {
-          label: "Supporting evidence",
+          label: "支持证据",
           value: `${featuredMission.evidenceIds.length}`,
-          context: "SCADA, CMS, model, history, resources",
+          context: "SCADA、CMS、模型、历史与资源",
           tone: "positive",
         },
         {
-          label: "Diagnosed missions",
+          label: "已诊断 Mission",
           value: `${diagnosedMissions.length}`,
-          context: `${averageConfidence.toFixed(1)}% mean confidence`,
+          context: `平均置信度 ${averageConfidence.toFixed(1)}%`,
           tone: "neutral",
         },
         {
-          label: "Human gate",
-          value: snapshot.decision.status,
-          context: snapshot.decision.approval ? "Approval recorded" : "Approval pending",
+          label: "人工门禁",
+          value: decisionStatusLabel,
+          context: snapshot.decision.approval ? "已记录审批" : "等待审批",
           tone: snapshot.decision.approval ? "positive" : "attention",
         },
       ],
       sections: [
         {
-          heading: "Evidence synthesis",
-          summary:
-            "Independent signal, spectral, history, and resource evidence supports the diagnosis.",
+          heading: "证据汇总",
+          summary: "独立的信号、频谱、历史与资源证据支持该诊断。",
           findings: [
-            "Main-bearing (主轴承) vibration RMS rose 27% from 3.79 to 4.81 mm/s across 44 consecutive samples.",
-            "BPFO-band energy increased 19%, consistent with an outer-race degradation pattern.",
-            "The closest historical case match scored 0.91 and the RUL model estimates 47 days before intervention.",
+            "主轴承振动 RMS 在连续 44 个采样点中从 3.79 升至 4.81 mm/s，增幅 27%。",
+            "BPFO 频带能量增加 19%，符合外圈退化模式。",
+            "最相似历史案例匹配分为 0.91，RUL 模型估计需在 47 天内干预。",
           ],
         },
         {
-          heading: "Guarded recommendation",
-          summary:
-            "The recommended response balances deterioration risk, safe access, and energy loss.",
+          heading: "受控建议",
+          summary: "推荐措施综合权衡退化风险、安全通行与发电损失。",
           findings: [
-            "Recommended action: derate to 70%, increase sampling, and inspect within the weather window.",
-            `Decision status is ${snapshot.decision.status}; no high-risk field execution occurs without the recorded gate.`,
-            `Workflow revision ${snapshot.revision} is the authoritative report overlay.`,
+            "推荐行动：降载至 70%，提高采样频率，并在天气窗口内检查。",
+            `决策状态为 ${decisionStatusLabel}；未记录人工门禁前不得执行高风险现场作业。`,
+            `工作流修订 ${snapshot.revision} 是报告的权威状态来源。`,
           ],
         },
       ],
@@ -342,62 +347,60 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
       ...common,
       id: "RPT-MAINT-20260813",
       type: "maintenance",
-      typeLabel: "Maintenance",
-      title: "Maintenance Report",
-      subtitle: "Work-order readiness, execution state, resources, and historical completion",
+      typeLabel: "维护",
+      title: "维护报告",
+      subtitle: "工单准备度、执行状态、资源与历史完工记录",
       period: "snapshot",
-      periodLabel: "Maintenance snapshot / 13 Aug 2026",
+      periodLabel: "维护快照 / 2026年8月13日",
       periodStart: "2026-08-13T00:00:00+08:00",
       periodEnd: generatedAt,
-      ownerAgent: "Work Order Agent",
-      assetScope: `${windFarm.code} / maintenance portfolio`,
-      highlight: `${currentWorkOrders.length} live work orders and ${historicalWorkOrders.length} historical orders are traceable; WT-023 is ${snapshot.workOrder.status}.`,
+      ownerAgent: "工单 Agent",
+      assetScope: `${windFarm.code} / 维护工单组合`,
+      highlight: `可追溯 ${currentWorkOrders.length} 条当前工单与 ${historicalWorkOrders.length} 条历史工单；WT-023 当前为 ${workOrderStatusLabel}。`,
       tags: ["maintenance", "work-order", "resources", "safety", "WT-023"],
       metrics: [
         {
-          label: "Live work orders",
+          label: "当前工单",
           value: `${currentWorkOrders.length}`,
-          context: `${workOrderStatuses["in-progress"] ?? 0} in progress`,
+          context: `${workOrderStatuses["in-progress"] ?? 0} 条执行中`,
           tone: "neutral",
         },
         {
-          label: "Historical ledger",
+          label: "历史台账",
           value: `${historicalWorkOrders.length}`,
-          context: `${completedOrders.length} completed or closed`,
+          context: `${completedOrders.length} 条已完成或关闭`,
           tone: "positive",
         },
         {
-          label: "WT-023 tasks",
+          label: "WT-023 任务",
           value: `${snapshot.workOrder.completedTaskCount}/${snapshot.workOrder.totalTaskCount}`,
-          context: `Work order ${snapshot.workOrder.status}`,
+          context: `工单状态：${workOrderStatusLabel}`,
           tone: snapshot.workOrder.status === "completed" ? "positive" : "attention",
         },
         {
-          label: "Reserved package",
-          value: "Crew + CTV + tools",
-          context: "Weather-gated execution",
+          label: "预留资源包",
+          value: "班组 + CTV + 工具",
+          context: "受天气窗口约束",
           tone: "positive",
         },
       ],
       sections: [
         {
-          heading: "Portfolio position",
-          summary:
-            "The live work-order portfolio remains linked to missions, decisions, safety, and resources.",
+          heading: "工单组合态势",
+          summary: "当前工单持续关联 Mission、决策、安全要求与资源。",
           findings: [
-            `Status counts include ${workOrderStatuses.draft ?? 0} draft, ${workOrderStatuses.scheduled ?? 0} scheduled, and ${workOrderStatuses["in-progress"] ?? 0} in progress.`,
-            `${currentWorkOrders.filter((order) => order.createdByAgentId !== null).length} live orders were created by an Agent.`,
-            `${failureCases.length} closed-loop failure cases support similarity-based planning.`,
+            `状态分布：${workOrderStatuses.draft ?? 0} 条草稿、${workOrderStatuses.scheduled ?? 0} 条已排程、${workOrderStatuses["in-progress"] ?? 0} 条执行中。`,
+            `${currentWorkOrders.filter((order) => order.createdByAgentId !== null).length} 条当前工单由 Agent 创建。`,
+            `${failureCases.length} 个闭环故障案例支持相似性规划。`,
           ],
         },
         {
-          heading: "WT-023 field package",
-          summary:
-            "The main-bearing inspection package preserves the human gate and five explicit tasks.",
+          heading: "WT-023 现场作业包",
+          summary: "主轴承检查作业包保留人工门禁与五项明确任务。",
           findings: [
-            `Work order ${featuredWorkOrder.id} is ${snapshot.workOrder.status} with ${snapshot.workOrder.completedTaskCount}/${snapshot.workOrder.totalTaskCount} tasks complete.`,
-            `Assigned team: ${featuredWorkOrder.assignedTeam}; estimated duration ${featuredWorkOrder.estimatedDurationHours} hours.`,
-            `${featuredWorkOrder.ppeRequirements.length} PPE controls, ${featuredWorkOrder.requiredTools.length} tools, and ${featuredWorkOrder.safetyProcedures.length} safety procedures are recorded.`,
+            `工单 ${featuredWorkOrder.id} 当前为 ${workOrderStatusLabel}，已完成 ${snapshot.workOrder.completedTaskCount}/${snapshot.workOrder.totalTaskCount} 项任务。`,
+            `执行班组：${featuredWorkOrder.assignedTeam}；预计工期 ${featuredWorkOrder.estimatedDurationHours} 小时。`,
+            `已记录 ${featuredWorkOrder.ppeRequirements.length} 项 PPE 要求、${featuredWorkOrder.requiredTools.length} 项工具和 ${featuredWorkOrder.safetyProcedures.length} 项安全程序。`,
           ],
         },
       ],
@@ -407,63 +410,62 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
       ...common,
       id: "RPT-HEALTH-20260813",
       type: "asset-health",
-      typeLabel: "Asset Health",
-      title: "Asset Health Report",
-      subtitle: "Fleet health distribution, trend signals, and intervention priority",
+      typeLabel: "资产健康",
+      title: "资产健康报告",
+      subtitle: "全场健康分布、趋势信号与干预优先级",
       period: "snapshot",
-      periodLabel: "Health snapshot / 13 Aug 2026",
+      periodLabel: "健康快照 / 2026年8月13日",
       periodStart: "2026-08-13T00:00:00+08:00",
       periodEnd: generatedAt,
-      ownerAgent: "Predictive Maintenance Agent",
-      assetScope: `${windFarm.code} / ${turbines.length} turbines`,
-      highlight: `${elevatedHealthRisk.length} turbines have high or critical 30-day risk; WT-023 health is ${snapshot.health.turbineScore}.`,
+      ownerAgent: "预测维护 Agent",
+      assetScope: `${windFarm.code} / ${turbines.length} 台风机`,
+      highlight: `${elevatedHealthRisk.length} 台风机的 30 天风险为高或严重；WT-023 健康度为 ${snapshot.health.turbineScore}。`,
       tags: ["health", "risk", "RUL", "trend", "WT-023"],
       metrics: [
         {
-          label: "Fleet health",
+          label: "全场健康度",
           value: `${windFarm.averageHealthScore.toFixed(1)}`,
-          context: "Average score / 100",
+          context: "平均分 / 100",
           tone: "positive",
         },
         {
-          label: "Elevated risk",
+          label: "较高风险",
           value: `${elevatedHealthRisk.length}`,
-          context: "High or critical 30-day risk",
+          context: "30 天高风险或严重风险",
           tone: "critical",
         },
         {
-          label: "Declining trend",
+          label: "下降趋势",
           value: `${decliningHealth.length}`,
-          context: "Assets requiring trend review",
+          context: "需要趋势复核的资产",
           tone: "attention",
         },
         {
-          label: "WT-023 bearing",
+          label: "WT-023 主轴承",
           value: `${snapshot.health.mainBearingScore}`,
-          context: `Turbine health ${snapshot.health.turbineScore}`,
+          context: `机组健康度 ${snapshot.health.turbineScore}`,
           tone: snapshot.health.mainBearingScore >= 75 ? "positive" : "critical",
         },
       ],
       sections: [
         {
-          heading: "Fleet health distribution",
-          summary: "Health scores and 30-day risk are calculated for all 64 turbines.",
+          heading: "全场健康分布",
+          summary: "已计算全部 64 台风机的健康评分与 30 天风险。",
           findings: [
-            `${currentHealth.filter((item) => item.state === "healthy").length} assets are healthy and ${currentHealth.filter((item) => item.state === "degraded" || item.state === "critical").length} are degraded or critical.`,
-            `${decliningHealth.length} assets show a declining trend across the deterministic snapshot.`,
-            `The highest modeled failure probability is ${Math.max(...currentHealth.map((item) => item.failureProbability30d))}%.`,
+            `${currentHealth.filter((item) => item.state === "healthy").length} 台资产健康，${currentHealth.filter((item) => item.state === "degraded" || item.state === "critical").length} 台处于退化或严重状态。`,
+            `${decliningHealth.length} 台资产在确定性快照中呈下降趋势。`,
+            `模型给出的最高故障概率为 ${Math.max(...currentHealth.map((item) => item.failureProbability30d))}%。`,
           ],
         },
         {
-          heading: "WT-023 health overlay",
-          summary:
-            "The report reflects the current server workflow, including post-maintenance recovery when closed.",
+          heading: "WT-023 健康状态叠加",
+          summary: "报告反映当前服务端工作流，包括闭环后的维护恢复。",
           findings: [
-            `Turbine health is ${snapshot.health.turbineScore}; main-bearing health is ${snapshot.health.mainBearingScore}.`,
-            `Mission ${snapshot.mission.id} is ${snapshot.mission.status}; work order ${snapshot.workOrder.id} is ${snapshot.workOrder.status}.`,
+            `机组健康度为 ${snapshot.health.turbineScore}；主轴承健康度为 ${snapshot.health.mainBearingScore}。`,
+            `Mission ${snapshot.mission.id} 当前为 ${missionStatusLabel}；工单 ${snapshot.workOrder.id} 当前为 ${workOrderStatusLabel}。`,
             snapshot.knowledgeCaseId
-              ? `Closed-loop knowledge case ${snapshot.knowledgeCaseId} is available.`
-              : "Knowledge capture remains pending until the field workflow is completed.",
+              ? `闭环知识案例 ${snapshot.knowledgeCaseId} 已可用。`
+              : "现场工作流完成前，知识沉淀保持待处理。",
           ],
         },
       ],
@@ -473,62 +475,60 @@ export function buildReportCatalog(snapshot: ServerWorkflowSnapshot): readonly W
       ...common,
       id: "RPT-WEEKLY-2026W33",
       type: "weekly-wind-farm",
-      typeLabel: "Weekly Wind Farm",
-      title: "Weekly Wind Farm Report",
-      subtitle: "Executive operating summary for East China Offshore Wind Farm",
+      typeLabel: "风场周报",
+      title: "风场运营周报",
+      subtitle: "华东海上风场管理层运营摘要",
       period: "weekly",
-      periodLabel: "10-16 Aug 2026 / W33",
+      periodLabel: "2026年8月10日–16日 / 第33周",
       periodStart: "2026-08-10T00:00:00+08:00",
       periodEnd: "2026-08-16T23:59:59+08:00",
-      ownerAgent: "Operations Coordinator Agent",
-      assetScope: windFarm.nameEn,
-      highlight: `The 384 MW fleet remains operational at ${averageAvailability.toFixed(1)}% mean availability, with WT-023 the featured governed intervention.`,
+      ownerAgent: "运营协调 Agent",
+      assetScope: windFarm.name,
+      highlight: `384 MW 风场保持运行，平均可利用率为 ${averageAvailability.toFixed(1)}%；WT-023 为本周重点受控干预案例。`,
       tags: ["weekly", "executive", "wind-farm", "KPI", "WT-023"],
       metrics: [
         {
-          label: "Installed capacity",
+          label: "装机容量",
           value: `${windFarm.totalCapacityMW} MW`,
-          context: `${windFarm.turbineCount} x 6.0 MW`,
+          context: `${windFarm.turbineCount} × 6.0 MW`,
           tone: "neutral",
         },
         {
-          label: "Mean availability",
+          label: "平均可利用率",
           value: `${averageAvailability.toFixed(1)}%`,
-          context: "Deterministic fleet mean",
+          context: "确定性全场均值",
           tone: "positive",
         },
         {
-          label: "Active missions",
+          label: "活动 Mission",
           value: `${activeMissions.length}`,
-          context: `${currentMissions.length} mission records`,
+          context: `共 ${currentMissions.length} 条 Mission 记录`,
           tone: "attention",
         },
         {
-          label: "Closed-loop cases",
+          label: "闭环案例",
           value: `${failureCases.length}`,
-          context: "Historical failure knowledge",
+          context: "历史故障知识",
           tone: "positive",
         },
       ],
       sections: [
         {
-          heading: "Executive summary",
-          summary:
-            "Fleet output and availability remain stable while AI-guided attention is focused on a small asset subset.",
+          heading: "管理层摘要",
+          summary: "全场出力与可利用率保持稳定，AI 辅助关注集中在少量重点资产。",
           findings: [
-            `${windFarm.operatingTurbines} turbines are operating, ${windFarm.maintenanceTurbines} is in maintenance, and ${windFarm.offlineTurbines} is offline.`,
-            `Current power is ${windFarm.currentPowerMW.toFixed(1)} MW and daily generation at snapshot is ${windFarm.todayGenerationGWh.toFixed(2)} GWh.`,
-            `${activeMissions.length} missions are active and retain links to their underlying alarms and work orders.`,
+            `${windFarm.operatingTurbines} 台风机运行中，${windFarm.maintenanceTurbines} 台维护中，${windFarm.offlineTurbines} 台离线。`,
+            `当前功率 ${windFarm.currentPowerMW.toFixed(1)} MW，快照时今日发电量 ${windFarm.todayGenerationGWh.toFixed(2)} GWh。`,
+            `${activeMissions.length} 个 Mission 处于活动状态，并保留与底层告警及工单的关联。`,
           ],
         },
         {
-          heading: "Risk and intervention focus",
-          summary:
-            "The weekly review highlights governed intervention rather than autonomous high-risk execution.",
+          heading: "风险与干预重点",
+          summary: "周度复盘强调受控干预，不允许自主执行高风险操作。",
           findings: [
-            `${elevatedHealthRisk.length} turbines are in the high or critical modeled-risk bands.`,
-            `WT-023 is at mission ${snapshot.mission.status}, decision ${snapshot.decision.status}, and work order ${snapshot.workOrder.status}.`,
-            `Audit revision ${snapshot.revision} and ${snapshot.auditEvents.length} workflow events support the report trace.`,
+            `${elevatedHealthRisk.length} 台风机处于模型高风险或严重风险区间。`,
+            `WT-023 的 Mission 状态为 ${missionStatusLabel}，决策状态为 ${decisionStatusLabel}，工单状态为 ${workOrderStatusLabel}。`,
+            `审计修订 ${snapshot.revision} 与 ${snapshot.auditEvents.length} 条工作流事件支撑报告追溯。`,
           ],
         },
       ],
@@ -553,17 +553,17 @@ export function reportToPlainText(report: WindOpsReport): readonly string[] {
     report.title,
     report.subtitle,
     "",
-    `Report ID: ${report.id}`,
-    `Type: ${report.typeLabel}`,
-    `Period: ${report.periodLabel}`,
-    `Generated: ${report.generatedAt}`,
-    `Owner: ${report.ownerAgent}`,
-    `Asset scope: ${report.assetScope}`,
+    `报告编号：${report.id}`,
+    `类型：${report.typeLabel}`,
+    `周期：${report.periodLabel}`,
+    `生成时间：${report.generatedAt}`,
+    `负责人：${report.ownerAgent}`,
+    `资产范围：${report.assetScope}`,
     "",
-    "EXECUTIVE HIGHLIGHT",
+    "执行摘要",
     report.highlight,
     "",
-    "KEY METRICS",
+    "关键指标",
     ...report.metrics.map((metric) => `${metric.label}: ${metric.value} - ${metric.context}`),
     "",
     ...report.sections.flatMap((section) => [
@@ -572,11 +572,11 @@ export function reportToPlainText(report: WindOpsReport): readonly string[] {
       ...section.findings.map((finding) => `- ${finding}`),
       "",
     ]),
-    "WORKFLOW TRACE",
-    `WT-023 mission=${report.workflow.missionStatus}; decision=${report.workflow.decisionStatus}; workOrder=${report.workflow.workOrderStatus}`,
-    `Tasks=${report.workflow.completedTaskCount}/${report.workflow.totalTaskCount}; health=${report.workflow.healthScore}; bearing=${report.workflow.mainBearingHealthScore}; revision=${report.workflow.revision}`,
-    `Linked entities: ${report.linkedEntityIds.join(", ")}`,
+    "工作流追溯",
+    `WT-023 Mission=${localizedStatusLabel(report.workflow.missionStatus)}；决策=${localizedStatusLabel(report.workflow.decisionStatus)}；工单=${localizedStatusLabel(report.workflow.workOrderStatus)}`,
+    `任务=${report.workflow.completedTaskCount}/${report.workflow.totalTaskCount}；健康度=${report.workflow.healthScore}；主轴承=${report.workflow.mainBearingHealthScore}；修订=${report.workflow.revision}`,
+    `关联实体：${report.linkedEntityIds.join(", ")}`,
     "",
-    "Generated from deterministic WindOps fixtures with the authoritative server workflow overlay.",
+    "基于 WindOps 确定性演示数据生成，并叠加权威服务端工作流状态。",
   ];
 }

@@ -50,7 +50,7 @@ const upperThresholds = (
   },
   {
     id: `${metric}-critical`,
-    label: "Critical",
+    label: "严重阈值",
     value: critical,
     direction: "above",
     severity: "critical",

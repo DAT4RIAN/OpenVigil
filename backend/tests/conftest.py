@@ -1,6 +1,9 @@
+import os
 from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
+import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
@@ -15,6 +18,15 @@ ARTIFACT_HASHES = {
 ARTIFACT_HASHES["minio://test/security-evidence.json"] = "a" * 64
 
 
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    del exitstatus
+    if os.getenv("WINDOPS_FAIL_ON_SKIPPED") != "1":
+        return
+    reporter: Any = session.config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None and reporter.stats.get("skipped"):
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
 @pytest_asyncio.fixture
 async def app(tmp_path) -> AsyncIterator[FastAPI]:
     settings = Settings(
@@ -25,6 +37,7 @@ async def app(tmp_path) -> AsyncIterator[FastAPI]:
         agent_mode="deterministic",
         test_auth_bypass_enabled=True,
         outbox_inline_drain=True,
+        knowledge_graph_backend="memory",
     )
     application = create_app(settings)
     async with application.router.lifespan_context(application):

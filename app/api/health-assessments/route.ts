@@ -1,6 +1,8 @@
 import { healthAssessments } from "@/lib";
 import { overlayWorkflowHealth } from "@/lib/server-workflow-overlays";
 import type { HealthState, RiskLevel } from "@/lib/types";
+import { productionHealthAssessmentsResponse } from "@/lib/production-domain-adapter";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 import { jsonResponse } from "../_shared";
 import { readWorkflowForApi } from "../_workflow";
@@ -16,6 +18,9 @@ const healthStates: readonly HealthState[] = [
 const riskLevels: readonly RiskLevel[] = ["critical", "high", "medium", "low"];
 
 export async function GET(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return productionHealthAssessmentsResponse(request);
+  }
   const url = new URL(request.url);
   const turbineId = url.searchParams.get("turbineId")?.trim().toUpperCase() ?? null;
   const state = url.searchParams.get("state")?.trim().toLowerCase() ?? null;

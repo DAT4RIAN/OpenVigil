@@ -13,6 +13,12 @@
 
 # testing
 /coverage
+/.test-tmp/
+**/.coverage
+**/.coverage.*
+**/htmlcov/
+**/.pytest-tmp*/
+**/.artifacts/
 
 # next.js
 /.next/
@@ -43,9 +49,9 @@ yarn-error.log*
 # Python backend local environment and caches
 /backend/.venv/
 **/__pycache__/
-/.pytest_cache/
-/.ruff_cache/
-/.mypy_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
 
 # TypeScript incremental build cache
 *.tsbuildinfo

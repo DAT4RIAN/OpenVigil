@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { localizedStatusLabel } from "@/lib/ui-localization";
 
 export type StatusTone =
   "success" | "warning" | "critical" | "offline" | "info" | "maintenance" | "neutral";
@@ -60,7 +61,7 @@ export function StatusBadge({
       )}
     >
       <span className={cn("status-dot", pulse && "status-dot--pulse")} aria-hidden="true" />
-      {label ?? value.toUpperCase()}
+      {label ?? localizedStatusLabel(value)}
     </span>
   );
 }

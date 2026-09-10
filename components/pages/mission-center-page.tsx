@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   Bot,
@@ -28,16 +29,22 @@ import { agents, getFeaturedMissionNarrative, missions } from "@/lib";
 import type { Mission, MissionStatus } from "@/lib/types";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
+import { localizedMissionTitle, localizedSeverityLabel } from "@/lib/ui-localization";
+import { agentDisplayName } from "@/lib/agent-control-meta";
+import { apiGet, apiPostCommand } from "@/lib/api-client";
+import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
+import type { Alarm } from "@/lib/types";
 
 const columns: { status: MissionStatus; label: string; description: string }[] = [
-  { status: "detected", label: "Detected", description: "新发现事件" },
-  { status: "investigating", label: "Investigating", description: "收集与分析证据" },
-  { status: "diagnosed", label: "Diagnosed", description: "已形成故障判断" },
-  { status: "decision-pending", label: "Decision Pending", description: "生成候选方案" },
-  { status: "under-review", label: "Under Review", description: "专业审核中" },
-  { status: "approved", label: "Approved", description: "等待执行资源" },
-  { status: "executing", label: "Executing", description: "现场任务进行中" },
-  { status: "completed", label: "Completed", description: "已完成闭环" },
+  { status: "detected", label: "已发现", description: "新发现事件" },
+  { status: "investigating", label: "调查中", description: "收集与分析证据" },
+  { status: "diagnosed", label: "已诊断", description: "已形成故障判断" },
+  { status: "decision-pending", label: "等待决策", description: "生成候选方案" },
+  { status: "under-review", label: "审核中", description: "专业审核中" },
+  { status: "approved", label: "已批准", description: "等待执行资源" },
+  { status: "executing", label: "执行中", description: "现场任务进行中" },
+  { status: "rejected", label: "已拒绝", description: "人工审核已拒绝" },
+  { status: "completed", label: "已完成", description: "已完成闭环" },
 ];
 
 const severityOptions: readonly Mission["severity"][] = ["critical", "high", "medium", "low"];
@@ -66,6 +73,12 @@ function formatUpdatedAt(timestamp: string) {
   });
 }
 
+function formatResolutionDuration(minutes: number) {
+  const rounded = Math.round(minutes);
+  if (rounded < 60) return `${rounded}m`;
+  return `${Math.floor(rounded / 60)}h ${rounded % 60}m`;
+}
+
 function MissionCard({ mission }: { mission: Mission }) {
   const lead = agents.find((agent) => agent.id === mission.leadAgentId);
   return (
@@ -77,13 +90,13 @@ function MissionCard({ mission }: { mission: Mission }) {
         <span className="mono">{mission.id}</span>
         <StatusBadge
           value={mission.severity}
-          label={mission.severity.toUpperCase()}
+          label={localizedSeverityLabel(mission.severity)}
           tone={severityTone(mission.severity)}
           compact
         />
       </div>
       <div className="kanban-card__copy">
-        <strong>{mission.title}</strong>
+        <strong>{localizedMissionTitle(mission.title)}</strong>
         <span>
           {mission.turbineId} · {mission.summary}
         </span>
@@ -97,7 +110,7 @@ function MissionCard({ mission }: { mission: Mission }) {
       ) : null}
       <div className="kanban-card__progress">
         <span>
-          <small>Progress</small>
+          <small>进度</small>
           <strong>{mission.progressPercent}%</strong>
         </span>
         <Progress
@@ -107,10 +120,14 @@ function MissionCard({ mission }: { mission: Mission }) {
       </div>
       <div className="kanban-card__meta">
         <span>
-          <Avatar label={lead?.shortName ?? "AI"} tone="teal" size="sm" />
+          <Avatar
+            label={lead ? agentDisplayName(lead.id, lead.shortName) : "AI"}
+            tone="teal"
+            size="sm"
+          />
           <span>
-            <small>Lead Agent</small>
-            <strong>{lead?.shortName ?? "Unassigned"}</strong>
+            <small>主导 Agent</small>
+            <strong>{lead ? agentDisplayName(lead.id, lead.shortName) : "未指派"}</strong>
           </span>
         </span>
         <span>
@@ -133,7 +150,7 @@ const missionListColumns: readonly LegacyColumnDef<Mission, unknown>[] = [
     header: "Mission",
     cell: ({ row }) => (
       <span className="alarm-title-cell">
-        <strong>{row.original.title}</strong>
+        <strong>{localizedMissionTitle(row.original.title)}</strong>
         <small className="mono">{row.original.id}</small>
       </span>
     ),
@@ -152,7 +169,7 @@ const missionListColumns: readonly LegacyColumnDef<Mission, unknown>[] = [
     cell: ({ row }) => (
       <StatusBadge
         value={row.original.severity}
-        label={row.original.severity.toUpperCase()}
+        label={localizedSeverityLabel(row.original.severity)}
         tone={severityTone(row.original.severity)}
         compact
       />
@@ -165,9 +182,12 @@ const missionListColumns: readonly LegacyColumnDef<Mission, unknown>[] = [
   },
   {
     accessorKey: "leadAgentId",
-    header: "Lead Agent",
+    header: "主导 Agent",
     cell: ({ row }) =>
-      agents.find((agent) => agent.id === row.original.leadAgentId)?.shortName ?? "Unassigned",
+      (() => {
+        const agent = agents.find((candidate) => candidate.id === row.original.leadAgentId);
+        return agent ? agentDisplayName(agent.id, agent.shortName) : "未指派";
+      })(),
   },
   {
     accessorKey: "progressPercent",
@@ -190,14 +210,20 @@ const missionCsvExport = {
   filename: "windops-missions.csv",
   columns: [
     { label: "Mission ID", value: (mission: Mission) => mission.id },
-    { label: "Title", value: (mission: Mission) => mission.title },
-    { label: "Status", value: (mission: Mission) => mission.status },
-    { label: "Severity", value: (mission: Mission) => mission.severity },
-    { label: "Wind Turbine", value: (mission: Mission) => mission.turbineId },
-    { label: "Lead Agent", value: (mission: Mission) => mission.leadAgentId },
-    { label: "Agents", value: (mission: Mission) => mission.agentIds.length },
-    { label: "Progress", value: (mission: Mission) => mission.progressPercent },
-    { label: "Updated At", value: (mission: Mission) => mission.updatedAt },
+    { label: "标题", value: (mission: Mission) => localizedMissionTitle(mission.title) },
+    { label: "状态", value: (mission: Mission) => statusLabel(mission.status) },
+    { label: "严重度", value: (mission: Mission) => localizedSeverityLabel(mission.severity) },
+    { label: "风机", value: (mission: Mission) => mission.turbineId },
+    {
+      label: "主导 Agent",
+      value: (mission: Mission) => {
+        const agent = agents.find((item) => item.id === mission.leadAgentId);
+        return agent ? agentDisplayName(agent.id, agent.shortName) : mission.leadAgentId;
+      },
+    },
+    { label: "Agent 数", value: (mission: Mission) => mission.agentIds.length },
+    { label: "进度", value: (mission: Mission) => mission.progressPercent },
+    { label: "更新时间", value: (mission: Mission) => mission.updatedAt },
   ],
 } as const;
 
@@ -267,9 +293,13 @@ function MissionTimeline({ items }: { items: readonly Mission[] }) {
               <div className="timeline-event__body">
                 <div>
                   <span>
-                    <Avatar label={lead?.shortName ?? "AI"} tone="teal" size="sm" />
+                    <Avatar
+                      label={lead ? agentDisplayName(lead.id, lead.shortName) : "AI"}
+                      tone="teal"
+                      size="sm"
+                    />
                     <span>
-                      <strong>{lead?.shortName ?? "Unassigned"}</strong>
+                      <strong>{lead ? agentDisplayName(lead.id, lead.shortName) : "未指派"}</strong>
                       <small>{statusLabel(mission.status)}</small>
                     </span>
                   </span>
@@ -277,7 +307,7 @@ function MissionTimeline({ items }: { items: readonly Mission[] }) {
                 </div>
                 <a href={`/missions/${mission.id}`}>
                   <h3>
-                    {mission.id} · {mission.title}
+                    {mission.id} · {localizedMissionTitle(mission.title)}
                   </h3>
                 </a>
                 <p>
@@ -295,7 +325,190 @@ function MissionTimeline({ items }: { items: readonly Mission[] }) {
   );
 }
 
-export function MissionCenterPage() {
+function CreateMissionDrawer({
+  alarms,
+  preferredTurbineId,
+  onClose,
+  onCreated,
+}: {
+  readonly alarms: readonly Alarm[];
+  readonly preferredTurbineId: string | null;
+  readonly onClose: () => void;
+  readonly onCreated: () => Promise<void>;
+}) {
+  const eligibleAlarms = alarms.filter((alarm) => alarm.missionId === null);
+  const preferred =
+    eligibleAlarms.find((alarm) => alarm.turbineId === preferredTurbineId) ?? eligibleAlarms[0];
+  const [alarmId, setAlarmId] = useState(preferred?.id ?? "");
+  const [title, setTitle] = useState(
+    preferred ? `${preferred.turbineId} ${preferred.title} Investigation` : "",
+  );
+  const [component, setComponent] = useState(preferred?.subsystem.replaceAll("-", "_") ?? "");
+  const [primaryVariable, setPrimaryVariable] = useState(
+    preferred
+      ? (preferred.sourceVariable ?? `${preferred.subsystem.replaceAll("-", "_")}_condition_signal`)
+      : "",
+  );
+  const [knowledgeQuery, setKnowledgeQuery] = useState(
+    preferred ? `${preferred.subsystem.replaceAll("-", " ")} inspection failure diagnosis` : "",
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
+
+  function selectAlarm(nextAlarmId: string) {
+    setAlarmId(nextAlarmId);
+    const alarm = eligibleAlarms.find((item) => item.id === nextAlarmId);
+    if (!alarm) return;
+    const nextComponent = alarm.subsystem.replaceAll("-", "_");
+    setTitle(`${alarm.turbineId} ${alarm.title} Investigation`);
+    setComponent(nextComponent);
+    setPrimaryVariable(alarm.sourceVariable ?? `${nextComponent}_condition_signal`);
+    setKnowledgeQuery(`${nextComponent.replaceAll("_", " ")} inspection failure diagnosis`);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiPostCommand(
+        "/api/missions",
+        {
+          alarm_id: alarmId,
+          title,
+          analysis_profile: {
+            component,
+            primary_variable: primaryVariable,
+            related_variables: [],
+            knowledge_query: knowledgeQuery,
+          },
+        },
+        `mission-create-${crypto.randomUUID()}`,
+      );
+      await onCreated();
+      onClose();
+    } catch (submissionError) {
+      setError(
+        submissionError instanceof Error ? submissionError.message : "Mission 创建请求失败。",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <button className="drawer-backdrop" onClick={onClose} aria-label="关闭 Mission 创建面板" />
+      <aside
+        ref={dialogRef}
+        className="detail-drawer mission-create-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-mission-title"
+        tabIndex={-1}
+      >
+        <header className="detail-drawer__header">
+          <div>
+            <span className="eyebrow">受控业务命令</span>
+            <h2 id="create-mission-title">创建 Mission</h2>
+            <p>任务与分析事件将在同一事务中持久化，并支持幂等重试。</p>
+          </div>
+          <Button variant="ghost" onClick={onClose} aria-label="关闭">
+            <X size={15} />
+          </Button>
+        </header>
+        {eligibleAlarms.length ? (
+          <form className="mission-create-form" onSubmit={(event) => void submit(event)}>
+            <section className="drawer-section">
+              <h3>任务来源</h3>
+              <label>
+                <span>未关联告警</span>
+                <select value={alarmId} onChange={(event) => selectAlarm(event.target.value)}>
+                  {eligibleAlarms.map((alarm) => (
+                    <option value={alarm.id} key={alarm.id}>
+                      {alarm.id} · {alarm.turbineId} · {alarm.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Mission 标题</span>
+                <input
+                  required
+                  minLength={3}
+                  maxLength={240}
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                />
+              </label>
+            </section>
+            <section className="drawer-section">
+              <h3>可审计分析配置</h3>
+              <label>
+                <span>部件标识</span>
+                <input
+                  required
+                  minLength={2}
+                  maxLength={80}
+                  value={component}
+                  onChange={(event) => setComponent(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>主信号变量</span>
+                <input
+                  required
+                  minLength={2}
+                  maxLength={96}
+                  value={primaryVariable}
+                  onChange={(event) => setPrimaryVariable(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>知识检索查询</span>
+                <textarea
+                  required
+                  minLength={3}
+                  maxLength={400}
+                  rows={4}
+                  value={knowledgeQuery}
+                  onChange={(event) => setKnowledgeQuery(event.target.value)}
+                />
+              </label>
+            </section>
+            {error ? (
+              <div className="drawer-alert" role="alert">
+                <span className="drawer-alert__icon">
+                  <ShieldCheck size={15} />
+                </span>
+                <span>
+                  <strong>创建失败</strong>
+                  <small>{error}</small>
+                </span>
+              </div>
+            ) : null}
+            <footer className="detail-drawer__footer">
+              <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
+                取消
+              </Button>
+              <Button type="submit" variant="primary" disabled={submitting || !alarmId}>
+                <Plus size={15} /> {submitting ? "正在提交…" : "创建并启动分析"}
+              </Button>
+            </footer>
+          </form>
+        ) : (
+          <section className="drawer-section">
+            <h3>没有可用告警</h3>
+            <p className="muted">所有当前告警都已关联 Mission，或告警列表仍在加载。</p>
+          </section>
+        )}
+      </aside>
+    </>
+  );
+}
+
+export function MissionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
   const workflow = useDemoWorkflow();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"active" | "all">("active");
@@ -304,6 +517,18 @@ export function MissionCenterPage() {
   const [leadAgentId, setLeadAgentId] = useState("all");
   const [turbineScope, setTurbineScope] = useState<string | null>(null);
   const [diagnosisIntent, setDiagnosisIntent] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const missionQuery = useQuery({
+    queryKey: ["missions", workflow.serverRevision, runtimeMode],
+    queryFn: ({ signal }) => apiGet<{ readonly data: readonly Mission[] }>("/api/missions", signal),
+    initialData: runtimeMode === "demo" ? { data: missions } : undefined,
+  });
+  const alarmQuery = useQuery({
+    queryKey: ["mission-create-alarms", runtimeMode],
+    queryFn: ({ signal }) => apiGet<{ readonly data: readonly Alarm[] }>("/api/alarms", signal),
+    initialData: runtimeMode === "demo" ? { data: [] } : undefined,
+    enabled: runtimeMode === "production",
+  });
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search)
       .get("turbineId")
@@ -320,8 +545,8 @@ export function MissionCenterPage() {
   const featuredNarrative = getFeaturedMissionNarrative(workflow);
   const displayMissions = useMemo(
     () =>
-      missions.map((mission) =>
-        mission.id === "MISSION-2026-0823"
+      (missionQuery.data?.data ?? []).map((mission) =>
+        runtimeMode === "demo" && mission.id === "MISSION-2026-0823"
           ? {
               ...mission,
               status: workflow.missionStatus,
@@ -336,18 +561,28 @@ export function MissionCenterPage() {
       featuredNarrative.summary,
       workflow.missionProgress,
       workflow.missionStatus,
+      missionQuery.data?.data,
+      runtimeMode,
     ],
   );
-  const leadOptions = useMemo(
+  const leadOptions = useMemo<readonly { id: string; shortName: string }[]>(
     () =>
-      agents.filter((agent) => displayMissions.some((mission) => mission.leadAgentId === agent.id)),
-    [displayMissions],
+      runtimeMode === "production"
+        ? [
+            ...new Set(
+              displayMissions.map((mission) => mission.leadAgentId).filter((id) => id !== ""),
+            ),
+          ].map((id) => ({ id, shortName: id }))
+        : agents.filter((agent) =>
+            displayMissions.some((mission) => mission.leadAgentId === agent.id),
+          ),
+    [displayMissions, runtimeMode],
   );
   const filteredByControls = useMemo(
     () =>
       displayMissions.filter(
         (mission) =>
-          (scope === "all" || mission.status !== "completed") &&
+          (scope === "all" || !["completed", "rejected"].includes(mission.status)) &&
           (turbineScope === null || mission.turbineId === turbineScope) &&
           (severity === "all" || mission.severity === severity) &&
           (leadAgentId === "all" || mission.leadAgentId === leadAgentId),
@@ -362,10 +597,32 @@ export function MissionCenterPage() {
         .includes(normalizedQuery),
     );
   }, [filteredByControls, query]);
-  const activeCount = displayMissions.filter((mission) => mission.status !== "completed").length;
+  const activeCount = displayMissions.filter(
+    (mission) => !["completed", "rejected"].includes(mission.status),
+  ).length;
   const reviewCount = displayMissions.filter((mission) => mission.status === "under-review").length;
   const executionCount = displayMissions.filter((mission) => mission.status === "executing").length;
   const completedCount = displayMissions.filter((mission) => mission.status === "completed").length;
+  // production 下统计真实 Mission 数据；demo 保持 fixture agents 的演示口径。
+  const participatingAgentCount =
+    runtimeMode === "production"
+      ? new Set(
+          displayMissions
+            .filter((mission) => !["completed", "rejected"].includes(mission.status))
+            .map((mission) => mission.leadAgentId)
+            .filter((id) => id !== ""),
+        ).size
+      : agents.filter((agent) => agent.currentMissionId).length;
+  const resolutionMinutes = displayMissions
+    .filter((mission) => mission.status === "completed")
+    .map(
+      (mission) =>
+        (new Date(mission.updatedAt).getTime() - new Date(mission.createdAt).getTime()) / 60_000,
+    )
+    .filter((minutes) => Number.isFinite(minutes) && minutes >= 0);
+  const averageResolutionMinutes = resolutionMinutes.length
+    ? resolutionMinutes.reduce((total, minutes) => total + minutes, 0) / resolutionMinutes.length
+    : null;
   const selectView = (nextView: MissionView) => {
     if (nextView === "list") setQuery("");
     setView(nextView);
@@ -374,10 +631,10 @@ export function MissionCenterPage() {
     <>
       <div className="agent-filter-tabs">
         <button className={cn(scope === "active" && "active")} onClick={() => setScope("active")}>
-          Active
+          活跃
         </button>
         <button className={cn(scope === "all" && "active")} onClick={() => setScope("all")}>
-          All Missions
+          全部 Mission
         </button>
       </div>
       <label>
@@ -387,25 +644,25 @@ export function MissionCenterPage() {
           value={severity}
           onChange={(event) => setSeverity(event.target.value as SeverityFilter)}
         >
-          <option value="all">Severity · All</option>
+          <option value="all">严重度 · 全部</option>
           {severityOptions.map((option) => (
             <option value={option} key={option}>
-              Severity · {option.toUpperCase()}
+              严重度 · {localizedSeverityLabel(option)}
             </option>
           ))}
         </select>
       </label>
       <label>
-        <span className="sr-only">按 Lead Agent 筛选</span>
+        <span className="sr-only">按主导 Agent 筛选</span>
         <select
           className="select-field"
           value={leadAgentId}
           onChange={(event) => setLeadAgentId(event.target.value)}
         >
-          <option value="all">Lead Agent · All</option>
+          <option value="all">主导 Agent · 全部</option>
           {leadOptions.map((agent) => (
             <option value={agent.id} key={agent.id}>
-              Lead Agent · {agent.shortName}
+              主导 Agent · {agentDisplayName(agent.id, agent.shortName)}
             </option>
           ))}
         </select>
@@ -445,17 +702,17 @@ export function MissionCenterPage() {
   );
 
   return (
-    <AppShell activePath="/missions">
+    <AppShell runtimeMode={runtimeMode} activePath="/missions">
       <PageHeader
-        eyebrow="AI Operations"
-        title="Mission Center"
+        eyebrow="AI 运营"
+        title="Mission 中心"
         description="跟踪多 Agent 从异常发现、诊断决策到运维执行的完整生命周期"
-        breadcrumb={["AI Operations", "Mission Center"]}
+        breadcrumb={["AI 运营", "Mission 中心"]}
         meta={
           <>
             <StatusBadge
               value="working"
-              label={`${activeCount} ACTIVE MISSIONS`}
+              label={`${activeCount} 个活跃 Mission`}
               tone="info"
               pulse
             />
@@ -471,15 +728,28 @@ export function MissionCenterPage() {
               onClick={() => selectView("timeline")}
               aria-pressed={view === "timeline"}
             >
-              <CalendarDays size={15} /> Timeline
+              <CalendarDays size={15} /> 时间线
             </Button>
-            <span title="演示环境未连接 Mission 写入后端">
-              <Button variant="primary" disabled aria-describedby="create-mission-help">
-                <Plus size={15} /> Create Mission
+            <span
+              title={
+                runtimeMode === "production"
+                  ? "创建受控 Mission"
+                  : "演示环境未连接 Mission 写入后端"
+              }
+            >
+              <Button
+                variant="primary"
+                disabled={runtimeMode !== "production"}
+                aria-describedby="create-mission-help"
+                onClick={() => setCreateOpen(true)}
+              >
+                <Plus size={15} /> 创建 Mission
               </Button>
             </span>
             <span id="create-mission-help" className="sr-only">
-              创建 Mission 在当前只读演示环境中不可用，因为尚未连接写入后端。
+              {runtimeMode === "production"
+                ? "创建命令将写入权威后端并启动受控分析。"
+                : "创建 Mission 在当前只读演示环境中不可用，因为尚未连接写入后端。"}
             </span>
           </>
         }
@@ -491,8 +761,10 @@ export function MissionCenterPage() {
           <span>
             <strong>已打开受控诊断入口</strong>
             <small>
-              资产范围：{turbineScope ?? "未指定"}。当前没有通用 Mission 写入
-              API；这里只展示现有诊断 Mission，不会假启动 Agent 流程。
+              资产范围：{turbineScope ?? "未指定"}。
+              {runtimeMode === "production"
+                ? "可从未关联告警创建持久化 Mission，并启动受控 Agent 分析。"
+                : "演示模式只展示现有诊断 Mission，不会假启动 Agent 流程。"}
             </small>
           </span>
           <Button
@@ -511,7 +783,7 @@ export function MissionCenterPage() {
             <GitBranch size={16} />
           </span>
           <span>
-            <small>ACTIVE</small>
+            <small>活跃</small>
             <strong>{activeCount}</strong>
           </span>
         </div>
@@ -520,7 +792,7 @@ export function MissionCenterPage() {
             <ShieldCheck size={16} />
           </span>
           <span>
-            <small>AWAITING REVIEW</small>
+            <small>等待审核</small>
             <strong>{reviewCount}</strong>
           </span>
         </div>
@@ -529,8 +801,8 @@ export function MissionCenterPage() {
             <Bot size={16} />
           </span>
           <span>
-            <small>AGENTS ENGAGED</small>
-            <strong>{agents.filter((agent) => agent.currentMissionId).length}</strong>
+            <small>参与 AGENT</small>
+            <strong>{participatingAgentCount}</strong>
           </span>
         </div>
         <div>
@@ -538,16 +810,28 @@ export function MissionCenterPage() {
             <CheckCircle2 size={16} />
           </span>
           <span>
-            <small>COMPLETED TODAY</small>
+            <small>今日完成</small>
             <strong>{completedCount}</strong>
           </span>
         </div>
         <div className="mission-throughput">
           <span>
-            <small>AVG. RESOLUTION</small>
-            <strong>4h 18m</strong>
+            <small>平均解决时长</small>
+            <strong>
+              {runtimeMode === "production"
+                ? averageResolutionMinutes === null
+                  ? "—"
+                  : formatResolutionDuration(averageResolutionMinutes)
+                : "4h 18m"}
+            </strong>
           </span>
-          <em>-12% vs 7d avg</em>
+          <em>
+            {runtimeMode === "production"
+              ? averageResolutionMinutes === null
+                ? "暂无已闭环 Mission，无法计算"
+                : `基于 ${resolutionMinutes.length} 个已闭环 Mission 计算`
+              : "较 7 日均值下降 12%"}
+          </em>
         </div>
       </section>
 
@@ -563,7 +847,7 @@ export function MissionCenterPage() {
             />
           </div>
           {missionFilterControls}
-          <span className="toolbar-result">{filtered.length} Missions</span>
+          <span className="toolbar-result">{filtered.length} 个 Mission</span>
         </section>
       )}
 
@@ -601,6 +885,16 @@ export function MissionCenterPage() {
       ) : (
         <MissionTimeline items={filtered} />
       )}
+      {createOpen ? (
+        <CreateMissionDrawer
+          alarms={alarmQuery.data?.data ?? []}
+          preferredTurbineId={turbineScope}
+          onClose={() => setCreateOpen(false)}
+          onCreated={async () => {
+            await Promise.all([missionQuery.refetch(), alarmQuery.refetch()]);
+          }}
+        />
+      ) : null}
     </AppShell>
   );
 }

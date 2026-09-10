@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { Avatar, Button, Card, CardHeader } from "@/components/ui/primitives";
+import { agentDisplayName } from "@/lib/agent-control-meta";
 import type { DemoWorkflowEvent } from "@/lib/demo-workflow";
 import type { ActivityEvent, Agent, MissionStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -30,11 +31,39 @@ export type LocalComment = {
 };
 
 const activityFilters: { label: string; value: ActivityFilter }[] = [
-  { label: "All activity", value: "all" },
-  { label: "Agents", value: "agents" },
-  { label: "Evidence", value: "evidence" },
-  { label: "Reviews", value: "reviews" },
+  { label: "全部活动", value: "all" },
+  { label: "Agent", value: "agents" },
+  { label: "证据", value: "evidence" },
+  { label: "审核", value: "reviews" },
 ];
+
+const activityKindLabels: Record<ActivityEvent["kind"], string> = {
+  detection: "异常发现",
+  analysis: "分析",
+  retrieval: "检索",
+  diagnosis: "诊断",
+  decision: "决策",
+  review: "审核",
+  approval: "审批",
+  "work-order": "工单",
+  execution: "执行",
+  system: "系统",
+};
+
+const workflowEventKindLabels: Record<DemoWorkflowEvent["kind"], string> = {
+  replay: "流程重放",
+  approval: "审批",
+  execution: "执行",
+  verification: "复测验证",
+  knowledge: "知识沉淀",
+};
+
+const outcomeLabels: Record<ActivityEvent["outcome"], string> = {
+  success: "成功",
+  attention: "需关注",
+  "in-progress": "进行中",
+  neutral: "一般",
+};
 
 const activityIcon: Record<ActivityEvent["kind"], typeof Activity> = {
   detection: AlarmTriangle,
@@ -129,14 +158,14 @@ export function MissionActivityTimeline({
   return (
     <Card className="mission-timeline-card">
       <CardHeader
-        eyebrow={missionStatus ? "LIVE ACTIVITY" : "ACTIVITY TRACE"}
-        title="Agent Activity Timeline"
+        eyebrow={missionStatus ? "实时活动" : "活动轨迹"}
+        title="Agent 活动时间线"
         description={description}
         action={
           missionStatus ? (
             <StatusBadge
               value={missionStatus}
-              label="AUDITED"
+              label="已审计"
               tone="info"
               pulse={missionStatus !== "completed"}
               compact
@@ -169,10 +198,10 @@ export function MissionActivityTimeline({
           <small>仅本次页面会话可见，不写入审计记录，也不会持久化。</small>
           <div className="approval-actions">
             <Button variant="secondary" onClick={() => onCommentingChange(false)}>
-              Cancel
+              取消
             </Button>
             <Button variant="primary" disabled={!commentDraft.trim()} onClick={addLocalComment}>
-              Add local comment
+              添加本地评论
             </Button>
           </div>
         </div>
@@ -198,18 +227,20 @@ export function MissionActivityTimeline({
                 <div>
                   <span>
                     <Avatar
-                      label={agent?.shortName ?? event.actorLabel}
+                      label={agent ? agentDisplayName(agent.id, agent.shortName) : event.actorLabel}
                       tone={event.kind === "review" ? "amber" : "teal"}
                       size="sm"
                     />
                     <span>
-                      <strong>{agent?.shortName ?? event.actorLabel}</strong>
-                      <small>{event.kind}</small>
+                      <strong>
+                        {agent ? agentDisplayName(agent.id, agent.shortName) : event.actorLabel}
+                      </strong>
+                      <small>{activityKindLabels[event.kind]}</small>
                     </span>
                   </span>
                   <StatusBadge
                     value={event.outcome}
-                    label={event.outcome.toUpperCase()}
+                    label={outcomeLabels[event.outcome]}
                     tone={
                       event.outcome === "success"
                         ? "success"
@@ -226,7 +257,7 @@ export function MissionActivityTimeline({
                 <p>{event.detail}</p>
                 {event.evidenceIds.length ? (
                   <div className="timeline-evidence">
-                    <Link2 size={11} /> {event.evidenceIds.length} linked evidence
+                    <Link2 size={11} /> {event.evidenceIds.length} 条关联证据
                   </div>
                 ) : null}
               </div>
@@ -254,15 +285,15 @@ export function MissionActivityTimeline({
                       <Avatar label={event.actor} tone="amber" size="sm" />
                       <span>
                         <strong>{event.actor}</strong>
-                        <small>{event.kind}</small>
+                        <small>{workflowEventKindLabels[event.kind]}</small>
                       </span>
                     </span>
-                    <StatusBadge value="audited" label="AUDITED" tone="success" compact />
+                    <StatusBadge value="audited" label="已审计" tone="success" compact />
                   </div>
                   <h3>{event.title}</h3>
                   <p>{event.detail}</p>
                   <div className="timeline-evidence">
-                    <Link2 size={11} /> immutable demo audit
+                    <Link2 size={11} /> 不可变演示审计
                   </div>
                 </div>
               </div>
@@ -287,10 +318,10 @@ export function MissionActivityTimeline({
                       <Avatar label="当前用户" tone="amber" size="sm" />
                       <span>
                         <strong>当前用户</strong>
-                        <small>comment</small>
+                        <small>评论</small>
                       </span>
                     </span>
-                    <StatusBadge value="local" label="LOCAL ONLY" tone="warning" compact />
+                    <StatusBadge value="local" label="仅本地" tone="warning" compact />
                   </div>
                   <h3>临时评论</h3>
                   <p>{localComment.text}</p>

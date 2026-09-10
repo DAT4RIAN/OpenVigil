@@ -1,4 +1,6 @@
 import { errorResponse, jsonResponse } from "@/app/api/_shared";
+import { productionMaintenancePlansResponse } from "@/lib/production-domain-adapter";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
 import { readWorkflowForApi } from "@/app/api/_workflow";
 import {
   createMaintenancePlans,
@@ -36,6 +38,9 @@ const integerParameter = (
 };
 
 export async function GET(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return productionMaintenancePlansResponse(request);
+  }
   const url = new URL(request.url);
   const unknownParameter = [...url.searchParams.keys()].find((key) => !allowedParameters.has(key));
   if (unknownParameter) {

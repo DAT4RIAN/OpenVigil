@@ -45,7 +45,7 @@ async def create_review_mission(client: httpx.AsyncClient, event_id: str) -> dic
     return detail.json()
 
 
-def test_catalog_is_the_exact_eleven_public_domain_tools() -> None:
+def test_catalog_is_the_exact_seventeen_public_domain_tools() -> None:
     assert [item["name"] for item in TOOL_CATALOG] == [
         "get_turbine_status",
         "query_scada",
@@ -58,9 +58,17 @@ def test_catalog_is_the_exact_eleven_public_domain_tools() -> None:
         "predict_rul",
         "create_decision",
         "create_work_order",
+        "query_manual",
+        "query_work_orders",
+        "query_spare_parts",
+        "query_crew",
+        "query_vessels",
+        "update_work_order",
     ]
-    assert TOOL_CATALOG[-2]["mode"] == "draft-write-gated"
-    assert TOOL_CATALOG[-1]["mode"] == "human-approval-gated-write"
+    modes = {item["name"]: item["mode"] for item in TOOL_CATALOG}
+    assert modes["create_decision"] == "draft-write-gated"
+    assert modes["create_work_order"] == "human-approval-gated-write"
+    assert modes["update_work_order"] == "governed-write"
 
 
 @pytest.mark.asyncio
@@ -154,6 +162,7 @@ async def test_atomic_resource_claim_prevents_a_second_mission_from_double_booki
     first = await create_review_mission(client, "SCADA-WT023-RESOURCE-001")
     first_approval = await client.post(
         f"/api/v1/missions/{first['mission_id']}/approvals",
+        headers={"Idempotency-Key": "resource-first-approval-001"},
         json={
             "action": "approve",
             "expected_revision": first["revision"],
@@ -168,6 +177,7 @@ async def test_atomic_resource_claim_prevents_a_second_mission_from_double_booki
     second = await create_review_mission(client, "SCADA-WT023-RESOURCE-002")
     second_approval = await client.post(
         f"/api/v1/missions/{second['mission_id']}/approvals",
+        headers={"Idempotency-Key": "resource-second-approval-001"},
         json={
             "action": "approve",
             "expected_revision": second["revision"],

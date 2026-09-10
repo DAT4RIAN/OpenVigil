@@ -100,6 +100,7 @@ export interface MaintenancePlan {
   readonly startsAt: string;
   readonly endsAt: string;
   readonly deadline: string;
+  readonly updatedAt: string;
   readonly dayKey: string;
   readonly durationHours: number;
   readonly taskProgressPercent: number;
@@ -111,8 +112,8 @@ export interface MaintenancePlan {
   readonly readinessPercent: number;
   readonly conflicts: readonly MaintenancePlanConflict[];
   readonly relatedMissionId: string | null;
-  readonly readOnly: true;
-  readonly source: "deterministic-demo-fixtures";
+  readonly readOnly: boolean;
+  readonly source: "deterministic-demo-fixtures" | "postgresql-governed-schedule";
 }
 
 export interface CreateMaintenancePlansOptions {
@@ -544,6 +545,7 @@ function toPlan(workOrder: WorkOrder, completedTaskIds?: readonly string[]): Mai
     startsAt: workOrder.plannedStart,
     endsAt,
     deadline: workOrder.deadline,
+    updatedAt: workOrder.updatedAt,
     dayKey: workOrder.plannedStart.slice(0, 10),
     durationHours: workOrder.estimatedDurationHours,
     taskProgressPercent: taskProgress(workOrder, completedTaskIds),

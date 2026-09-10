@@ -1,0 +1,320 @@
+name: release-candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Immutable approved release identifier
+        required: true
+        type: string
+
+concurrency:
+  group: release-candidate-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-qualify:
+    name: build-sign-and-qualify
+    runs-on: ubuntu-24.04
+    environment: production-release
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      checks: read
+    env:
+      RELEASE_ID: ${{ inputs.release_id }}
+      IMAGE_REPOSITORY: ${{ vars.WINDOPS_IMAGE_REPOSITORY }}
+      WINDOPS_ISOLATED_RELEASE_ENV_B64: ${{ secrets.WINDOPS_ISOLATED_RELEASE_ENV_B64 }}
+      WINDOPS_FAIL_ON_SKIPPED: "1"
+    steps:
+      - name: Check out the exact candidate commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Validate protected release inputs and prior CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          git diff --exit-code --quiet
+          [[ "${RELEASE_ID}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$ ]]
+          [[ ! "${RELEASE_ID,,}" =~ ^(development|unknown|unreleased)$ ]]
+          [[ "${IMAGE_REPOSITORY}" =~ ^ghcr\.io/[a-z0-9._/-]+$ ]]
+          test -n "${WINDOPS_ISOLATED_RELEASE_ENV_B64}"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs" \
+            --jq '.check_runs[]' \
+            | python backend/scripts/verify_release_checks.py --sha "${GITHUB_SHA}"
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.12.1"
+
+      - name: Install frozen release tooling
+        run: uv sync --project backend --frozen --all-extras
+
+      - name: Load approved release policy
+        id: policy
+        run: |
+          set -euo pipefail
+          base_image="$(jq -er '.python_base_image' backend/deploy/release-policy.json)"
+          postgres_client_image="$(jq -er '.postgres_client_image' backend/deploy/release-policy.json)"
+          postgres_client_major="$(jq -er '.postgres_client_major' backend/deploy/release-policy.json)"
+          platform="$(jq -er '.platform' backend/deploy/release-policy.json)"
+          storage_class="$(jq -er '.approved_backup_storage_class' backend/deploy/release-policy.json)"
+          [[ "${base_image}" =~ @sha256:[0-9a-f]{64}$ ]]
+          [[ ! "${base_image}" =~ sha256:0{64}$ ]]
+          [[ "${postgres_client_image}" =~ @sha256:[0-9a-f]{64}$ ]]
+          [[ "${postgres_client_major}" == "16" ]]
+          echo "base_image=${base_image}" >> "${GITHUB_OUTPUT}"
+          echo "postgres_client_image=${postgres_client_image}" >> "${GITHUB_OUTPUT}"
+          echo "postgres_client_major=${postgres_client_major}" >> "${GITHUB_OUTPUT}"
+          echo "platform=${platform}" >> "${GITHUB_OUTPUT}"
+          echo "storage_class=${storage_class}" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to protected registry
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Build and push the multi-entrypoint backend image
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: backend
+          file: backend/Dockerfile
+          platforms: ${{ steps.policy.outputs.platform }}
+          push: true
+          pull: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}
+          build-args: |
+            PYTHON_BASE_IMAGE=${{ steps.policy.outputs.base_image }}
+            POSTGRES_CLIENT_IMAGE=${{ steps.policy.outputs.postgres_client_image }}
+            POSTGRES_CLIENT_MAJOR=${{ steps.policy.outputs.postgres_client_major }}
+            WINDOPS_RELEASE_ID=${{ env.RELEASE_ID }}
+            WINDOPS_COMMIT_SHA=${{ github.sha }}
+            WINDOPS_SOURCE_URL=https://github.com/${{ github.repository }}
+          labels: |
+            org.opencontainers.image.version=${{ env.RELEASE_ID }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Export immutable image identity
+        run: |
+          set -euo pipefail
+          [[ "${{ steps.build.outputs.digest }}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          test "${{ steps.build.outputs.digest }}" != "sha256:$(printf '0%.0s' {1..64})"
+          echo "IMAGE_DIGEST=${{ steps.build.outputs.digest }}" >> "${GITHUB_ENV}"
+          echo "IMAGE_REF=${IMAGE_REPOSITORY}@${{ steps.build.outputs.digest }}" >> "${GITHUB_ENV}"
+
+      - name: Publish GitHub build provenance
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ${{ env.IMAGE_REPOSITORY }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+
+      - name: Sign and verify the immutable image
+        run: |
+          set -euo pipefail
+          mkdir -p release-evidence
+          cosign sign --yes "${IMAGE_REF}"
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main$" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${IMAGE_REF}" > release-evidence/signature-verification.json
+
+      - name: Scan immutable image for blocking vulnerabilities
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          image-ref: ${{ env.IMAGE_REPOSITORY }}@${{ steps.build.outputs.digest }}
+          format: json
+          output: release-evidence/image-scan.json
+          exit-code: "1"
+          ignore-unfixed: false
+          severity: CRITICAL,HIGH
+
+      - name: Generate SPDX SBOM
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          image-ref: ${{ env.IMAGE_REPOSITORY }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output: release-evidence/sbom.spdx.json
+          exit-code: "0"
+
+      - name: Attest and verify the SBOM
+        run: |
+          set -euo pipefail
+          test -s release-evidence/sbom.spdx.json
+          jq -e '.spdxVersion and (.packages | length > 0)' release-evidence/sbom.spdx.json
+          cosign attest --yes --type spdxjson --predicate release-evidence/sbom.spdx.json "${IMAGE_REF}"
+          cosign verify-attestation \
+            --type spdxjson \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main$" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${IMAGE_REF}" > release-evidence/sbom-attestation-verification.json
+
+      - name: Verify image structure, labels, entrypoints, lock, and client compatibility
+        working-directory: backend
+        run: >-
+          uv run windops-container-artifact
+          --image "${IMAGE_REF}"
+          --release-id "${RELEASE_ID}"
+          --commit-sha "${GITHUB_SHA}"
+          --source-url "https://github.com/${GITHUB_REPOSITORY}"
+          --policy deploy/release-policy.json
+          --report ../release-evidence/container-artifact.json
+
+      - name: Start digest-pinned isolated smoke dependencies
+        run: >-
+          docker compose
+          --project-name "windops-release-${GITHUB_RUN_ID}"
+          --file backend/docker-compose.yml
+          up --detach --wait postgres neo4j
+
+      - name: Run migration and hardened health/readiness smoke from the image
+        working-directory: backend
+        run: >-
+          uv run windops-release-smoke
+          --image "${IMAGE_REF}"
+          --network "windops-release-${GITHUB_RUN_ID}_default"
+          --database-url "postgresql+asyncpg://windops:change-me@postgres:5432/windops"
+          --neo4j-uri "neo4j://neo4j:7687"
+          --neo4j-password "change-me-neo4j"
+          --release-id "${RELEASE_ID}"
+          --commit-sha "${GITHUB_SHA}"
+          --image-digest "${IMAGE_DIGEST}"
+          --report ../release-evidence/release-image-smoke.json
+
+      - name: Render and verify all Kubernetes workloads at the exact digest
+        run: |
+          set -euo pipefail
+          kubectl kustomize backend/deploy/kubernetes > release-evidence/kustomize-base.yaml
+          uv run --project backend python backend/scripts/render_release_manifests.py \
+            --input release-evidence/kustomize-base.yaml \
+            --output release-evidence/rendered-manifests.yaml \
+            --release-id "${RELEASE_ID}" \
+            --commit-sha "${GITHUB_SHA}" \
+            --image "${IMAGE_REF}"
+          uv run --project backend windops-deployment-policy \
+            --manifests release-evidence/rendered-manifests.yaml \
+            --expected-image-digest "${IMAGE_DIGEST}" \
+            --expected-release-id "${RELEASE_ID}" \
+            --expected-commit-sha "${GITHUB_SHA}" \
+            --approved-backup-storage-class "${{ steps.policy.outputs.storage_class }}" \
+            --report release-evidence/deployment-policy.json
+          if rg -n 'registry\.invalid|sha256:0{64}|\b(unreleased|unknown)\b' release-evidence/rendered-manifests.yaml; then
+            exit 1
+          fi
+
+      - name: Load protected isolated production configuration
+        env:
+          WINDOPS_RELEASE_ENV_PATH: ${{ runner.temp }}/windops-release.env
+        run: |
+          set -euo pipefail
+          uv run --project backend python backend/scripts/load_release_environment.py
+          echo "WINDOPS_RELEASE_ID=${RELEASE_ID}" >> "${GITHUB_ENV}"
+          echo "WINDOPS_RELEASE_COMMIT_SHA=${GITHUB_SHA}" >> "${GITHUB_ENV}"
+          echo "WINDOPS_RELEASE_IMAGE_DIGEST=${IMAGE_DIGEST}" >> "${GITHUB_ENV}"
+          printf '%s\n' \
+            "WINDOPS_RELEASE_ID=${RELEASE_ID}" \
+            "WINDOPS_RELEASE_COMMIT_SHA=${GITHUB_SHA}" \
+            "WINDOPS_RELEASE_IMAGE_DIGEST=${IMAGE_DIGEST}" >> "${RUNNER_TEMP}/windops-release.env"
+
+      - name: Run non-skipped isolated production dependency acceptance
+        working-directory: backend
+        env:
+          WINDOPS_RUN_EXTERNAL_RELEASE_TESTS: "1"
+        run: >-
+          uv run pytest tests/external/test_release_environment.py
+          -m external_release
+          --junitxml=../release-evidence/external-release-junit.xml
+          -q
+
+      - name: Create a verified backup from the release image
+        run: |
+          set -euo pipefail
+          backup_dir="${RUNNER_TEMP}/windops-release-backup"
+          mkdir -p "${backup_dir}"
+          sudo chown 10001:10001 "${backup_dir}"
+          docker run --rm \
+            --user 10001:10001 \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=128m \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --env-file "${RUNNER_TEMP}/windops-release.env" \
+            --volume "${backup_dir}:/evidence" \
+            "${IMAGE_REF}" windops-backup --output-dir /evidence
+          test -n "$(find "${backup_dir}" -type f -print -quit)"
+          find "${backup_dir}" -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            > release-evidence/backup-verification.sha256
+          test "${backup_dir}" = "${RUNNER_TEMP}/windops-release-backup"
+          rm -rf -- "${backup_dir}"
+
+      - name: Record backend-to-Sites immutable release bindings
+        run: |
+          printf '%s\n' \
+            "WINDOPS_BACKEND_EXPECTED_RELEASE_ID=${RELEASE_ID}" \
+            "WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST=${IMAGE_DIGEST}" \
+            > release-evidence/sites-release-bindings.env
+
+      - name: Record the commit-to-image-to-manifest-to-environment chain
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg release_id "${RELEASE_ID}" \
+            --arg commit_sha "${GITHUB_SHA}" \
+            --arg image "${IMAGE_REF}" \
+            --arg manifest_sha256 "$(sha256sum release-evidence/rendered-manifests.yaml | cut -d' ' -f1)" \
+            --arg external_release_sha256 "$(sha256sum release-evidence/external-release-junit.xml | cut -d' ' -f1)" \
+            '{format_version:1,release_id:$release_id,commit_sha:$commit_sha,image:$image,rendered_manifest_sha256:$manifest_sha256,isolated_environment_junit_sha256:$external_release_sha256,status:"qualified"}' \
+            > release-evidence/release-chain.json
+          jq -e '.status == "qualified"' release-evidence/release-chain.json
+
+      - name: Stop isolated smoke dependencies
+        if: always()
+        run: >-
+          docker compose
+          --project-name "windops-release-${GITHUB_RUN_ID}"
+          --file backend/docker-compose.yml
+          down --volumes --remove-orphans
+
+      - name: Remove decoded protected configuration
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/windops-release.env"
+
+      - name: Preserve immutable release candidate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-candidate-${{ github.sha }}
+          path: release-evidence
+          if-no-files-found: error
+          retention-days: 90

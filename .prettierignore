@@ -2,6 +2,13 @@ dist
 .next
 .vinext
 .wrangler
+.test-tmp
+.mypy_cache
+.ruff_cache
+backend/.mypy_cache
+backend/.pytest_cache
+backend/.ruff_cache
+backend/.venv
 node_modules
 backend/.venv
 **/__pycache__
@@ -10,3 +17,11 @@ backend/.venv
 .mypy_cache
 pnpm-lock.yaml
 public/og.png
+# Task prompts are reference material, not source files.
+docs/项目代码优化与重构提示词.md
+
+# Agent/audit control records preserve their authoritative hand-maintained layout.
+AGENTS.md
+AUDIT_REPORT.md
+EXECUTION_GOAL.md
+EXECUTION_PROGRESS.md

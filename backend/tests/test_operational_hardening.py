@@ -88,6 +88,7 @@ async def test_bearer_secret_maps_to_server_owned_subject_not_unsigned_headers(t
         schema_bootstrap=True,
         demo_seed=True,
         test_auth_bypass_enabled=False,
+        knowledge_graph_backend="memory",
     )
     application = create_app(settings)
     async with application.router.lifespan_context(application):
@@ -126,7 +127,7 @@ async def test_versioned_catalog_is_persisted_and_linked_to_executions(
     assert catalog["catalog_version"]["version"] == "2026.08.1"
     assert len(catalog["agents"]) == 8
     assert len(catalog["skills"]) == 8
-    assert len(catalog["tools"]) == 11
+    assert len(catalog["tools"]) == 17
     assert all(agent["skills"] for agent in catalog["agents"])
 
     ingested = await client.post("/api/v1/scada/ingest", json=anomaly("SCADA-WT023-CATALOG-001"))

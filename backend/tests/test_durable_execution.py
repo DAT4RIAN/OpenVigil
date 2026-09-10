@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -20,7 +21,13 @@ from windops_backend.models import (
     WindFarm,
     WorkOrder,
 )
-from windops_backend.outbox import claim_event, mark_event_succeeded, process_outbox_event
+from windops_backend.outbox import (
+    OUTBOX_DISPATCH_VISIBILITY,
+    claim_event,
+    mark_event_succeeded,
+    pending_events,
+    process_outbox_event,
+)
 from windops_backend.reference_import import _import_reference_pack
 from windops_backend.storage import OutboxEvent
 
@@ -63,6 +70,81 @@ async def test_stale_processing_outbox_lease_can_be_reclaimed(app: FastAPI) -> N
         assert reclaimed.status == "processing"
         assert reclaimed.attempts == 1
         assert reclaimed.claim_token is not None
+
+
+@pytest.mark.asyncio
+async def test_worker_cancellation_leaves_outbox_event_reclaimable(app: FastAPI) -> None:
+    async with app.state.session_factory() as session, session.begin():
+        event = OutboxEvent(
+            event_type="mission.analysis.requested",
+            aggregate_type="mission",
+            aggregate_id="cancelled-worker",
+            payload={"mission_id": "cancelled-worker"},
+        )
+        session.add(event)
+        await session.flush()
+        event_id = event.id
+
+    async def cancel_handler(session: Any, settings: Settings, mission_id: str) -> None:
+        del session, settings, mission_id
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await process_outbox_event(
+            app.state.session_factory,
+            app.state.settings,
+            event_id,
+            cancel_handler,
+        )
+
+    async with app.state.session_factory() as session:
+        cancelled = await session.get(OutboxEvent, event_id)
+        assert cancelled is not None
+        assert cancelled.status == "processing"
+        assert cancelled.claim_token is not None
+
+
+@pytest.mark.asyncio
+async def test_relay_requeues_a_dispatched_event_after_message_loss(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dispatched_at = datetime.now(UTC) - OUTBOX_DISPATCH_VISIBILITY - timedelta(seconds=1)
+    async with app.state.session_factory() as session, session.begin():
+        event = OutboxEvent(
+            event_type="mission.analysis.requested",
+            aggregate_type="mission",
+            aggregate_id="lost-after-redis-publish",
+            payload={"mission_id": "lost-after-redis-publish"},
+            status="dispatched",
+            dispatched_at=dispatched_at,
+        )
+        session.add(event)
+        await session.flush()
+        event_id = event.id
+
+    sent: list[str] = []
+
+    class RelayEngine:
+        async def dispose(self) -> None:
+            return None
+
+    monkeypatch.setattr(workers, "get_settings", lambda: app.state.settings)
+    monkeypatch.setattr(workers, "create_engine", lambda settings: RelayEngine())
+    monkeypatch.setattr(workers, "create_session_factory", lambda engine: app.state.session_factory)
+    monkeypatch.setattr(workers.process_mission_analysis, "send", sent.append)
+
+    assert await workers.relay_pending_once() == 1
+    assert sent == [event_id]
+    async with app.state.session_factory() as session:
+        recovered = await session.get(OutboxEvent, event_id)
+        assert recovered is not None
+        assert recovered.status == "dispatched"
+        assert recovered.dispatched_at is not None
+        recovered_dispatched_at = recovered.dispatched_at.replace(tzinfo=UTC)
+        assert recovered_dispatched_at > dispatched_at
+    assert (event_id, "mission.analysis.requested") not in await pending_events(
+        app.state.session_factory
+    )
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 
 import { DigitalTwinPage } from "@/components/pages/digital-twin-page";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "数字孪生",
@@ -8,5 +11,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <DigitalTwinPage />;
+  return <DigitalTwinPage runtimeMode={getProductionBackendConfig().mode} />;
 }

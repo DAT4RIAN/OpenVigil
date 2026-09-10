@@ -19,7 +19,7 @@ export interface PredictiveAssessment extends HealthAssessment {
 
 export const predictiveModelMeta = Object.freeze({
   id: "windops-rul-fixture-v1.4.2",
-  label: "WindOps RUL Fixture Model",
+  label: "WindOps RUL 演示模型",
   mode: "deterministic-fixture",
   horizonDays: 30,
   evaluatedAt: windFarm.lastUpdatedAt,

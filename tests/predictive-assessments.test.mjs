@@ -116,8 +116,8 @@ test("predictive maintenance page renders the WT-023 model story", async () => {
   const html = await response.text();
   assert.match(html, /预测性维护/);
   assert.match(html, /WT-023/);
-  assert.match(html, /FAILURE PROBABILITY/);
-  assert.match(html, /PROBABILITY × CONSEQUENCE/);
-  assert.match(html, /FIXTURE MODEL/);
+  assert.match(html, /失效概率/);
+  assert.match(html, /概率 × 后果/);
+  assert.match(html, /演示模型/);
   assert.match(html, /无真实推理/);
 });

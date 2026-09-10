@@ -17,6 +17,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useMemo, useState, type CSSProperties } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import Link from "next/link";
@@ -46,6 +47,10 @@ import {
   overlayClientMissions,
   overlayClientTurbines,
 } from "@/lib/client-workflow-overlays";
+import { agentDisplayName } from "@/lib/agent-control-meta";
+import { localizedMissionTitle, localizedSeverityLabel } from "@/lib/ui-localization";
+import { apiGet } from "@/lib/api-client";
+import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
 
 const missionLabels: Record<Mission["status"], string> = {
   detected: "已发现",
@@ -55,6 +60,7 @@ const missionLabels: Record<Mission["status"], string> = {
   "under-review": "审核中",
   approved: "已批准",
   executing: "执行中",
+  rejected: "已拒绝",
   completed: "已完成",
 };
 
@@ -160,7 +166,373 @@ function formatTime(timestamp: string) {
   });
 }
 
-export function DashboardPage() {
+type ProductionDashboardEnvelope = {
+  readonly data: {
+    readonly snapshot_at: string;
+    readonly source: string;
+    readonly farm: {
+      readonly id: string;
+      readonly name: string;
+      readonly capacity_mw: number;
+    } | null;
+    readonly fleet: {
+      readonly asset_count: number;
+      readonly status_counts: Readonly<Record<string, number>>;
+      readonly operating_count: number;
+      readonly average_health_score: number | null;
+      readonly current_power_mw: number;
+      readonly energy_24h_gwh: number | null;
+      readonly energy_coverage_percent: number;
+      readonly average_availability_percent: number | null;
+      readonly telemetry_asset_count: number;
+      readonly latest_telemetry_at: string | null;
+      readonly open_alarm_count: number;
+      readonly high_priority_alarm_count: number;
+      readonly active_mission_count: number;
+    };
+    readonly power_trend: readonly {
+      readonly timestamp: string;
+      readonly power_mw: number;
+      readonly asset_count: number;
+    }[];
+    readonly alarms: readonly {
+      readonly id: string;
+      readonly turbine_id: string;
+      readonly code: string;
+      readonly title: string;
+      readonly severity: string;
+      readonly status: string;
+      readonly triggered_at: string;
+    }[];
+    readonly missions: readonly {
+      readonly id: string;
+      readonly turbine_id: string;
+      readonly title: string;
+      readonly status: string;
+      readonly revision: number;
+      readonly updated_at: string;
+    }[];
+    readonly agents: {
+      readonly active_definition_count: number;
+      readonly execution_count_24h: number;
+      readonly succeeded_24h: number;
+      readonly failed_24h: number;
+    };
+    readonly activity: readonly {
+      readonly sequence: number;
+      readonly event_type: string;
+      readonly aggregate_type: string;
+      readonly aggregate_id: string;
+      readonly occurred_at: string;
+      readonly summary: string;
+    }[];
+  };
+};
+
+const productionMissionLabel = (status: string): string =>
+  ({
+    detected: "已发现",
+    investigating: "分析中",
+    diagnosed: "已诊断",
+    decision_pending: "待决策",
+    "decision-pending": "待决策",
+    under_review: "审核中",
+    "under-review": "审核中",
+    approved: "已批准",
+    executing: "执行中",
+    completed: "已完成",
+  })[status] ?? status;
+
+function ProductionDashboardPage() {
+  const dashboardQuery = useQuery({
+    queryKey: ["production-dashboard"],
+    queryFn: ({ signal }) => apiGet<ProductionDashboardEnvelope>("/api/backend/dashboard", signal),
+    refetchInterval: 15_000,
+    retry: false,
+  });
+  const snapshot = dashboardQuery.data?.data;
+  const fleet = snapshot?.fleet;
+  const statusCounts = fleet?.status_counts ?? {};
+  const powerChartData = useMemo<TimeSeriesPoint[]>(
+    () =>
+      (snapshot?.power_trend ?? []).map((point) => ({
+        timestamp: new Date(point.timestamp).toLocaleTimeString("zh-CN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }),
+        value: point.power_mw,
+      })),
+    [snapshot?.power_trend],
+  );
+  const assetCount = fleet?.asset_count ?? 0;
+  const runningCount = statusCounts.running ?? 0;
+  const offlineCount = (statusCounts.offline ?? 0) + (statusCounts["communication-lost"] ?? 0);
+  const criticalCount = statusCounts.critical ?? 0;
+  const availability = fleet?.average_availability_percent;
+  const farmName = snapshot?.farm?.name ?? "生产风场";
+
+  return (
+    <AppShell runtimeMode="production" activePath="/">
+      <PageHeader
+        eyebrow="实时运行态势"
+        title="运营指挥中心"
+        description={`${farmName} · PostgreSQL/TimescaleDB 权威运营快照`}
+        meta={
+          <>
+            <StatusBadge
+              value={dashboardQuery.isError ? "degraded" : "running"}
+              label={dashboardQuery.isError ? "生产快照不可用" : "生产数据已连接"}
+              tone={dashboardQuery.isError ? "critical" : "success"}
+              pulse={!dashboardQuery.isError}
+            />
+            <span className="page-meta-text">
+              {snapshot
+                ? `快照 ${new Date(snapshot.snapshot_at).toLocaleString("zh-CN")}`
+                : "正在读取权威运营快照"}
+            </span>
+          </>
+        }
+        actions={
+          <>
+            <Link className="button button--secondary button--md" href="/work-orders">
+              <CalendarDays size={15} /> 运行日历
+            </Link>
+            <Link className="button button--primary button--md" href="/reports">
+              <Download size={15} /> 生成持久化报告
+            </Link>
+          </>
+        }
+      />
+
+      {dashboardQuery.isError ? (
+        <Card className="view-empty-state" role="alert">
+          生产首页已失败关闭，不会显示演示风场、固定告警或 WT-023 故事数据。
+        </Card>
+      ) : null}
+
+      <section className="metrics-grid" aria-label="生产运行指标">
+        <MetricCard
+          label="当前功率"
+          value={fleet ? fleet.current_power_mw.toFixed(1) : "—"}
+          unit={fleet ? "MW" : undefined}
+          detail={`遥测覆盖 ${fleet?.telemetry_asset_count ?? 0}/${assetCount} 台`}
+          icon={<Zap size={15} />}
+          tone="info"
+        />
+        <MetricCard
+          label="近 24 小时电量"
+          value={fleet?.energy_24h_gwh == null ? "—" : fleet.energy_24h_gwh.toFixed(3)}
+          unit={fleet?.energy_24h_gwh == null ? undefined : "GWh"}
+          detail={`时间桶覆盖 ${fleet?.energy_coverage_percent ?? 0}%`}
+          icon={<Activity size={15} />}
+        />
+        <MetricCard
+          label="运行机组"
+          value={`${fleet?.operating_count ?? 0} / ${assetCount}`}
+          detail={`${runningCount} 台正常运行`}
+          icon={<TowerControl size={15} />}
+          tone="success"
+        />
+        <MetricCard
+          label="离线机组"
+          value={String(offlineCount)}
+          detail="含通信中断资产"
+          icon={<Radio size={15} />}
+          tone={offlineCount ? "warning" : "success"}
+        />
+        <MetricCard
+          label="故障机组"
+          value={String(criticalCount)}
+          detail="状态为 CRITICAL"
+          icon={<AlarmTriangle size={15} />}
+          tone={criticalCount ? "critical" : "success"}
+        />
+        <MetricCard
+          label="平均健康度"
+          value={fleet?.average_health_score == null ? "—" : fleet.average_health_score.toFixed(1)}
+          unit={fleet?.average_health_score == null ? undefined : "%"}
+          detail="来自资产健康台账"
+          icon={<CircleGauge size={15} />}
+        />
+        <MetricCard
+          label="活跃告警"
+          value={String(fleet?.open_alarm_count ?? 0)}
+          detail={`${fleet?.high_priority_alarm_count ?? 0} 条高优先级`}
+          icon={<AlarmTriangle size={15} />}
+          tone={(fleet?.high_priority_alarm_count ?? 0) ? "critical" : "success"}
+        />
+        <MetricCard
+          label="AI Mission"
+          value={String(fleet?.active_mission_count ?? 0)}
+          detail={`${snapshot?.agents.active_definition_count ?? 0} 个受治理 Agent 启用`}
+          icon={<Bot size={15} />}
+          tone="info"
+        />
+        <MetricCard
+          label="总装机容量"
+          value={snapshot?.farm ? snapshot.farm.capacity_mw.toFixed(1) : "—"}
+          unit={snapshot?.farm ? "MW" : undefined}
+          detail={snapshot?.farm?.id ?? "场站未配置"}
+          icon={<Wind size={15} />}
+        />
+      </section>
+
+      <section className="dashboard-grid">
+        <Card className="panel panel--power">
+          <CardHeader
+            eyebrow="SCADA · 24H"
+            title="全场有功功率"
+            description="按 15 分钟桶聚合实际 active_power 遥测"
+          />
+          {powerChartData.length ? (
+            <TimeSeriesChart
+              data={powerChartData}
+              height={250}
+              primaryName="全场有功功率"
+              unit="MW"
+            />
+          ) : (
+            <div className="view-empty-state">当前没有足够的功率遥测用于绘图。</div>
+          )}
+        </Card>
+
+        <Card className="panel panel--fleet">
+          <CardHeader
+            eyebrow="全场健康"
+            title="机组状态分布"
+            description="来自资产主数据当前状态"
+          />
+          <div className="fleet-summary">
+            {Object.entries(statusCounts).map(([status, count]) => (
+              <div key={status}>
+                <span>{status}</span>
+                <strong>{count}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="fleet-foot">
+            <span>平均可利用率</span>
+            <strong>{availability == null ? "未接入" : `${availability.toFixed(1)}%`}</strong>
+            {availability == null ? null : <Progress value={availability} tone="success" />}
+          </div>
+        </Card>
+
+        <Card className="panel panel--alerts">
+          <CardHeader
+            eyebrow="需要关注"
+            title="高优先级告警"
+            description="按严重性和触发时间排序"
+            action={
+              <Link className="text-link" href="/alarms">
+                告警中心 <ArrowRight size={12} />
+              </Link>
+            }
+          />
+          <div className="compact-list">
+            {(snapshot?.alarms ?? []).map((alarm) => (
+              <Link className="compact-row alarm-row" href="/alarms" key={alarm.id}>
+                <span className={`severity-rail severity-rail--${alarm.severity}`} />
+                <span className="compact-row__main">
+                  <strong>{alarm.title}</strong>
+                  <small>
+                    <span className="mono">{alarm.turbine_id}</span> · {alarm.code}
+                  </small>
+                </span>
+                <span className="compact-row__meta">
+                  <StatusBadge value={alarm.severity} compact />
+                  <small>{formatTime(alarm.triggered_at)}</small>
+                </span>
+              </Link>
+            ))}
+            {!snapshot?.alarms.length ? (
+              <div className="view-empty-state">没有未关闭告警。</div>
+            ) : null}
+          </div>
+        </Card>
+
+        <Card className="panel panel--missions">
+          <CardHeader
+            eyebrow="多 Agent 协作"
+            title="活跃 Missions"
+            description="来自持久化 Mission 台账"
+            action={
+              <Link className="text-link" href="/missions">
+                Mission 中心 <ArrowRight size={12} />
+              </Link>
+            }
+          />
+          <div className="mission-list">
+            {(snapshot?.missions ?? []).map((mission) => (
+              <Link className="mission-list-row" href={`/missions/${mission.id}`} key={mission.id}>
+                <span>
+                  <strong>{mission.title}</strong>
+                  <small>
+                    {mission.turbine_id} · REV {mission.revision}
+                  </small>
+                </span>
+                <StatusBadge
+                  value={mission.status}
+                  label={productionMissionLabel(mission.status)}
+                  compact
+                />
+              </Link>
+            ))}
+            {!snapshot?.missions.length ? (
+              <div className="view-empty-state">没有活跃 Mission。</div>
+            ) : null}
+          </div>
+        </Card>
+
+        <Card className="panel panel--activity">
+          <CardHeader
+            eyebrow="审计事件"
+            title="最近领域事件"
+            description="使用持久化 sequence 作为可重放游标"
+          />
+          <div className="activity-timeline">
+            {(snapshot?.activity ?? []).map((event) => (
+              <div className="activity-item" key={event.sequence}>
+                <span className="activity-dot activity-dot--system">
+                  <Bot size={12} />
+                </span>
+                <span>
+                  <strong>{event.event_type}</strong>
+                  <small>
+                    {event.aggregate_type} · {event.aggregate_id} · {event.summary}
+                  </small>
+                </span>
+                <time>{formatTime(event.occurred_at)}</time>
+              </div>
+            ))}
+            {!snapshot?.activity.length ? (
+              <div className="view-empty-state">尚无领域事件。</div>
+            ) : null}
+          </div>
+        </Card>
+
+        <Card className="panel panel--window">
+          <CardHeader
+            eyebrow="Agent 运行"
+            title="近 24 小时执行"
+            description="持久化 AgentExecution 账本"
+          />
+          <div className="resource-check">
+            <ShieldCheck size={14} />
+            <span>
+              <strong>{snapshot?.agents.execution_count_24h ?? 0} 次执行</strong>
+              <small>
+                成功 {snapshot?.agents.succeeded_24h ?? 0} · 失败 {snapshot?.agents.failed_24h ?? 0}
+              </small>
+            </span>
+          </div>
+        </Card>
+      </section>
+    </AppShell>
+  );
+}
+
+function DemoDashboardPage() {
   const workflow = useDemoWorkflow();
   const [powerRange, setPowerRange] = useState<PowerRange>("24H");
   const powerChartData = useMemo(() => chartData(powerRange), [powerRange]);
@@ -239,10 +611,10 @@ export function DashboardPage() {
   };
 
   return (
-    <AppShell activePath="/">
+    <AppShell runtimeMode="demo" activePath="/">
       <PageHeader
         eyebrow="实时运行态势"
-        title="Operations Command Center"
+        title="运营指挥中心"
         description="华东海上风电场 · 64 台机组的实时状态、风险事件与 AI 运维进程"
         meta={
           <>
@@ -273,7 +645,7 @@ export function DashboardPage() {
             <Wind size={20} />
           </span>
           <span>
-            <small>FLEET STATUS</small>
+            <small>全场状态</small>
             <strong>全场运行总体稳定</strong>
           </span>
           <span className="command-strip__reading">
@@ -368,7 +740,7 @@ export function DashboardPage() {
           tone="critical"
         />
         <MetricCard
-          label="AI Missions"
+          label="AI Mission"
           value={String(workflowKpis.activeMissionCount)}
           detail={`${activeAgents} 个 Agent 活跃`}
           icon={<Bot size={15} />}
@@ -435,7 +807,7 @@ export function DashboardPage() {
 
         <Card className="panel panel--fleet">
           <CardHeader
-            eyebrow="FLEET HEALTH"
+            eyebrow="全场健康"
             title="机组状态分布"
             description="基于当前在线快照"
             action={
@@ -475,7 +847,7 @@ export function DashboardPage() {
 
         <Card className="panel panel--alerts">
           <CardHeader
-            eyebrow="ATTENTION REQUIRED"
+            eyebrow="需要关注"
             title="高优先级告警"
             description="按风险与持续时间排序"
             action={
@@ -505,12 +877,12 @@ export function DashboardPage() {
 
         <Card className="panel panel--missions">
           <CardHeader
-            eyebrow="MULTI-AGENT OPERATIONS"
+            eyebrow="多 Agent 协作"
             title="活跃 Missions"
             description="诊断、审核与执行进度"
             action={
               <Link className="text-link" href="/missions">
-                Mission Center <ArrowRight size={12} />
+                Mission 中心 <ArrowRight size={12} />
               </Link>
             }
           />
@@ -518,10 +890,10 @@ export function DashboardPage() {
             {activeMissions.map((mission) => (
               <a className="mission-list-row" href={`/missions/${mission.id}`} key={mission.id}>
                 <span className="mission-priority" data-risk={mission.severity}>
-                  {mission.severity.slice(0, 1).toUpperCase()}
+                  {localizedSeverityLabel(mission.severity).slice(0, 1)}
                 </span>
                 <span className="mission-list-row__copy">
-                  <strong>{mission.title}</strong>
+                  <strong>{localizedMissionTitle(mission.title)}</strong>
                   <small>
                     <span className="mono">{mission.turbineId}</span> ·{" "}
                     {missionLabels[mission.status]}
@@ -545,13 +917,13 @@ export function DashboardPage() {
 
         <Card className="panel panel--activity">
           <CardHeader
-            eyebrow="LIVE AGENT ACTIVITY"
+            eyebrow="Agent 实时活动"
             title="WT-023 协作时间线"
             description="仅显示结构化执行摘要，不展示隐藏推理"
             action={
               <StatusBadge
                 value="working"
-                label={`${activeAgents} AGENTS ACTIVE`}
+                label={`${activeAgents} 个 Agent 活跃`}
                 tone="info"
                 pulse
                 compact
@@ -570,7 +942,11 @@ export function DashboardPage() {
                   <span className="activity-event__copy">
                     <strong>{event.title}</strong>
                     <small>{event.detail}</small>
-                    <span>{agent?.shortName ?? event.actorLabel}</span>
+                    <span>
+                      {agent
+                        ? agentDisplayName(agent.id, agent.shortName)
+                        : agentDisplayName(event.agentId ?? "", event.actorLabel)}
+                    </span>
                   </span>
                   <time>{formatTime(event.timestamp)}</time>
                 </div>
@@ -584,7 +960,7 @@ export function DashboardPage() {
 
         <Card className="panel panel--window">
           <CardHeader
-            eyebrow="OFFSHORE WINDOW"
+            eyebrow="海上作业窗口"
             title="下一可用作业窗口"
             description="气象与船舶作业条件"
           />
@@ -646,4 +1022,8 @@ export function DashboardPage() {
       </section>
     </AppShell>
   );
+}
+
+export function DashboardPage({ runtimeMode }: { readonly runtimeMode: WindOpsRuntimeMode }) {
+  return runtimeMode === "production" ? <ProductionDashboardPage /> : <DemoDashboardPage />;
 }

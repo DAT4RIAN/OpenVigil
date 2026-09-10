@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 
 import { ModelManagementPage } from "@/components/pages/model-management-page";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "模型管理",
@@ -8,5 +11,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <ModelManagementPage />;
+  return <ModelManagementPage runtimeMode={getProductionBackendConfig().mode} />;
 }

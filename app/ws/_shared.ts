@@ -46,7 +46,7 @@ const upgradeRequired = (channel: RealtimeChannel, runtimeSupported: boolean): R
     },
   );
 
-export async function handleRealtimeWebSocket(
+export function handleRealtimeWebSocket(
   request: Request,
   channel: RealtimeChannel,
 ): Promise<Response> {
@@ -56,7 +56,7 @@ export async function handleRealtimeWebSocket(
   const wantsUpgrade = request.headers.get("upgrade")?.toLowerCase() === "websocket";
 
   if (!wantsUpgrade || !pairConstructor) {
-    return upgradeRequired(channel, Boolean(pairConstructor));
+    return Promise.resolve(upgradeRequired(channel, Boolean(pairConstructor)));
   }
 
   const pair = new pairConstructor();
@@ -81,7 +81,7 @@ export async function handleRealtimeWebSocket(
         channel === "alarms" ? await overlayAlarmRuntimeState(getWorkerEnv().DB, alarms) : alarms;
       send(buildRealtimeFrame(channel, sequence, workflow, alarmItems));
       sequence += 1;
-      timer = setTimeout(tick, cadenceMs);
+      timer = setTimeout(() => void tick(), cadenceMs);
     } catch {
       stop();
       server.close(1011, "stream delivery failed");
@@ -90,7 +90,7 @@ export async function handleRealtimeWebSocket(
 
   server.accept();
   send(realtimeHello(channel));
-  tick();
+  void tick();
   server.addEventListener("message", (event) => {
     if (event.data === "ping") {
       send({
@@ -105,8 +105,10 @@ export async function handleRealtimeWebSocket(
   server.addEventListener("close", stop);
   server.addEventListener("error", stop);
 
-  return new Response(null, {
-    status: 101,
-    webSocket: client,
-  } as UpgradeResponseInit);
+  return Promise.resolve(
+    new Response(null, {
+      status: 101,
+      webSocket: client,
+    } as UpgradeResponseInit),
+  );
 }

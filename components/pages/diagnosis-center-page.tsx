@@ -37,6 +37,7 @@ import {
   type DiagnosisStatus,
 } from "@/lib/diagnosis-data";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
+import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
 import type { RiskLevel } from "@/lib/types";
 
 import styles from "./diagnosis-center-page.module.css";
@@ -50,7 +51,138 @@ interface DiagnosisResponse {
     readonly count: number;
     readonly total: number;
     readonly filteredTotal: number;
-    readonly model: typeof diagnosisModelMeta;
+    readonly model: {
+      readonly mode: string;
+      readonly deterministic: boolean;
+      readonly readOnly: boolean;
+      readonly realInference: boolean;
+      readonly notice: string;
+    };
+  };
+}
+
+interface BenchmarkDiagnosisEnvelope {
+  readonly data: readonly {
+    readonly replay_run_id: string;
+    readonly event: {
+      readonly event_id: number;
+      readonly farm: string;
+      readonly logical_asset_id: string;
+      readonly online_turbine_id: string;
+    };
+    readonly replay: {
+      readonly status: string;
+      readonly mode: string;
+      readonly anchor_at: string;
+      readonly time_rule_version: string;
+      readonly time_semantics: string;
+      readonly error: string | null;
+    };
+    readonly model: {
+      readonly model_id: string | null;
+      readonly name: string | null;
+      readonly version: string | null;
+      readonly kind: string | null;
+      readonly artifact_sha256: string | null;
+      readonly artifact_present: boolean;
+    };
+    readonly deployment: {
+      readonly deployment_id: string | null;
+      readonly status: string | null;
+      readonly target_id: string | null;
+      readonly stale: boolean;
+      readonly threshold_policy_version: string | null;
+      readonly threshold_policy_sha256: string | null;
+    };
+    readonly quality_report: {
+      readonly status: string;
+      readonly quality_rule_version: string | null;
+      readonly feature_set_version: string | null;
+      readonly mask_count: number;
+      readonly mask_artifact: {
+        readonly uri: string | null;
+        readonly sha256: string | null;
+        readonly present: boolean;
+      };
+    };
+    readonly predictions: readonly {
+      readonly prediction_id: string;
+      readonly status: string;
+      readonly error_code: string | null;
+      readonly anomaly_score: number | null;
+      readonly binary_prediction: boolean | null;
+      readonly component: string | null;
+      readonly model_id: string;
+      readonly deployment_id: string;
+      readonly evaluation_run_id: string | null;
+      readonly feature_window: {
+        readonly start: string | null;
+        readonly end: string | null;
+        readonly start_sequence: number | null;
+        readonly end_sequence: number | null;
+      };
+      readonly threshold: {
+        readonly value: number | null;
+        readonly comparison: string | null;
+        readonly policy_version: string | null;
+        readonly policy_sha256: string | null;
+      };
+      readonly time_evidence: {
+        readonly synthetic_observed_at: string;
+        readonly observed_at_is_synthetic: boolean;
+        readonly time_claim: string | null;
+        readonly anonymous_observed_at: string | null;
+        readonly source_time_stamp: string | number | null;
+        readonly source_row_id: number | null;
+      };
+      readonly quality: {
+        readonly signal_count: number;
+        readonly signals_truncated: boolean;
+        readonly quality_counts: Readonly<Record<string, number>>;
+        readonly quality_mask_refs: readonly string[];
+      };
+      readonly evidence_artifact: {
+        readonly uri: string | null;
+        readonly sha256: string | null;
+        readonly present: boolean;
+      };
+      readonly links: {
+        readonly alarm_id: string | null;
+        readonly alarm_status: string | null;
+        readonly mission_id: string | null;
+        readonly mission_status: string | null;
+        readonly decision_id: string | null;
+      };
+    }[];
+    readonly predictions_truncated: boolean;
+    readonly first_alert: {
+      readonly prediction_id: string;
+      readonly alarm_id: string;
+      readonly mission_id: string | null;
+      readonly synthetic_observed_at: string;
+      readonly anonymous_observed_at: string | null;
+      readonly source_sequence: number;
+      readonly lead_source_rows: number | null;
+      readonly lead_semantics: "source-row-offset-not-rul";
+    } | null;
+    readonly truth: {
+      readonly access: "restricted" | "revealed";
+      readonly event_label: string | null;
+      readonly event_interval_start: number | null;
+      readonly event_interval_end: number | null;
+      readonly description: string | null;
+    };
+  }[];
+  readonly meta: {
+    readonly count: number;
+    readonly filtered_total: number;
+    readonly truth_revealed: boolean;
+    readonly truth_reveal_allowed: boolean;
+    readonly bounds: {
+      readonly diagnosis_page_max: number;
+      readonly predictions_per_replay_max: number;
+      readonly signals_inspected_per_prediction_max: number;
+    };
   };
 }
 
@@ -98,19 +230,55 @@ const sourceLabels: Readonly<Record<string, string>> = {
 
 const initialRecords = sortDiagnosisRecords(diagnosisRecords, "priority-desc");
 
-export function DiagnosisCenterPage() {
+export function DiagnosisCenterPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMode }) {
   const workflow = useDemoWorkflow();
+  const isProduction = runtimeMode === "production";
   const [selectedId, setSelectedId] = useState("WT-023");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
+  const [selectedBenchmarkReplayId, setSelectedBenchmarkReplayId] = useState("");
+  const [revealBenchmarkTruth, setRevealBenchmarkTruth] = useState(false);
+  const benchmarkDiagnosisEndpoint =
+    runtimeMode === "production"
+      ? [
+          "/api/backend/benchmarks/diagnoses?limit=16",
+          revealBenchmarkTruth ? "&revealTruth=true" : "",
+        ].join("")
+      : null;
+  const benchmarkDiagnosisQuery = useQuery({
+    queryKey: ["care-benchmark-diagnoses", benchmarkDiagnosisEndpoint],
+    queryFn: ({ signal }) =>
+      apiGet<BenchmarkDiagnosisEnvelope>(benchmarkDiagnosisEndpoint ?? "", signal),
+    enabled: Boolean(benchmarkDiagnosisEndpoint),
+    staleTime: 0,
+  });
+  const benchmarkDiagnoses = benchmarkDiagnosisQuery.data?.data ?? [];
+  const selectedBenchmarkDiagnosis =
+    benchmarkDiagnoses.find((row) => row.replay_run_id === selectedBenchmarkReplayId) ??
+    benchmarkDiagnoses[0] ??
+    null;
 
   useEffect(() => {
     const turbineId = new URLSearchParams(window.location.search).get("turbineId")?.toUpperCase();
-    if (!turbineId || !diagnosisRecords.some((record) => record.turbineId === turbineId)) return;
+    if (!turbineId || !/^WT-[A-Z0-9-]+$/.test(turbineId)) return;
     const timer = window.setTimeout(() => setSelectedId(turbineId), 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (
+      !selectedBenchmarkDiagnosis ||
+      selectedBenchmarkDiagnosis.replay_run_id === selectedBenchmarkReplayId
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setSelectedBenchmarkReplayId(selectedBenchmarkDiagnosis.replay_run_id),
+      0,
+    );
+    return () => window.clearTimeout(timer);
+  }, [selectedBenchmarkDiagnosis, selectedBenchmarkReplayId]);
 
   const endpoint = useMemo(() => {
     const params = new URLSearchParams({ limit: "64", sort: "priority-desc" });
@@ -124,12 +292,21 @@ export function DiagnosisCenterPage() {
     queryKey: ["diagnoses", endpoint],
     queryFn: ({ signal }) => apiGet<DiagnosisResponse>(endpoint, signal),
     initialData: {
-      data: initialRecords,
+      data: isProduction ? [] : initialRecords,
       meta: {
-        count: initialRecords.length,
-        total: initialRecords.length,
-        filteredTotal: initialRecords.length,
-        model: diagnosisModelMeta,
+        count: isProduction ? 0 : initialRecords.length,
+        total: isProduction ? 0 : initialRecords.length,
+        filteredTotal: isProduction ? 0 : initialRecords.length,
+        // production 初始不携带 fixture 模型声明，等待真实查询返回治理元数据。
+        model: isProduction
+          ? {
+              mode: "pending",
+              deterministic: false,
+              readOnly: true,
+              realInference: false,
+              notice: "正在读取生产诊断模型元数据…",
+            }
+          : diagnosisModelMeta,
       },
     },
     initialDataUpdatedAt: 0,
@@ -145,13 +322,15 @@ export function DiagnosisCenterPage() {
       }),
     [workflow.decisionStatus, workflow.missionStatus, workflow.workOrderStatus],
   );
-  const featured = workflowRecords[22]!;
+  const featured = workflowRecords[22];
   const records = useMemo(
     () =>
-      diagnosisQuery.data.data.map((record) =>
-        record.turbineId === featured.turbineId ? featured : record,
-      ),
-    [diagnosisQuery.data.data, featured],
+      isProduction
+        ? diagnosisQuery.data.data
+        : diagnosisQuery.data.data.map((record) =>
+            record.turbineId === featured.turbineId ? featured : record,
+          ),
+    [diagnosisQuery.data.data, featured, isProduction],
   );
   const selected = records.find((record) => record.turbineId === selectedId) ?? records[0] ?? null;
 
@@ -168,7 +347,7 @@ export function DiagnosisCenterPage() {
   const topCandidate = selected?.candidates[0] ?? null;
 
   return (
-    <AppShell activePath="/diagnosis">
+    <AppShell runtimeMode={runtimeMode} activePath="/diagnosis">
       <PageHeader
         eyebrow="智能运维"
         title="智能诊断中心"
@@ -176,14 +355,34 @@ export function DiagnosisCenterPage() {
         breadcrumb={["智能运维", "智能诊断"]}
         meta={
           <>
-            <StatusBadge value="info" label="DETERMINISTIC DEMO" tone="info" />
-            <span className="page-meta-text">64 台机组 · 只读诊断快照</span>
+            <StatusBadge
+              value="info"
+              label={isProduction ? "生产 Mission 诊断" : "确定性演示"}
+              tone="info"
+            />
+            <span className="page-meta-text">
+              {diagnosisQuery.data.meta.total} 条权威诊断 · 只读推理输出
+            </span>
           </>
         }
         actions={
-          <Link className="button button--secondary button--md" href="/missions/MISSION-2026-0823">
-            <GitBranch size={15} /> 查看 WT-023 Mission
-          </Link>
+          isProduction ? (
+            selected?.missionId ? (
+              <Link
+                className="button button--secondary button--md"
+                href={`/missions/${selected.missionId}`}
+              >
+                <GitBranch size={15} /> 查看 {selected.turbineId} Mission
+              </Link>
+            ) : null
+          ) : (
+            <Link
+              className="button button--secondary button--md"
+              href="/missions/MISSION-2026-0823"
+            >
+              <GitBranch size={15} /> 查看 WT-023 Mission
+            </Link>
+          )
         }
       />
 
@@ -192,20 +391,273 @@ export function DiagnosisCenterPage() {
           <Sparkles size={18} aria-hidden="true" />
         </span>
         <div>
-          <strong>AI-native 诊断工作台 · readOnly=true · realInference=false</strong>
-          <p>{diagnosisModelMeta.notice}</p>
+          <strong>
+            {isProduction
+              ? "受治理模型诊断 · 证据与执行可追溯"
+              : "AI 原生诊断工作台 · 只读演示 · 无真实推理"}
+          </strong>
+          <p>{diagnosisQuery.data.meta.model.notice}</p>
         </div>
         <span className={styles.noticeFact}>
-          <Database size={13} /> 固定证据快照
+          <Database size={13} /> {isProduction ? "持久化证据" : "固定证据快照"}
         </span>
         <span className={styles.noticeFact}>
           <BadgeCheck size={13} /> 公开可审计输出
         </span>
       </section>
 
+      <section className={styles.benchmarkPanel} aria-label="CARE 回放诊断证据">
+        <header className={styles.benchmarkHeader}>
+          <div>
+            <span>CARE v6 · GOVERNED REPLAY</span>
+            <h2>异常预测与业务闭环</h2>
+            <p>合成回放时间、匿名来源时间、质量 mask、模型预测、告警与 Mission 同链核验。</p>
+          </div>
+          <div className={styles.benchmarkActions}>
+            <button
+              type="button"
+              onClick={() => void benchmarkDiagnosisQuery.refetch()}
+              disabled={runtimeMode !== "production" || benchmarkDiagnosisQuery.isFetching}
+            >
+              {benchmarkDiagnosisQuery.isFetching ? "同步中…" : "刷新证据"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRevealBenchmarkTruth((current) => !current)}
+              disabled={
+                runtimeMode !== "production" ||
+                benchmarkDiagnosisQuery.isFetching ||
+                !benchmarkDiagnosisQuery.data?.meta.truth_reveal_allowed
+              }
+              title={
+                benchmarkDiagnosisQuery.data?.meta.truth_reveal_allowed
+                  ? undefined
+                  : "当前身份没有 benchmark_truth 数据范围"
+              }
+            >
+              {revealBenchmarkTruth ? "隐藏真值" : "按权限揭示真值"}
+            </button>
+          </div>
+        </header>
+
+        {runtimeMode !== "production" ? (
+          <div className={styles.benchmarkState}>
+            演示模式不加载 CARE fixture，也不把固定诊断、提前量或模型分数冒充真实评估。
+          </div>
+        ) : benchmarkDiagnosisQuery.isLoading ? (
+          <div className={styles.benchmarkState}>正在读取 PostgreSQL 回放与诊断证据…</div>
+        ) : benchmarkDiagnosisQuery.isError ? (
+          <div className={styles.benchmarkState} data-tone="error" role="alert">
+            <AlertTriangle size={15} /> CARE 诊断 API、数据域或真值权限校验失败；未回退演示数据。
+          </div>
+        ) : !selectedBenchmarkDiagnosis ? (
+          <div className={styles.benchmarkState}>
+            当前授权范围没有 CARE replay diagnosis；不会生成占位预测或 Mission。
+          </div>
+        ) : (
+          <div className={styles.benchmarkWorkspace}>
+            <aside className={styles.benchmarkRuns}>
+              {benchmarkDiagnoses.map((diagnosis) => (
+                <button
+                  type="button"
+                  key={diagnosis.replay_run_id}
+                  data-selected={
+                    diagnosis.replay_run_id === selectedBenchmarkDiagnosis.replay_run_id
+                  }
+                  onClick={() => setSelectedBenchmarkReplayId(diagnosis.replay_run_id)}
+                >
+                  <span>
+                    <strong>
+                      {diagnosis.event.farm}
+                      {diagnosis.event.event_id} · {diagnosis.event.online_turbine_id}
+                    </strong>
+                    <small>{diagnosis.replay_run_id}</small>
+                  </span>
+                  <StatusBadge
+                    value={diagnosis.replay.status}
+                    label={diagnosis.replay.status}
+                    tone={diagnosis.replay.status === "completed" ? "success" : "warning"}
+                    compact
+                  />
+                </button>
+              ))}
+            </aside>
+
+            <div className={styles.benchmarkDetail}>
+              <div className={styles.benchmarkFacts}>
+                <span>
+                  <small>时间轴</small>
+                  <strong>合成回放时间</strong>
+                  <em>{selectedBenchmarkDiagnosis.replay.time_rule_version}</em>
+                </span>
+                <span data-alert={selectedBenchmarkDiagnosis.deployment.stale}>
+                  <small>部署</small>
+                  <strong>{selectedBenchmarkDiagnosis.deployment.deployment_id ?? "未绑定"}</strong>
+                  <em>
+                    {selectedBenchmarkDiagnosis.deployment.stale
+                      ? "已陈旧"
+                      : (selectedBenchmarkDiagnosis.deployment.status ?? "缺失")}
+                  </em>
+                </span>
+                <span data-alert={!selectedBenchmarkDiagnosis.model.artifact_present}>
+                  <small>anomaly 模型制品</small>
+                  <strong>
+                    {selectedBenchmarkDiagnosis.model.name ??
+                      selectedBenchmarkDiagnosis.model.model_id ??
+                      "缺失"}
+                  </strong>
+                  <em>
+                    {selectedBenchmarkDiagnosis.model.artifact_present
+                      ? selectedBenchmarkDiagnosis.model.artifact_sha256?.slice(0, 12)
+                      : "artifact missing"}
+                  </em>
+                </span>
+                <span data-alert={!selectedBenchmarkDiagnosis.quality_report.mask_artifact.present}>
+                  <small>质量 mask</small>
+                  <strong>
+                    {selectedBenchmarkDiagnosis.quality_report.mask_count} 条 ·{" "}
+                    {selectedBenchmarkDiagnosis.quality_report.status}
+                  </strong>
+                  <em>
+                    {selectedBenchmarkDiagnosis.quality_report.quality_rule_version ?? "缺失"}
+                  </em>
+                </span>
+              </div>
+
+              <div className={styles.truthStrip} data-revealed={revealBenchmarkTruth}>
+                <LockKeyhole size={14} />
+                <span>
+                  <strong>
+                    真值：
+                    {selectedBenchmarkDiagnosis.truth.access === "revealed"
+                      ? selectedBenchmarkDiagnosis.truth.event_label
+                      : "评估前隐藏 / 当前受限"}
+                  </strong>
+                  <small>
+                    {selectedBenchmarkDiagnosis.truth.access === "revealed"
+                      ? (selectedBenchmarkDiagnosis.truth.description ?? "无故障描述")
+                      : "只有 benchmark_truth 授权可揭示事件区间和故障描述。"}
+                  </small>
+                </span>
+              </div>
+
+              {selectedBenchmarkDiagnosis.first_alert ? (
+                <div className={styles.firstAlert}>
+                  <Activity size={15} />
+                  <span>
+                    <strong>
+                      最早模型告警 · {selectedBenchmarkDiagnosis.first_alert.alarm_id}
+                    </strong>
+                    <small>
+                      合成时间 {selectedBenchmarkDiagnosis.first_alert.synthetic_observed_at} ·
+                      匿名来源时间{" "}
+                      {selectedBenchmarkDiagnosis.first_alert.anonymous_observed_at ?? "未记录"} ·
+                      提前行数（非 RUL）{" "}
+                      {selectedBenchmarkDiagnosis.first_alert.lead_source_rows ?? "真值受限"}
+                    </small>
+                  </span>
+                  {selectedBenchmarkDiagnosis.first_alert.mission_id ? (
+                    <Link href={"/missions/" + selectedBenchmarkDiagnosis.first_alert.mission_id}>
+                      Mission <ArrowRight size={12} />
+                    </Link>
+                  ) : (
+                    <em>未关联 Mission</em>
+                  )}
+                </div>
+              ) : (
+                <div className={styles.benchmarkState}>
+                  此 replay 未形成模型告警；正常抑制或连续窗口不足不会伪造 Mission。
+                </div>
+              )}
+
+              <div className={styles.predictionList}>
+                {selectedBenchmarkDiagnosis.predictions.map((prediction) => (
+                  <article key={prediction.prediction_id} data-status={prediction.status}>
+                    <div className={styles.predictionHeadline}>
+                      <span>
+                        <strong>
+                          score {prediction.anomaly_score ?? "—"} · binary{" "}
+                          {prediction.binary_prediction === null
+                            ? "—"
+                            : prediction.binary_prediction
+                              ? "true"
+                              : "false"}
+                        </strong>
+                        <small>
+                          threshold {prediction.threshold.value ?? "—"} ·{" "}
+                          {prediction.threshold.policy_version ?? "策略缺失"}
+                        </small>
+                      </span>
+                      <StatusBadge
+                        value={prediction.status}
+                        label={prediction.error_code ?? prediction.status}
+                        tone={prediction.status === "succeeded" ? "success" : "critical"}
+                        compact
+                      />
+                    </div>
+                    <div className={styles.predictionEvidence}>
+                      <span>
+                        <small>特征窗口 / sequence</small>
+                        <strong>
+                          {prediction.feature_window.start ?? "—"} →{" "}
+                          {prediction.feature_window.end ?? "—"}
+                        </strong>
+                        <em>
+                          {prediction.feature_window.start_sequence ?? "—"} →{" "}
+                          {prediction.feature_window.end_sequence ?? "—"}
+                        </em>
+                      </span>
+                      <span>
+                        <small>时间证据</small>
+                        <strong>合成 {prediction.time_evidence.synthetic_observed_at}</strong>
+                        <em>
+                          匿名 {prediction.time_evidence.anonymous_observed_at ?? "未记录"} · row{" "}
+                          {prediction.time_evidence.source_row_id ?? "—"}
+                        </em>
+                      </span>
+                      <span>
+                        <small>质量 / mask</small>
+                        <strong>
+                          good {prediction.quality.quality_counts.good ?? 0} · uncertain{" "}
+                          {prediction.quality.quality_counts.uncertain ?? 0} · bad{" "}
+                          {prediction.quality.quality_counts.bad ?? 0}
+                        </strong>
+                        <em>
+                          {prediction.quality.quality_mask_refs.length
+                            ? prediction.quality.quality_mask_refs.join(" · ")
+                            : "无 mask 引用"}
+                        </em>
+                      </span>
+                      <span data-alert={!prediction.evidence_artifact.present}>
+                        <small>闭环链接 / evidence</small>
+                        <strong>
+                          Prediction {prediction.prediction_id.slice(0, 12)} · Alarm{" "}
+                          {prediction.links.alarm_id ?? "—"}
+                        </strong>
+                        <em>
+                          Mission {prediction.links.mission_id ?? "—"} · Decision{" "}
+                          {prediction.links.decision_id ?? "—"} ·{" "}
+                          {prediction.evidence_artifact.present ? "artifact verified" : "缺制品"}
+                        </em>
+                      </span>
+                    </div>
+                  </article>
+                ))}
+                {!selectedBenchmarkDiagnosis.predictions.length ? (
+                  <div className={styles.benchmarkState}>
+                    此 replay 没有持久化 ModelPrediction；页面不会根据 SCADA 属性合成分数。
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
       {diagnosisQuery.isError ? (
         <div className={styles.errorBanner} role="status">
-          <AlertTriangle size={15} /> 诊断 API 暂不可用，当前显示内置只读快照。
+          <AlertTriangle size={15} /> 诊断 API 暂不可用；
+          {isProduction ? "生产模式不会回退到演示诊断。" : "当前显示内置只读快照。"}
         </div>
       ) : null}
 
@@ -275,7 +727,7 @@ export function DiagnosisCenterPage() {
             <strong>{reviewCount}</strong> 人工复核
           </span>
           <span>
-            <strong>{records.length}</strong> / 64
+            <strong>{records.length}</strong> / {diagnosisQuery.data.meta.total}
           </span>
         </div>
       </section>
@@ -284,7 +736,7 @@ export function DiagnosisCenterPage() {
         <aside className={styles.inboxPanel}>
           <div className={styles.panelHeader}>
             <div>
-              <span>DIAGNOSIS INBOX</span>
+              <span>诊断收件箱</span>
               <h2>机组诊断记录</h2>
             </div>
             <span
@@ -338,7 +790,7 @@ export function DiagnosisCenterPage() {
           <main className={styles.detailPanel} aria-label={`${selected.turbineId} 诊断详情`}>
             <section className={styles.detailHero}>
               <div className={styles.heroCopy}>
-                <span className={styles.heroEyebrow}>SELECTED DIAGNOSIS · {selected.id}</span>
+                <span className={styles.heroEyebrow}>已选诊断 · {selected.id}</span>
                 <div className={styles.heroTitleRow}>
                   <h2>{selected.turbineId}</h2>
                   <StatusBadge
@@ -360,15 +812,15 @@ export function DiagnosisCenterPage() {
               </div>
               <div className={styles.heroMetrics}>
                 <span>
-                  <small>HEALTH</small>
+                  <small>健康度</small>
                   <strong>{selected.healthScore}</strong>
                 </span>
                 <span>
-                  <small>ANOMALY</small>
+                  <small>异常分数</small>
                   <strong>{selected.anomaly.anomalyScore.toFixed(2)}</strong>
                 </span>
                 <span>
-                  <small>CITATIONS</small>
+                  <small>引用数</small>
                   <strong>{selected.citations.length}</strong>
                 </span>
               </div>
@@ -395,7 +847,7 @@ export function DiagnosisCenterPage() {
                     <Activity size={16} />
                   </span>
                   <div>
-                    <span>ANOMALY INTAKE</span>
+                    <span>异常输入</span>
                     <h3>异常接入</h3>
                     <p>{sourceLabels[selected.anomaly.source]}</p>
                   </div>
@@ -405,7 +857,7 @@ export function DiagnosisCenterPage() {
                         ? "warning"
                         : "normal"
                     }
-                    label={`SCORE ${selected.anomaly.anomalyScore.toFixed(2)}`}
+                    label={`分数 ${selected.anomaly.anomalyScore.toFixed(2)}`}
                     compact
                   />
                 </div>
@@ -432,9 +884,9 @@ export function DiagnosisCenterPage() {
                     <LockKeyhole size={16} />
                   </span>
                   <div>
-                    <span>RISK &amp; GOVERNANCE</span>
+                    <span>风险与治理</span>
                     <h3>风险与人工门禁</h3>
-                    <p>Human-in-the-loop</p>
+                    <p>人工参与审批</p>
                   </div>
                 </div>
                 <div className={styles.gateMessage}>
@@ -468,8 +920,8 @@ export function DiagnosisCenterPage() {
                 </div>
                 {selected.gate.decisionStatus ? (
                   <div className={styles.gateStateRow}>
-                    <span>Decision · {selected.gate.decisionStatus}</span>
-                    <span>Work order · {selected.gate.workOrderStatus}</span>
+                    <span>决策 · {selected.gate.decisionStatus}</span>
+                    <span>工单 · {selected.gate.workOrderStatus}</span>
                   </div>
                 ) : null}
               </article>
@@ -481,7 +933,7 @@ export function DiagnosisCenterPage() {
                   <Target size={16} />
                 </span>
                 <div>
-                  <span>STRUCTURED DIFFERENTIAL</span>
+                  <span>结构化鉴别诊断</span>
                   <h3>差分诊断</h3>
                   <p>候选故障模式、支持证据、反证与下一步</p>
                 </div>
@@ -548,7 +1000,7 @@ export function DiagnosisCenterPage() {
                     <BrainCircuit size={16} />
                   </span>
                   <div>
-                    <span>AGENT COLLABORATION</span>
+                    <span>AGENT 协作</span>
                     <h3>Agent 协作记录</h3>
                     <p>只展示可审计结论、证据引用与工具结果</p>
                   </div>
@@ -603,7 +1055,7 @@ export function DiagnosisCenterPage() {
                     <FileSearch size={16} />
                   </span>
                   <div>
-                    <span>EVIDENCE CITATIONS</span>
+                    <span>证据引用</span>
                     <h3>证据引用</h3>
                     <p>点击深链回到原始业务上下文</p>
                   </div>

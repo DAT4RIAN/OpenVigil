@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from pydantic import ValidationError
+from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +25,9 @@ from windops_backend.models import (
     WorkOrder,
     WorkOrderTask,
 )
-from windops_backend.schemas import TASK_MEASUREMENT_SCHEMAS, TaskCompletionRequest
+from windops_backend.outbox import enqueue_knowledge_graph_projection
+from windops_backend.schemas import TaskCompletionRequest
+from windops_backend.services.events import append_domain_event
 from windops_backend.storage import ArtifactVerifier, FieldTaskEvidence
 
 
@@ -68,23 +70,28 @@ async def complete_task(
             f"task sequence {task.sequence} cannot complete before its predecessors"
         )
 
-    measurement_schema = TASK_MEASUREMENT_SCHEMAS.get(task.sequence)
-    if measurement_schema is None:  # pragma: no cover - task creation is fixed at five rows
-        raise InvalidTransitionError(f"task sequence {task.sequence} has no measurement schema")
-    try:
-        normalized_measurement = measurement_schema.model_validate(request.measurement).model_dump()
-    except ValidationError as exc:
+    validator = Draft202012Validator(task.measurement_schema)
+    validation_errors = sorted(
+        validator.iter_errors(request.measurement), key=lambda item: list(item.path)
+    )
+    if validation_errors:
         issues = "; ".join(
-            f"{'.'.join(str(part) for part in issue['loc'])}: {issue['msg']}"
-            for issue in exc.errors(include_url=False)
+            f"{'.'.join(str(part) for part in issue.path) or 'measurement'}: {issue.message}"
+            for issue in validation_errors
         )
         raise InvalidTransitionError(
             f"task sequence {task.sequence} measurement failed its operational gate: {issues}"
-        ) from exc
-    normalized_measurement["schema_version"] = f"wt023-field-task-{task.sequence}-v1"
+        )
+    normalized_measurement = dict(request.measurement)
+    normalized_measurement["schema_version"] = task.schema_version
 
     try:
-        await artifact_verifier.verify(request.artifact_uri, request.artifact_sha256)
+        await artifact_verifier.verify(
+            request.artifact_uri,
+            request.artifact_sha256,
+            work_order_id=work_order_id,
+            task_id=task_id,
+        )
     except ValueError as exc:
         raise InvalidTransitionError(str(exc)) from exc
 
@@ -106,6 +113,7 @@ async def complete_task(
     task.completed_at = now
     if work_order.status == WorkOrderStatus.SCHEDULED.value:
         work_order.status = WorkOrderStatus.IN_PROGRESS.value
+    work_order.updated_at = now
     await session.flush()
 
     pending = await session.scalar(
@@ -122,11 +130,17 @@ async def complete_task(
         .join(WorkOrderTask, WorkOrderTask.id == FieldTaskEvidence.task_id)
         .where(WorkOrderTask.work_order_id == work_order_id)
     )
-    finalized = pending == 0 and evidence_count == 5
+    task_count = await session.scalar(
+        select(func.count())
+        .select_from(WorkOrderTask)
+        .where(WorkOrderTask.work_order_id == work_order_id)
+    )
+    finalized = pending == 0 and evidence_count == task_count and bool(task_count)
     case_id: str | None = None
     if finalized:
         work_order.status = WorkOrderStatus.COMPLETED.value
         work_order.completed_at = now
+        work_order.updated_at = now
         mission = await session.get(Mission, work_order.mission_id)
         if mission is None:  # pragma: no cover - protected by FK
             raise RuntimeError("work order lost its mission")
@@ -138,18 +152,10 @@ async def complete_task(
         if alarm is not None:
             alarm.status = AlarmStatus.RESOLVED.value
             alarm.ai_status = "completed"
+            alarm.resolved_at = now
+            alarm.revision += 1
+            alarm.updated_at = now
 
-        tools = SQLToolAdapter(session)
-        await tools.update_asset_health(
-            turbine_id=work_order.turbine_id,
-            mission_id=mission.id,
-            score=82,
-            status=TurbineStatus.RUNNING.value,
-            reason=(
-                "five verified field tasks restored turbine health to 82 "
-                "and main-bearing health to 78"
-            ),
-        )
         tasks = (
             await session.scalars(
                 select(WorkOrderTask)
@@ -165,6 +171,41 @@ async def complete_task(
             )
         ).all()
         evidence_by_task = {row.task_id: row for row in evidence_rows}
+        closure_policy = work_order.closure_policy or {
+            "health_score_field": "turbine_health_score",
+            "healthy_threshold": 82,
+            "component": "main_bearing",
+        }
+        closure_task = tasks[-1]
+        closure_measurement = evidence_by_task[closure_task.id].measurement
+        health_score_field = str(closure_policy["health_score_field"])
+        try:
+            verified_health_score = float(closure_measurement[health_score_field])
+        except (KeyError, TypeError, ValueError) as exc:  # pragma: no cover - schema prevents this
+            raise RuntimeError(
+                "closure evidence did not contain its governed health score"
+            ) from exc
+        healthy_threshold = float(closure_policy.get("healthy_threshold", 80))
+        if verified_health_score < healthy_threshold:  # pragma: no cover - schema prevents this
+            raise InvalidTransitionError(
+                "closure evidence does not meet the return-to-service gate"
+            )
+        component = str(closure_policy.get("component", "component"))
+        component_score_field = f"{component}_health_score"
+        component_health_score = closure_measurement.get(
+            component_score_field, closure_measurement.get("component_health_score")
+        )
+        tools = SQLToolAdapter(session)
+        await tools.update_asset_health(
+            turbine_id=work_order.turbine_id,
+            mission_id=mission.id,
+            score=verified_health_score,
+            status=TurbineStatus.RUNNING.value,
+            reason=(
+                f"{task_count} governed field tasks with verified artifacts restored "
+                f"{component.replace('_', ' ')} health and met the return-to-service gate"
+            ),
+        )
         existing_case = await session.scalar(
             select(KnowledgeCase).where(KnowledgeCase.mission_id == mission.id)
         )
@@ -175,11 +216,12 @@ async def complete_task(
                 mission_id=mission.id,
                 work_order_id=work_order.id,
                 turbine_id=work_order.turbine_id,
-                title="WT-023 early main-bearing degradation: inspected and stabilized",
+                title=f"{mission.title}: inspected and stabilized",
                 diagnosis=mission.public_state.get("diagnosis", {}),
                 resolution={
-                    "verified_health_score": 82,
-                    "main_bearing_health_score": 78,
+                    "verified_health_score": verified_health_score,
+                    "component": component,
+                    "component_health_score": component_health_score,
                     "completed_tasks": [
                         {
                             "sequence": row.sequence,
@@ -211,7 +253,63 @@ async def complete_task(
             resource = await session.get(Resource, reservation.resource_id)
             if resource is not None:
                 resource.status = ResourceStatus.AVAILABLE.value
+                resource.updated_at = now
         await session.flush()
+
+    append_domain_event(
+        session,
+        event_type="work_order.task.completed",
+        aggregate_type="work_order",
+        aggregate_id=work_order.id,
+        payload={
+            "work_order_id": work_order.id,
+            "mission_id": work_order.mission_id,
+            "task_id": task.id,
+            "task_sequence": task.sequence,
+            "task_status": task.status,
+            "work_order_status": work_order.status,
+            "verified_by": request.completed_by,
+            "workflow_finalized": finalized,
+        },
+    )
+    if finalized:
+        if alarm is not None:
+            append_domain_event(
+                session,
+                event_type="alarm.resolved",
+                aggregate_type="alarm",
+                aggregate_id=alarm.id,
+                payload={
+                    "alarm_id": alarm.id,
+                    "turbine_id": alarm.turbine_id,
+                    "status": alarm.status,
+                    "revision": alarm.revision,
+                    "resolved_at": now.isoformat(),
+                    "mission_id": work_order.mission_id,
+                    "work_order_id": work_order.id,
+                },
+            )
+        append_domain_event(
+            session,
+            event_type="work_order.completed",
+            aggregate_type="work_order",
+            aggregate_id=work_order.id,
+            payload={
+                "work_order_id": work_order.id,
+                "mission_id": work_order.mission_id,
+                "turbine_id": work_order.turbine_id,
+                "status": work_order.status,
+                "knowledge_case_id": case_id,
+                "completed_at": now.isoformat(),
+            },
+        )
+
+    enqueue_knowledge_graph_projection(
+        session,
+        aggregate_type="work_order",
+        aggregate_id=work_order.id,
+        reason="field-task-completed",
+    )
 
     return {
         "task_id": task.id,

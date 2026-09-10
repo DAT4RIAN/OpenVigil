@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +9,7 @@ from sqlalchemy import func, select
 
 from windops_backend.agents.tools import SQLToolAdapter
 from windops_backend.errors import ApprovalGateError
-from windops_backend.models import WorkOrder
+from windops_backend.models import Decision, WeatherWindow, WorkOrder
 
 
 def normal_samples() -> dict[str, Any]:
@@ -66,6 +67,15 @@ def anomaly_sample(event_id: str = "SCADA-WT023-ANOMALY-001") -> dict[str, Any]:
             }
         ]
     }
+
+
+async def create_review_mission(client: httpx.AsyncClient, event_id: str) -> dict[str, Any]:
+    response = await client.post("/api/v1/scada/ingest", json=anomaly_sample(event_id))
+    assert response.status_code == 202
+    mission_id = response.json()["results"][0]["mission_id"]
+    detail = await client.get(f"/api/v1/missions/{mission_id}")
+    assert detail.status_code == 200
+    return detail.json()
 
 
 def valid_field_measurements() -> list[dict[str, Any]]:
@@ -145,7 +155,7 @@ async def test_wt023_full_audited_workflow(client: httpx.AsyncClient) -> None:
     assert_no_private_reasoning(mission["executions"])
 
     tool_catalog = (await client.get("/api/v1/tools")).json()
-    assert tool_catalog["count"] == 11
+    assert tool_catalog["count"] == 17
     assert {item["name"] for item in tool_catalog["tools"]} == {
         "get_turbine_status",
         "query_scada",
@@ -158,10 +168,17 @@ async def test_wt023_full_audited_workflow(client: httpx.AsyncClient) -> None:
         "predict_rul",
         "create_decision",
         "create_work_order",
+        "query_manual",
+        "query_work_orders",
+        "query_spare_parts",
+        "query_crew",
+        "query_vessels",
+        "update_work_order",
     }
 
     stale = await client.post(
         f"/api/v1/missions/{mission_id}/approvals",
+        headers={"Idempotency-Key": "vertical-approval-stale-001"},
         json={
             "action": "approve",
             "expected_revision": mission["revision"] - 1,
@@ -176,6 +193,7 @@ async def test_wt023_full_audited_workflow(client: httpx.AsyncClient) -> None:
 
     approval = await client.post(
         f"/api/v1/missions/{mission_id}/approvals",
+        headers={"Idempotency-Key": "vertical-approval-accepted-001"},
         json={
             "action": "approve",
             "expected_revision": mission["revision"],
@@ -197,9 +215,22 @@ async def test_wt023_full_audited_workflow(client: httpx.AsyncClient) -> None:
     assert len(work_order["tasks"]) == 5
     assert [task["sequence"] for task in work_order["tasks"]] == [1, 2, 3, 4, 5]
     assert "LOTO" in work_order["safety_plan"]["procedures"]
+    approved_alternative = next(
+        item
+        for item in mission["public_state"]["alternatives"]
+        if item["alternative_id"] == work_order["selected_alternative_id"]
+    )
+    assert (
+        work_order["safety_plan"]["weather_window_id"] == approved_alternative["weather_window_id"]
+    )
+    planned_start = datetime.fromisoformat(work_order["planned_start"])
+    deadline = datetime.fromisoformat(work_order["deadline"])
+    assert planned_start >= datetime.now(UTC) - timedelta(seconds=1)
+    assert deadline - planned_start == timedelta(hours=10)
 
     out_of_order = await client.post(
         f"/api/v1/work-orders/{work_order_id}/tasks/{work_order['tasks'][1]['task_id']}/complete",
+        headers={"Idempotency-Key": "vertical-task-out-of-order-001"},
         json={
             "completed_by": "Offshore Team A",
             "result": "Attempted out-of-order completion.",
@@ -212,6 +243,7 @@ async def test_wt023_full_audited_workflow(client: httpx.AsyncClient) -> None:
 
     bad_artifact = await client.post(
         f"/api/v1/work-orders/{work_order_id}/tasks/{work_order['tasks'][0]['task_id']}/complete",
+        headers={"Idempotency-Key": "vertical-task-bad-artifact-001"},
         json={
             "completed_by": "Offshore Team A",
             "result": "Artifact hash does not match object.",
@@ -224,6 +256,7 @@ async def test_wt023_full_audited_workflow(client: httpx.AsyncClient) -> None:
 
     unsafe_measurement = await client.post(
         f"/api/v1/work-orders/{work_order_id}/tasks/{work_order['tasks'][0]['task_id']}/complete",
+        headers={"Idempotency-Key": "vertical-task-unsafe-measurement-001"},
         json={
             "completed_by": "Offshore Team A",
             "result": "Water content is outside the controlled maintenance threshold.",
@@ -244,6 +277,7 @@ async def test_wt023_full_audited_workflow(client: httpx.AsyncClient) -> None:
     for index, task in enumerate(work_order["tasks"], start=1):
         completed = await client.post(
             f"/api/v1/work-orders/{work_order_id}/tasks/{task['task_id']}/complete",
+            headers={"Idempotency-Key": f"vertical-task-complete-{index:03d}"},
             json={
                 "completed_by": "Offshore Team A",
                 "result": f"Task {index} completed with traceable field evidence.",
@@ -263,6 +297,7 @@ async def test_wt023_full_audited_workflow(client: httpx.AsyncClient) -> None:
 
     duplicate_completion = await client.post(
         f"/api/v1/work-orders/{work_order_id}/tasks/{work_order['tasks'][-1]['task_id']}/complete",
+        headers={"Idempotency-Key": "vertical-task-business-replay-001"},
         json={
             "completed_by": "Offshore Team A",
             "result": "Duplicate transport replay.",
@@ -309,6 +344,61 @@ async def test_sql_tool_cannot_bypass_human_approval_gate(
 
 
 @pytest.mark.asyncio
+async def test_approved_alternative_must_reference_an_existing_weather_window(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+) -> None:
+    mission = await create_review_mission(client, "SCADA-WT023-WINDOW-MISSING-001")
+    async with app.state.session_factory() as session, session.begin():
+        decision = await session.scalar(
+            select(Decision).where(Decision.mission_id == mission["mission_id"])
+        )
+        assert decision is not None
+        decision.alternatives = [
+            {**item, "weather_window_id": "WEATHER-WINDOW-MISSING"}
+            for item in decision.alternatives
+        ]
+
+    approval = await client.post(
+        f"/api/v1/missions/{mission['mission_id']}/approvals",
+        headers={"Idempotency-Key": "weather-missing-approval-001"},
+        json={
+            "action": "approve",
+            "expected_revision": mission["revision"],
+            "reason": "Reject an approval that references an unknown execution window",
+        },
+    )
+    assert approval.status_code == 409
+    assert "weather window" in approval.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_approved_weather_window_must_cover_the_estimated_work_duration(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+) -> None:
+    mission = await create_review_mission(client, "SCADA-WT023-WINDOW-SHORT-001")
+    now = datetime.now(UTC)
+    async with app.state.session_factory() as session, session.begin():
+        window = await session.get(WeatherWindow, "WEATHER-WINDOW-WT023")
+        assert window is not None
+        window.starts_at = now - timedelta(hours=1)
+        window.ends_at = now + timedelta(hours=1)
+
+    approval = await client.post(
+        f"/api/v1/missions/{mission['mission_id']}/approvals",
+        headers={"Idempotency-Key": "weather-short-approval-001"},
+        json={
+            "action": "approve",
+            "expected_revision": mission["revision"],
+            "reason": "Reject an approval whose window cannot cover the controlled work plan",
+        },
+    )
+    assert approval.status_code == 409
+    assert "estimated work duration" in approval.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_rejection_is_recorded_without_creating_work_order(
     client: httpx.AsyncClient,
 ) -> None:
@@ -319,6 +409,7 @@ async def test_rejection_is_recorded_without_creating_work_order(
     mission = (await client.get(f"/api/v1/missions/{mission_id}")).json()
     rejected = await client.post(
         f"/api/v1/missions/{mission_id}/approvals",
+        headers={"Idempotency-Key": "vertical-rejection-001"},
         json={
             "action": "reject",
             "expected_revision": mission["revision"],
@@ -347,6 +438,7 @@ async def test_request_revision_reanalyzes_and_can_then_be_approved(
 
     revision = await client.post(
         f"/api/v1/missions/{mission_id}/approvals",
+        headers={"Idempotency-Key": "vertical-request-revision-001"},
         json={
             "action": "request_revision",
             "expected_revision": first_review["revision"],
@@ -367,6 +459,7 @@ async def test_request_revision_reanalyzes_and_can_then_be_approved(
 
     approved = await client.post(
         f"/api/v1/missions/{mission_id}/approvals",
+        headers={"Idempotency-Key": "vertical-revised-approval-001"},
         json={
             "action": "approve",
             "expected_revision": revised["revision"],
@@ -390,6 +483,7 @@ async def test_escalation_keeps_decision_open_for_a_later_approval(
 
     escalated = await client.post(
         f"/api/v1/missions/{mission_id}/approvals",
+        headers={"Idempotency-Key": "vertical-escalation-001"},
         json={
             "action": "escalate",
             "expected_revision": first_review["revision"],
@@ -405,6 +499,7 @@ async def test_escalation_keeps_decision_open_for_a_later_approval(
 
     approved = await client.post(
         f"/api/v1/missions/{mission_id}/approvals",
+        headers={"Idempotency-Key": "vertical-escalated-approval-001"},
         json={
             "action": "approve",
             "expected_revision": detail["revision"],

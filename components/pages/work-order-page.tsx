@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   Bot,
@@ -22,16 +23,18 @@ import {
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
+import { useWindOpsIdentity } from "@/components/providers/identity-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, KeyValue, Progress } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { featuredMission, historicalWorkOrders, workOrders } from "@/lib";
-import type { WorkOrder, WorkOrderPriority, WorkOrderStatus } from "@/lib/types";
+import type { WorkOrder, WorkOrderPriority, WorkOrderStatus, WorkOrderTask } from "@/lib/types";
 import { canCompleteFeaturedWorkOrder } from "@/lib/demo-workflow";
 import { overlayClientWorkOrders } from "@/lib/client-workflow-overlays";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
-import { cn } from "@/lib/utils";
+import { asText, cn } from "@/lib/utils";
 import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
+import { apiGet, apiPost } from "@/lib/api-client";
 
 const statusLabels: Record<WorkOrderStatus, string> = {
   draft: "草稿",
@@ -104,17 +107,17 @@ function nextOption<T extends string>(options: readonly T[], current: T): T {
 const workOrderColumns: readonly LegacyColumnDef<WorkOrder, unknown>[] = [
   {
     accessorKey: "id",
-    header: "Work Order ID",
+    header: "工单编号",
     cell: ({ row }) => <strong className="mono">{row.original.id}</strong>,
   },
   {
     accessorKey: "turbineId",
-    header: "Wind Turbine",
+    header: "风机",
     cell: ({ row }) => <span className="mono">{row.original.turbineId}</span>,
   },
   {
     accessorKey: "issue",
-    header: "Issue",
+    header: "问题",
     cell: ({ row }) => (
       <span className="alarm-title-cell">
         <strong>{row.original.issue}</strong>
@@ -125,11 +128,19 @@ const workOrderColumns: readonly LegacyColumnDef<WorkOrder, unknown>[] = [
   },
   {
     accessorKey: "priority",
-    header: "Priority",
+    header: "优先级",
     cell: ({ row }) => (
       <StatusBadge
         value={row.original.priority}
-        label={row.original.priority.toUpperCase()}
+        label={
+          row.original.priority === "critical"
+            ? "严重"
+            : row.original.priority === "high"
+              ? "高"
+              : row.original.priority === "medium"
+                ? "中"
+                : "低"
+        }
         tone={
           row.original.priority === "critical"
             ? "critical"
@@ -143,7 +154,7 @@ const workOrderColumns: readonly LegacyColumnDef<WorkOrder, unknown>[] = [
   },
   {
     accessorKey: "status",
-    header: "Status",
+    header: "状态",
     cell: ({ row }) => (
       <StatusBadge
         value={row.original.status}
@@ -163,7 +174,7 @@ const workOrderColumns: readonly LegacyColumnDef<WorkOrder, unknown>[] = [
   },
   {
     accessorKey: "assignedTeam",
-    header: "Assigned Team",
+    header: "执行班组",
     cell: ({ row }) => (
       <span className="team-cell">
         <UserRound size={13} /> {row.original.assignedTeam}
@@ -172,7 +183,7 @@ const workOrderColumns: readonly LegacyColumnDef<WorkOrder, unknown>[] = [
   },
   {
     accessorKey: "createdByAgentId",
-    header: "Created By",
+    header: "创建方式",
     cell: ({ row }) =>
       row.original.createdByAgentId ? (
         <span className="ai-status-cell">
@@ -184,17 +195,17 @@ const workOrderColumns: readonly LegacyColumnDef<WorkOrder, unknown>[] = [
   },
   {
     accessorKey: "relatedMissionId",
-    header: "Related Mission",
+    header: "关联 Mission",
     cell: ({ row }) => <span className="mono">{row.original.relatedMissionId ?? "—"}</span>,
   },
   {
     accessorKey: "plannedStart",
-    header: "Planned Start",
+    header: "计划开始",
     cell: ({ row }) => new Date(row.original.plannedStart).toLocaleDateString("zh-CN"),
   },
   {
     accessorKey: "deadline",
-    header: "Deadline",
+    header: "截止时间",
     cell: ({ row }) => new Date(row.original.deadline).toLocaleDateString("zh-CN"),
   },
 ];
@@ -202,15 +213,18 @@ const workOrderColumns: readonly LegacyColumnDef<WorkOrder, unknown>[] = [
 const workOrderCsvExport = {
   filename: "windops-work-orders-2026-08-13.csv",
   columns: [
-    { label: "Work Order ID", value: (workOrder: WorkOrder) => workOrder.id },
-    { label: "Wind Turbine", value: (workOrder: WorkOrder) => workOrder.turbineId },
-    { label: "Issue", value: (workOrder: WorkOrder) => workOrder.issue },
-    { label: "Priority", value: (workOrder: WorkOrder) => workOrder.priority },
-    { label: "Status", value: (workOrder: WorkOrder) => statusLabels[workOrder.status] },
-    { label: "Assigned Team", value: (workOrder: WorkOrder) => workOrder.assignedTeam },
-    { label: "Related Mission", value: (workOrder: WorkOrder) => workOrder.relatedMissionId },
-    { label: "Planned Start", value: (workOrder: WorkOrder) => workOrder.plannedStart },
-    { label: "Deadline", value: (workOrder: WorkOrder) => workOrder.deadline },
+    { label: "工单编号", value: (workOrder: WorkOrder) => workOrder.id },
+    { label: "风机", value: (workOrder: WorkOrder) => workOrder.turbineId },
+    { label: "问题", value: (workOrder: WorkOrder) => workOrder.issue },
+    {
+      label: "优先级",
+      value: (workOrder: WorkOrder) => priorityFilterLabels[workOrder.priority],
+    },
+    { label: "状态", value: (workOrder: WorkOrder) => statusLabels[workOrder.status] },
+    { label: "执行班组", value: (workOrder: WorkOrder) => workOrder.assignedTeam },
+    { label: "关联 Mission", value: (workOrder: WorkOrder) => workOrder.relatedMissionId },
+    { label: "计划开始", value: (workOrder: WorkOrder) => workOrder.plannedStart },
+    { label: "截止时间", value: (workOrder: WorkOrder) => workOrder.deadline },
   ],
 } as const;
 
@@ -219,27 +233,303 @@ const workOrderSearchText = (workOrder: WorkOrder): string =>
 
 const workOrderRowId = (workOrder: WorkOrder): string => workOrder.id;
 
+const FIELD_ARTIFACT_TYPES = new Set([
+  "application/json",
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "text/plain",
+  "video/mp4",
+]);
+const FIELD_ARTIFACT_ACCEPT = [...FIELD_ARTIFACT_TYPES].join(",");
+const MAX_FIELD_ARTIFACT_BYTES = 50 * 1024 * 1024;
+
+type SchemaProperty = Readonly<Record<string, unknown>>;
+
+type ArtifactUploadGrant = {
+  artifact_uri: string;
+  upload_url: string;
+  required_headers: Readonly<Record<string, string>>;
+};
+
+function recordValue(value: unknown): Readonly<Record<string, unknown>> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Readonly<Record<string, unknown>>)
+    : {};
+}
+
+function fieldContentType(file: File): string | null {
+  if (FIELD_ARTIFACT_TYPES.has(file.type)) return file.type;
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  return (
+    {
+      json: "application/json",
+      pdf: "application/pdf",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      txt: "text/plain",
+      mp4: "video/mp4",
+    }[extension ?? ""] ?? null
+  );
+}
+
+async function sha256Hex(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+function FieldTaskCompletionForm({
+  workOrderId,
+  task,
+  onCompleted,
+  authorized,
+}: {
+  workOrderId: string;
+  task: WorkOrderTask;
+  onCompleted: () => Promise<void>;
+  authorized: boolean;
+}) {
+  const schema = recordValue(task.measurementSchema);
+  const properties = recordValue(schema.properties);
+  const required = new Set(
+    Array.isArray(schema.required)
+      ? schema.required.filter((value): value is string => typeof value === "string")
+      : [],
+  );
+  const initialMeasurement = Object.fromEntries(
+    Object.entries(properties)
+      .map(([name, value]) => [name, recordValue(value).const] as const)
+      .filter((entry) => entry[1] !== undefined),
+  );
+  const [measurement, setMeasurement] = useState<Record<string, unknown>>(initialMeasurement);
+  const [result, setResult] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const updateMeasurement = (name: string, raw: string, property: SchemaProperty) => {
+    setMeasurement((current) => {
+      const next = { ...current };
+      if (raw === "") {
+        delete next[name];
+        return next;
+      }
+      next[name] =
+        property.type === "number" || property.type === "integer"
+          ? Number(raw)
+          : property.type === "boolean"
+            ? raw === "true"
+            : raw;
+      return next;
+    });
+  };
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    if (!authorized) {
+      setError("当前角色没有提交现场证据或完成任务的权限。");
+      return;
+    }
+    if (!file) {
+      setError("请选择现场证据文件。");
+      return;
+    }
+    if (file.size <= 0 || file.size > MAX_FIELD_ARTIFACT_BYTES) {
+      setError("现场证据文件必须在 1 Byte 到 50 MiB 之间。");
+      return;
+    }
+    const contentType = fieldContentType(file);
+    if (!contentType) {
+      setError("仅支持 JSON、PDF、JPEG、PNG、TXT 或 MP4 证据文件。");
+      return;
+    }
+    const missing = [...required].filter(
+      (name) => measurement[name] === undefined || measurement[name] === "",
+    );
+    if (missing.length) {
+      setError(`请填写必填测量字段：${missing.join("、")}。`);
+      return;
+    }
+    if (result.trim().length < 3) {
+      setError("请填写至少 3 个字符的现场结论。");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const artifactSha256 = await sha256Hex(file);
+      const taskPath = `/api/backend/work-orders/${encodeURIComponent(workOrderId)}/tasks/${encodeURIComponent(task.id)}`;
+      const grant = await apiPost<ArtifactUploadGrant>(`${taskPath}/artifacts/presign`, {
+        file_name: file.name,
+        content_type: contentType,
+        artifact_sha256: artifactSha256,
+      });
+      const upload = await fetch(grant.upload_url, {
+        method: "PUT",
+        headers: grant.required_headers,
+        body: file,
+      });
+      if (!upload.ok) {
+        throw new Error(`对象存储上传失败（HTTP ${upload.status}）。`);
+      }
+      await apiPost(`${taskPath}/complete`, {
+        result: result.trim(),
+        artifact_uri: grant.artifact_uri,
+        artifact_sha256: artifactSha256,
+        measurement,
+      });
+      await onCompleted();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "现场证据提交失败，请重试。");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form className="field-evidence-form" onSubmit={(event) => void submit(event)}>
+      <div className="field-evidence-form__heading">
+        <span>
+          <ShieldCheck size={14} /> 当前可执行任务
+        </span>
+        <small className="mono">{task.schemaVersion ?? "schema-unversioned"}</small>
+      </div>
+      <strong>
+        {task.sequence}. {task.title}
+      </strong>
+      <div className="field-evidence-form__fields">
+        {Object.entries(properties).map(([name, rawProperty]) => {
+          const property = recordValue(rawProperty);
+          const label = typeof property.title === "string" ? property.title : name;
+          const enumValues = Array.isArray(property.enum) ? property.enum : null;
+          const constant = property.const;
+          return (
+            <label key={name}>
+              <span>
+                {label} {required.has(name) ? "*" : ""}
+              </span>
+              {constant !== undefined ? (
+                <input value={asText(constant)} readOnly aria-readonly="true" />
+              ) : enumValues ? (
+                <select
+                  value={asText(measurement[name])}
+                  onChange={(event) => updateMeasurement(name, event.target.value, property)}
+                  required={required.has(name)}
+                >
+                  <option value="">请选择</option>
+                  {enumValues.map((value) => (
+                    <option key={String(value)} value={String(value)}>
+                      {String(value)}
+                    </option>
+                  ))}
+                </select>
+              ) : property.type === "boolean" ? (
+                <select
+                  value={asText(measurement[name])}
+                  onChange={(event) => updateMeasurement(name, event.target.value, property)}
+                  required={required.has(name)}
+                >
+                  <option value="">请选择</option>
+                  <option value="true">是</option>
+                  <option value="false">否</option>
+                </select>
+              ) : (
+                <input
+                  type={
+                    property.type === "number" || property.type === "integer" ? "number" : "text"
+                  }
+                  step={
+                    property.type === "integer" ? 1 : property.type === "number" ? "any" : undefined
+                  }
+                  min={typeof property.minimum === "number" ? property.minimum : undefined}
+                  max={typeof property.maximum === "number" ? property.maximum : undefined}
+                  value={asText(measurement[name])}
+                  onChange={(event) => updateMeasurement(name, event.target.value, property)}
+                  required={required.has(name)}
+                />
+              )}
+              {typeof property.description === "string" ? (
+                <small>{property.description}</small>
+              ) : null}
+            </label>
+          );
+        })}
+        <label>
+          <span>现场结论 *</span>
+          <textarea
+            rows={3}
+            value={result}
+            onChange={(event) => setResult(event.target.value)}
+            placeholder="记录检查、测量和处置结论"
+            required
+          />
+        </label>
+        <label>
+          <span>不可变现场证据 *</span>
+          <input
+            type="file"
+            accept={FIELD_ARTIFACT_ACCEPT}
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            required
+          />
+          <small>上传后由后端重新计算 SHA-256；最大 50 MiB。</small>
+        </label>
+      </div>
+      {error ? (
+        <p className="field-evidence-form__error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <Button type="submit" variant="primary" disabled={submitting || !authorized}>
+        <ShieldCheck size={14} /> {submitting ? "校验并提交中…" : "上传证据并完成任务"}
+      </Button>
+    </form>
+  );
+}
+
 function WorkOrderDrawer({
   workOrder,
+  runtimeMode,
   isWorkflowWorkOrder,
   workflowWritable,
   onClose,
   onToggleTask,
   onStart,
   onComplete,
+  onProductionTaskCompleted,
   canComplete,
+  canCompleteProductionTask,
 }: {
   workOrder: WorkOrder;
+  runtimeMode: "demo" | "production";
   isWorkflowWorkOrder: boolean;
   workflowWritable: boolean;
   onClose: () => void;
   onToggleTask: (taskId: string) => void;
   onStart: () => void;
   onComplete: () => void;
+  onProductionTaskCompleted: () => Promise<void>;
   canComplete: boolean;
+  canCompleteProductionTask: boolean;
 }) {
   const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
   const completed = workOrder.tasks.filter((task) => task.completed).length;
+  const productionMode = runtimeMode === "production";
+  const nextProductionTask = productionMode
+    ? workOrder.tasks.find((task) => !task.completed)
+    : undefined;
+  const eamStatusLabel =
+    workOrder.eam?.syncStatus === "pending"
+      ? "等待发布"
+      : workOrder.eam?.syncStatus === "accepted"
+        ? "EAM 已接收"
+        : workOrder.eam?.syncStatus === "in_progress"
+          ? "EAM 执行中"
+          : workOrder.eam?.syncStatus === "completed" || workOrder.eam?.syncStatus === "closed"
+            ? "EAM 已完成"
+            : (workOrder.eam?.syncStatus.replaceAll("_", " ") ?? "未启用");
   return (
     <>
       <button className="drawer-backdrop" onClick={onClose} aria-label="关闭工单详情" />
@@ -253,7 +543,7 @@ function WorkOrderDrawer({
       >
         <header className="detail-drawer__header">
           <div>
-            <span className="eyebrow">WORK ORDER</span>
+            <span className="eyebrow">工单</span>
             <h2>{workOrder.id}</h2>
             <p>
               {workOrder.turbineId} · {workOrder.assignedTeam}
@@ -277,7 +567,15 @@ function WorkOrderDrawer({
           />
           <StatusBadge
             value={workOrder.priority}
-            label={workOrder.priority.toUpperCase()}
+            label={
+              workOrder.priority === "critical"
+                ? "严重"
+                : workOrder.priority === "high"
+                  ? "高"
+                  : workOrder.priority === "medium"
+                    ? "中"
+                    : "低"
+            }
             tone={
               workOrder.priority === "critical"
                 ? "critical"
@@ -301,10 +599,38 @@ function WorkOrderDrawer({
           <div className="ai-generated-note">
             <Bot size={15} />
             <span>
-              <strong>由 Work Order Agent 自动生成</strong>
-              <small>来源 {workOrder.relatedMissionId} · 已通过 Safety Review</small>
+              <strong>由工单 Agent 自动生成</strong>
+              <small>来源 {workOrder.relatedMissionId} · 已通过安全审核</small>
             </span>
-            <StatusBadge value="approved" label="AI VERIFIED" tone="info" compact />
+            <StatusBadge value="approved" label="AI 已验证" tone="info" compact />
+          </div>
+        ) : null}
+        {productionMode && workOrder.eam ? (
+          <div className="ai-generated-note" role="status">
+            <PackageCheck size={15} />
+            <span>
+              <strong>企业资产管理系统同步</strong>
+              <small>
+                {workOrder.eam.externalId
+                  ? `${workOrder.eam.provider ?? "EAM"} 工单 ${workOrder.eam.externalId}`
+                  : "审批事务已持久化，等待出站工作进程发布"}
+                {workOrder.eam.externalUpdatedAt
+                  ? ` · 外部更新时间 ${new Date(workOrder.eam.externalUpdatedAt).toLocaleString("zh-CN")}`
+                  : ""}
+              </small>
+            </span>
+            <StatusBadge
+              value={workOrder.eam.syncStatus}
+              label={eamStatusLabel}
+              tone={
+                workOrder.eam.syncStatus === "completed" || workOrder.eam.syncStatus === "closed"
+                  ? "success"
+                  : workOrder.eam.syncStatus === "pending"
+                    ? "warning"
+                    : "info"
+              }
+              compact
+            />
           </div>
         ) : null}
         <section className="drawer-section">
@@ -331,7 +657,7 @@ function WorkOrderDrawer({
             </span>
           </div>
           <Progress value={(completed / Math.max(1, workOrder.tasks.length)) * 100} tone="info" />
-          {!isWorkflowWorkOrder || !workflowWritable ? (
+          {!productionMode && (!isWorkflowWorkOrder || !workflowWritable) ? (
             <div className="ai-generated-note" role="note">
               <ShieldCheck size={15} />
               <span>
@@ -342,7 +668,7 @@ function WorkOrderDrawer({
                     : `当前状态为 ${statusLabels[workOrder.status]}；仅 ${WORKFLOW_WORK_ORDER_ID} 接入 WT-023 闭环，任务与执行动作已禁用。`}
                 </small>
               </span>
-              <StatusBadge value="read-only" label="READ ONLY" tone="maintenance" compact />
+              <StatusBadge value="read-only" label="只读" tone="maintenance" compact />
             </div>
           ) : null}
           <div className="task-checklist">
@@ -352,7 +678,10 @@ function WorkOrderDrawer({
                   type="checkbox"
                   checked={task.completed}
                   disabled={
-                    !isWorkflowWorkOrder || !workflowWritable || workOrder.status !== "in-progress"
+                    productionMode ||
+                    !isWorkflowWorkOrder ||
+                    !workflowWritable ||
+                    workOrder.status !== "in-progress"
                   }
                   onChange={() => {
                     if (isWorkflowWorkOrder) onToggleTask(task.id);
@@ -367,6 +696,31 @@ function WorkOrderDrawer({
               </label>
             ))}
           </div>
+          {productionMode &&
+          nextProductionTask &&
+          (workOrder.status === "scheduled" || workOrder.status === "in-progress") ? (
+            canCompleteProductionTask ? (
+              <FieldTaskCompletionForm
+                key={nextProductionTask.id}
+                workOrderId={workOrder.id}
+                task={nextProductionTask}
+                onCompleted={onProductionTaskCompleted}
+                authorized={canCompleteProductionTask}
+              />
+            ) : (
+              <div
+                className="ai-generated-note"
+                role="status"
+                data-capability="work_order.task.complete"
+              >
+                <ShieldCheck size={15} />
+                <span>
+                  <strong>现场任务只读</strong>
+                  <small>提交证据和完成任务需要现场技术员及对应工单范围授权。</small>
+                </span>
+              </div>
+            )
+          ) : null}
         </section>
         <section className="drawer-section">
           <h3>安全与 PPE</h3>
@@ -428,7 +782,16 @@ function WorkOrderDrawer({
           <Button variant="secondary" disabled title="资源重新指派将在资源中心完成">
             <UserRound size={14} /> 重新指派
           </Button>
-          {!isWorkflowWorkOrder || !workflowWritable ? (
+          {productionMode ? (
+            <Button variant="primary" disabled>
+              <ShieldCheck size={14} />
+              {workOrder.status === "completed"
+                ? "证据已验证 · 工单已闭环"
+                : nextProductionTask
+                  ? `按任务 ${nextProductionTask.sequence} 提交现场证据`
+                  : `当前状态 · ${statusLabels[workOrder.status]}`}
+            </Button>
+          ) : !isWorkflowWorkOrder || !workflowWritable ? (
             <Button
               variant="primary"
               disabled
@@ -461,7 +824,9 @@ function WorkOrderDrawer({
   );
 }
 
-export function WorkOrderPage() {
+export function WorkOrderPage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
+  const { can } = useWindOpsIdentity();
+  const canCompleteProductionTask = runtimeMode === "demo" || can("work_order.task.complete");
   const workflow = useDemoWorkflow();
   const [status, setStatus] = useState<WorkOrderStatusFilter>("all");
   const [priority, setPriority] = useState<"all" | WorkOrderPriority>("all");
@@ -469,6 +834,12 @@ export function WorkOrderPage() {
   const [turbineScope, setTurbineScope] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createIntent, setCreateIntent] = useState(false);
+  const workOrderQuery = useQuery({
+    queryKey: ["work-orders", workflow.serverRevision, runtimeMode],
+    queryFn: ({ signal }) =>
+      apiGet<{ readonly data: readonly WorkOrder[] }>("/api/work-orders", signal),
+    initialData: runtimeMode === "demo" ? { data: workOrders } : undefined,
+  });
 
   useEffect(() => {
     const parameters = new URLSearchParams(window.location.search);
@@ -483,8 +854,14 @@ export function WorkOrderPage() {
     return () => window.clearTimeout(timer);
   }, []);
   const displayWorkOrders = useMemo(
-    () => overlayClientWorkOrders(workOrders, workflow),
-    [workflow],
+    () =>
+      runtimeMode === "demo"
+        ? overlayClientWorkOrders(workOrderQuery.data?.data ?? [], workflow)
+        : (workOrderQuery.data?.data ?? []),
+    [runtimeMode, workOrderQuery.data?.data, workflow],
+  );
+  const [scheduleReference] = useState(() =>
+    runtimeMode === "production" ? Date.now() : SNAPSHOT_TIMESTAMP,
   );
   const filtered = useMemo(
     () =>
@@ -499,24 +876,27 @@ export function WorkOrderPage() {
         const plannedTimestamp = Date.parse(item.plannedStart);
         const matchesPlannedStart =
           plannedStart === "all" ||
-          (plannedStart === "due" && plannedTimestamp < SNAPSHOT_TIMESTAMP) ||
+          (plannedStart === "due" && plannedTimestamp < scheduleReference) ||
           (plannedStart === "next-24h" &&
-            plannedTimestamp >= SNAPSHOT_TIMESTAMP &&
-            plannedTimestamp <= SNAPSHOT_TIMESTAMP + DAY_MS) ||
+            plannedTimestamp >= scheduleReference &&
+            plannedTimestamp <= scheduleReference + DAY_MS) ||
           (plannedStart === "next-7d" &&
-            plannedTimestamp >= SNAPSHOT_TIMESTAMP &&
-            plannedTimestamp <= SNAPSHOT_TIMESTAMP + 7 * DAY_MS);
+            plannedTimestamp >= scheduleReference &&
+            plannedTimestamp <= scheduleReference + 7 * DAY_MS);
 
         return matchesTurbine && matchesStatus && matchesPriority && matchesPlannedStart;
       }),
-    [displayWorkOrders, plannedStart, priority, status, turbineScope],
+    [displayWorkOrders, plannedStart, priority, scheduleReference, status, turbineScope],
   );
   const featured =
-    displayWorkOrders.find((item) => item.relatedMissionId === featuredMission.id) ??
-    displayWorkOrders[0];
+    (runtimeMode === "demo"
+      ? displayWorkOrders.find((item) => item.relatedMissionId === featuredMission.id)
+      : undefined) ?? displayWorkOrders[0];
   const selected =
     displayWorkOrders.find((item) => item.id === selectedId) ??
-    historicalWorkOrders.find((item) => item.id === selectedId) ??
+    (runtimeMode === "demo"
+      ? historicalWorkOrders.find((item) => item.id === selectedId)
+      : undefined) ??
     null;
   const counts = {
     pending: displayWorkOrders.filter((item) => item.status === "pending-approval").length,
@@ -526,6 +906,12 @@ export function WorkOrderPage() {
       (item) => item.status === "completed" || item.status === "closed",
     ).length,
   };
+  const summaryStatus =
+    runtimeMode === "production" ? (featured?.status ?? "draft") : workflow.workOrderStatus;
+  const summaryCompletedTaskCount =
+    runtimeMode === "production"
+      ? (featured?.tasks.filter((task) => task.completed).length ?? 0)
+      : workflow.completedTaskIds.length;
   const hasFilters =
     turbineScope !== null || status !== "all" || priority !== "all" || plannedStart !== "all";
 
@@ -534,7 +920,7 @@ export function WorkOrderPage() {
   };
 
   return (
-    <AppShell activePath="/work-orders">
+    <AppShell runtimeMode={runtimeMode} activePath="/work-orders">
       <PageHeader
         eyebrow="运维执行"
         title="工单中心"
@@ -543,16 +929,26 @@ export function WorkOrderPage() {
         meta={
           <>
             <StatusBadge
-              value={workflow.workOrderStatus}
-              label={workflow.workOrderStatus.replaceAll("-", " ").toUpperCase()}
+              value={summaryStatus}
+              label={
+                summaryStatus === "in-progress"
+                  ? "执行中"
+                  : summaryStatus === "pending-approval"
+                    ? "等待审批"
+                    : summaryStatus === "scheduled"
+                      ? "已排程"
+                      : summaryStatus === "completed"
+                        ? "已完成"
+                        : "草案"
+              }
               tone={
-                workflow.workOrderStatus === "completed"
+                summaryStatus === "completed"
                   ? "success"
-                  : workflow.workOrderStatus === "in-progress"
+                  : summaryStatus === "in-progress"
                     ? "info"
                     : "maintenance"
               }
-              pulse={workflow.workOrderStatus === "in-progress"}
+              pulse={summaryStatus === "in-progress"}
             />
             <span className="page-meta-text">
               {counts.pending} 待审批 · {counts.scheduled} 已排程 · {counts.completed} 已完成
@@ -560,7 +956,7 @@ export function WorkOrderPage() {
           </>
         }
         actions={
-          <Button variant="primary" disabled title="当前演示环境不写入新工单">
+          <Button variant="primary" disabled title="工单只能由已审批 Mission 的受控工作流创建">
             <Plus size={15} /> 创建工单
           </Button>
         }
@@ -573,7 +969,9 @@ export function WorkOrderPage() {
             <strong>已打开受控工单创建入口</strong>
             <small>
               {turbineScope ? `资产范围：${turbineScope}。` : "未指定资产范围。"}{" "}
-              当前没有通用工单写入 API；页面仅展示可审计的只读工作台，不会假创建工单。
+              {runtimeMode === "production"
+                ? "生产工单只能由已审批 Mission 的审批门禁原子创建，并同时预留资源与天气窗口。"
+                : "演示模式只展示可审计的只读工作台，不会假创建工单。"}
             </small>
           </span>
           <Button
@@ -591,48 +989,62 @@ export function WorkOrderPage() {
           <div className="featured-work-order__tag">
             <Bot size={14} />
             <span>
-              <small>AI GENERATED · MISSION-2026-0823</small>
+              <small>AI 生成 · {featured.relatedMissionId ?? "无关联 Mission"}</small>
               <strong>
-                {workflow.workOrderStatus === "completed"
-                  ? "WT-023 检查已完成，结果已回写"
-                  : workflow.workOrderStatus === "in-progress"
-                    ? "WT-023 主轴承检查正在执行"
-                    : "WT-023 主轴承检查工单已准备"}
+                {runtimeMode === "production"
+                  ? featured.issue
+                  : summaryStatus === "completed"
+                    ? "WT-023 检查已完成，结果已回写"
+                    : summaryStatus === "in-progress"
+                      ? "WT-023 主轴承检查正在执行"
+                      : "WT-023 主轴承检查工单已准备"}
               </strong>
             </span>
           </div>
           <div className="featured-work-order__facts">
             <span>
               <small>建议窗口</small>
-              <strong>8月14日 · 08:00</strong>
+              <strong>
+                {new Date(featured.plannedStart).toLocaleString("zh-CN", {
+                  month: "numeric",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                })}
+              </strong>
             </span>
             <span>
               <small>任务进度</small>
               <strong>
-                {workflow.completedTaskIds.length} / {featured.tasks.length}
+                {summaryCompletedTaskCount} / {featured.tasks.length}
               </strong>
             </span>
             <span>
               <small>闭环状态</small>
-              <strong className={workflow.knowledgeCaseId ? "success-text" : "warning-text"}>
-                {workflow.knowledgeCaseId
+              <strong
+                className={
+                  summaryStatus === "completed" || workflow.knowledgeCaseId
+                    ? "success-text"
+                    : "warning-text"
+                }
+              >
+                {summaryStatus === "completed" || workflow.knowledgeCaseId
                   ? "案例已沉淀"
-                  : workflow.workOrderStatus === "draft" ||
-                      workflow.workOrderStatus === "pending-approval"
+                  : summaryStatus === "draft" || summaryStatus === "pending-approval"
                     ? "等待审批"
-                    : workflow.workOrderStatus === "scheduled"
+                    : summaryStatus === "scheduled"
                       ? "已排程"
-                      : workflow.workOrderStatus === "in-progress"
+                      : summaryStatus === "in-progress"
                         ? "现场执行中"
-                        : workflow.workOrderStatus === "paused"
+                        : summaryStatus === "paused"
                           ? "执行已暂停"
                           : "等待验证"}
               </strong>
             </span>
           </div>
           <Button variant="primary" onClick={() => setSelectedId(featured.id)}>
-            {workflow.workOrderStatus === "completed" ? "查看结果" : "打开工单"}{" "}
-            <ArrowRight size={14} />
+            {summaryStatus === "completed" ? "查看结果" : "打开工单"} <ArrowRight size={14} />
           </Button>
         </section>
       ) : null}
@@ -647,7 +1059,7 @@ export function WorkOrderPage() {
             <ShieldCheck size={16} />
           </span>
           <span>
-            <small>PENDING APPROVAL</small>
+            <small>等待审批</small>
             <strong>{counts.pending}</strong>
           </span>
         </button>
@@ -660,7 +1072,7 @@ export function WorkOrderPage() {
             <CalendarClock size={16} />
           </span>
           <span>
-            <small>SCHEDULED</small>
+            <small>已排程</small>
             <strong>{counts.scheduled}</strong>
           </span>
         </button>
@@ -673,7 +1085,7 @@ export function WorkOrderPage() {
             <Wrench size={16} />
           </span>
           <span>
-            <small>IN PROGRESS</small>
+            <small>执行中</small>
             <strong>{counts.progress}</strong>
           </span>
         </button>
@@ -686,7 +1098,7 @@ export function WorkOrderPage() {
             <CheckCircle2 size={16} />
           </span>
           <span>
-            <small>COMPLETED</small>
+            <small>已完成</small>
             <strong>{counts.completed}</strong>
           </span>
         </button>
@@ -763,6 +1175,7 @@ export function WorkOrderPage() {
       {selected ? (
         <WorkOrderDrawer
           workOrder={selected}
+          runtimeMode={runtimeMode}
           isWorkflowWorkOrder={selected.id === WORKFLOW_WORK_ORDER_ID}
           workflowWritable={workflow.writable}
           onClose={() => setSelectedId(null)}
@@ -791,7 +1204,11 @@ export function WorkOrderPage() {
               actor: "林工",
             });
           }}
+          onProductionTaskCompleted={async () => {
+            await workOrderQuery.refetch();
+          }}
           canComplete={canCompleteFeaturedWorkOrder(workflow)}
+          canCompleteProductionTask={canCompleteProductionTask}
         />
       ) : null}
     </AppShell>

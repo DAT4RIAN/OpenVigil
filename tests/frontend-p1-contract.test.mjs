@@ -108,20 +108,31 @@ test("command intent, scoped pages, honest controls and accessible drawers are s
     source("lib/use-accessible-dialog.ts"),
   ]);
 
-  assert.match(shell, /Open Mission Center/);
-  assert.match(shell, /Create Work Order · 只读受控入口/);
-  assert.match(shell, /Start Diagnosis · 只读诊断入口/);
+  assert.match(shell, /打开 Mission 中心/);
+  assert.match(shell, /创建工单 · 只读受控入口/);
+  assert.match(shell, /启动诊断 · 只读诊断入口/);
   assert.match(shell, /此命令不会创建工单/);
   assert.match(shell, /不会启动新 Agent 或写入诊断/);
   assert.match(shell, /intent=create/);
   assert.match(shell, /intent=diagnosis/);
   assert.match(workOrdersPage, /parameters\.get\("intent"\) === "create"/);
+  assert.match(workOrdersPage, /crypto\.subtle\.digest\("SHA-256"/);
+  assert.match(workOrdersPage, /\/artifacts\/presign/);
+  assert.match(workOrdersPage, /grant\.required_headers/);
+  assert.match(workOrdersPage, /MAX_FIELD_ARTIFACT_BYTES/);
+  assert.match(workOrdersPage, /onProductionTaskCompleted/);
   assert.match(workOrdersPage, /不会假创建工单/);
   assert.match(missionsPage, /\.get\("turbineId"\)/);
   assert.match(missionsPage, /不会假启动 Agent 流程/);
   assert.match(scadaPage, /requestFullscreen/);
   assert.match(decisionPage, /setShowAllEvidence/);
-  assert.match(windFarmPage, /更多筛选维度尚未接入/);
+  assert.match(decisionPage, /\/api\/backend\/missions\//);
+  assert.match(decisionPage, /expected_revision/);
+  assert.match(decisionPage, /selected_alternative_id/);
+  assert.match(decisionPage, /productionMode/);
+  assert.match(windFarmPage, /aria-label="风场高级筛选"/);
+  assert.match(windFarmPage, /仅已配置坐标/);
+  assert.match(windFarmPage, /清除高级筛选/);
   assert.match(windFarmPage, /当前筛选下没有可绘制的拓扑节点/);
   assert.match(agentPage, /scrollIntoView/);
   assert.match(agentPage, /toolTest\.mutate/);
@@ -153,4 +164,71 @@ test("all five drawers use the shared accessible dialog", async () => {
   for (const file of drawerFiles) {
     assert.match(await source(file), /useAccessibleDialog/);
   }
+});
+
+test("production branches never render fixture drawer, approval, summary, or diagnosis data", async () => {
+  const [alarmPage, decisionPage, missionPage, diagnosisPage] = await Promise.all([
+    source("components/pages/alarm-center-page.tsx"),
+    source("components/pages/decision-center-page.tsx"),
+    source("components/pages/mission-center-page.tsx"),
+    source("components/pages/diagnosis-center-page.tsx"),
+  ]);
+
+  // F1: 告警抽屉的特色卡与 fixture 关联数据只允许出现在 demo 分支。
+  assert.match(alarmPage, /const featured = !production &&/);
+  assert.match(alarmPage, /const relatedEvidence = production\s*\?\s*\[\]/);
+  assert.match(alarmPage, /const similarCases = production\s*\?\s*\[\]/);
+  assert.match(alarmPage, /const maintenanceRecords = production\s*\?\s*\[\]/);
+  assert.match(alarmPage, /const referencedKnowledge = production\s*\?\s*\[\]/);
+  // 生产模式接线权威后端：告警详情证据、Mission 关联、相似案例、工单与知识文档。
+  assert.match(alarmPage, /\/api\/backend\/alarms\/\$\{encodeURIComponent\(alarm\.id\)\}/);
+  assert.match(alarmPage, /\/api\/backend\/knowledge\/cases\?mission_id=/);
+  assert.match(alarmPage, /\/api\/backend\/work-orders\?turbine_id=/);
+  assert.match(alarmPage, /\/api\/backend\/knowledge\/documents\?q=/);
+  assert.match(alarmPage, /enabled: production/);
+  // 失败关闭与显式空态，不静默回落到 fixture。
+  assert.match(alarmPage, /已失败关闭，不回退演示数据/);
+  assert.match(alarmPage, /不会展示演示诊断结论/);
+
+  // F2: 生产审批意见必须显式输入，演示文案不得进入生产 POST。
+  assert.match(decisionPage, /productionMode \? "" : "同意执行方案 B/);
+  assert.match(decisionPage, /不会代入演示文案/);
+  assert.match(decisionPage, /productionMode && comment\.trim\(\)\.length < 3/);
+  assert.match(decisionPage, /reason: comment\.trim\(\)/);
+
+  // F3: Mission 汇总区在 production 下统计真实 Mission 数据，不读 fixture agents。
+  assert.match(missionPage, /const participatingAgentCount =/);
+  assert.doesNotMatch(
+    missionPage,
+    /<strong>\{agents\.filter\(\(agent\) => agent\.currentMissionId\)\.length\}<\/strong>/,
+  );
+  assert.match(missionPage, /暂无已闭环 Mission，无法计算/);
+  assert.match(missionPage, /基于 \$\{resolutionMinutes\.length\} 个已闭环 Mission 计算/);
+
+  // F4: 诊断中心 production 不硬链 fixture Mission、不携带 fixture 模型声明。
+  assert.match(diagnosisPage, /查看 \{selected\.turbineId\} Mission/);
+  assert.match(diagnosisPage, /model: isProduction/);
+  assert.match(diagnosisPage, /正在读取生产诊断模型元数据/);
+  assert.doesNotMatch(
+    diagnosisPage,
+    /actions=\{\s*<Link className="button button--secondary button--md" href="\/missions\/MISSION-2026-0823">/,
+  );
+});
+
+test("production knowledge and report routes do not fall back to demo scope or paginated reports", async () => {
+  const [knowledgeAssistant, reportDetail, reportExport, productionRuntime] = await Promise.all([
+    source("app/api/knowledge-assistant/route.ts"),
+    source("app/api/reports/[id]/route.ts"),
+    source("app/api/reports/[id]/export/route.ts"),
+    source("lib/production-runtime.ts"),
+  ]);
+
+  assert.match(knowledgeAssistant, /const productionMode = getProductionBackendConfig\(\)\.mode/);
+  assert.match(knowledgeAssistant, /productionMode \? null : featuredMission\.turbineId/);
+  assert.match(knowledgeAssistant, /productionMode \? null : featuredMission\.id/);
+  assert.match(knowledgeAssistant, /if \(productionMode\)/);
+  assert.match(reportDetail, /"\/api\/v1\/reports\/" \+ encodeURIComponent\(id\)/);
+  assert.match(reportExport, /"\/api\/v1\/reports\/" \+ encodeURIComponent\(id\)/);
+  assert.doesNotMatch(reportExport, /new URL\("\/api\/reports",/);
+  assert.match(productionRuntime, /reports\(\?:\\\/\[\^\/\]\+\)\?/);
 });

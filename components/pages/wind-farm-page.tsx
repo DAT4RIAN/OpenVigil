@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowRight,
@@ -41,8 +42,41 @@ import {
   overlayClientTurbines,
 } from "@/lib/client-workflow-overlays";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
+import { apiGet } from "@/lib/api-client";
+import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
 
 type ViewMode = "cards" | "list" | "topology" | "map";
+
+type FleetTurbine = WindTurbine & {
+  readonly updatedAt?: string;
+  readonly telemetryObservedAt?: string | null;
+  readonly telemetryAvailable?: boolean;
+  readonly availabilityAvailable?: boolean;
+  readonly coordinatesConfigured?: boolean;
+  readonly lastMaintenanceRecorded?: boolean;
+  readonly nextInspectionRecorded?: boolean;
+};
+
+type FleetResponse = {
+  readonly data: readonly FleetTurbine[];
+  readonly meta: {
+    readonly snapshotAt: string;
+    readonly farms: readonly {
+      readonly id: string;
+      readonly name: string;
+      readonly capacityMW: number;
+    }[];
+    readonly fleet: {
+      readonly currentPowerMW: number;
+      readonly averageHealthScore: number;
+      readonly activeAlarmCount: number;
+      readonly activeMissionCount: number;
+      readonly generationAvailable: boolean;
+      readonly averageAvailabilityPercent: number | null;
+      readonly telemetryAssetCount: number;
+    };
+  };
+};
 
 const statusMeta: Record<TurbineStatus, { label: string; tone: StatusTone }> = {
   running: { label: "运行", tone: "success" },
@@ -53,8 +87,16 @@ const statusMeta: Record<TurbineStatus, { label: string; tone: StatusTone }> = {
   "communication-lost": { label: "通信中断", tone: "offline" },
 };
 
-function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: () => void }) {
-  const anomaly = turbine.id === "WT-023";
+function TurbineDrawer({
+  turbine,
+  onClose,
+  demo,
+}: {
+  turbine: FleetTurbine;
+  onClose: () => void;
+  demo: boolean;
+}) {
+  const anomaly = demo && turbine.id === "WT-023";
   const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
   return (
     <>
@@ -69,7 +111,7 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
       >
         <header className="detail-drawer__header">
           <div>
-            <span className="eyebrow">WIND TURBINE</span>
+            <span className="eyebrow">风力发电机组</span>
             <h2>{turbine.id}</h2>
             <p>
               {turbine.manufacturer} · {turbine.model}
@@ -87,7 +129,13 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
             pulse={turbine.status === "running"}
           />
           <HealthBadge score={turbine.healthScore} />
-          <span>最后更新 12 秒前</span>
+          <span>
+            {demo
+              ? "演示快照"
+              : turbine.updatedAt
+                ? `更新于 ${new Date(turbine.updatedAt).toLocaleString("zh-CN")}`
+                : "更新时间未记录"}
+          </span>
         </div>
 
         {anomaly ? (
@@ -111,7 +159,8 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
                 <Zap size={14} /> 有功功率
               </span>
               <strong>
-                {turbine.powerMW.toFixed(2)} <small>MW</small>
+                {demo || turbine.telemetryAvailable ? turbine.powerMW.toFixed(2) : "—"}{" "}
+                <small>MW</small>
               </strong>
             </div>
             <div>
@@ -119,7 +168,8 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
                 <Wind size={14} /> 风速
               </span>
               <strong>
-                {turbine.windSpeedMps.toFixed(1)} <small>m/s</small>
+                {demo || turbine.telemetryAvailable ? turbine.windSpeedMps.toFixed(1) : "—"}{" "}
+                <small>m/s</small>
               </strong>
             </div>
             <div>
@@ -127,7 +177,8 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
                 <Activity size={14} /> 转子转速
               </span>
               <strong>
-                {turbine.rotorSpeedRpm.toFixed(1)} <small>rpm</small>
+                {demo || turbine.telemetryAvailable ? turbine.rotorSpeedRpm.toFixed(1) : "—"}{" "}
+                <small>rpm</small>
               </strong>
             </div>
             <div>
@@ -135,7 +186,10 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
                 <TowerControl size={14} /> 可利用率
               </span>
               <strong>
-                {turbine.availabilityPercent.toFixed(1)} <small>%</small>
+                {demo || turbine.availabilityAvailable
+                  ? turbine.availabilityPercent.toFixed(1)
+                  : "—"}{" "}
+                <small>%</small>
               </strong>
             </div>
             <div>
@@ -143,7 +197,11 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
                 <Activity size={14} /> 轴承振动
               </span>
               <strong>
-                {anomaly ? "4.81" : (2.1 + (turbine.gridPosition.column % 5) * 0.18).toFixed(2)}{" "}
+                {demo
+                  ? anomaly
+                    ? "4.81"
+                    : (2.1 + (turbine.gridPosition.column % 5) * 0.18).toFixed(2)
+                  : "—"}{" "}
                 <small>mm/s</small>
               </strong>
             </div>
@@ -152,7 +210,7 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
                 <Thermometer size={14} /> 轴承温度
               </span>
               <strong>
-                {anomaly ? "76.4" : (59 + turbine.gridPosition.row * 0.8).toFixed(1)}{" "}
+                {demo ? (anomaly ? "76.4" : (59 + turbine.gridPosition.row * 0.8).toFixed(1)) : "—"}{" "}
                 <small>°C</small>
               </strong>
             </div>
@@ -177,10 +235,26 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
           <div className="key-value-list">
             <KeyValue
               label="主轴承"
-              value={anomaly ? "63 · 退化" : `${Math.min(98, turbine.healthScore + 1)} · 正常`}
+              value={
+                demo
+                  ? anomaly
+                    ? "63 · 退化"
+                    : `${Math.min(98, turbine.healthScore + 1)} · 正常`
+                  : "未配置部件健康数据"
+              }
             />
-            <KeyValue label="齿轮箱" value={`${Math.min(98, turbine.healthScore + 10)} · 正常`} />
-            <KeyValue label="发电机" value={`${Math.min(99, turbine.healthScore + 12)} · 正常`} />
+            <KeyValue
+              label="齿轮箱"
+              value={
+                demo ? `${Math.min(98, turbine.healthScore + 10)} · 正常` : "未配置部件健康数据"
+              }
+            />
+            <KeyValue
+              label="发电机"
+              value={
+                demo ? `${Math.min(99, turbine.healthScore + 12)} · 正常` : "未配置部件健康数据"
+              }
+            />
             <KeyValue label="活跃告警" value={`${turbine.activeAlarmCount} 条`} />
           </div>
         </section>
@@ -190,11 +264,19 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
           <div className="key-value-list">
             <KeyValue
               label="上次维护"
-              value={new Date(turbine.lastMaintenanceAt).toLocaleDateString("zh-CN")}
+              value={
+                demo || turbine.lastMaintenanceRecorded
+                  ? new Date(turbine.lastMaintenanceAt).toLocaleDateString("zh-CN")
+                  : "未记录"
+              }
             />
             <KeyValue
               label="下次巡检"
-              value={new Date(turbine.nextInspectionAt).toLocaleDateString("zh-CN")}
+              value={
+                demo || turbine.nextInspectionRecorded
+                  ? new Date(turbine.nextInspectionAt).toLocaleDateString("zh-CN")
+                  : "未排期"
+              }
             />
             <KeyValue label="当前 Mission" value={turbine.currentMissionId ?? "—"} mono />
           </div>
@@ -211,7 +293,11 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
           <Link
             className="button button--secondary button--md"
             href={`/work-orders?turbineId=${turbine.id}&intent=create`}
-            title="打开该资产的工单工作台；当前演示只允许服务器状态机管理 WT-023 主工单"
+            title={
+              demo
+                ? "打开该资产的工单工作台；演示状态机管理 WT-023 主工单"
+                : "打开该资产的生产工单工作台"
+            }
           >
             <ClipboardPlus size={15} /> 工单创建入口
           </Link>
@@ -242,30 +328,124 @@ function TurbineDrawer({ turbine, onClose }: { turbine: WindTurbine; onClose: ()
   );
 }
 
-export function WindFarmPage() {
+export function WindFarmPage({ runtimeMode }: { readonly runtimeMode: WindOpsRuntimeMode }) {
   const workflow = useDemoWorkflow();
+  const isProduction = runtimeMode === "production";
   const [view, setView] = useState<ViewMode>("cards");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | TurbineStatus>("all");
-  const [selected, setSelected] = useState<WindTurbine | null>(null);
-  const displayTurbines = useMemo(() => overlayClientTurbines(turbines, workflow), [workflow]);
-  const displayAlarms = useMemo(() => overlayClientAlarms(alarms, workflow), [workflow]);
-  const displayMissions = useMemo(() => overlayClientMissions(missions, workflow), [workflow]);
-  const displayAgents = useMemo(() => overlayClientAgents(agents, workflow), [workflow]);
-  const workflowKpis = useMemo(
-    () => deriveWorkflowKpis(displayTurbines, displayAlarms, displayMissions, displayAgents),
-    [displayAgents, displayAlarms, displayMissions, displayTurbines],
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [minimumHealth, setMinimumHealth] = useState("0");
+  const [maximumHealth, setMaximumHealth] = useState("100");
+  const [alarmOnly, setAlarmOnly] = useState(false);
+  const [missionOnly, setMissionOnly] = useState(false);
+  const [geolocatedOnly, setGeolocatedOnly] = useState(false);
+  const [selected, setSelected] = useState<FleetTurbine | null>(null);
+  const fleetQuery = useQuery({
+    queryKey: ["production-fleet"],
+    queryFn: ({ signal }) => apiGet<FleetResponse>("/api/turbines", signal),
+    enabled: isProduction,
+    retry: false,
+  });
+  const displayTurbines = useMemo<readonly FleetTurbine[]>(
+    () =>
+      isProduction ? [...(fleetQuery.data?.data ?? [])] : overlayClientTurbines(turbines, workflow),
+    [fleetQuery.data?.data, isProduction, workflow],
   );
+  const displayAlarms = useMemo(
+    () => (isProduction ? [] : overlayClientAlarms(alarms, workflow)),
+    [isProduction, workflow],
+  );
+  const displayMissions = useMemo(
+    () => (isProduction ? [] : overlayClientMissions(missions, workflow)),
+    [isProduction, workflow],
+  );
+  const displayAgents = useMemo(
+    () => (isProduction ? [] : overlayClientAgents(agents, workflow)),
+    [isProduction, workflow],
+  );
+  const workflowKpis = useMemo(() => {
+    if (isProduction && fleetQuery.data) {
+      return {
+        averageHealth: fleetQuery.data.meta.fleet.averageHealthScore,
+        activeAlarmCount: fleetQuery.data.meta.fleet.activeAlarmCount,
+        activeMissionCount: fleetQuery.data.meta.fleet.activeMissionCount,
+        activeAgentCount: 0,
+        onlineAgentCount: 0,
+      };
+    }
+    return deriveWorkflowKpis(displayTurbines, displayAlarms, displayMissions, displayAgents);
+  }, [
+    displayAgents,
+    displayAlarms,
+    displayMissions,
+    displayTurbines,
+    fleetQuery.data,
+    isProduction,
+  ]);
+  const productionFarm = fleetQuery.data?.meta.farms[0];
+  const farmName = isProduction ? productionFarm?.name || "生产风场" : windFarm.name;
+  const farmCode = isProduction ? productionFarm?.id || "未配置" : windFarm.code;
+  const farmCapacityMW = isProduction ? productionFarm?.capacityMW : windFarm.totalCapacityMW;
+  const turbineCount = displayTurbines.length;
+  const productionFleet = fleetQuery.data?.meta.fleet;
   const filtered = useMemo(
     () =>
       displayTurbines.filter((turbine) => {
         const matchesQuery = turbine.id.toLowerCase().includes(query.trim().toLowerCase());
         const matchesStatus = status === "all" || turbine.status === status;
-        return matchesQuery && matchesStatus;
+        const matchesHealth =
+          turbine.healthScore >= Number(minimumHealth || 0) &&
+          turbine.healthScore <= Number(maximumHealth || 100);
+        const matchesAlarm = !alarmOnly || turbine.activeAlarmCount > 0;
+        const matchesMission = !missionOnly || Boolean(turbine.currentMissionId);
+        const matchesGeo = !geolocatedOnly || turbine.coordinatesConfigured === true;
+        return (
+          matchesQuery &&
+          matchesStatus &&
+          matchesHealth &&
+          matchesAlarm &&
+          matchesMission &&
+          matchesGeo
+        );
       }),
-    [displayTurbines, query, status],
+    [
+      alarmOnly,
+      displayTurbines,
+      geolocatedOnly,
+      maximumHealth,
+      minimumHealth,
+      missionOnly,
+      query,
+      status,
+    ],
   );
-  const columns = useMemo<LegacyColumnDef<WindTurbine, unknown>[]>(
+  const positionedMapTurbines = useMemo(() => {
+    const candidates = isProduction
+      ? filtered.filter((turbine) => turbine.coordinatesConfigured)
+      : filtered;
+    if (!isProduction) {
+      return candidates.map((turbine) => ({
+        turbine,
+        left: 7 + turbine.gridPosition.column * 10.7,
+        top: 9 + turbine.gridPosition.row * 10.3,
+      }));
+    }
+    const latitudes = candidates.map((turbine) => turbine.coordinates.latitude);
+    const longitudes = candidates.map((turbine) => turbine.coordinates.longitude);
+    const minimumLatitude = Math.min(...latitudes);
+    const maximumLatitude = Math.max(...latitudes);
+    const minimumLongitude = Math.min(...longitudes);
+    const maximumLongitude = Math.max(...longitudes);
+    const latitudeSpan = maximumLatitude - minimumLatitude || 1;
+    const longitudeSpan = maximumLongitude - minimumLongitude || 1;
+    return candidates.map((turbine) => ({
+      turbine,
+      left: 8 + ((turbine.coordinates.longitude - minimumLongitude) / longitudeSpan) * 84,
+      top: 8 + ((maximumLatitude - turbine.coordinates.latitude) / latitudeSpan) * 84,
+    }));
+  }, [filtered, isProduction]);
+  const columns = useMemo<LegacyColumnDef<FleetTurbine, unknown>[]>(
     () => [
       {
         accessorKey: "id",
@@ -297,17 +477,29 @@ export function WindFarmPage() {
       {
         accessorKey: "powerMW",
         header: "有功功率",
-        cell: ({ row }) => <strong>{row.original.powerMW.toFixed(2)} MW</strong>,
+        cell: ({ row }) => (
+          <strong>
+            {!isProduction || row.original.telemetryAvailable
+              ? `${row.original.powerMW.toFixed(2)} MW`
+              : "—"}
+          </strong>
+        ),
       },
       {
         accessorKey: "windSpeedMps",
         header: "风速",
-        cell: ({ row }) => `${row.original.windSpeedMps.toFixed(1)} m/s`,
+        cell: ({ row }) =>
+          !isProduction || row.original.telemetryAvailable
+            ? `${row.original.windSpeedMps.toFixed(1)} m/s`
+            : "—",
       },
       {
         accessorKey: "rotorSpeedRpm",
         header: "转子转速",
-        cell: ({ row }) => `${row.original.rotorSpeedRpm.toFixed(1)} rpm`,
+        cell: ({ row }) =>
+          !isProduction || row.original.telemetryAvailable
+            ? `${row.original.rotorSpeedRpm.toFixed(1)} rpm`
+            : "—",
       },
       {
         accessorKey: "healthScore",
@@ -323,23 +515,37 @@ export function WindFarmPage() {
       {
         accessorKey: "lastMaintenanceAt",
         header: "最近维护",
-        cell: ({ row }) => new Date(row.original.lastMaintenanceAt).toLocaleDateString("zh-CN"),
+        cell: ({ row }) =>
+          !isProduction || row.original.lastMaintenanceRecorded
+            ? new Date(row.original.lastMaintenanceAt).toLocaleDateString("zh-CN")
+            : "未记录",
       },
     ],
-    [],
+    [isProduction],
   );
 
   return (
-    <AppShell activePath="/wind-farms">
+    <AppShell runtimeMode={runtimeMode} activePath="/wind-farms">
       <PageHeader
         eyebrow="资产与监测"
-        title="华东海上风电场"
-        description="384 MW · 64 台 GW165-6.0MW 海上风电机组的运行状态与健康概览"
-        breadcrumb={["资产与监测", "风场", windFarm.code]}
+        title={farmName}
+        description={`${farmCapacityMW ?? "—"} MW · ${turbineCount} 台风电机组的运行状态与健康概览`}
+        breadcrumb={["资产与监测", "风场", farmCode]}
         meta={
           <>
-            <StatusBadge value="running" label="场站运行中" tone="success" pulse />
-            <span className="page-meta-text">场站可利用率 96.8% · 数据延迟 12s</span>
+            <StatusBadge
+              value={isProduction && fleetQuery.isError ? "degraded" : "running"}
+              label={isProduction && fleetQuery.isError ? "生产数据不可用" : "场站资产已连接"}
+              tone={isProduction && fleetQuery.isError ? "critical" : "success"}
+              pulse={!fleetQuery.isError}
+            />
+            <span className="page-meta-text">
+              {isProduction
+                ? productionFleet?.averageAvailabilityPercent == null
+                  ? `遥测资产 ${productionFleet?.telemetryAssetCount ?? 0}/${turbineCount} · 可利用率未接入`
+                  : `平均可利用率 ${productionFleet.averageAvailabilityPercent.toFixed(1)}% · 遥测资产 ${productionFleet.telemetryAssetCount}/${turbineCount}`
+                : "场站可利用率 96.8% · 数据延迟 12s"}
+            </span>
           </>
         }
         actions={
@@ -354,17 +560,36 @@ export function WindFarmPage() {
         }
       />
 
+      {isProduction && fleetQuery.isLoading ? (
+        <Card className="view-empty-state" role="status">
+          正在读取生产资产、遥测、告警和任务快照…
+        </Card>
+      ) : null}
+
+      {isProduction && fleetQuery.isError ? (
+        <Card className="view-empty-state" role="alert">
+          生产风场数据读取失败；页面已失败关闭，不会回退到演示资产。
+        </Card>
+      ) : null}
+
       <section className="farm-summary-bar">
         <div>
           <small>当前功率</small>
           <strong>
-            {windFarm.currentPowerMW.toFixed(1)} <span>MW</span>
+            {(isProduction
+              ? (productionFleet?.currentPowerMW ?? 0)
+              : windFarm.currentPowerMW
+            ).toFixed(1)}{" "}
+            <span>MW</span>
           </strong>
         </div>
         <div>
           <small>今日发电</small>
           <strong>
-            {windFarm.todayGenerationGWh.toFixed(2)} <span>GWh</span>
+            {isProduction && !productionFleet?.generationAvailable
+              ? "未接入"
+              : windFarm.todayGenerationGWh.toFixed(2)}{" "}
+            {isProduction && !productionFleet?.generationAvailable ? null : <span>GWh</span>}
           </strong>
         </div>
         <div>
@@ -375,7 +600,7 @@ export function WindFarmPage() {
                 (item) => !["maintenance", "offline", "communication-lost"].includes(item.status),
               ).length
             }{" "}
-            <span>/ 64</span>
+            <span>/ {turbineCount}</span>
           </strong>
         </div>
         <div>
@@ -389,7 +614,7 @@ export function WindFarmPage() {
           <strong className="critical-text">{workflowKpis.activeAlarmCount}</strong>
         </div>
         <div>
-          <small>AI Missions</small>
+          <small>AI Mission</small>
           <strong className="info-text">{workflowKpis.activeMissionCount}</strong>
         </div>
       </section>
@@ -416,8 +641,14 @@ export function WindFarmPage() {
           <option value="critical">故障</option>
           <option value="maintenance">维护</option>
           <option value="offline">离线</option>
+          <option value="communication-lost">通信中断</option>
         </select>
-        <Button variant="secondary" disabled title="更多筛选维度尚未接入；当前可使用状态与搜索筛选">
+        <Button
+          variant="secondary"
+          onClick={() => setAdvancedOpen((open) => !open)}
+          aria-expanded={advancedOpen}
+          aria-controls="wind-farm-advanced-filters"
+        >
           <SlidersHorizontal size={14} /> 更多筛选
         </Button>
         <span className="toolbar-result">
@@ -455,12 +686,82 @@ export function WindFarmPage() {
         </div>
       </section>
 
+      {advancedOpen ? (
+        <section
+          id="wind-farm-advanced-filters"
+          className="advanced-filter-panel"
+          aria-label="风场高级筛选"
+        >
+          <label>
+            <span>最低健康度</span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={minimumHealth}
+              onChange={(event) => setMinimumHealth(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>最高健康度</span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={maximumHealth}
+              onChange={(event) => setMaximumHealth(event.target.value)}
+            />
+          </label>
+          <label className="advanced-filter-panel__check">
+            <input
+              type="checkbox"
+              checked={alarmOnly}
+              onChange={(event) => setAlarmOnly(event.target.checked)}
+            />
+            <span>仅活跃告警</span>
+          </label>
+          <label className="advanced-filter-panel__check">
+            <input
+              type="checkbox"
+              checked={missionOnly}
+              onChange={(event) => setMissionOnly(event.target.checked)}
+            />
+            <span>仅活跃 Mission</span>
+          </label>
+          {isProduction ? (
+            <label className="advanced-filter-panel__check">
+              <input
+                type="checkbox"
+                checked={geolocatedOnly}
+                onChange={(event) => setGeolocatedOnly(event.target.checked)}
+              />
+              <span>仅已配置坐标</span>
+            </label>
+          ) : null}
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setMinimumHealth("0");
+              setMaximumHealth("100");
+              setAlarmOnly(false);
+              setMissionOnly(false);
+              setGeolocatedOnly(false);
+            }}
+          >
+            清除高级筛选
+          </Button>
+        </section>
+      ) : null}
+
       {view === "cards" ? (
         filtered.length ? (
           <section className="turbine-card-grid">
             {filtered.map((turbine) => (
               <button
-                className={cn("turbine-card", turbine.id === "WT-023" && "turbine-card--featured")}
+                className={cn(
+                  "turbine-card",
+                  !isProduction && turbine.id === "WT-023" && "turbine-card--featured",
+                )}
                 onClick={() => setSelected(turbine)}
                 key={turbine.id}
               >
@@ -477,13 +778,19 @@ export function WindFarmPage() {
                   />
                 </span>
                 <span className="turbine-card__power">
-                  <strong>{turbine.powerMW.toFixed(2)}</strong>
+                  <strong>
+                    {!isProduction || turbine.telemetryAvailable ? turbine.powerMW.toFixed(2) : "—"}
+                  </strong>
                   <small>MW</small>
                 </span>
                 <span className="turbine-card__metrics">
                   <span>
                     <small>风速</small>
-                    <strong>{turbine.windSpeedMps.toFixed(1)} m/s</strong>
+                    <strong>
+                      {!isProduction || turbine.telemetryAvailable
+                        ? `${turbine.windSpeedMps.toFixed(1)} m/s`
+                        : "—"}
+                    </strong>
                   </span>
                   <span>
                     <small>健康度</small>
@@ -497,7 +804,13 @@ export function WindFarmPage() {
                   </span>
                 </span>
                 <span className="turbine-card__footer">
-                  <span>{turbine.currentMissionId ? "AI Mission 进行中" : "运行稳定"}</span>
+                  <span>
+                    {turbine.currentMissionId
+                      ? "AI Mission 进行中"
+                      : isProduction
+                        ? "无活跃 Mission"
+                        : "运行稳定"}
+                  </span>
                   <ArrowRight size={13} />
                 </span>
               </button>
@@ -524,14 +837,14 @@ export function WindFarmPage() {
             csvExport={{
               filename: "windops-turbines.csv",
               columns: [
-                { label: "Turbine", value: (row) => row.id },
-                { label: "Status", value: (row) => row.status },
-                { label: "Power MW", value: (row) => row.powerMW },
-                { label: "Wind m/s", value: (row) => row.windSpeedMps },
-                { label: "Health", value: (row) => row.healthScore },
-                { label: "Alerts", value: (row) => row.activeAlarmCount },
+                { label: "风机", value: (row) => row.id },
+                { label: "状态", value: (row) => statusMeta[row.status].label },
+                { label: "功率 MW", value: (row) => row.powerMW },
+                { label: "风速 m/s", value: (row) => row.windSpeedMps },
+                { label: "健康度", value: (row) => row.healthScore },
+                { label: "告警数", value: (row) => row.activeAlarmCount },
                 { label: "Mission", value: (row) => row.currentMissionId },
-                { label: "Last maintenance", value: (row) => row.lastMaintenanceAt },
+                { label: "最近维护", value: (row) => row.lastMaintenanceAt },
               ],
             }}
             data={filtered}
@@ -594,20 +907,24 @@ export function WindFarmPage() {
         <Card className="farm-map">
           <div className="farm-map__labels">
             <span>
-              <Map size={15} /> 近海阵列 A 区
+              <Map size={15} /> {isProduction ? `${farmName} · GIS 资产位置` : "近海阵列 A 区"}
             </span>
-            <small>121.3°E · 31.0°N · 示意视图</small>
+            <small>
+              {isProduction
+                ? `${positionedMapTurbines.length}/${filtered.length} 台资产已配置经纬度`
+                : "121.3°E · 31.0°N · 示意视图"}
+            </small>
           </div>
-          <div className="farm-map__watermark">EAST CHINA SEA</div>
-          {filtered.length ? (
-            filtered.map((turbine) => (
+          <div className="farm-map__watermark">东海</div>
+          {positionedMapTurbines.length ? (
+            positionedMapTurbines.map(({ turbine, left, top }) => (
               <button
                 key={turbine.id}
                 onClick={() => setSelected(turbine)}
                 className={cn("map-node", `map-node--${statusMeta[turbine.status].tone}`)}
                 style={{
-                  left: `${7 + turbine.gridPosition.column * 10.7}%`,
-                  top: `${9 + turbine.gridPosition.row * 10.3}%`,
+                  left: `${left}%`,
+                  top: `${top}%`,
                 }}
                 title={`${turbine.id} · ${statusMeta[turbine.status].label}`}
               >
@@ -623,7 +940,13 @@ export function WindFarmPage() {
         </Card>
       ) : null}
 
-      {selected ? <TurbineDrawer turbine={selected} onClose={() => setSelected(null)} /> : null}
+      {selected ? (
+        <TurbineDrawer
+          turbine={selected}
+          demo={runtimeMode === "demo"}
+          onClose={() => setSelected(null)}
+        />
+      ) : null}
     </AppShell>
   );
 }

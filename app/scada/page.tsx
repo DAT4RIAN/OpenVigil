@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { ScadaPage } from "@/components/pages/scada-page";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "SCADA 实时监测",
@@ -7,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <ScadaPage />;
+  return <ScadaPage runtimeMode={getProductionBackendConfig().mode} />;
 }

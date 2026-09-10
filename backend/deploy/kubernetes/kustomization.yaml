@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: windops
+resources:
+  - namespace.yaml
+  - workloads.yaml
+  - service.yaml
+  - availability.yaml
+  - network-policy.yaml
+  - migration-job.yaml
+  - backup-cronjob.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: windops-backend
+    includeSelectors: false
+    includeTemplates: true

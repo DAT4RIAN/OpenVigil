@@ -2371,13 +2371,30 @@ kbd {
   }
   .command-strip__incident {
     align-items: flex-start;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+  .incident-index {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .incident-copy,
+  .incident-progress {
+    grid-column: 2;
+    min-width: 0;
+  }
+  .incident-copy strong,
+  .incident-copy > span {
+    overflow-wrap: anywhere;
   }
   .incident-progress {
-    flex: 1 1 100px;
+    width: min(100%, 240px);
   }
   .incident-link {
-    margin-left: 43px;
+    grid-column: 2;
+    justify-self: start;
+    margin-left: 0;
+    min-height: 44px;
   }
   .chart-stat-row {
     flex-wrap: wrap;
@@ -2476,6 +2493,44 @@ kbd {
   margin-bottom: 10px;
   min-height: 50px;
   padding: 8px 10px;
+}
+
+.advanced-filter-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin: -8px 0 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+
+.advanced-filter-panel label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.advanced-filter-panel input[type="number"] {
+  width: 112px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-base);
+  color: var(--text-primary);
+}
+
+.advanced-filter-panel__check {
+  display: flex !important;
+  min-height: 36px;
+  align-items: center;
+  gap: 7px !important;
+  padding: 0 4px;
 }
 
 .search-field {
@@ -3096,6 +3151,45 @@ kbd {
   flex: 1 1 100%;
 }
 
+.mission-create-form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.mission-create-form .drawer-section {
+  display: grid;
+  gap: 12px;
+}
+
+.mission-create-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.mission-create-form label > span {
+  color: var(--foreground-muted);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.mission-create-form input,
+.mission-create-form select,
+.mission-create-form textarea {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  font-size: 10px;
+  padding: 9px 10px;
+  width: 100%;
+}
+
+.mission-create-form textarea {
+  line-height: 1.5;
+  resize: vertical;
+}
+
 @media (max-width: 1500px) {
   .turbine-card-grid {
     grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -3696,6 +3790,16 @@ kbd {
 .asset-selector strong {
   font-family: var(--font-geist-mono);
   font-size: 9px;
+}
+.asset-selector select {
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--foreground);
+  font-family: var(--font-geist-mono);
+  font-size: 9px;
+  min-height: 28px;
+  padding: 3px 22px 3px 7px;
 }
 .asset-selector__divider {
   background: var(--border);
@@ -7084,6 +7188,80 @@ kbd {
   color: var(--foreground-subtle);
   text-decoration: line-through;
 }
+.field-evidence-form {
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface-subtle));
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: 7px;
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 11px;
+}
+.field-evidence-form__heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+.field-evidence-form__heading > span {
+  align-items: center;
+  color: var(--primary);
+  display: flex;
+  font-size: 8px;
+  font-weight: 700;
+  gap: 5px;
+}
+.field-evidence-form__heading small {
+  color: var(--foreground-subtle);
+  font-size: 6.5px;
+}
+.field-evidence-form > strong {
+  font-size: 9px;
+}
+.field-evidence-form__fields {
+  display: grid;
+  gap: 9px;
+}
+.field-evidence-form__fields label {
+  cursor: default;
+  display: grid;
+  gap: 5px;
+  padding: 0;
+}
+.field-evidence-form__fields label > span {
+  color: var(--foreground-muted);
+  font-size: 7.5px;
+  font-weight: 650;
+}
+.field-evidence-form input,
+.field-evidence-form select,
+.field-evidence-form textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--foreground);
+  font-size: 8px;
+  padding: 8px;
+  width: 100%;
+}
+.field-evidence-form input[readonly] {
+  color: var(--foreground-muted);
+}
+.field-evidence-form textarea {
+  line-height: 1.45;
+  resize: vertical;
+}
+.field-evidence-form__fields label small {
+  color: var(--foreground-subtle);
+  font-size: 6.5px;
+}
+.field-evidence-form__error {
+  background: var(--critical-soft);
+  border-radius: 5px;
+  color: var(--critical);
+  font-size: 7px;
+  margin: 0;
+  padding: 7px 8px;
+}
 .safety-procedure {
   align-items: flex-start;
   background: var(--success-soft);
@@ -7414,7 +7592,7 @@ kbd {
   .global-search kbd {
     display: none;
   }
-  .user-menu > span,
+  .user-menu > span:not(.avatar),
   .user-menu > svg {
     display: none;
   }
@@ -7447,6 +7625,22 @@ kbd {
     right: 14px;
     top: 54px;
     width: 330px;
+  }
+}
+
+@media (max-width: 460px) {
+  .live-context > :not(:first-child) {
+    display: none;
+  }
+  .topbar {
+    padding: 0 8px;
+  }
+  .topbar__left,
+  .topbar__right {
+    gap: 4px;
+  }
+  .user-menu {
+    margin-left: 0;
   }
 }
 
@@ -7808,5 +8002,59 @@ kbd {
   }
   .health-turbine-grid {
     grid-template-columns: repeat(4, minmax(44px, 1fr));
+  }
+}
+/* Production authentication/capability feedback remains visible above every workspace. */
+.access-recovery-banner {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--warning, #b76500) 32%, transparent);
+  background: color-mix(in srgb, var(--surface, #fff) 94%, #f8c15c);
+}
+
+.access-recovery-banner div {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+}
+
+.access-recovery-banner span {
+  color: var(--text-secondary, #55656f);
+  font-size: 12px;
+}
+
+.access-recovery-banner button,
+.root-session-gate a {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--border, #d8e0e5);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: inherit;
+  cursor: pointer;
+}
+
+.root-session-gate {
+  width: min(560px, calc(100% - 32px));
+  margin: 12vh auto;
+  padding: 32px;
+  border: 1px solid #d8e0e5;
+  border-radius: 18px;
+  background: #fff;
+}
+
+@media (max-width: 740px) {
+  .access-recovery-banner {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .access-recovery-banner div {
+    flex-basis: 100%;
   }
 }

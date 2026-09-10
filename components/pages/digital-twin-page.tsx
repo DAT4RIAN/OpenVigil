@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   ArrowRight,
@@ -23,21 +23,26 @@ import { HealthBadge, StatusBadge } from "@/components/data-display/status-badge
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, EmptyState, Progress } from "@/components/ui/primitives";
-import { apiGet } from "@/lib/api-client";
+import { apiGet, apiPost } from "@/lib/api-client";
 import { buildDigitalTwinSnapshot, type DigitalTwinSnapshot } from "@/lib/digital-twin-data";
 import { turbines } from "@/lib/farm-data";
 import { useRealtimeChannel } from "@/lib/use-realtime-channel";
+import { useProductionEvents } from "@/lib/use-production-events";
+import { localizedMetricLabel } from "@/lib/ui-localization";
+import { localizedStatusLabel } from "@/lib/ui-localization";
+import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
 
 import styles from "./digital-twin-page.module.css";
+import { TwinModelViewer } from "./twin-model-viewer";
 
 type DigitalTwinResponse = {
   readonly data: DigitalTwinSnapshot;
   readonly meta: {
     readonly turbineId: string;
     readonly snapshotAt: string;
-    readonly deterministic: true;
+    readonly deterministic: boolean;
     readonly readOnly: true;
-    readonly workflowPersistence: "d1" | "ephemeral" | null;
+    readonly workflowPersistence: "d1" | "ephemeral" | "postgresql" | null;
     readonly workflowRevision: number;
   };
 };
@@ -116,9 +121,9 @@ function TurbineSchematic({
           <path d="M405 171 Q496 239 446 342" />
         </g>
       </svg>
-      <span className={styles.modelTag}>OPERATIONAL TWIN · 2D</span>
+      <span className={styles.modelTag}>运营数字孪生 · 2D</span>
       <span className={styles.modelHealth}>
-        <small>ASSET HEALTH</small>
+        <small>资产健康度</small>
         <strong>{healthScore}</strong>
       </span>
       <span
@@ -149,10 +154,75 @@ function TurbineSchematic({
   );
 }
 
-export function DigitalTwinPage() {
+type TurbineCollectionResponse = {
+  readonly data: readonly {
+    readonly id: string;
+    readonly status: string;
+  }[];
+};
+
+type TwinArtifactUpload = {
+  readonly artifact_uri: string;
+  readonly upload_url: string;
+  readonly required_headers: Readonly<Record<string, string>>;
+};
+
+const twinContentType = (file: File): string => {
+  if (file.type) return file.type;
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith(".gltf")) return "model/gltf+json";
+  if (lower.endsWith(".glb")) return "model/gltf-binary";
+  if (lower.endsWith(".zip")) return "application/zip";
+  return "application/octet-stream";
+};
+
+const sha256Hex = async (file: File): Promise<string> => {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+};
+
+export function DigitalTwinPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMode }) {
+  const isProduction = runtimeMode === "production";
   const [turbineId, setTurbineId] = useState("WT-023");
   const [selectedKey, setSelectedKey] = useState("main-bearing");
-  const realtime = useRealtimeChannel("scada", turbineId === "WT-023");
+  const [manufacturer, setManufacturer] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [elevationM, setElevationM] = useState("0");
+  const [coordinateReferenceSystem, setCoordinateReferenceSystem] = useState("EPSG:4326");
+  const [geometryFile, setGeometryFile] = useState<File | null>(null);
+  const [profileReason, setProfileReason] = useState("");
+  const queryClient = useQueryClient();
+  const realtime = useRealtimeChannel("scada", !isProduction && turbineId === "WT-023");
+  const productionStream = useProductionEvents({
+    enabled: isProduction,
+    eventTypes: [
+      "scada.sample.accepted",
+      "alarm.opened",
+      "alarm.acknowledged",
+      "alarm.assigned",
+      "alarm.unassigned",
+      "alarm.resolved",
+      "mission.created",
+      "mission.review_ready",
+      "work_order.created",
+      "work_order.task.completed",
+      "work_order.completed",
+      "asset.twin-profile.updated",
+    ],
+    cursorKey: "windops.production-events.digital-twin.v1",
+    minimumDispatchIntervalMs: 1_000,
+    onReady: () => void queryClient.invalidateQueries({ queryKey: ["digital-twin", turbineId] }),
+    onEvent: () => {
+      void queryClient.invalidateQueries({ queryKey: ["digital-twin", turbineId] });
+      void queryClient.invalidateQueries({ queryKey: ["digital-twin-assets"] });
+    },
+  });
+  const assetsQuery = useQuery({
+    queryKey: ["digital-twin-assets", runtimeMode],
+    queryFn: ({ signal }) => apiGet<TurbineCollectionResponse>("/api/turbines", signal),
+    enabled: isProduction,
+  });
   const fallbackResponse = useMemo<DigitalTwinResponse>(() => {
     const snapshot = buildDigitalTwinSnapshot(turbineId)!;
     return {
@@ -173,15 +243,103 @@ export function DigitalTwinPage() {
       apiGet<DigitalTwinResponse>(`/api/digital-twin?turbineId=${turbineId}`, signal),
     staleTime: 0,
   });
-  const response = twinQuery.data ?? fallbackResponse;
+  const unavailableResponse = useMemo<DigitalTwinResponse>(
+    () => ({
+      data: {
+        turbine: {
+          id: turbineId,
+          model: "unavailable",
+          manufacturer: "unavailable",
+          status: "offline",
+          powerMW: 0,
+          windSpeedMps: 0,
+          healthScore: 0,
+          latitude: null,
+          longitude: null,
+        },
+        subsystems: [],
+        signals: [],
+        context: {
+          activeAlarmCount: 0,
+          missionId: null,
+          missionStatus: null,
+          workOrderId: null,
+          workOrderStatus: null,
+          nextWeatherWindowId: null,
+          nextWeatherWindowSuitability: null,
+        },
+        model: {
+          mode: "unavailable",
+          realPhysicsSimulation: false,
+          readOnly: true,
+          source: "unavailable",
+        },
+        snapshotAt: new Date(0).toISOString(),
+      },
+      meta: {
+        turbineId,
+        snapshotAt: new Date(0).toISOString(),
+        deterministic: false,
+        readOnly: true,
+        workflowPersistence: null,
+        workflowRevision: 0,
+      },
+    }),
+    [turbineId],
+  );
+  const response = twinQuery.data ?? (isProduction ? unavailableResponse : fallbackResponse);
   const snapshot = response.data;
+  const profileMutation = useMutation({
+    mutationFn: async () => {
+      if (!geometryFile) throw new Error("请选择 GLB、glTF 或 ZIP 几何制品。");
+      const artifactSha256 = await sha256Hex(geometryFile);
+      const contentType = twinContentType(geometryFile);
+      const upload = await apiPost<TwinArtifactUpload>(
+        `/api/backend/turbines/${encodeURIComponent(turbineId)}/twin-profile/artifacts/presign`,
+        {
+          file_name: geometryFile.name,
+          content_type: contentType,
+          artifact_sha256: artifactSha256,
+        },
+      );
+      const uploaded = await fetch(upload.upload_url, {
+        method: "PUT",
+        headers: upload.required_headers,
+        body: geometryFile,
+      });
+      if (!uploaded.ok) throw new Error(`几何制品上传失败（HTTP ${uploaded.status}）。`);
+      return apiPost(`/api/backend/turbines/${encodeURIComponent(turbineId)}/twin-profile`, {
+        manufacturer: manufacturer.trim(),
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        elevation_m: Number(elevationM),
+        coordinate_reference_system: coordinateReferenceSystem.trim(),
+        geometry_uri: upload.artifact_uri,
+        geometry_sha256: artifactSha256,
+        expected_updated_at: snapshot.model.profileUpdatedAt ?? null,
+        reason: profileReason.trim(),
+      });
+    },
+    onSuccess: async () => {
+      setGeometryFile(null);
+      setProfileReason("");
+      await queryClient.invalidateQueries({ queryKey: ["digital-twin", turbineId] });
+    },
+  });
 
   useEffect(() => {
     const deepLinked = new URLSearchParams(window.location.search).get("turbineId")?.toUpperCase();
-    if (!deepLinked || !turbines.some((turbine) => turbine.id === deepLinked)) return;
+    if (!deepLinked || !/^WT-[A-Z0-9-]+$/.test(deepLinked)) return;
     const timer = window.setTimeout(() => setTurbineId(deepLinked), 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!isProduction || !assetsQuery.data?.data.length) return;
+    if (assetsQuery.data.data.some((asset) => asset.id === turbineId)) return;
+    const timer = window.setTimeout(() => setTurbineId(assetsQuery.data.data[0].id), 0);
+    return () => window.clearTimeout(timer);
+  }, [assetsQuery.data, isProduction, turbineId]);
 
   useEffect(() => {
     const subsystems = snapshot.subsystems;
@@ -189,6 +347,27 @@ export function DigitalTwinPage() {
     const timer = window.setTimeout(() => setSelectedKey(subsystems[0]?.key ?? ""), 0);
     return () => window.clearTimeout(timer);
   }, [selectedKey, snapshot.subsystems]);
+
+  useEffect(() => {
+    if (!isProduction) return;
+    const timer = window.setTimeout(() => {
+      setManufacturer(
+        snapshot.turbine.manufacturer === "unconfigured" ? "" : snapshot.turbine.manufacturer,
+      );
+      setLatitude(snapshot.turbine.latitude?.toString() ?? "");
+      setLongitude(snapshot.turbine.longitude?.toString() ?? "");
+      setElevationM(snapshot.model.elevationM?.toString() ?? "0");
+      setCoordinateReferenceSystem(snapshot.model.coordinateReferenceSystem ?? "EPSG:4326");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [
+    isProduction,
+    snapshot.model.coordinateReferenceSystem,
+    snapshot.model.elevationM,
+    snapshot.turbine.latitude,
+    snapshot.turbine.longitude,
+    snapshot.turbine.manufacturer,
+  ]);
 
   const selected =
     snapshot.subsystems.find((subsystem) => subsystem.key === selectedKey) ??
@@ -198,36 +377,62 @@ export function DigitalTwinPage() {
     ...signal,
     value: liveValues.get(signal.metric) ?? signal.value,
   }));
-  const sourceLabel = !twinQuery.data
-    ? "LOCAL"
-    : snapshot.model.source === "fixture"
-      ? "FIXTURE"
-      : response.meta.workflowPersistence === "d1"
-        ? "D1"
-        : "EPHEMERAL";
-  const sourceDetail = !twinQuery.data
-    ? `${snapshot.turbine.id} · same-asset fallback`
-    : snapshot.model.source === "fixture"
-      ? `${snapshot.turbine.id} · deterministic fixture`
-      : `${response.meta.workflowPersistence} · revision ${response.meta.workflowRevision}`;
+  const sourceLabel =
+    isProduction && twinQuery.data
+      ? "PostgreSQL / TimescaleDB"
+      : !twinQuery.data
+        ? isProduction
+          ? "不可用"
+          : "本地"
+        : snapshot.model.source === "fixture"
+          ? "演示数据"
+          : response.meta.workflowPersistence === "d1"
+            ? "D1"
+            : "临时状态";
+  const sourceDetail =
+    isProduction && twinQuery.data
+      ? `${snapshot.turbine.id} · 权威资产、遥测与工作流快照`
+      : !twinQuery.data
+        ? isProduction
+          ? `${snapshot.turbine.id} · 生产模式已停止展示`
+          : `${snapshot.turbine.id} · 同资产降级快照`
+        : snapshot.model.source === "fixture"
+          ? `${snapshot.turbine.id} · 确定性演示数据`
+          : `${response.meta.workflowPersistence} · 修订 ${response.meta.workflowRevision}`;
 
   return (
-    <AppShell activePath="/digital-twin">
+    <AppShell runtimeMode={runtimeMode} activePath="/digital-twin">
       <PageHeader
-        eyebrow="ASSET INTELLIGENCE"
+        eyebrow="资产智能"
         title="数字孪生"
         description="把资产结构、SCADA、健康评估、告警与执行上下文汇聚到同一可追溯视图。"
         breadcrumb={["知识与数据", "数字孪生", turbineId]}
         meta={
           <>
             <StatusBadge
-              value={realtime.status}
-              label={turbineId === "WT-023" ? `WS · ${realtime.status.toUpperCase()}` : "FIXTURE"}
-              tone={realtime.status === "connected" ? "success" : "warning"}
-              pulse={realtime.status === "connected"}
+              value={isProduction ? productionStream.status : realtime.status}
+              label={
+                isProduction
+                  ? productionStream.status === "connected"
+                    ? `SSE 实时 · 游标 ${productionStream.cursor ?? "同步中"}`
+                    : twinQuery.isError
+                      ? "权威数据不可用"
+                      : "SSE 重连中 · TimescaleDB 快照"
+                  : turbineId === "WT-023"
+                    ? `WS · ${realtime.status === "connected" ? "已连接" : "连接中"}`
+                    : "演示数据"
+              }
+              tone={
+                (isProduction ? productionStream.status : realtime.status) === "connected"
+                  ? "success"
+                  : "warning"
+              }
+              pulse={(isProduction ? productionStream.status : realtime.status) === "connected"}
             />
-            <StatusBadge value="read-only" label="READ ONLY" tone="neutral" />
-            <span className="page-meta-text">非物理仿真 · 确定性运营孪生</span>
+            <StatusBadge value="read-only" label="只读" tone="neutral" />
+            <span className="page-meta-text">
+              非物理仿真 · {isProduction ? "可追溯运营状态孪生" : "确定性运营孪生"}
+            </span>
           </>
         }
         actions={
@@ -235,9 +440,9 @@ export function DigitalTwinPage() {
             <label className={styles.assetSelector}>
               <span>资产</span>
               <select value={turbineId} onChange={(event) => setTurbineId(event.target.value)}>
-                {turbines.map((turbine) => (
+                {(isProduction ? (assetsQuery.data?.data ?? []) : turbines).map((turbine) => (
                   <option value={turbine.id} key={turbine.id}>
-                    {turbine.id} · {turbine.status}
+                    {turbine.id} · {localizedStatusLabel(turbine.status)}
                   </option>
                 ))}
               </select>
@@ -258,7 +463,11 @@ export function DigitalTwinPage() {
           <EmptyState
             icon={<Database size={21} />}
             title="数字孪生同步失败"
-            description="当前显示所选资产的本地确定性快照。可重试 API 同步。"
+            description={
+              isProduction
+                ? "生产模式不会回退到本地演示孪生；请恢复 Python 后端或遥测依赖。"
+                : "当前显示所选资产的本地确定性快照。可重试 API 同步。"
+            }
           />
           <Button onClick={() => void twinQuery.refetch()}>重试同步</Button>
         </div>
@@ -316,7 +525,7 @@ export function DigitalTwinPage() {
 
         <Card className={styles.subsystemPanel}>
           <CardHeader
-            eyebrow="12 SUBSYSTEMS"
+            eyebrow="12 个子系统"
             title="子系统状态"
             description="健康评分、告警与预测信号"
           />
@@ -352,7 +561,7 @@ export function DigitalTwinPage() {
           {selected ? (
             <>
               <CardHeader
-                eyebrow="SELECTED NODE"
+                eyebrow="已选节点"
                 title={selected.name}
                 description={selected.primaryFinding}
                 action={<StatusBadge value={selected.state} tone={stateTone(selected.state)} />}
@@ -361,7 +570,7 @@ export function DigitalTwinPage() {
                 <div>
                   <HealthBadge score={selected.healthScore} />
                   <strong>{selected.healthScore}</strong>
-                  <small>HEALTH / 100</small>
+                  <small>健康度 / 100</small>
                 </div>
                 <Progress
                   value={selected.healthScore}
@@ -384,7 +593,7 @@ export function DigitalTwinPage() {
                   <strong>{selected.remainingUsefulLifeDays ?? "—"} 天</strong>
                 </span>
                 <span>
-                  <small>Anomaly</small>
+                  <small>异常分数</small>
                   <strong>{selected.anomalyScore.toFixed(2)}</strong>
                 </span>
                 <span>
@@ -406,24 +615,125 @@ export function DigitalTwinPage() {
       </section>
 
       <section className={styles.lowerGrid}>
+        {isProduction && snapshot.model.geometryConfigured ? (
+          <TwinModelViewer turbineId={turbineId} />
+        ) : null}
+        {isProduction ? (
+          <Card className={styles.contextPanel}>
+            <CardHeader
+              eyebrow="资产孪生制品治理"
+              title="GIS 与三维模型档案"
+              description="上传内容寻址的 GLB/glTF 制品并绑定真实坐标；后端会验证 MinIO 对象、内容类型和 SHA-256 后才激活档案。"
+              action={
+                <StatusBadge
+                  value={snapshot.model.geometryConfigured ? "configured" : "unconfigured"}
+                  label={snapshot.model.geometryConfigured ? "制品已验证" : "尚未配置"}
+                  tone={snapshot.model.geometryConfigured ? "success" : "warning"}
+                />
+              }
+            />
+            <label>
+              <span>制造商</span>
+              <input
+                value={manufacturer}
+                onChange={(event) => setManufacturer(event.target.value)}
+                placeholder="Goldwind"
+              />
+            </label>
+            <label>
+              <span>纬度</span>
+              <input
+                type="number"
+                step="any"
+                value={latitude}
+                onChange={(event) => setLatitude(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>经度</span>
+              <input
+                type="number"
+                step="any"
+                value={longitude}
+                onChange={(event) => setLongitude(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>高程（m）</span>
+              <input
+                type="number"
+                step="any"
+                value={elevationM}
+                onChange={(event) => setElevationM(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>坐标参考系</span>
+              <input
+                value={coordinateReferenceSystem}
+                onChange={(event) => setCoordinateReferenceSystem(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>几何制品</span>
+              <input
+                type="file"
+                accept=".glb,.gltf,.zip,model/gltf-binary,model/gltf+json,application/zip"
+                onChange={(event) => setGeometryFile(event.target.files?.[0] ?? null)}
+              />
+            </label>
+            <label>
+              <span>变更原因</span>
+              <input
+                value={profileReason}
+                onChange={(event) => setProfileReason(event.target.value)}
+                placeholder="关联资产档案或工程变更单"
+              />
+            </label>
+            {profileMutation.error instanceof Error ? (
+              <p role="alert">{profileMutation.error.message}</p>
+            ) : null}
+            <Button
+              loading={profileMutation.isPending}
+              disabled={
+                !geometryFile ||
+                manufacturer.trim().length < 2 ||
+                !Number.isFinite(Number(latitude)) ||
+                !Number.isFinite(Number(longitude)) ||
+                profileReason.trim().length < 3
+              }
+              onClick={() => profileMutation.mutate()}
+            >
+              上传并激活孪生档案
+            </Button>
+            {snapshot.model.geometryUri ? (
+              <p className={styles.modelNotice}>
+                已验证对象：{snapshot.model.geometryUri} · SHA-256 {snapshot.model.geometrySha256}
+              </p>
+            ) : null}
+          </Card>
+        ) : null}
+
         <Card className={styles.signalsPanel}>
           <CardHeader
-            eyebrow="OBSERVABLE SIGNALS"
+            eyebrow="可观测信号"
             title="传感器同步"
             description={
-              turbineId === "WT-023"
-                ? "WebSocket 帧覆盖 API 快照中的同名测点"
-                : "通用资产确定性运行快照"
+              isProduction
+                ? "TimescaleDB 权威快照；每条信号保留来源、质量和观测时间。"
+                : turbineId === "WT-023"
+                  ? "WebSocket 帧覆盖 API 快照中的同名测点"
+                  : "通用资产确定性运行快照"
             }
           />
           <div className={styles.signalGrid}>
             {signals.map((signal) => (
               <div data-anomaly={signal.isAnomaly} key={signal.metric}>
-                <span>{signal.label}</span>
+                <span>{localizedMetricLabel(signal.metric, signal.label)}</span>
                 <strong>
                   {signal.value.toFixed(2)} <small>{signal.unit}</small>
                 </strong>
-                <em>{signal.quality.toUpperCase()}</em>
+                <em>{localizedStatusLabel(signal.quality)}</em>
               </div>
             ))}
           </div>
@@ -431,7 +741,7 @@ export function DigitalTwinPage() {
 
         <Card className={styles.contextPanel}>
           <CardHeader
-            eyebrow="OPERATIONAL CONTEXT"
+            eyebrow="运营上下文"
             title="关联执行上下文"
             description="Mission、工单与天气窗口的同源状态"
           />
@@ -457,7 +767,7 @@ export function DigitalTwinPage() {
             >
               <Wrench size={17} />
               <span>
-                <small>Work Order</small>
+                <small>工单</small>
                 <strong>{snapshot.context.workOrderId ?? "暂无关联"}</strong>
               </span>
               <StatusBadge value={snapshot.context.workOrderStatus ?? "idle"} compact />
@@ -465,7 +775,7 @@ export function DigitalTwinPage() {
             <Link href="/resources">
               <CloudSun size={17} />
               <span>
-                <small>Weather Window</small>
+                <small>天气窗口</small>
                 <strong>{snapshot.context.nextWeatherWindowId ?? "暂无窗口"}</strong>
               </span>
               <StatusBadge
@@ -476,7 +786,7 @@ export function DigitalTwinPage() {
             <Link href={`/turbines/${turbineId}`}>
               <TowerControl size={17} />
               <span>
-                <small>Asset Record</small>
+                <small>资产档案</small>
                 <strong>{turbineId}</strong>
               </span>
               <ArrowRight size={14} />

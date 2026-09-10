@@ -36,8 +36,8 @@ export interface DigitalTwinSnapshot {
     readonly powerMW: number;
     readonly windSpeedMps: number;
     readonly healthScore: number;
-    readonly latitude: number;
-    readonly longitude: number;
+    readonly latitude: number | null;
+    readonly longitude: number | null;
   };
   readonly subsystems: readonly DigitalTwinSubsystem[];
   readonly signals: readonly DigitalTwinSignal[];
@@ -51,10 +51,22 @@ export interface DigitalTwinSnapshot {
     readonly nextWeatherWindowSuitability: string | null;
   };
   readonly model: {
-    readonly mode: "deterministic-operational-twin";
+    readonly mode: "deterministic-operational-twin" | "operational-state-twin" | "unavailable";
     readonly realPhysicsSimulation: false;
     readonly readOnly: true;
-    readonly source: "fixture" | "ephemeral-workflow-overlay" | "d1-workflow-overlay";
+    readonly source:
+      | "fixture"
+      | "ephemeral-workflow-overlay"
+      | "d1-workflow-overlay"
+      | "postgresql-timescaledb"
+      | "unavailable";
+    readonly geometryConfigured?: boolean;
+    readonly gisConfigured?: boolean;
+    readonly geometryUri?: string | null;
+    readonly geometrySha256?: string | null;
+    readonly coordinateReferenceSystem?: string | null;
+    readonly elevationM?: number | null;
+    readonly profileUpdatedAt?: string | null;
   };
   readonly snapshotAt: string;
 }

@@ -1,0 +1,927 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/afff0e",
+    "id": "afff0e",
+    "slide": 10,
+    "layoutId": "1a506a55-4077-4a84-8539-7cb686d4e11a",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "09e431e1-37b8-40b2-bc49-82340fbef326",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#FFFFFF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Arial",
+      "Microsoft YaHei"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "1a506a55-4077-4a84-8539-7cb686d4e11a",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "09e431e1-37b8-40b2-bc49-82340fbef326",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "09e431e1-37b8-40b2-bc49-82340fbef326",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/zu50fa9s",
+      "id": "1",
+      "bbox": [
+        662,
+        0,
+        618,
+        720
+      ],
+      "alt": "WindOps AI-Native 风电运维平台总览视觉",
+      "contentType": "image/png",
+      "imageCrop": {
+        "left": 0.28,
+        "top": 0.03,
+        "right": 0.02,
+        "bottom": 0.03
+      },
+      "imageFit": "cover",
+      "asset": {
+        "assetId": "a9e5fbfa-8715-4140-b32b-0b960faee44d",
+        "contentType": "image/png",
+        "byteLength": 1829226
+      }
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hsbaxcnm",
+      "id": "2",
+      "bbox": [
+        58,
+        42,
+        300,
+        24
+      ],
+      "geometry": "rect",
+      "text": "09 / 总结与下一步",
+      "textPreview": "09 / 总结与下一步",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "Microsoft YaHei",
+        "color": "#0D6F6C",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "09 / 总结与下一步"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "09 / 总结与下一步",
+          "resolvedTextStyle": {
+            "fontSize": 15,
+            "typeface": "Microsoft YaHei",
+            "color": "#0D6F6C",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "09 / 总结与下一步",
+              "fontSize": 15,
+              "typeface": "Microsoft YaHei",
+              "color": "#0D6F6C",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gr294761",
+      "id": "3",
+      "name": "closing-title",
+      "bbox": [
+        58,
+        103,
+        540,
+        128
+      ],
+      "geometry": "rect",
+      "text": "从“可演示”\n走向“可验收”",
+      "textPreview": "从“可演示” | 走向“可验收”",
+      "resolvedFontSize": 52,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 52,
+        "typeface": "Microsoft YaHei",
+        "color": "#101820",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "从“可演示”"
+          },
+          {
+            "index": 2,
+            "text": "走向“可验收”"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "从“可演示”",
+          "resolvedTextStyle": {
+            "fontSize": 52,
+            "typeface": "Microsoft YaHei",
+            "color": "#101820",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "从“可演示”",
+              "fontSize": 52,
+              "typeface": "Microsoft YaHei",
+              "color": "#101820",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "走向“可验收”",
+          "resolvedTextStyle": {
+            "fontSize": 52,
+            "typeface": "Microsoft YaHei",
+            "color": "#101820",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "走向“可验收”",
+              "fontSize": 52,
+              "typeface": "Microsoft YaHei",
+              "color": "#101820",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3utszm5c",
+      "id": "4",
+      "bbox": [
+        58,
+        272,
+        210,
+        32
+      ],
+      "geometry": "rect",
+      "text": "当前已具备",
+      "textPreview": "当前已具备",
+      "resolvedFontSize": 23,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 23,
+        "typeface": "Microsoft YaHei",
+        "color": "#0D6F6C",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "当前已具备"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "当前已具备",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#0D6F6C",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "当前已具备",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#0D6F6C",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/2tkr6hor",
+      "id": "5",
+      "bbox": [
+        62,
+        326,
+        9,
+        9
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#2D8B69",
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/pwva1wni",
+      "id": "6",
+      "bbox": [
+        83,
+        313,
+        510,
+        35
+      ],
+      "geometry": "rect",
+      "text": "端到端异常处置闭环与统一业务状态",
+      "textPreview": "端到端异常处置闭环与统一业务状态",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 17,
+        "typeface": "Microsoft YaHei",
+        "color": "#101820",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "端到端异常处置闭环与统一业务状态"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "端到端异常处置闭环与统一业务状态",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "Microsoft YaHei",
+            "color": "#101820",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "端到端异常处置闭环与统一业务状态",
+              "fontSize": 17,
+              "typeface": "Microsoft YaHei",
+              "color": "#101820",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ovm98r6x",
+      "id": "7",
+      "bbox": [
+        62,
+        371,
+        9,
+        9
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#2D8B69",
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/jy98ni58",
+      "id": "8",
+      "bbox": [
+        83,
+        358,
+        510,
+        35
+      ],
+      "geometry": "rect",
+      "text": "受约束多 Agent、类型化工具与人工门禁",
+      "textPreview": "受约束多 Agent、类型化工具与人工门禁",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 17,
+        "typeface": "Microsoft YaHei",
+        "color": "#101820",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "受约束多 Agent、类型化工具与人工门禁"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "受约束多 Agent、类型化工具与人工门禁",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "Microsoft YaHei",
+            "color": "#101820",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "受约束多 Agent、类型化工具与人工门禁",
+              "fontSize": 17,
+              "typeface": "Microsoft YaHei",
+              "color": "#101820",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ix0rudon",
+      "id": "9",
+      "bbox": [
+        62,
+        416,
+        9,
+        9
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#2D8B69",
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ofip8nax",
+      "id": "10",
+      "bbox": [
+        83,
+        403,
+        510,
+        35
+      ],
+      "geometry": "rect",
+      "text": "Demo / Production Candidate 双运行边界",
+      "textPreview": "Demo / Production Candidate 双运行边界",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 17,
+        "typeface": "Microsoft YaHei",
+        "color": "#101820",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Demo / Production Candidate 双运行边界"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Demo / Production Candidate 双运行边界",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "Microsoft YaHei",
+            "color": "#101820",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Demo / Production Candidate 双运行边界",
+              "fontSize": 17,
+              "typeface": "Microsoft YaHei",
+              "color": "#101820",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/pgb61sri",
+      "id": "11",
+      "bbox": [
+        62,
+        461,
+        9,
+        9
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#2D8B69",
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/2t076ds7",
+      "id": "12",
+      "bbox": [
+        83,
+        448,
+        510,
+        35
+      ],
+      "geometry": "rect",
+      "text": "CARE v6 数据评估与工程质量门禁",
+      "textPreview": "CARE v6 数据评估与工程质量门禁",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 17,
+        "typeface": "Microsoft YaHei",
+        "color": "#101820",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "CARE v6 数据评估与工程质量门禁"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "CARE v6 数据评估与工程质量门禁",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "Microsoft YaHei",
+            "color": "#101820",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "CARE v6 数据评估与工程质量门禁",
+              "fontSize": 17,
+              "typeface": "Microsoft YaHei",
+              "color": "#101820",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3e9ozi9c",
+      "id": "13",
+      "bbox": [
+        58,
+        508,
+        540,
+        1
+      ],
+      "geometry": "rect",
+      "fillColor": "#C7CDD2",
+      "lineWidth": 0
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/cj2pcna9",
+      "id": "14",
+      "bbox": [
+        58,
+        531,
+        210,
+        32
+      ],
+      "geometry": "rect",
+      "text": "下一阶段",
+      "textPreview": "下一阶段",
+      "resolvedFontSize": 23,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 23,
+        "typeface": "Microsoft YaHei",
+        "color": "#D48A12",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "下一阶段"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "下一阶段",
+          "resolvedTextStyle": {
+            "fontSize": 23,
+            "typeface": "Microsoft YaHei",
+            "color": "#D48A12",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "下一阶段",
+              "fontSize": 23,
+              "typeface": "Microsoft YaHei",
+              "color": "#D48A12",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/dkbq5sru",
+      "id": "15",
+      "bbox": [
+        58,
+        573,
+        540,
+        68
+      ],
+      "geometry": "rect",
+      "text": "真实身份与模型供应商联调 · 现场 SCADA/CMS/EAM 接入 · 签名制品与集群准入 · 风场试点指标与 SOP 验收",
+      "textPreview": "真实身份与模型供应商联调 · 现场 SCADA/CMS/EAM 接入 · 签名制品与集群准入 · 风场试点指标与 SOP 验收",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "Microsoft YaHei",
+        "color": "#5B6670",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "真实身份与模型供应商联调 · 现场 SCADA/CMS/EAM 接入 ·"
+          },
+          {
+            "index": 2,
+            "text": "签名制品与集群准入 · 风场试点指标与 SOP 验收"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "真实身份与模型供应商联调 · 现场 SCADA/CMS/EAM 接入 · 签名制品与集群准入 · 风场试点指标与 SOP 验收",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "Microsoft YaHei",
+            "color": "#5B6670",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "真实身份与模型供应商联调 · 现场 SCADA/CMS/EAM 接入 · 签名制品与集群准入 · 风场试点指标与 SOP 验收",
+              "fontSize": 17,
+              "typeface": "Microsoft YaHei",
+              "color": "#5B6670",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qhk7ads3",
+      "id": "16",
+      "bbox": [
+        58,
+        655,
+        540,
+        34
+      ],
+      "geometry": "rect",
+      "text": "让 Agent 在工业现场可用、可控、可追责。",
+      "textPreview": "让 Agent 在工业现场可用、可控、可追责。",
+      "resolvedFontSize": 22,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22,
+        "typeface": "Microsoft YaHei",
+        "color": "#0D6F6C",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "让 Agent 在工业现场可用、可控、可追责。"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "让 Agent 在工业现场可用、可控、可追责。",
+          "resolvedTextStyle": {
+            "fontSize": 22,
+            "typeface": "Microsoft YaHei",
+            "color": "#0D6F6C",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "让 Agent 在工业现场可用、可控、可追责。",
+              "fontSize": 22,
+              "typeface": "Microsoft YaHei",
+              "color": "#0D6F6C",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/bito3i9o",
+      "id": "17",
+      "bbox": [
+        1150,
+        674,
+        72,
+        22
+      ],
+      "geometry": "rect",
+      "text": "10",
+      "textPreview": "10",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Arial",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "10"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "10",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Arial",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "10",
+              "fontSize": 14,
+              "typeface": "Arial",
+              "color": "#FFFFFF",
+              "bold": true,
+              "alignment": "right"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

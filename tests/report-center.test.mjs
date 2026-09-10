@@ -46,18 +46,18 @@ function parseStoredZip(bytes) {
   return { entries, centralOffset: offset };
 }
 
-test("Report Center renders all six governed report choices", async () => {
+test("报告中心渲染六类受控报告", async () => {
   const response = await request("/reports", { headers: { accept: "text/html" } });
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /Report Center/);
-  assert.match(html, /Daily Operations/);
-  assert.match(html, /Alarm Analysis/);
-  assert.match(html, /AI Diagnosis/);
-  assert.match(html, /Maintenance/);
-  assert.match(html, /Asset Health/);
-  assert.match(html, /Weekly Wind Farm/);
+  assert.match(html, /报告中心/);
+  assert.match(html, /运营日报/);
+  assert.match(html, /告警分析/);
+  assert.match(html, /AI 诊断/);
+  assert.match(html, /维护报告/);
+  assert.match(html, /资产健康/);
+  assert.match(html, /风场周报/);
   assert.match(html, /PDF 1\.4/);
   assert.match(html, /DOCX OOXML/);
 });
@@ -95,7 +95,7 @@ test("report catalog exposes six deterministic fixture-backed documents with wor
 
   const diagnosis = catalog.data.reports.find((report) => report.type === "ai-diagnosis");
   assert.ok(diagnosis);
-  assert.match(diagnosis.highlight, /87% confidence/);
+  assert.match(diagnosis.highlight, /置信度为 87%/);
   assert.ok(diagnosis.linkedEntityIds.includes("MISSION-2026-0823"));
   assert.ok(diagnosis.linkedEntityIds.includes("DECISION-2026-0823"));
 });
@@ -171,10 +171,7 @@ test("PDF export returns a verifiable PDF 1.4 file with a valid xref pointer", a
   assert.match(text, /^%PDF-1\.4/);
   assert.match(text, /\/Encoding \/UniGB-UCS2-H/);
   assert.match(text, /\/BaseFont \/STSong-Light/);
-  assert.match(
-    text,
-    /0041004900200044006900610067006E006F0073006900730020005200650070006F00720074/,
-  );
+  assert.match(text, /0041004900208BCA65AD62A5544A/);
   assert.match(text, /4E3B8F74627F/);
   assert.match(text, /xref\n0 \d+/);
   assert.match(text, /%%EOF\n$/);
@@ -213,7 +210,7 @@ test("DOCX export returns a real ZIP package with required OOXML parts", async (
   const contentTypes = new TextDecoder().decode(entries.get("[Content_Types].xml"));
   assert.match(documentXml, /^<\?xml/);
   assert.match(documentXml, /<w:document/);
-  assert.match(documentXml, /Maintenance Report/);
-  assert.match(documentXml, /WORKFLOW TRACE.*WT-023 mission=/s);
+  assert.match(documentXml, /维护报告/);
+  assert.match(documentXml, /工作流追溯.*WT-023 Mission=/s);
   assert.match(contentTypes, /wordprocessingml\.document\.main\+xml/);
 });

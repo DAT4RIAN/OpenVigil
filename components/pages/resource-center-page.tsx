@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   Anchor,
@@ -18,9 +18,10 @@ import {
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
+import { useWindOpsIdentity } from "@/components/providers/identity-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, EmptyState, Progress } from "@/components/ui/primitives";
-import { apiGet } from "@/lib/api-client";
+import { apiGet, apiPost } from "@/lib/api-client";
 import { resourceCenterSnapshot } from "@/lib";
 import type { ResourceCenterSnapshot, SparePart } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,7 @@ type ResourceResponse = {
     count: number;
     total: number;
     snapshotAt: string;
-    deterministic: true;
+    deterministic: boolean;
   };
 };
 
@@ -403,68 +404,125 @@ function ResourceEmpty() {
   );
 }
 
-export function ResourceCenterPage() {
+const emptyResourceData: ResourceResponse["data"] = {
+  spareParts: [],
+  crews: [],
+  vessels: [],
+  tools: [],
+  weatherWindows: [],
+};
+
+export function ResourceCenterPage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
+  const { can } = useWindOpsIdentity();
+  const canManageResources = runtimeMode === "demo" || can("resource.manage");
   const [activeTab, setActiveTab] = useState<ResourceTab>("spare-parts");
   const [query, setQuery] = useState("");
   const [featuredOnly, setFeaturedOnly] = useState(false);
+  const [stockResourceId, setStockResourceId] = useState("");
+  const [stockDelta, setStockDelta] = useState("1");
+  const [stockReason, setStockReason] = useState("");
+  const [reassignFromId, setReassignFromId] = useState("");
+  const [reassignToId, setReassignToId] = useState("");
+  const [reassignReason, setReassignReason] = useState("");
+  const queryClient = useQueryClient();
   const resourceQuery = useQuery({
     queryKey: ["resource-center"],
     queryFn: ({ signal }) => apiGet<ResourceResponse>("/api/resources", signal),
-    initialData: {
-      data: resourceCenterSnapshot,
-      meta: {
-        count:
-          resourceCenterSnapshot.spareParts.length +
-          resourceCenterSnapshot.crews.length +
-          resourceCenterSnapshot.vessels.length +
-          resourceCenterSnapshot.tools.length +
-          resourceCenterSnapshot.weatherWindows.length,
-        total:
-          resourceCenterSnapshot.spareParts.length +
-          resourceCenterSnapshot.crews.length +
-          resourceCenterSnapshot.vessels.length +
-          resourceCenterSnapshot.tools.length +
-          resourceCenterSnapshot.weatherWindows.length,
-        snapshotAt: resourceCenterSnapshot.snapshotAt,
-        deterministic: true,
-      },
-    },
+    initialData:
+      runtimeMode === "demo"
+        ? {
+            data: resourceCenterSnapshot,
+            meta: {
+              count:
+                resourceCenterSnapshot.spareParts.length +
+                resourceCenterSnapshot.crews.length +
+                resourceCenterSnapshot.vessels.length +
+                resourceCenterSnapshot.tools.length +
+                resourceCenterSnapshot.weatherWindows.length,
+              total:
+                resourceCenterSnapshot.spareParts.length +
+                resourceCenterSnapshot.crews.length +
+                resourceCenterSnapshot.vessels.length +
+                resourceCenterSnapshot.tools.length +
+                resourceCenterSnapshot.weatherWindows.length,
+              snapshotAt: resourceCenterSnapshot.snapshotAt,
+              deterministic: true,
+            },
+          }
+        : undefined,
     initialDataUpdatedAt: 0,
     staleTime: 0,
   });
+  const resourceData = resourceQuery.data?.data ?? emptyResourceData;
+  const dispatchableResources = useMemo(
+    () => [
+      ...resourceData.crews.map((item) => ({ ...item, resourceType: "crew" as const })),
+      ...resourceData.vessels.map((item) => ({ ...item, resourceType: "vessel" as const })),
+      ...resourceData.tools.map((item) => ({ ...item, resourceType: "tool" as const })),
+    ],
+    [resourceData.crews, resourceData.tools, resourceData.vessels],
+  );
+  const sourceResource = dispatchableResources.find((item) => item.id === reassignFromId);
+  const stockMutation = useMutation({
+    mutationFn: () => {
+      if (!canManageResources) throw new Error("当前角色没有调整库存的权限。");
+      const part = resourceData.spareParts.find((item) => item.id === stockResourceId);
+      if (!part) throw new Error("请选择需要调整的备件。");
+      return apiPost(`/api/backend/resources/${encodeURIComponent(part.id)}/stock-adjustments`, {
+        quantity_delta: Number.parseInt(stockDelta, 10),
+        expected_updated_at: part.updatedAt,
+        reason: stockReason.trim(),
+      });
+    },
+    onSuccess: async () => {
+      setStockReason("");
+      await queryClient.invalidateQueries({ queryKey: ["resource-center"] });
+    },
+  });
+  const reassignMutation = useMutation({
+    mutationFn: () => {
+      if (!canManageResources) throw new Error("当前角色没有改派资源的权限。");
+      const source = dispatchableResources.find((item) => item.id === reassignFromId);
+      if (!source?.assignedMissionId) throw new Error("源资源没有可改派的 Mission 预留。");
+      return apiPost("/api/backend/resources/reassignments", {
+        mission_id: source.assignedMissionId,
+        from_resource_id: source.id,
+        to_resource_id: reassignToId,
+        reason: reassignReason.trim(),
+      });
+    },
+    onSuccess: async () => {
+      setReassignReason("");
+      setReassignFromId("");
+      setReassignToId("");
+      await queryClient.invalidateQueries({ queryKey: ["resource-center"] });
+    },
+  });
 
   const resources = useMemo(() => {
-    if (!featuredOnly) return resourceQuery.data.data;
+    if (!featuredOnly) return resourceData;
     return {
-      spareParts: resourceQuery.data.data.spareParts.filter((item) =>
+      spareParts: resourceData.spareParts.filter((item) =>
         item.reservedForWorkOrderIds.includes("WO-20260823-017"),
       ),
-      crews: resourceQuery.data.data.crews.filter(
+      crews: resourceData.crews.filter((item) => item.assignedWorkOrderId === "WO-20260823-017"),
+      vessels: resourceData.vessels.filter(
         (item) => item.assignedWorkOrderId === "WO-20260823-017",
       ),
-      vessels: resourceQuery.data.data.vessels.filter(
-        (item) => item.assignedWorkOrderId === "WO-20260823-017",
-      ),
-      tools: resourceQuery.data.data.tools.filter(
-        (item) => item.assignedWorkOrderId === "WO-20260823-017",
-      ),
-      weatherWindows: resourceQuery.data.data.weatherWindows,
+      tools: resourceData.tools.filter((item) => item.assignedWorkOrderId === "WO-20260823-017"),
+      weatherWindows: resourceData.weatherWindows,
     };
-  }, [featuredOnly, resourceQuery.data.data]);
+  }, [featuredOnly, resourceData]);
 
-  const lowStock = resourceQuery.data.data.spareParts.filter(
-    (item) => item.status !== "in-stock",
-  ).length;
+  const lowStock = resourceData.spareParts.filter((item) => item.status !== "in-stock").length;
   const reservedResources =
-    resourceQuery.data.data.crews.filter((item) => item.availability === "reserved").length +
-    resourceQuery.data.data.vessels.filter((item) => item.availability === "reserved").length +
-    resourceQuery.data.data.tools.filter((item) => item.availability === "reserved").length;
-  const nextWindow = resourceQuery.data.data.weatherWindows.find(
-    (item) => item.suitability === "suitable",
-  )!;
+    resourceData.crews.filter((item) => item.availability === "reserved").length +
+    resourceData.vessels.filter((item) => item.availability === "reserved").length +
+    resourceData.tools.filter((item) => item.availability === "reserved").length;
+  const nextWindow = resourceData.weatherWindows.find((item) => item.suitability === "suitable");
 
   return (
-    <AppShell activePath="/resources">
+    <AppShell runtimeMode={runtimeMode} activePath="/resources">
       <PageHeader
         eyebrow="执行与维护"
         title="运维资源中心"
@@ -474,7 +532,7 @@ export function ResourceCenterPage() {
           <>
             <StatusBadge
               value={resourceQuery.isError ? "degraded" : "healthy"}
-              label={resourceQuery.isError ? "FALLBACK SNAPSHOT" : "RESOURCE LEDGER CURRENT"}
+              label={resourceQuery.isError ? "降级快照" : "资源账本已更新"}
             />
             <span className="page-meta-text">快照 2026-08-13 10:25</span>
           </>
@@ -491,29 +549,26 @@ export function ResourceCenterPage() {
           <span>
             <PackageCheck size={18} />
           </span>
-          <small>SPARE PART SKUS</small>
-          <strong>{resourceQuery.data.data.spareParts.length}</strong>
+          <small>备件 SKU</small>
+          <strong>{resourceData.spareParts.length}</strong>
           <em>{lowStock} 项需补货</em>
         </Card>
         <Card>
           <span>
             <UsersRound size={18} />
           </span>
-          <small>MAINTENANCE CREWS</small>
-          <strong>{resourceQuery.data.data.crews.length}</strong>
+          <small>维护班组</small>
+          <strong>{resourceData.crews.length}</strong>
           <em>{reservedResources} 项资源已预留</em>
         </Card>
         <Card>
           <span>
             <Anchor size={18} />
           </span>
-          <small>VESSELS AVAILABLE</small>
+          <small>可用船舶</small>
           <strong>
-            {
-              resourceQuery.data.data.vessels.filter((item) => item.availability === "available")
-                .length
-            }{" "}
-            / {resourceQuery.data.data.vessels.length}
+            {resourceData.vessels.filter((item) => item.availability === "available").length} /{" "}
+            {resourceData.vessels.length}
           </strong>
           <em>CTV / SOV 船队</em>
         </Card>
@@ -521,37 +576,190 @@ export function ResourceCenterPage() {
           <span>
             <CloudSun size={18} />
           </span>
-          <small>NEXT SAFE WINDOW</small>
-          <strong>08:00</strong>
+          <small>下一个安全窗口</small>
+          <strong>
+            {nextWindow
+              ? new Date(nextWindow.startsAt).toLocaleTimeString("zh-CN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "—"}
+          </strong>
           <em>
-            {new Date(nextWindow.startsAt).toLocaleDateString("zh-CN", {
-              month: "short",
-              day: "numeric",
-            })}{" "}
-            · 浪高 {nextWindow.waveHeightM} m
+            {nextWindow
+              ? `${new Date(nextWindow.startsAt).toLocaleDateString("zh-CN", {
+                  month: "short",
+                  day: "numeric",
+                })} · 浪高 ${nextWindow.waveHeightM} m`
+              : "暂无满足约束的安全窗口"}
           </em>
         </Card>
       </section>
 
-      <Card className="resource-featured-plan">
-        <span className="resource-featured-plan__marker">WT-023</span>
-        <div>
-          <small>READY-TO-EXECUTE RESOURCE PLAN</small>
-          <h2>WO-20260823-017 · 主轴承联合检查</h2>
-          <p>海维二组、CTV-03、4 件专业工具和主轴承总成已锁定；首选天气窗满足 1.8 m 靠泊限制。</p>
-        </div>
-        <div className="resource-readiness">
-          <strong>92%</strong>
-          <Progress value={92} tone="success" />
-          <small>等待船长最终确认</small>
-        </div>
-        <Button
-          variant={featuredOnly ? "primary" : "secondary"}
-          onClick={() => setFeaturedOnly((value) => !value)}
-        >
-          {featuredOnly ? "显示全部资源" : "只看本工单"}
-        </Button>
-      </Card>
+      {runtimeMode === "demo" ? (
+        <Card className="resource-featured-plan">
+          <span className="resource-featured-plan__marker">WT-023</span>
+          <div>
+            <small>可执行资源方案</small>
+            <h2>WO-20260823-017 · 主轴承联合检查</h2>
+            <p>海维二组、CTV-03、4 件专业工具和主轴承总成已锁定；首选天气窗满足 1.8 m 靠泊限制。</p>
+          </div>
+          <div className="resource-readiness">
+            <strong>92%</strong>
+            <Progress value={92} tone="success" />
+            <small>等待船长最终确认</small>
+          </div>
+          <Button
+            variant={featuredOnly ? "primary" : "secondary"}
+            onClick={() => setFeaturedOnly((value) => !value)}
+          >
+            {featuredOnly ? "显示全部资源" : "只看本工单"}
+          </Button>
+        </Card>
+      ) : null}
+
+      {runtimeMode === "production" ? (
+        <section className="resource-kpi-grid" aria-label="资源治理写入">
+          {!canManageResources ? (
+            <Card role="status" data-capability="resource.manage">
+              <CardHeader
+                eyebrow="只读权限"
+                title="资源台账可见，治理写入已停用"
+                description="库存调整和资源改派需要运维经理及对应资源范围授权。"
+              />
+            </Card>
+          ) : null}
+          <Card>
+            <CardHeader
+              eyebrow="库存治理"
+              title="备件收发调整"
+              description="使用资源更新时间进行 CAS 校验，库存不得低于已预留数量。"
+            />
+            <label>
+              <span>备件</span>
+              <select
+                disabled={!canManageResources}
+                value={stockResourceId}
+                onChange={(event) => setStockResourceId(event.target.value)}
+              >
+                <option value="">选择备件</option>
+                {resourceData.spareParts.map((part) => (
+                  <option value={part.id} key={part.id}>
+                    {part.partNumber} · 在库 {part.onHand}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>数量变化</span>
+              <input
+                disabled={!canManageResources}
+                type="number"
+                value={stockDelta}
+                onChange={(event) => setStockDelta(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>调整原因</span>
+              <input
+                disabled={!canManageResources}
+                value={stockReason}
+                onChange={(event) => setStockReason(event.target.value)}
+                placeholder="收货、领用或盘点差异原因"
+              />
+            </label>
+            {stockMutation.error instanceof Error ? (
+              <p role="alert">{stockMutation.error.message}</p>
+            ) : null}
+            <Button
+              loading={stockMutation.isPending}
+              disabled={
+                !canManageResources ||
+                !stockResourceId ||
+                !Number.isInteger(Number(stockDelta)) ||
+                Number(stockDelta) === 0 ||
+                stockReason.trim().length < 3
+              }
+              onClick={() => stockMutation.mutate()}
+            >
+              提交库存调整
+            </Button>
+          </Card>
+          <Card>
+            <CardHeader
+              eyebrow="调度治理"
+              title="改派已预留资源"
+              description="仅允许同类型、可用且库存足够的目标资源，并同步更新关联工单与 EAM Outbox。"
+            />
+            <label>
+              <span>源资源</span>
+              <select
+                disabled={!canManageResources}
+                value={reassignFromId}
+                onChange={(event) => {
+                  setReassignFromId(event.target.value);
+                  setReassignToId("");
+                }}
+              >
+                <option value="">选择已预留资源</option>
+                {dispatchableResources
+                  .filter((resource) => resource.assignedMissionId)
+                  .map((resource) => (
+                    <option value={resource.id} key={resource.id}>
+                      {resource.name} · {resource.assignedWorkOrderId}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              <span>目标资源</span>
+              <select
+                disabled={!canManageResources}
+                value={reassignToId}
+                onChange={(event) => setReassignToId(event.target.value)}
+              >
+                <option value="">选择可用目标</option>
+                {dispatchableResources
+                  .filter(
+                    (resource) =>
+                      resource.availability === "available" &&
+                      resource.resourceType === sourceResource?.resourceType &&
+                      resource.id !== sourceResource?.id,
+                  )
+                  .map((resource) => (
+                    <option value={resource.id} key={resource.id}>
+                      {resource.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              <span>改派原因</span>
+              <input
+                disabled={!canManageResources}
+                value={reassignReason}
+                onChange={(event) => setReassignReason(event.target.value)}
+                placeholder="说明人员资质、天气或可用性变化"
+              />
+            </label>
+            {reassignMutation.error instanceof Error ? (
+              <p role="alert">{reassignMutation.error.message}</p>
+            ) : null}
+            <Button
+              loading={reassignMutation.isPending}
+              disabled={
+                !canManageResources ||
+                !reassignFromId ||
+                !reassignToId ||
+                reassignReason.trim().length < 3
+              }
+              onClick={() => reassignMutation.mutate()}
+            >
+              提交资源改派
+            </Button>
+          </Card>
+        </section>
+      ) : null}
 
       <section className="data-toolbar resource-toolbar">
         <div className="search-field">
@@ -563,7 +771,7 @@ export function ResourceCenterPage() {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <span className="toolbar-result">{resourceQuery.data.meta.total} RESOURCES</span>
+        <span className="toolbar-result">{resourceQuery.data?.meta.total ?? 0} 项资源</span>
         <Button variant="secondary" onClick={() => void resourceQuery.refetch()}>
           刷新台账
         </Button>
@@ -571,7 +779,7 @@ export function ResourceCenterPage() {
 
       <Card className="resource-ledger">
         <CardHeader
-          eyebrow="RESOURCE LEDGER"
+          eyebrow="资源账本"
           title="资源与窗口"
           description="所有预留均保留工单关联，支持跨模块追溯"
         />

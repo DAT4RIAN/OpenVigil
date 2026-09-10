@@ -39,14 +39,17 @@ import {
   workOrders,
 } from "@/lib";
 import type { WindTurbine, WorkOrderStatus } from "@/lib/types";
+import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { cn } from "@/lib/utils";
 import { buildGenericSubsystemAssessments } from "@/lib/generic-subsystem-data";
 import {
   subsystemStateLabel as stateLabel,
+  turbineDetailTabLabels,
   turbineDetailTabs as tabs,
   type TurbineDetailTab as Tab,
 } from "./turbine-detail-support";
+import { ProductionTurbineDetailPage } from "./production-turbine-detail-page";
 
 function series(metric: string): TimeSeriesPoint[] {
   const match = scadaSeries.find((item) => item.metric === metric);
@@ -80,10 +83,10 @@ function OverviewTab({
         <div className="asset-hero-card__visual">
           <span className="asset-hero-grid" />
           <TowerControl size={88} strokeWidth={1.2} />
-          <span className="asset-hero-card__tag">DIGITAL ASSET</span>
+          <span className="asset-hero-card__tag">数字资产</span>
         </div>
         <div className="asset-hero-card__content">
-          <span className="eyebrow">ASSET PROFILE</span>
+          <span className="eyebrow">资产档案</span>
           <h2>{turbine023.id}</h2>
           <p>
             {turbine023.manufacturer} {turbine023.model}
@@ -99,7 +102,7 @@ function OverviewTab({
 
       <Card className="asset-live-card">
         <CardHeader
-          eyebrow="LIVE SNAPSHOT"
+          eyebrow="实时快照"
           title="实时运行参数"
           description="数据质量良好 · 12 秒前更新"
         />
@@ -143,7 +146,7 @@ function OverviewTab({
         </div>
         <div className="asset-mini-chart">
           <div>
-            <span className="eyebrow">ACTIVE POWER · 6H</span>
+            <span className="eyebrow">有功功率 · 6H</span>
             <strong>稳定输出，存在 6% 功率波动</strong>
           </div>
           <TimeSeriesChart data={series("active-power")} height={108} unit="MW" compact />
@@ -156,10 +159,10 @@ function OverviewTab({
             <ShieldAlert size={19} />
           </span>
           <span>
-            <span className="eyebrow">PRIMARY RISK</span>
+            <span className="eyebrow">主要风险</span>
             <h2>主轴承早期退化</h2>
           </span>
-          <StatusBadge value="high" label="HIGH RISK" tone="critical" />
+          <StatusBadge value="high" label="高风险" tone="critical" />
         </div>
         <p>
           {closed
@@ -224,7 +227,7 @@ function OverviewTab({
 
       <Card className="subsystem-panel">
         <CardHeader
-          eyebrow="COMPONENT HEALTH"
+          eyebrow="部件健康"
           title="子系统健康状态"
           description="基于 SCADA、振动和维护数据的综合评估"
           action={
@@ -284,11 +287,7 @@ function OverviewTab({
       </Card>
 
       <Card className="asset-history-card">
-        <CardHeader
-          eyebrow="ASSET HISTORY"
-          title="最近事件"
-          description="维护、告警与 AI 分析记录"
-        />
+        <CardHeader eyebrow="资产历史" title="最近事件" description="维护、告警与 AI 分析记录" />
         <div className="asset-history-list">
           <div>
             <span className="history-icon history-icon--critical">
@@ -351,7 +350,7 @@ function ScadaTab() {
       </Card>
       <Card>
         <CardHeader
-          eyebrow="CORRELATED SIGNAL"
+          eyebrow="关联信号"
           title="主轴承温度"
           description="与振动异常存在 0.79 相关度"
         />
@@ -372,7 +371,7 @@ function HealthTab() {
     <div className="health-detail-layout">
       <Card className="health-matrix-card">
         <CardHeader
-          eyebrow="ASSET HEALTH"
+          eyebrow="资产健康"
           title="子系统风险矩阵"
           description="概率 × 后果的综合风险排序"
         />
@@ -400,7 +399,7 @@ function HealthTab() {
         </div>
       </Card>
       <Card>
-        <CardHeader eyebrow="DEGRADATION" title="健康趋势" description="过去 90 天持续下降" />
+        <CardHeader eyebrow="退化趋势" title="健康趋势" description="过去 90 天持续下降" />
         <TimeSeriesChart
           data={series("anomaly-score")}
           height={290}
@@ -470,7 +469,7 @@ function RelatedList({
   return (
     <Card className="related-records">
       <CardHeader
-        eyebrow="RELATED RECORDS"
+        eyebrow="关联记录"
         title={type === "alarms" ? "相关告警" : type === "maintenance" ? "维护记录" : "关联文档"}
         description={`与 ${turbine023.id} 资产关联的可追溯记录`}
       />
@@ -510,7 +509,7 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
   const assessments = buildGenericSubsystemAssessments(turbine);
 
   return (
-    <AppShell activePath={`/turbines/${turbine.id}`}>
+    <AppShell runtimeMode="demo" activePath={`/turbines/${turbine.id}`}>
       <PageHeader
         eyebrow="数字资产"
         title={`${turbine.id} · ${turbine.model}`}
@@ -520,7 +519,15 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
           <>
             <StatusBadge
               value={turbine.status}
-              label={turbine.status.replaceAll("-", " ").toUpperCase()}
+              label={
+                turbine.status === "running"
+                  ? "运行中"
+                  : turbine.status === "warning"
+                    ? "预警运行"
+                    : turbine.status === "maintenance"
+                      ? "维护中"
+                      : "离线"
+              }
               pulse={turbine.status === "running"}
             />
             <HealthBadge score={turbine.healthScore} />
@@ -558,12 +565,12 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
       />
       <nav className="detail-tabs" aria-label="机组详情标签页">
         <a className="active" href="#overview">
-          Overview
+          概览
         </a>
         <a href={`/scada?turbineId=${turbine.id}`}>SCADA</a>
-        <a href="#health">Health</a>
+        <a href="#health">健康</a>
         <a href={`/alarms?turbineId=${turbine.id}`}>
-          Alarms <span>{relatedAlarms.length}</span>
+          告警 <span>{relatedAlarms.length}</span>
         </a>
         <a
           href={
@@ -572,22 +579,22 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
               : `/missions?turbineId=${turbine.id}`
           }
         >
-          Missions <span>{relatedMissions.length}</span>
+          Mission <span>{relatedMissions.length}</span>
         </a>
         <a href={`/work-orders?turbineId=${turbine.id}`}>
-          Maintenance <span>{relatedWorkOrders.length}</span>
+          维护 <span>{relatedWorkOrders.length}</span>
         </a>
-        <a href="#documents">Documents</a>
+        <a href="#documents">文档</a>
       </nav>
       <div className="asset-overview-grid" id="overview">
         <Card className="asset-hero-card">
           <div className="asset-hero-card__visual">
             <span className="asset-hero-grid" />
             <TowerControl size={88} strokeWidth={1.2} />
-            <span className="asset-hero-card__tag">DIGITAL ASSET</span>
+            <span className="asset-hero-card__tag">数字资产</span>
           </div>
           <div className="asset-hero-card__content">
-            <span className="eyebrow">ASSET PROFILE</span>
+            <span className="eyebrow">资产档案</span>
             <h2>{turbine.id}</h2>
             <p>
               {turbine.manufacturer} {turbine.model}
@@ -602,7 +609,7 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
         </Card>
         <Card className="asset-live-card">
           <CardHeader
-            eyebrow="LIVE SNAPSHOT"
+            eyebrow="实时快照"
             title="实时运行参数"
             description="确定性场站快照 · 数据质量良好"
           />
@@ -649,7 +656,7 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
               <ShieldAlert size={19} />
             </span>
             <span>
-              <span className="eyebrow">ASSET ASSESSMENT</span>
+              <span className="eyebrow">资产评估</span>
               <h2>
                 {turbine.healthScore >= 90
                   ? "运行状态健康"
@@ -658,7 +665,7 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
                     : "需要优先处置"}
               </h2>
             </span>
-            <StatusBadge value={turbine.status} label={turbine.status.toUpperCase()} />
+            <StatusBadge value={turbine.status} />
           </div>
           <p>综合 SCADA 运行状态、活跃告警和最近维护记录形成当前健康快照。</p>
           <div className="risk-stat-grid">
@@ -691,21 +698,21 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
               <small>活跃告警</small>
               <strong>{turbine.activeAlarmCount}</strong>
               <span className="trend-label">
-                <AlarmTriangle size={12} /> linked records
+                <AlarmTriangle size={12} /> 条关联记录
               </span>
             </div>
             <div>
               <small>维护记录</small>
               <strong>{relatedWorkOrders.length}</strong>
               <span className="trend-label">
-                <Wrench size={12} /> work orders
+                <Wrench size={12} /> 张工单
               </span>
             </div>
           </div>
         </Card>
         <Card className="subsystem-panel" id="health">
           <CardHeader
-            eyebrow="COMPONENT HEALTH"
+            eyebrow="部件健康"
             title="子系统健康状态"
             description="12 个子系统 · 健康 / 告警 / 30 天失效概率 / RUL · 确定性演示估计"
           />
@@ -749,7 +756,7 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
                     </span>
                   </div>
                   <div className="subsystem-item__footer">
-                    <span>DEMO ESTIMATE</span>
+                    <span>演示估算</span>
                     <span>{turbine.id}</span>
                   </div>
                 </div>
@@ -759,7 +766,7 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
         </Card>
         <Card className="asset-history-card">
           <CardHeader
-            eyebrow="MAINTENANCE HISTORY"
+            eyebrow="维护历史"
             title="关联工单"
             description={`与 ${turbine.id} 关联的可追溯维护记录`}
           />
@@ -794,7 +801,7 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
         </Card>
         <Card className="asset-history-card">
           <CardHeader
-            eyebrow="ALARMS & MISSIONS"
+            eyebrow="告警与 Mission"
             title="事件与诊断任务"
             description={`${turbine.id} 的告警和 Mission 关联；空记录会明确显示而不生成虚假任务`}
           />
@@ -834,7 +841,7 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
                 </span>
                 <span>
                   <strong>当前没有关联事件</strong>
-                  <small>告警中心和 Mission Center 均保留该资产筛选入口</small>
+                  <small>告警中心和 Mission 中心均保留该资产筛选入口</small>
                 </span>
               </div>
             ) : null}
@@ -842,9 +849,9 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
         </Card>
         <Card className="asset-history-card" id="documents">
           <CardHeader
-            eyebrow="DOCUMENTS"
+            eyebrow="文档"
             title="适用文档"
-            description="设备手册、维护规程与技术标准；通过 Knowledge Base 打开可追溯来源"
+            description="设备手册、维护规程与技术标准；通过知识库打开可追溯来源"
           />
           <div className="asset-history-list">
             {relatedDocuments.map((document) => (
@@ -860,7 +867,7 @@ function GenericTurbineDetailPage({ turbine }: { turbine: WindTurbine }) {
                 </span>
                 <StatusBadge
                   value={document.vectorized ? "vectorized" : "indexed"}
-                  label={document.vectorized ? "INDEXED" : "CATALOGED"}
+                  label={document.vectorized ? "已索引" : "已编目"}
                   compact
                 />
               </a>
@@ -878,7 +885,7 @@ function FeaturedTurbineDetailPage() {
   const closed = workflow.missionStatus === "completed";
   const featuredNarrative = getFeaturedMissionNarrative(workflow);
   return (
-    <AppShell activePath="/turbines/WT-023">
+    <AppShell runtimeMode="demo" activePath="/turbines/WT-023">
       <PageHeader
         eyebrow="数字资产"
         title={`${turbine023.id} · ${turbine023.model}`}
@@ -926,7 +933,7 @@ function FeaturedTurbineDetailPage() {
       <nav className="detail-tabs" aria-label="机组详情标签页">
         {tabs.map((item) => (
           <button key={item} className={cn(tab === item && "active")} onClick={() => setTab(item)}>
-            {item}
+            {turbineDetailTabLabels[item]}
             {item === "Alarms" ? <span>3</span> : null}
             {item === "Missions" ? <span>1</span> : null}
           </button>
@@ -956,7 +963,15 @@ function FeaturedTurbineDetailPage() {
             <div>
               <StatusBadge
                 value={workflow.missionStatus}
-                label={workflow.missionStatus.replaceAll("-", " ").toUpperCase()}
+                label={
+                  workflow.missionStatus === "under-review"
+                    ? "审核中"
+                    : workflow.missionStatus === "executing"
+                      ? "执行中"
+                      : workflow.missionStatus === "completed"
+                        ? "已完成"
+                        : "已诊断"
+                }
                 tone={closed ? "success" : "info"}
                 pulse={!closed}
               />
@@ -978,7 +993,16 @@ function FeaturedTurbineDetailPage() {
   );
 }
 
-export function TurbineDetailPage({ turbineId = "WT-023" }: { turbineId?: string }) {
+export function TurbineDetailPage({
+  turbineId = "WT-023",
+  runtimeMode = "demo",
+}: {
+  turbineId?: string;
+  runtimeMode?: WindOpsRuntimeMode;
+}) {
+  if (runtimeMode === "production") {
+    return <ProductionTurbineDetailPage turbineId={turbineId} />;
+  }
   const turbine = getTurbine(turbineId);
   if (!turbine) return null;
   return turbine.id === turbine023.id ? (

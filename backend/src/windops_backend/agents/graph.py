@@ -17,8 +17,10 @@ from windops_backend.agents.reasoning import (
 from windops_backend.agents.state import PublicWorkflowState
 from windops_backend.agents.tools import SQLToolAdapter
 from windops_backend.enums import ExecutionStatus
+from windops_backend.errors import InvalidTransitionError
 from windops_backend.models import AgentDefinition, AgentExecution, Evidence
 from windops_backend.schemas import PublicDiagnosis, PublicEvidence
+from windops_backend.services.events import append_domain_event
 
 NodeOperation = Callable[[PublicWorkflowState], Awaitable[dict[str, Any]]]
 
@@ -36,6 +38,17 @@ class WindOpsWorkflowGraph:
         self.tools = tools
         self.reasoning = reasoning
         self.graph = self._build()
+
+    @staticmethod
+    def _analysis_profile(state: PublicWorkflowState) -> dict[str, Any]:
+        return {
+            "component": "main_bearing",
+            "primary_variable": "main_bearing_vibration_rms",
+            "related_variables": ["main_bearing_temperature", "active_power"],
+            "failure_mode_hint": "main-bearing degradation",
+            "knowledge_query": "main bearing rising RMS temperature inspection",
+            **state.get("analysis_profile", {}),
+        }
 
     async def _recorded(
         self,
@@ -56,13 +69,15 @@ class WindOpsWorkflowGraph:
             .order_by(AgentDefinition.version.desc())
             .limit(1)
         )
+        if agent_definition is None:
+            raise InvalidTransitionError(
+                f"agent role {agent_role} is stopped or has no active governed release"
+            )
         execution = AgentExecution(
             id=str(uuid4()),
             mission_id=state["mission_id"],
-            catalog_version_id=(
-                agent_definition.catalog_version_id if agent_definition is not None else None
-            ),
-            agent_definition_id=(agent_definition.id if agent_definition is not None else None),
+            catalog_version_id=agent_definition.catalog_version_id,
+            agent_definition_id=agent_definition.id,
             node=node,
             agent_role=agent_role,
             status=ExecutionStatus.RUNNING.value,
@@ -94,6 +109,8 @@ class WindOpsWorkflowGraph:
                     "source": "not_applicable",
                 },
             )
+            execution.evaluation_result = usage.get("evaluation_result", {})
+            execution.degradation_policy = usage.get("degradation_policy", {})
             execution.public_output = {
                 "failure": {
                     "node": node,
@@ -113,6 +130,8 @@ class WindOpsWorkflowGraph:
                 "provider": execution.provider,
                 "model": execution.model,
                 "token_usage": execution.token_usage,
+                "evaluation_result": execution.evaluation_result,
+                "degradation_policy": execution.degradation_policy,
                 "error_code": execution.error_code,
             }
             await self.session.flush()
@@ -132,6 +151,23 @@ class WindOpsWorkflowGraph:
                 "completion_tokens": 0,
                 "total_tokens": 0,
                 "source": "not_applicable",
+            },
+        )
+        execution.evaluation_result = usage.get("evaluation_result", {})
+        execution.degradation_policy = usage.get("degradation_policy", {})
+        append_domain_event(
+            self.session,
+            event_type="agent.execution.succeeded",
+            aggregate_type="mission",
+            aggregate_id=state["mission_id"],
+            payload={
+                "execution_id": execution.id,
+                "mission_id": state["mission_id"],
+                "node": node,
+                "agent_role": agent_role,
+                "status": execution.status,
+                "latency_ms": execution.latency_ms,
+                "completed_at": execution.completed_at.isoformat(),
             },
         )
         await self.session.flush()
@@ -174,36 +210,59 @@ class WindOpsWorkflowGraph:
 
     async def scada(self, state: PublicWorkflowState) -> dict[str, Any]:
         async def operation(current: PublicWorkflowState) -> dict[str, Any]:
+            profile = self._analysis_profile(current)
+            component = str(profile["component"])
+            primary_variable = str(profile["primary_variable"])
+            variables = list(
+                dict.fromkeys(
+                    [primary_variable]
+                    + [str(value) for value in profile.get("related_variables", [])]
+                )
+            )
             alarms = await self.tools.query_alarm_history(current["turbine_id"], limit=100)
             alarm = next(item for item in alarms if item["alarm_id"] == current["alarm_id"])
             alarm_attributes = alarm["evidence"].get("attributes", {})
             samples = await self.tools.query_scada(
                 current["turbine_id"],
-                [
-                    "main_bearing_vibration_rms",
-                    "main_bearing_temperature",
-                    "active_power",
-                ],
+                variables,
                 limit=24,
             )
             draft = PublicEvidence(
-                evidence_id="SCADA-WT023",
+                evidence_id=(
+                    "SCADA-WT023" if component == "main_bearing" else f"SCADA-{component.upper()}"
+                ),
                 evidence_type="scada_anomaly",
                 summary=(
-                    "Main-bearing vibration crossed the threshold with +8.4 °C temperature "
-                    "and 6% power-fluctuation context."
+                    "Main-bearing vibration crossed the governed threshold with temperature "
+                    "and power-fluctuation context."
+                    if component == "main_bearing"
+                    else (
+                        f"{primary_variable} triggered the governed "
+                        f"{component.replace('_', ' ')} condition rule with related telemetry."
+                    )
                 ),
                 source_refs=[alarm["alarm_id"]]
                 + [str(row["source_event_id"]) for row in samples[:5]],
-                metrics={
-                    "vibration_rms_mm_s": float(alarm["evidence"]["value"]),
-                    "threshold_mm_s": 4.5,
-                    "temperature_delta_c": float(alarm_attributes.get("temperature_delta_c", 0)),
-                    "power_fluctuation_pct": float(
-                        alarm_attributes.get("power_fluctuation_pct", 0)
-                    ),
-                    "anomaly_score": float(alarm_attributes.get("anomaly_score", 0)),
-                },
+                metrics=(
+                    {
+                        "vibration_rms_mm_s": float(alarm["evidence"]["value"]),
+                        "threshold_mm_s": 4.5,
+                        "temperature_delta_c": float(
+                            alarm_attributes.get("temperature_delta_c", 0)
+                        ),
+                        "power_fluctuation_pct": float(
+                            alarm_attributes.get("power_fluctuation_pct", 0)
+                        ),
+                        "anomaly_score": float(alarm_attributes.get("anomaly_score", 0)),
+                    }
+                    if component == "main_bearing"
+                    else {
+                        "primary_variable": primary_variable,
+                        "observed_value": float(alarm["evidence"].get("value", 0)),
+                        "unit": str(alarm["evidence"].get("unit", "unknown")),
+                        "anomaly_score": float(alarm_attributes.get("anomaly_score", 0)),
+                    }
+                ),
             ).model_dump()
             evidence = await self._persist_evidence(current, draft)
             return {"evidence": [*current.get("evidence", []), evidence]}
@@ -212,20 +271,57 @@ class WindOpsWorkflowGraph:
 
     async def vibration(self, state: PublicWorkflowState) -> dict[str, Any]:
         async def operation(current: PublicWorkflowState) -> dict[str, Any]:
-            analysis = await self.tools.query_vibration(current["turbine_id"])
+            profile = self._analysis_profile(current)
+            component = str(profile["component"])
+            primary_variable = str(profile["primary_variable"])
+            is_vibration = primary_variable == "main_bearing_vibration_rms"
+            if is_vibration:
+                analysis = await self.tools.query_vibration(current["turbine_id"])
+            else:
+                samples = await self.tools.query_scada(
+                    current["turbine_id"], [primary_variable], limit=24
+                )
+                alarms = await self.tools.query_alarm_history(current["turbine_id"], limit=100)
+                alarm = next(item for item in alarms if item["alarm_id"] == current["alarm_id"])
+                latest = samples[0] if samples else alarm["evidence"]
+                attributes = latest.get("attributes", {})
+                latest_value = float(latest.get("value", 0))
+                baseline = float(attributes.get("baseline", latest_value)) or 1.0
+                analysis = {
+                    "samples": samples,
+                    "latest_value": latest_value,
+                    "trend_pct": round(((latest_value - baseline) / abs(baseline)) * 100, 1),
+                    "anomaly_score": float(attributes.get("anomaly_score", 0)),
+                }
             draft = PublicEvidence(
-                evidence_id="VIB-WT023",
-                evidence_type="vibration_spectrum",
-                summary="RMS is 27% above baseline with a bearing-fault spectral marker.",
+                evidence_id=("VIB-WT023" if is_vibration else f"SIGNAL-{component.upper()}"),
+                evidence_type="vibration_spectrum" if is_vibration else "condition_signal",
+                summary=(
+                    "RMS is above baseline with a bearing-fault spectral marker."
+                    if is_vibration
+                    else (
+                        f"{primary_variable} was evaluated against its governed baseline and "
+                        "anomaly context."
+                    )
+                ),
                 source_refs=[
                     str(row["source_event_id"]) for row in analysis.get("samples", [])[:5]
                 ],
-                metrics={
-                    "rms_mm_s": float(analysis.get("rms_mm_s", 0)),
-                    "trend_pct": float(analysis.get("trend_pct", 0)),
-                    "anomaly_score": float(analysis.get("anomaly_score", 0)),
-                    "spectrum_marker": str(analysis.get("spectrum_marker", "none")),
-                },
+                metrics=(
+                    {
+                        "rms_mm_s": float(analysis.get("rms_mm_s", 0)),
+                        "trend_pct": float(analysis.get("trend_pct", 0)),
+                        "anomaly_score": float(analysis.get("anomaly_score", 0)),
+                        "spectrum_marker": str(analysis.get("spectrum_marker", "none")),
+                    }
+                    if is_vibration
+                    else {
+                        "primary_variable": primary_variable,
+                        "latest_value": float(analysis.get("latest_value", 0)),
+                        "trend_pct": float(analysis.get("trend_pct", 0)),
+                        "anomaly_score": float(analysis.get("anomaly_score", 0)),
+                    }
+                ),
             ).model_dump()
             evidence = await self._persist_evidence(current, draft)
             return {"evidence": [*current.get("evidence", []), evidence]}
@@ -234,15 +330,20 @@ class WindOpsWorkflowGraph:
 
     async def knowledge(self, state: PublicWorkflowState) -> dict[str, Any]:
         async def operation(current: PublicWorkflowState) -> dict[str, Any]:
+            profile = self._analysis_profile(current)
+            component = str(profile["component"])
             documents = await self.tools.query_similar_failures(
-                "main bearing rising RMS temperature inspection", current["turbine_id"]
+                str(profile["knowledge_query"]), current["turbine_id"]
             )
             source_refs = [str(document["citation_href"]) for document in documents]
             draft = PublicEvidence(
-                evidence_id="KB-MB-GW165-001",
+                evidence_id=(
+                    "KB-MB-GW165-001" if component == "main_bearing" else f"KB-{component.upper()}"
+                ),
                 evidence_type="knowledge_citation",
                 summary=(
-                    "The controlled GW165 procedure links rising RMS and temperature to inspection."
+                    "The controlled knowledge corpus returned inspection guidance for "
+                    f"{component.replace('_', ' ')}."
                 ),
                 source_refs=source_refs,
                 metrics={"documents_retrieved": float(len(documents))},
@@ -267,10 +368,18 @@ class WindOpsWorkflowGraph:
 
     async def diagnosis(self, state: PublicWorkflowState) -> dict[str, Any]:
         async def operation(current: PublicWorkflowState) -> dict[str, Any]:
+            profile = self._analysis_profile(current)
             diagnosis = await self.reasoning.generate(
                 PublicDiagnosis,
-                "Produce the public diagnosis for WT-023 from the cited evidence.",
-                {"evidence": current.get("evidence", [])},
+                (
+                    f"Produce the public diagnosis for {current['turbine_id']} "
+                    f"{profile['component']} from the cited evidence."
+                ),
+                {
+                    "turbine_id": current["turbine_id"],
+                    "analysis_profile": profile,
+                    "evidence": current.get("evidence", []),
+                },
             )
             return {
                 "diagnosis": diagnosis.model_dump(),
@@ -281,12 +390,20 @@ class WindOpsWorkflowGraph:
 
     async def alternatives(self, state: PublicWorkflowState) -> dict[str, Any]:
         async def operation(current: PublicWorkflowState) -> dict[str, Any]:
-            weather = await self.tools.query_weather("WF-EAST-01")
-            rul = await self.tools.predict_rul(current["turbine_id"], "main_bearing")
+            profile = self._analysis_profile(current)
+            turbine_status = await self.tools.get_turbine_status(current["turbine_id"])
+            weather = await self.tools.query_weather(str(turbine_status["wind_farm_id"]))
+            rul = await self.tools.predict_rul(
+                current["turbine_id"],
+                str(profile["component"]),
+                str(profile["primary_variable"]),
+            )
             bundle = await self.reasoning.generate(
                 AlternativeBundle,
                 "Generate three public maintenance alternatives and exactly one recommendation.",
                 {
+                    "turbine_id": current["turbine_id"],
+                    "analysis_profile": profile,
                     "diagnosis": current.get("diagnosis", {}),
                     "weather": weather,
                     "rul": rul,
@@ -300,11 +417,14 @@ class WindOpsWorkflowGraph:
                 str(recommended["alternative_id"]),
                 (
                     "Engineering, safety, RUL, weather, and production impact favor "
-                    "controlled derating."
+                    "the governed controlled-intervention option."
                 ),
                 [
                     {
-                        "risk": "bearing degradation accelerates before inspection",
+                        "risk": (
+                            f"{str(profile['component']).replace('_', ' ')} degradation "
+                            "accelerates before inspection"
+                        ),
                         "mitigation": "70% derating and 15-minute vibration monitoring",
                     },
                     {
@@ -319,13 +439,15 @@ class WindOpsWorkflowGraph:
 
     async def reviews(self, state: PublicWorkflowState) -> dict[str, Any]:
         async def operation(current: PublicWorkflowState) -> dict[str, Any]:
+            profile = self._analysis_profile(current)
             turbine_status = await self.tools.get_turbine_status(current["turbine_id"])
             resources = turbine_status["maintenance_resources"]
-            weather = await self.tools.query_weather("WF-EAST-01")
+            weather = await self.tools.query_weather(str(turbine_status["wind_farm_id"]))
             bundle = await self.reasoning.generate(
                 ReviewBundle,
                 "Publish engineering, safety, economic, resource, and compliance reviews.",
                 {
+                    "analysis_profile": profile,
                     "diagnosis": current.get("diagnosis", {}),
                     "alternatives": current.get("alternatives", []),
                     "resources": resources,

@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { AssetHealthPage } from "@/components/pages/asset-health-page";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "设备健康",
@@ -7,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <AssetHealthPage />;
+  return <AssetHealthPage runtimeMode={getProductionBackendConfig().mode} />;
 }

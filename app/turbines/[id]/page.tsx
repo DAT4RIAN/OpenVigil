@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { TurbineDetailPage } from "@/components/pages/turbine-detail-page";
 import { getTurbine } from "@/lib";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
+
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -9,6 +12,12 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
+  if (getProductionBackendConfig().mode === "production") {
+    return {
+      title: `${id} 数字资产`,
+      description: `${id} 生产资产、SCADA、健康、告警与维护信息。`,
+    };
+  }
   const turbine = getTurbine(id);
   return turbine
     ? {
@@ -20,7 +29,11 @@ export async function generateMetadata({
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const runtimeMode = getProductionBackendConfig().mode;
+  if (runtimeMode === "production") {
+    return <TurbineDetailPage turbineId={id} runtimeMode={runtimeMode} />;
+  }
   const turbine = getTurbine(id);
   if (!turbine) notFound();
-  return <TurbineDetailPage turbineId={turbine.id} />;
+  return <TurbineDetailPage turbineId={turbine.id} runtimeMode={runtimeMode} />;
 }

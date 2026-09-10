@@ -47,10 +47,10 @@ test("knowledge page renders the catalog and default WT-023 question", async () 
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /Knowledge Base/);
+  assert.match(html, /知识库/);
   assert.match(html, /WT-023为什么被判断为主轴承退化？/);
-  assert.match(html, /DOCUMENT CATALOG/);
-  assert.match(html, /DETERMINISTIC/);
+  assert.match(html, /文档目录/);
+  assert.match(html, /确定性检索/);
 });
 
 test("knowledge document API performs exact search, filter, sort, and pagination", async () => {

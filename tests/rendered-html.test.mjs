@@ -39,7 +39,7 @@ test("server-renders the WindOps command center instead of the starter", async (
 
   const html = await response.text();
   assert.match(html, /WindOps/);
-  assert.match(html, /Operations Command Center/);
+  assert.match(html, /运营指挥中心/);
   assert.match(html, /WT-023/);
   assert.match(html, /MISSION-2026-0823/);
   assert.doesNotMatch(html, /codex-preview/i);

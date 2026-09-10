@@ -23,6 +23,10 @@ import {
   type AgentToolRequest,
 } from "@/lib";
 import { getWorkerEnv } from "@/lib/worker-env";
+import {
+  getProductionBackendConfig,
+  proxyProductionBackendRequest,
+} from "@/lib/production-runtime";
 
 import { jsonResponse } from "../_shared";
 import { readWorkflowForApi } from "../_workflow";
@@ -306,6 +310,9 @@ function parseFilters(request: Request): AgentExecutionFilters {
 const getDatabase = (): D1Database | undefined => getWorkerEnv().DB;
 
 export async function GET(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return proxyProductionBackendRequest(request, "/api/v1/agent-tools");
+  }
   try {
     const filters = parseFilters(request);
     const result = await readAgentToolLedger(getDatabase(), filters);
@@ -342,6 +349,9 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return proxyProductionBackendRequest(request, "/api/v1/agent-tools");
+  }
   let body: unknown;
   try {
     body = await request.json();

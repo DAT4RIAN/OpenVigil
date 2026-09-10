@@ -71,10 +71,10 @@ test("digital twin page renders its model, signals, and read-only boundary", asy
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /数字孪生/);
-  assert.match(html, /OPERATIONAL TWIN/);
-  assert.match(html, /12 SUBSYSTEMS/);
+  assert.match(html, /运营数字孪生/);
+  assert.match(html, /12 个子系统/);
   assert.match(html, /非物理仿真/);
-  assert.match(html, /READ ONLY/);
+  assert.match(html, /只读/);
 });
 
 test("digital twin client fallback is asset-scoped and labels the actual workflow persistence", async () => {
@@ -85,6 +85,6 @@ test("digital twin client fallback is asset-scoped and labels the actual workflo
   assert.doesNotMatch(source, /const initialSnapshot\s*=\s*buildDigitalTwinSnapshot\("WT-023"\)/);
   assert.match(source, /buildDigitalTwinSnapshot\(turbineId\)/);
   assert.match(source, /workflowPersistence === "d1"/);
-  assert.match(source, /same-asset fallback/);
+  assert.match(source, /同资产降级快照/);
   assert.doesNotMatch(source, /SCADA 与 D1\s*工作流状态/);
 });

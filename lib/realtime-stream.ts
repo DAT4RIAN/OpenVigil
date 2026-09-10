@@ -54,7 +54,7 @@ export function buildRealtimeFrame(
       const series = scadaSeries.find((candidate) => candidate.metric === metric)!;
       const windowStart = Math.max(0, series.points.length - 12);
       const point =
-        series.points[windowStart + (normalized % (series.points.length - windowStart))]!;
+        series.points[windowStart + (normalized % (series.points.length - windowStart))];
       return Object.freeze({
         seriesId: series.id,
         turbineId: series.turbineId,
@@ -93,7 +93,7 @@ export function buildRealtimeFrame(
     });
   }
 
-  const activity = activityEvents[normalized % activityEvents.length]!;
+  const activity = activityEvents[normalized % activityEvents.length];
   return Object.freeze({
     protocol: "windops.realtime.v1" as const,
     channel,

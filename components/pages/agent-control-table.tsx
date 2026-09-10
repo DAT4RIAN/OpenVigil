@@ -5,6 +5,7 @@ import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 
 import { DataTable } from "@/components/data-display/data-table";
 import { StatusBadge } from "@/components/data-display/status-badge";
+import { agentDisplayName, agentLayerMeta, agentStatusLabel } from "@/lib/agent-control-meta";
 import type { Agent } from "@/lib/types";
 
 export interface AgentControlTableRow {
@@ -29,41 +30,42 @@ export function AgentControlTable({
         accessorFn: (row) => row.agent.name,
         cell: ({ row }) => (
           <span>
-            <strong>{row.original.agent.shortName}</strong>
+            <strong>{agentDisplayName(row.original.agent.id, row.original.agent.shortName)}</strong>
             <small className="mono">{row.original.agent.id}</small>
           </span>
         ),
       },
       {
         id: "layer",
-        header: "Layer",
+        header: "层级",
         accessorFn: (row) => row.agent.layer,
+        cell: ({ row }) => agentLayerMeta[row.original.agent.layer].label,
       },
       {
         id: "status",
-        header: "Status",
+        header: "状态",
         accessorFn: (row) => row.agent.status,
         cell: ({ row }) => <StatusBadge value={row.original.agent.status} compact />,
       },
       {
         id: "task",
-        header: "Current task",
+        header: "当前任务",
         accessorFn: (row) => row.currentTask,
       },
       {
         id: "queue",
-        header: "Queue",
+        header: "队列",
         accessorFn: (row) => row.agent.queueDepth,
       },
       {
         id: "success",
-        header: "Success",
+        header: "成功率",
         accessorFn: (row) => row.agent.metrics.successRate,
         cell: ({ row }) => `${row.original.agent.metrics.successRate}%`,
       },
       {
         id: "latency",
-        header: "Latency",
+        header: "延迟",
         accessorFn: (row) => row.agent.metrics.averageLatencySeconds,
         cell: ({ row }) => `${row.original.agent.metrics.averageLatencySeconds}s`,
       },
@@ -95,7 +97,7 @@ export function AgentControlTable({
       }
       bulkActions={[
         {
-          label: "Inspect first selected Agent",
+          label: "查看首个已选 Agent",
           onActivate: (selected) => {
             if (selected[0]) onInspect(selected[0].agent);
           },
@@ -105,15 +107,15 @@ export function AgentControlTable({
         filename: "windops-agents.csv",
         columns: [
           { label: "Agent ID", value: (row) => row.agent.id },
-          { label: "Name", value: (row) => row.agent.name },
-          { label: "Role", value: (row) => row.agent.role },
-          { label: "Layer", value: (row) => row.agent.layer },
-          { label: "Status", value: (row) => row.agent.status },
-          { label: "Current task", value: (row) => row.currentTask },
-          { label: "Queue", value: (row) => row.agent.queueDepth },
-          { label: "Success %", value: (row) => row.agent.metrics.successRate },
+          { label: "名称", value: (row) => agentDisplayName(row.agent.id, row.agent.name) },
+          { label: "角色", value: (row) => row.agent.role },
+          { label: "层级", value: (row) => agentLayerMeta[row.agent.layer].label },
+          { label: "状态", value: (row) => agentStatusLabel[row.agent.status] },
+          { label: "当前任务", value: (row) => row.currentTask },
+          { label: "队列", value: (row) => row.agent.queueDepth },
+          { label: "成功率 %", value: (row) => row.agent.metrics.successRate },
           {
-            label: "Average latency seconds",
+            label: "平均延迟（秒）",
             value: (row) => row.agent.metrics.averageLatencySeconds,
           },
         ],

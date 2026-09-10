@@ -1,4 +1,6 @@
 import { knowledgeDocuments } from "@/lib/knowledge-data";
+import { productionKnowledgeDocumentsResponse } from "@/lib/production-domain-adapter";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
 import { overlayWorkflowKnowledge } from "@/lib/server-workflow-overlays";
 import type { KnowledgeDocument, KnowledgeDocumentType } from "@/lib/types";
 
@@ -89,6 +91,9 @@ const compareDocuments = (
 };
 
 export async function GET(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return productionKnowledgeDocumentsResponse(request);
+  }
   const searchParams = new URL(request.url).searchParams;
   const query = (searchParams.get("q") ?? "").trim();
   const typeValue = (searchParams.get("type") ?? "all").trim();
@@ -146,7 +151,7 @@ export async function GET(request: Request): Promise<Response> {
     return searchable.includes(normalizedQuery);
   });
   const sorted = [...filtered].sort((left, right) =>
-    compareDocuments(left, right, sortValue as SortField, orderValue as SortOrder),
+    compareDocuments(left, right, sortValue as SortField, orderValue),
   );
   const offset = (page - 1) * pageSize;
   const documents = sorted.slice(offset, offset + pageSize);

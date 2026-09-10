@@ -1,4 +1,8 @@
 import { activityEvents, windFarm } from "@/lib";
+import {
+  getProductionBackendConfig,
+  proxyProductionBackendRequest,
+} from "@/lib/production-runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +15,10 @@ const encodeEvent = (event: string, id: string, data: unknown): Uint8Array => {
  * A finite, deterministic SSE replay of the public agent activity timeline.
  * Clients can reconnect to replay the fixture snapshot without persistence.
  */
-export function GET(): Response {
+export function GET(request: Request): Response | Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return proxyProductionBackendRequest(request, "/api/v1/events/stream");
+  }
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(

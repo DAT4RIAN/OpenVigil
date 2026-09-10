@@ -92,7 +92,7 @@ export const agents: readonly Agent[] = [
     role: "传动链振动频谱诊断",
     description: "分析 RMS、包络谱和阶次特征，区分不平衡、松动与轴承退化。",
     status: "working",
-    currentTask: "WT-023 Bearing Diagnosis",
+    currentTask: "WT-023 主轴承诊断",
     currentMissionId: "MISSION-2026-0823",
     queueDepth: 3,
     skills: ["FFT", "envelope spectrum", "order tracking", "bearing diagnosis"],

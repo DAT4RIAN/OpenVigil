@@ -31,10 +31,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const payload = (await request.json()) as {
-      title?: string;
-      content?: string;
-    };
+    const payload = (await request.json()) as { title?: string; content?: string };
     const title = payload.title?.trim() ?? "";
     const content = payload.content?.trim() ?? "";
 

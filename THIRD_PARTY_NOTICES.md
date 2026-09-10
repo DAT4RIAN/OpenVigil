@@ -31,6 +31,14 @@ This notice intentionally does not enumerate every npm package or transitive dep
 
 Release engineering should generate and archive a dependency license inventory or SPDX/CycloneDX SBOM separately, review bundled assets, and include any notices required by the versions actually shipped. That generated inventory supplements this reference-project record; it does not replace it.
 
+## CARE v6 benchmark data and derived artifacts
+
+The repository's MIT `LICENSE` applies to WindOps code, not to CARE source data or CARE-derived data artifacts. CARE v6, “Wind Turbine SCADA Data For Early Fault Detection,” is attributed to Christian Gück and Cyriana M. A. Roelofs, Fraunhofer Institute for Energy Economics and Energy System Technology, and is published at [Zenodo DOI 10.5281/zenodo.15846963](https://doi.org/10.5281/zenodo.15846963) under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+
+The recommended scholarly citation is: Gück, C.; Roelofs, C.M.A.; Faulstich, S. “CARE to Compare: A Real-World Benchmark Dataset for Early Fault Detection in Wind Turbine Data.” _Data_ 2024, 9, 138. [https://doi.org/10.3390/data9120138](https://doi.org/10.3390/data9120138).
+
+Raw CARE data is not bundled in this repository. Any distributed derived artifact must retain attribution and the license link, identify changes and transformation versions, preserve source and artifact SHA-256 identities, and pass the external-distribution ShareAlike review described in `docs/runbooks/care-artifact-governance.md`.
+
 ## Trademarks and attribution
 
 PyScada, OpenClaw Mission Control, NetBird, Grafana, next-shadcn-dashboard-starter and their associated names, logos and trademarks belong to their respective owners. WindOps does not use their logos and is not affiliated with, sponsored by or endorsed by those projects or maintainers.

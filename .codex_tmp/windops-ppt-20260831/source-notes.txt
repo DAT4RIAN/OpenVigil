@@ -1,0 +1,20 @@
+Deck: WindOps 风电运维智能体 — 项目介绍（10 页）
+Audience: 项目评审、潜在客户、技术管理者
+Purpose: 解释业务价值、产品闭环、Agent 工程、数据验证与落地边界
+Communication job: 让评审理解 WindOps 不是聊天型 Demo，而是一套用状态、权限、证据和人工审批约束智能体行动的风电运维闭环生产候选。
+
+Primary repository sources:
+- C:\coding\project\wind-agent\README.md
+- C:\coding\project\wind-agent\docs\agent-engineer-interview-project-introduction.md
+- C:\coding\project\wind-agent\backend\README.md
+- C:\coding\project\wind-agent\backend\src\windops_backend\agents\graph.py
+- C:\coding\project\wind-agent\backend\src\windops_backend\agents\tools.py
+- C:\coding\project\wind-agent\backend\src\windops_backend\services\seed.py
+
+Visual assets:
+- C:\coding\project\wind-agent\public\windops-command-center.png
+- C:\coding\project\wind-agent\docs\design\windops-operations-command-center-concept-v2.png
+- C:\coding\project\wind-agent\tests\e2e\__screenshots__\dashboard-p1-incident-390.png
+- C:\coding\project\wind-agent\public\og.png
+
+No web or external imagery was used. Quantitative claims are explicitly framed as repository/demo/local-candidate evidence rather than production results.

@@ -1,0 +1,35 @@
+{
+  "Statement": [
+    {
+      "Action": ["s3:GetBucketLocation"],
+      "Effect": "Allow",
+      "Resource": ["arn:aws:s3:::windops-care-benchmarks"]
+    },
+    {
+      "Action": ["s3:ListBucket"],
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "care/v6/standard/*",
+            "care/v6/quality/*",
+            "care/v6/predictions/*",
+            "care/v6/reports/*"
+          ]
+        }
+      },
+      "Effect": "Allow",
+      "Resource": ["arn:aws:s3:::windops-care-benchmarks"]
+    },
+    {
+      "Action": ["s3:GetObject", "s3:DeleteObject"],
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:s3:::windops-care-benchmarks/care/v6/standard/*",
+        "arn:aws:s3:::windops-care-benchmarks/care/v6/quality/*",
+        "arn:aws:s3:::windops-care-benchmarks/care/v6/predictions/*",
+        "arn:aws:s3:::windops-care-benchmarks/care/v6/reports/*"
+      ]
+    }
+  ],
+  "Version": "2012-10-17"
+}

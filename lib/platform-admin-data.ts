@@ -13,7 +13,7 @@ import { scadaSeries, subsystemHealth } from "./telemetry-data";
 
 export const PLATFORM_SNAPSHOT_AT = "2026-08-13T10:30:00+08:00";
 
-export const dataCatalogCategories = ["live", "archive", "api", "schema"] as const;
+export const dataCatalogCategories = ["live", "archive", "api", "schema", "benchmark"] as const;
 export const dataCatalogStatuses = ["ready", "demo", "read-only"] as const;
 
 export type DataCatalogCategory = (typeof dataCatalogCategories)[number];
@@ -33,8 +33,8 @@ export interface DataCatalogEntry {
   readonly source: string;
   readonly queryHref: string;
   readonly queryLabel: string;
-  readonly deterministic: true;
-  readonly readOnly: true;
+  readonly deterministic: boolean;
+  readonly readOnly: boolean;
 }
 
 export interface CatalogSensor {
@@ -261,9 +261,9 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     recordCount: scadaSeries.reduce((total, series) => total + series.points.length, 0),
     schemaObjectCount: 2,
     freshness: "5 秒演示帧",
-    quality: "good / uncertain 标记；非生产遥测",
+    quality: "良好 / 不确定标记；非生产遥测",
     retention: "客户端会话窗口",
-    source: "telemetry-data fixture",
+    source: "telemetry-data 演示数据",
     queryHref: "/api/scada-history?turbineId=WT-023&range=24h",
     queryLabel: "查询历史",
     deterministic: true,
@@ -280,7 +280,7 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     freshness: "确定性事件流",
     quality: "跨域引用完整性校验",
     retention: "演示快照",
-    source: "operations-data fixture",
+    source: "operations-data 演示数据",
     queryHref: "/api/alarms",
     queryLabel: "查询告警",
     deterministic: true,
@@ -297,7 +297,7 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     freshness: "确定性事件流",
     quality: "事件 ID 与 Mission 链接校验",
     retention: "演示快照",
-    source: "operations-data fixture",
+    source: "operations-data 演示数据",
     queryHref: "/api/agent-events",
     queryLabel: "查询事件",
     deterministic: true,
@@ -312,9 +312,9 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     recordCount: SCADA_ARCHIVE_TOTAL,
     schemaObjectCount: 3,
     freshness: "2026-08-13 10:30 快照",
-    quality: "good / uncertain / bad 与异常标记",
+    quality: "良好 / 不确定 / 异常质量标记",
     retention: "128 × 15 分钟演示窗口",
-    source: "archive-data logical archive",
+    source: "archive-data 逻辑归档",
     queryHref: "/api/scada-measurements?limit=100",
     queryLabel: "分页查询",
     deterministic: true,
@@ -331,7 +331,7 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     freshness: "2026-08-13 快照",
     quality: "机组与 Mission 引用校验",
     retention: "演示历史全集",
-    source: "archive-data fixture",
+    source: "archive-data 演示数据",
     queryHref: "/api/alarms?includeArchived=true",
     queryLabel: "查询归档",
     deterministic: true,
@@ -348,7 +348,7 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     freshness: "2026-08-13 快照",
     quality: "资产与失败案例引用校验",
     retention: "演示历史全集",
-    source: "archive-data fixture",
+    source: "archive-data 演示数据",
     queryHref: "/api/work-orders?includeHistorical=true",
     queryLabel: "查询工单",
     deterministic: true,
@@ -365,7 +365,7 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     freshness: "2026-08-13 快照",
     quality: "关联工单完整性校验",
     retention: "演示历史全集",
-    source: "archive-data fixture",
+    source: "archive-data 演示数据",
     queryHref: "/api/failure-cases",
     queryLabel: "查询案例",
     deterministic: true,
@@ -381,8 +381,8 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     schemaObjectCount: 4,
     freshness: "请求时读取快照",
     quality: "严格资产 ID 校验",
-    retention: "no-store",
-    source: "same-origin Worker API",
+    retention: "不缓存",
+    source: "同源 Worker API",
     queryHref: "/api/turbines",
     queryLabel: "打开接口",
     deterministic: true,
@@ -397,9 +397,9 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     recordCount: missions.length + workOrders.length,
     schemaObjectCount: 10,
     freshness: "请求时叠加工作流状态",
-    quality: "revision 与审计事件约束",
-    retention: "响应 no-store；D1 保留审计",
-    source: "same-origin Worker API",
+    quality: "修订号与审计事件约束",
+    retention: "响应不缓存；D1 保留审计",
+    source: "同源 Worker API",
     queryHref: "/api/missions",
     queryLabel: "打开接口",
     deterministic: true,
@@ -416,7 +416,7 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     freshness: "2026-08-13 快照",
     quality: "确定性公式；非真实 ML 推理",
     retention: "演示快照",
-    source: "health-data deterministic fixture",
+    source: "health-data 确定性演示数据",
     queryHref: "/api/health-assessments",
     queryLabel: "打开接口",
     deterministic: true,
@@ -433,7 +433,7 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     freshness: "2026-08-13 快照",
     quality: "词法匹配与人工策展加权；无向量检索",
     retention: "演示快照",
-    source: "knowledge-data fixture",
+    source: "knowledge-data 演示数据",
     queryHref: "/api/knowledge-documents",
     queryLabel: "打开接口",
     deterministic: true,
@@ -441,7 +441,7 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
   },
   {
     id: "DATA-SCHEMA-REGISTRY",
-    name: "D1 运营 Schema Registry",
+    name: "D1 运营数据模型注册表",
     description: "资产、遥测、Agent、工作流、资源与知识域逻辑对象。",
     category: "schema",
     status: "read-only",
@@ -450,7 +450,7 @@ export const dataCatalog: readonly DataCatalogEntry[] = Object.freeze([
     freshness: "随版本构建",
     quality: "Drizzle 声明与迁移约束",
     retention: "版本控制",
-    source: "db/schema.ts declarations",
+    source: "db/schema.ts 声明",
     queryHref: "/api/data-catalog?category=schema",
     queryLabel: "查看对象",
     deterministic: true,
@@ -492,13 +492,22 @@ export interface ModelRegistryEntry {
   readonly inputs: readonly string[];
   readonly outputs: readonly string[];
   readonly metrics: readonly { readonly label: string; readonly value: string }[];
-  readonly realInference: false;
-  readonly usesEmbeddings: false;
-  readonly artifactBacked: false;
+  readonly realInference: boolean;
+  readonly usesEmbeddings: boolean;
+  readonly artifactBacked: boolean;
   readonly endpoint: string;
   readonly limitation: string;
-  readonly deterministic: true;
+  readonly deterministic: boolean;
   readonly updatedAt: string;
+  readonly lifecycleStatus?: string;
+  readonly artifactSha256?: string;
+  readonly deployments?: readonly {
+    readonly id: string;
+    readonly status: string;
+    readonly targetId: string;
+    readonly trafficPercent: number;
+    readonly activatedAt: string | null;
+  }[];
 }
 
 export const modelRegistry: readonly ModelRegistryEntry[] = Object.freeze([
@@ -716,33 +725,33 @@ export function buildSystemStatusSnapshot(input: SystemStatusInput): SystemStatu
     connections: [
       {
         id: "worker-runtime",
-        label: "Worker API Runtime",
+        label: "Worker API 运行时",
         state: "pass",
-        check: "in-process route execution",
+        check: "进程内路由执行",
         detail: "系统诊断路由已在当前 Worker 请求中执行。",
       },
       {
         id: "d1-workflow",
-        label: "D1 Workflow Store",
+        label: "D1 工作流存储",
         state: input.d1Bound && input.workflowWritable ? "pass" : "limited",
-        check: "binding and workflow-store capability",
+        check: "绑定与工作流存储能力",
         detail:
           input.d1Bound && input.workflowWritable
             ? "D1 绑定可用，工作流支持持久化写入。"
-            : "当前未绑定可写 D1；工作流使用只读 ephemeral 基线。",
+            : "当前未绑定可写 D1；工作流使用临时只读基线。",
       },
       {
         id: "websocket-contracts",
-        label: "WebSocket Routes",
+        label: "WebSocket 路由",
         state: "pass",
-        check: "declared same-origin route contracts",
+        check: "已声明同源路由契约",
         detail: "三条演示流路由已声明；此诊断不伪造浏览器握手或外部网络探测。",
       },
       {
         id: "domain-integrity",
-        label: "Domain Fixture Integrity",
+        label: "领域演示数据完整性",
         state: input.integrityErrorCount === 0 ? "pass" : "limited",
-        check: "referential integrity audit",
+        check: "引用完整性审计",
         detail:
           input.integrityErrorCount === 0
             ? "资产、Mission、告警、工单和知识引用校验通过。"
@@ -750,11 +759,11 @@ export function buildSystemStatusSnapshot(input: SystemStatusInput): SystemStatu
       },
     ],
     websockets: [
-      { endpoint: "/ws/scada", channel: "SCADA measurements", mode: "deterministic-demo-stream" },
-      { endpoint: "/ws/alarms", channel: "alarm events", mode: "deterministic-demo-stream" },
+      { endpoint: "/ws/scada", channel: "SCADA 测量值", mode: "deterministic-demo-stream" },
+      { endpoint: "/ws/alarms", channel: "告警事件", mode: "deterministic-demo-stream" },
       {
         endpoint: "/ws/agent-events",
-        channel: "agent execution events",
+        channel: "Agent 执行事件",
         mode: "deterministic-demo-stream",
       },
     ],
@@ -786,7 +795,7 @@ export function buildSystemStatusSnapshot(input: SystemStatusInput): SystemStatu
         id: "POLICY-WORKFLOW",
         scope: "WT-023 审批与工单工作流",
         policy: "revision、幂等键和审计事件约束",
-        enforcement: input.d1Bound ? "D1 transaction store" : "ephemeral read-only fallback",
+        enforcement: input.d1Bound ? "D1 事务存储" : "临时只读降级基线",
       },
       {
         id: "POLICY-THEME",

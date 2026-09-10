@@ -1,4 +1,6 @@
 import { readWorkflowForApi } from "@/app/api/_workflow";
+import { productionReportsResponse } from "@/lib/production-domain-adapter";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
 import {
   buildReportCatalog,
   reportTypes,
@@ -71,6 +73,9 @@ const compareReports = (
 };
 
 export async function GET(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return productionReportsResponse(request);
+  }
   const params = new URL(request.url).searchParams;
   const unknownParameters = [...new Set(params.keys())]
     .filter((key) => !allowedParameters.has(key))
@@ -146,7 +151,7 @@ export async function GET(request: Request): Promise<Response> {
       .includes(normalizedQuery);
   });
   const sorted = [...filtered].sort((left, right) =>
-    compareReports(left, right, sort as SortField, order as SortOrder),
+    compareReports(left, right, sort as SortField, order),
   );
   const offset = (page - 1) * pageSize;
   const pageReports = sorted.slice(offset, offset + pageSize);

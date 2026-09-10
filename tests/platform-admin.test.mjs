@@ -67,12 +67,13 @@ test("platform admin fixtures expose a deterministic 32+ object catalog and hone
 });
 
 test("data catalog API provides filtering, hierarchy, query links, and strict parameters", async () => {
-  const [first, repeated, archive, schema, search] = await Promise.all([
+  const [first, repeated, archive, schema, search, page] = await Promise.all([
     fetchJson("/api/data-catalog"),
     fetchJson("/api/data-catalog"),
     fetchJson("/api/data-catalog?category=archive"),
     fetchJson("/api/data-catalog?category=schema&status=read-only"),
     fetchJson("/api/data-catalog?q=SCADA"),
+    fetchJson("/api/data-catalog?offset=1&limit=2"),
   ]);
 
   assert.deepEqual(repeated, first);
@@ -88,11 +89,18 @@ test("data catalog API provides filtering, hierarchy, query links, and strict pa
   assert.equal(schema.data.length, 1);
   assert.equal(schema.data[0].schemaObjectCount, 33);
   assert.ok(search.data.some((entry) => entry.id === "DATA-ARCHIVE-SCADA"));
+  assert.equal(page.data.length, 2);
+  assert.equal(page.meta.offset, 1);
+  assert.equal(page.meta.limit, 2);
+  assert.equal(page.meta.hasMore, true);
+  assert.equal(page.meta.nextOffset, 3);
 
   const invalidCases = [
     ["/api/data-catalog?category=warehouse", "INVALID_CATEGORY"],
     ["/api/data-catalog?status=online", "INVALID_STATUS"],
-    ["/api/data-catalog?offset=1", "INVALID_QUERY_PARAMETER"],
+    ["/api/data-catalog?offset=-1", "INVALID_OFFSET"],
+    ["/api/data-catalog?limit=65", "INVALID_LIMIT"],
+    ["/api/data-catalog?unexpected=1", "INVALID_QUERY_PARAMETER"],
     [`/api/data-catalog?q=${"x".repeat(101)}`, "INVALID_QUERY"],
   ];
   for (const [path, code] of invalidCases) {
@@ -171,9 +179,12 @@ test("platform admin pages render real workspaces and explicit safety boundaries
     pages.map((response) => response.text()),
   );
   assert.match(dataHtml, /数据中心/);
-  assert.match(dataHtml, /WindFarm → Turbine → Subsystem → Sensor/);
+  assert.match(dataHtml, /风场 → 风机 → 子系统 → 传感器/);
   assert.match(dataHtml, /131,072/);
   assert.match(dataHtml, /数据集目录/);
+  assert.match(dataHtml, /受治理基准数据/);
+  assert.match(dataHtml, /生产数据连接未启用/);
+  assert.match(dataHtml, /不会用 fixture 冒充 CARE/);
   assert.match(modelHtml, /模型管理/);
   assert.match(modelHtml, /不是真正?生产 ML 模型仓库|不是生产 ML 模型仓库/);
   assert.match(modelHtml, /无真实 embedding/);

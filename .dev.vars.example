@@ -1,0 +1,15 @@
+# Use demo for local fixture development. Production fails closed unless the
+# HTTPS Python backend, delegated identity, and exact backend release are configured.
+WINDOPS_RUNTIME_MODE=demo
+
+# Production uses the authenticated Sites user headers. The Worker creates a
+# 60-second request-bound delegation token that the Python backend validates.
+WINDOPS_BACKEND_BASE_URL=http://127.0.0.1:8000
+WINDOPS_BACKEND_AUTH_MODE=sites_delegation
+WINDOPS_BACKEND_DELEGATION_SECRET=replace-with-the-same-random-48-plus-character-backend-secret
+# Production must match the immutable identity reported by the backend deployment.
+WINDOPS_BACKEND_EXPECTED_RELEASE_ID=replace-with-approved-release-id
+WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST=sha256:replace-with-approved-image-digest
+# Optional only for non-production service-token development.
+WINDOPS_BACKEND_API_TOKEN=replace-with-a-configured-windops-role-token
+WINDOPS_BACKEND_REQUEST_TIMEOUT_MS=8000

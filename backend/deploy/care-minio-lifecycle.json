@@ -1,0 +1,40 @@
+{
+  "Rules": [
+    {
+      "Expiration": { "Days": 7 },
+      "Filter": { "Prefix": "care/v6/_tmp/" },
+      "ID": "care-v6-temporary-expiry",
+      "Status": "Enabled"
+    },
+    {
+      "Expiration": { "Days": 3650 },
+      "Filter": { "Prefix": "care/v6/raw/" },
+      "ID": "care-v6-raw-retention",
+      "Status": "Enabled"
+    },
+    {
+      "Expiration": { "Days": 3650 },
+      "Filter": { "Prefix": "care/v6/standard/" },
+      "ID": "care-v6-standard-retention",
+      "Status": "Enabled"
+    },
+    {
+      "Expiration": { "Days": 3650 },
+      "Filter": { "Prefix": "care/v6/quality/" },
+      "ID": "care-v6-quality-retention",
+      "Status": "Enabled"
+    },
+    {
+      "Expiration": { "Days": 1825 },
+      "Filter": { "Prefix": "care/v6/predictions/" },
+      "ID": "care-v6-predictions-retention",
+      "Status": "Enabled"
+    },
+    {
+      "Expiration": { "Days": 3650 },
+      "Filter": { "Prefix": "care/v6/reports/" },
+      "ID": "care-v6-reports-retention",
+      "Status": "Enabled"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "source_id": "offshore-opcua-01",
+  "transport": "opcua",
+  "backend_base_url": "https://windops-api.example.com",
+  "backend_api_key_env": "WINDOPS_CONNECTOR_BACKEND_API_KEY",
+  "upstream_url": "opc.tcp://scada-gateway.internal:4840",
+  "upstream_username_env": "WINDOPS_CONNECTOR_UPSTREAM_USERNAME",
+  "upstream_password_env": "WINDOPS_CONNECTOR_UPSTREAM_PASSWORD",
+  "tls_ca_file": "/run/secrets/scada-ca.pem",
+  "tls_certificate_file": "/run/secrets/scada-client.pem",
+  "tls_private_key_file": "/run/secrets/scada-client-key.pem",
+  "opcua_security_string": "Basic256Sha256,SignAndEncrypt,/run/secrets/scada-client.pem,/run/secrets/scada-client-key.pem",
+  "poll_interval_seconds": 1,
+  "request_timeout_seconds": 15,
+  "batch_size": 500,
+  "max_delivery_attempts": 20,
+  "spool_path": "/var/lib/windops-connector/telemetry.sqlite",
+  "mappings": [
+    {
+      "key": "ns=4;s=WT-023.MainBearing.VibrationRms",
+      "turbine_id": "WT-023",
+      "variable": "main_bearing_vibration_rms",
+      "unit": "mm/s"
+    }
+  ]
+}

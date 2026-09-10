@@ -7,6 +7,11 @@ import {
   type ReportExportFormat,
 } from "@/lib/report-export";
 import { buildReportCatalog, findReport } from "@/lib/report-data";
+import type { WindOpsReport } from "@/lib/report-data";
+import {
+  getProductionBackendConfig,
+  proxyProductionBackendRequest,
+} from "@/lib/production-runtime";
 
 import { jsonResponse } from "../../../_shared";
 
@@ -39,11 +44,11 @@ const exportError = (
 export async function GET(request: Request, context: ReportExportRouteContext): Promise<Response> {
   const params = new URL(request.url).searchParams;
   const parameterNames = [...new Set(params.keys())];
-  const allowedParameters = new Set(["format", "expectedRevision"]);
+  const allowedParameters = new Set(["format", "expectedRevision", "expectedDigest"]);
   if (parameterNames.some((parameter) => !allowedParameters.has(parameter))) {
     return exportError(
       "UNKNOWN_PARAMETERS",
-      "Export accepts only the format query parameter.",
+      "Export accepts only format and version-check parameters.",
       400,
       {
         parameters: parameterNames.filter((parameter) => !allowedParameters.has(parameter)).sort(),
@@ -64,6 +69,66 @@ export async function GET(request: Request, context: ReportExportRouteContext): 
       allowed: formats,
     });
   }
+  const { id } = await context.params;
+  if (getProductionBackendConfig().mode === "production") {
+    if (params.getAll("expectedDigest").length !== 1) {
+      return exportError(
+        "INVALID_REPORT_DIGEST",
+        "Exactly one expectedDigest value is required for a production export.",
+        400,
+        { argument: "expectedDigest" },
+      );
+    }
+    const expectedDigest = params.get("expectedDigest") ?? "";
+    if (!/^[0-9a-f]{64}$/i.test(expectedDigest)) {
+      return exportError("INVALID_REPORT_DIGEST", "expectedDigest must be a SHA-256 digest.", 400, {
+        argument: "expectedDigest",
+      });
+    }
+    const upstreamRequest = new Request(
+      new URL("/api/reports/" + encodeURIComponent(id), request.url),
+      { headers: request.headers },
+    );
+    const upstream = await proxyProductionBackendRequest(
+      upstreamRequest,
+      "/api/v1/reports/" + encodeURIComponent(id),
+    );
+    if (!upstream.ok) return upstream;
+    const payload = (await upstream.json()) as { data?: WindOpsReport };
+    const report =
+      payload.data && typeof payload.data === "object" && payload.data.id === id
+        ? payload.data
+        : null;
+    if (report === null) {
+      return exportError("REPORT_NOT_FOUND", `Report ${id} was not found.`, 404, {
+        reportId: id,
+      });
+    }
+    if (report.contentDigest !== expectedDigest.toLowerCase()) {
+      return exportError(
+        "REPORT_DIGEST_CONFLICT",
+        "The production report preview does not match the immutable snapshot.",
+        409,
+        { expectedDigest, currentDigest: report.contentDigest ?? null },
+      );
+    }
+    const resolvedFormat = format as ReportExportFormat;
+    const bytes = resolvedFormat === "pdf" ? createReportPdf(report) : createReportDocx(report);
+    const filename = reportExportFilename(report, resolvedFormat);
+    return new Response(bytes.buffer as ArrayBuffer, {
+      status: 200,
+      headers: {
+        "cache-control": "no-store",
+        "content-disposition": `attachment; filename="${filename}"`,
+        "content-length": bytes.byteLength.toString(),
+        "content-type": reportExportMimeTypes[resolvedFormat],
+        "x-content-type-options": "nosniff",
+        "x-windops-report-id": report.id,
+        "x-windops-report-sha256": expectedDigest.toLowerCase(),
+        "x-windops-report-source": "python-fastapi",
+      },
+    });
+  }
   if (params.getAll("expectedRevision").length !== 1) {
     return exportError(
       "INVALID_WORKFLOW_REVISION",
@@ -81,8 +146,6 @@ export async function GET(request: Request, context: ReportExportRouteContext): 
       { argument: "expectedRevision" },
     );
   }
-
-  const { id } = await context.params;
   const workflow = await readWorkflowForApi();
   const expectedRevision = Number(expectedRevisionRaw);
   if (expectedRevision !== workflow.snapshot.revision) {

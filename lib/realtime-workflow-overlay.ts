@@ -20,7 +20,7 @@ export function selectRealtimeAlarm(
           : alarm,
       )
     : items;
-  return source[sequence % source.length]!;
+  return source[sequence % source.length];
 }
 
 /** Public alarm WebSocket payload, including every mutable alarm field. */

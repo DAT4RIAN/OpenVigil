@@ -1,0 +1,107 @@
+groups:
+  - name: windops-slo-recording
+    interval: 30s
+    rules:
+      - record: windops:sli_http_error_ratio:5m
+        expr: >-
+          sum(rate(windops_http_requests_total{status=~"5..",route!~"/healthz|/readyz|/metrics"}[5m]))
+          /
+          clamp_min(sum(rate(windops_http_requests_total{route!~"/healthz|/readyz|/metrics"}[5m])), 0.001)
+      - record: windops:sli_http_error_ratio:1h
+        expr: >-
+          sum(rate(windops_http_requests_total{status=~"5..",route!~"/healthz|/readyz|/metrics"}[1h]))
+          /
+          clamp_min(sum(rate(windops_http_requests_total{route!~"/healthz|/readyz|/metrics"}[1h])), 0.001)
+      - record: windops:sli_http_error_ratio:30m
+        expr: >-
+          sum(rate(windops_http_requests_total{status=~"5..",route!~"/healthz|/readyz|/metrics"}[30m]))
+          /
+          clamp_min(sum(rate(windops_http_requests_total{route!~"/healthz|/readyz|/metrics"}[30m])), 0.001)
+      - record: windops:sli_http_error_ratio:6h
+        expr: >-
+          sum(rate(windops_http_requests_total{status=~"5..",route!~"/healthz|/readyz|/metrics"}[6h]))
+          /
+          clamp_min(sum(rate(windops_http_requests_total{route!~"/healthz|/readyz|/metrics"}[6h])), 0.001)
+
+  - name: windops-slo-alerts
+    interval: 30s
+    rules:
+      - alert: WindOpsHttpErrorBudgetFastBurn
+        expr: >-
+          windops:sli_http_error_ratio:5m
+          > 14.4 * (1 - scalar(windops_slo_target{objective="http_availability",unit="ratio"}))
+          and
+          windops:sli_http_error_ratio:1h
+          > 14.4 * (1 - scalar(windops_slo_target{objective="http_availability",unit="ratio"}))
+        for: 2m
+        labels:
+          severity: page
+          owner: wind-operations-platform
+        annotations:
+          summary: WindOps API is rapidly exhausting its 30-day error budget
+          runbook: docs/runbooks/incident-response.md#http-error-budget
+      - alert: WindOpsHttpErrorBudgetSlowBurn
+        expr: >-
+          windops:sli_http_error_ratio:30m
+          > 6 * (1 - scalar(windops_slo_target{objective="http_availability",unit="ratio"}))
+          and
+          windops:sli_http_error_ratio:6h
+          > 6 * (1 - scalar(windops_slo_target{objective="http_availability",unit="ratio"}))
+        for: 15m
+        labels:
+          severity: ticket
+          owner: wind-operations-platform
+        annotations:
+          summary: WindOps API is steadily exhausting its 30-day error budget
+          runbook: docs/runbooks/incident-response.md#http-error-budget
+      - alert: WindOpsHttpP95LatencyHigh
+        expr: >-
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(windops_http_request_duration_seconds_bucket{route!~"/healthz|/readyz|/metrics"}[10m]))
+          )
+          > scalar(windops_slo_target{objective="http_p95_latency",unit="seconds"})
+        for: 10m
+        labels:
+          severity: ticket
+          owner: wind-operations-platform
+        annotations:
+          summary: WindOps API p95 latency is outside its objective
+          runbook: docs/runbooks/incident-response.md#latency
+      - alert: WindOpsAgentSuccessLow
+        expr: >-
+          (
+            windops_agent_executions{status="succeeded",window="30d"}
+            /
+            scalar(clamp_min(sum(windops_agent_executions{status=~"succeeded|failed",window="30d"}), 1))
+          )
+          < scalar(windops_slo_target{objective="agent_success",unit="ratio"})
+          and
+          sum(windops_agent_executions{status=~"succeeded|failed",window="30d"}) >= 20
+        for: 15m
+        labels:
+          severity: page
+          owner: wind-operations-ai
+        annotations:
+          summary: Governed agent execution success is below target
+          runbook: docs/runbooks/incident-response.md#agent-failure
+      - alert: WindOpsTelemetryStale
+        expr: >-
+          windops_telemetry_freshness_seconds
+          > scalar(windops_slo_target{objective="telemetry_freshness",unit="seconds"})
+        for: 5m
+        labels:
+          severity: page
+          owner: wind-operations-data
+        annotations:
+          summary: Governed telemetry is stale
+          runbook: docs/runbooks/incident-response.md#telemetry-stale
+      - alert: WindOpsMetricsAbsent
+        expr: absent(windops_slo_target{objective="http_availability"})
+        for: 5m
+        labels:
+          severity: page
+          owner: wind-operations-platform
+        annotations:
+          summary: Prometheus cannot observe the WindOps service
+          runbook: docs/runbooks/incident-response.md#metrics-absent

@@ -8,7 +8,6 @@ import {
   type DemoApprovalRecord,
   type DemoWorkflowAction,
   type DemoWorkflowEvent,
-  type DemoWorkflowEventKind,
   type DemoWorkflowState,
 } from "./demo-workflow";
 import {
@@ -75,7 +74,7 @@ function mapApproval(
 function mapAuditEvent(event: ServerWorkflowAuditEvent): DemoWorkflowEvent {
   return {
     id: event.id,
-    kind: (event.kind === "reset" ? "replay" : event.kind) as DemoWorkflowEventKind,
+    kind: event.kind === "reset" ? "replay" : event.kind,
     timestamp: event.timestamp,
     actor: event.actor.name,
     title: eventTitle(event.action),

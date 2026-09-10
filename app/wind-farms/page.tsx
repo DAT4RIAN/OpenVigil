@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { WindFarmPage } from "@/components/pages/wind-farm-page";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "华东海上风电场",
@@ -7,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <WindFarmPage />;
+  return <WindFarmPage runtimeMode={getProductionBackendConfig().mode} />;
 }

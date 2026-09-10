@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   TriangleAlert as AlarmTriangle,
@@ -22,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { useWindOpsIdentity } from "@/components/providers/identity-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   downloadMissionJson,
@@ -50,17 +52,16 @@ import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { overlayClientDecisions, overlayClientWorkOrders } from "@/lib/client-workflow-overlays";
 import { isServerWorkflowAlternativeId } from "@/lib/server-workflow-contract";
 import { cn } from "@/lib/utils";
+import { agentDisplayName } from "@/lib/agent-control-meta";
+import { apiGet, apiPostCommand, createIdempotencyKey } from "@/lib/api-client";
+import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
+import {
+  localizedMissionTitle,
+  localizedSeverityLabel,
+  localizedStatusLabel,
+} from "@/lib/ui-localization";
 
-const steps = [
-  "Detected",
-  "Investigating",
-  "Diagnosed",
-  "Decision",
-  "Review",
-  "Approved",
-  "Executing",
-  "Completed",
-];
+const steps = ["已发现", "调查中", "已诊断", "决策", "审核", "已批准", "执行中", "已完成"];
 function formatTime(timestamp: string) {
   return new Date(timestamp).toLocaleTimeString("zh-CN", {
     hour: "2-digit",
@@ -88,6 +89,7 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
     "under-review": 4,
     approved: 5,
     executing: 6,
+    rejected: 7,
     completed: 7,
   }[mission.status];
 
@@ -110,17 +112,17 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
   }
 
   return (
-    <AppShell activePath={`/missions/${mission.id}`}>
+    <AppShell runtimeMode="demo" activePath={`/missions/${mission.id}`}>
       <PageHeader
-        eyebrow="MISSION DETAIL"
+        eyebrow="MISSION 详情"
         title={mission.id}
-        description={`${mission.turbineId} · ${mission.title} · 结构化协作与执行记录`}
-        breadcrumb={["AI Operations", "Mission Center", mission.id]}
+        description={`${mission.turbineId} · ${localizedMissionTitle(mission.title)} · 结构化协作与执行记录`}
+        breadcrumb={["AI 运营", "Mission 中心", mission.id]}
         meta={
           <>
             <StatusBadge
               value={mission.status}
-              label={mission.status.replaceAll("-", " ").toUpperCase()}
+              label={localizedStatusLabel(mission.status)}
               tone={
                 mission.status === "completed"
                   ? "success"
@@ -132,7 +134,7 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
             />
             <StatusBadge
               value={mission.severity}
-              label={mission.severity.toUpperCase()}
+              label={localizedSeverityLabel(mission.severity)}
               tone={
                 mission.severity === "critical"
                   ? "critical"
@@ -153,14 +155,14 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
               <TerminalSquare size={15} /> 查看资产
             </a>
             <Button variant="secondary" onClick={exportMissionLog}>
-              <TerminalSquare size={15} /> Export JSON
+              <TerminalSquare size={15} /> 导出 JSON
             </Button>
             <Button
               variant="primary"
               onClick={() => setIsCommenting((current) => !current)}
               aria-expanded={isCommenting}
             >
-              <MessageSquareText size={15} /> Add Comment
+              <MessageSquareText size={15} /> 添加评论
             </Button>
           </>
         }
@@ -197,7 +199,7 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
       <section className="mission-detail-grid">
         <div className="mission-context-column">
           <Card className="mission-overview-card">
-            <CardHeader eyebrow="MISSION OVERVIEW" title={mission.title} />
+            <CardHeader eyebrow="MISSION 概览" title={localizedMissionTitle(mission.title)} />
             <div className="mission-overview-hero">
               <span className="mission-overview-icon">
                 <AlarmTriangle size={20} />
@@ -210,26 +212,29 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
               </div>
             </div>
             <div className="mission-overview-facts">
-              <KeyValue label="Lead Agent" value={lead?.shortName ?? "Unassigned"} />
-              <KeyValue label="Participating Agents" value={`${team.length} Agents`} />
-              <KeyValue label="Evidence" value={`${relatedEvidence.length} items`} />
               <KeyValue
-                label="Target Resolution"
+                label="主导 Agent"
+                value={lead ? agentDisplayName(lead.id, lead.shortName) : "未指派"}
+              />
+              <KeyValue label="参与 Agent" value={`${team.length} 个`} />
+              <KeyValue label="证据" value={`${relatedEvidence.length} 项`} />
+              <KeyValue
+                label="目标解决时间"
                 value={new Date(mission.targetResolutionAt).toLocaleString("zh-CN")}
               />
             </div>
             <div className="mission-next-action">
-              <small>NEXT ACTION</small>
+              <small>下一步行动</small>
               <strong>{mission.nextAction}</strong>
             </div>
           </Card>
           <Card className="mission-agent-list">
-            <CardHeader eyebrow="MISSION TEAM" title={`${team.length} Participating Agents`} />
+            <CardHeader eyebrow="MISSION 团队" title={`${team.length} 个参与 Agent`} />
             <div>
               {team.map((agent) => (
                 <a href={`/agents?agent=${encodeURIComponent(agent.id)}`} key={agent.id}>
                   <Avatar
-                    label={agent.shortName}
+                    label={agentDisplayName(agent.id, agent.shortName)}
                     tone={
                       agent.layer === "decision"
                         ? "teal"
@@ -240,7 +245,7 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
                     size="sm"
                   />
                   <span>
-                    <strong>{agent.shortName}</strong>
+                    <strong>{agentDisplayName(agent.id, agent.shortName)}</strong>
                     <small>{agent.role}</small>
                   </span>
                   <StatusBadge value={agent.status} compact />
@@ -261,7 +266,7 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
         <div className="decision-column">
           <Card className="current-decision-card">
             <CardHeader
-              eyebrow="CURRENT DIAGNOSIS"
+              eyebrow="当前诊断"
               title={mission.diagnosis ?? "等待诊断"}
               description={
                 mission.confidencePercent
@@ -288,12 +293,12 @@ function GenericMissionDetailPage({ mission }: { mission: Mission }) {
             </div>
           </Card>
           <Card className="weather-resource-card">
-            <CardHeader eyebrow="RELATED OBJECTS" title="业务关联" />
+            <CardHeader eyebrow="关联对象" title="业务关联" />
             <div className="key-value-list">
-              <KeyValue label="Wind Turbine" value={turbine?.id ?? mission.turbineId} mono />
-              <KeyValue label="Decision" value={decision?.id ?? "—"} mono />
-              <KeyValue label="Work Order" value={workOrder?.id ?? "—"} mono />
-              <KeyValue label="Audit Events" value={String(events.length)} />
+              <KeyValue label="风机" value={turbine?.id ?? mission.turbineId} mono />
+              <KeyValue label="决策" value={decision?.id ?? "—"} mono />
+              <KeyValue label="工单" value={workOrder?.id ?? "—"} mono />
+              <KeyValue label="审计事件" value={String(events.length)} />
             </div>
           </Card>
         </div>
@@ -339,6 +344,7 @@ function FeaturedMissionDetailPage() {
     "under-review": 4,
     approved: 5,
     executing: 6,
+    rejected: 7,
     completed: 7,
   }[workflow.missionStatus];
   function exportMissionLog() {
@@ -398,17 +404,17 @@ function FeaturedMissionDetailPage() {
   }
 
   return (
-    <AppShell activePath="/missions/MISSION-2026-0823">
+    <AppShell runtimeMode="demo" activePath="/missions/MISSION-2026-0823">
       <PageHeader
-        eyebrow="MISSION DETAIL"
+        eyebrow="MISSION 详情"
         title={featuredMission.id}
-        description={`${turbine023.id} · ${featuredMission.title} · 多 Agent 协同诊断与运维决策`}
-        breadcrumb={["AI Operations", "Mission Center", featuredMission.id]}
+        description={`${turbine023.id} · ${localizedMissionTitle(featuredMission.title)} · 多 Agent 协同诊断与运维决策`}
+        breadcrumb={["AI 运营", "Mission 中心", featuredMission.id]}
         meta={
           <>
             <StatusBadge
               value={workflow.missionStatus}
-              label={workflow.missionStatus.replaceAll("-", " ").toUpperCase()}
+              label={localizedStatusLabel(workflow.missionStatus)}
               tone={
                 workflow.missionStatus === "completed"
                   ? "success"
@@ -418,7 +424,11 @@ function FeaturedMissionDetailPage() {
               }
               pulse={workflow.missionStatus !== "completed"}
             />
-            <StatusBadge value={featuredMission.severity} label="HIGH SEVERITY" tone="critical" />
+            <StatusBadge
+              value={featuredMission.severity}
+              label={`${localizedSeverityLabel(featuredMission.severity)}严重度`}
+              tone="critical"
+            />
             <span className="page-meta-text">
               当前周期审计事件 {currentAuditTrail.length} 条 · 完整历史保留于 D1
             </span>
@@ -427,14 +437,14 @@ function FeaturedMissionDetailPage() {
         actions={
           <>
             <Button variant="secondary" onClick={exportMissionLog}>
-              <TerminalSquare size={15} /> Export JSON
+              <TerminalSquare size={15} /> 导出 JSON
             </Button>
             <Button
               variant="primary"
               onClick={() => setIsCommenting((current) => !current)}
               aria-expanded={isCommenting}
             >
-              <MessageSquareText size={15} /> Add Comment
+              <MessageSquareText size={15} /> 添加评论
             </Button>
           </>
         }
@@ -477,28 +487,31 @@ function FeaturedMissionDetailPage() {
       <section className="mission-detail-grid">
         <div className="mission-context-column">
           <Card className="mission-overview-card">
-            <CardHeader eyebrow="MISSION OVERVIEW" title={featuredMission.title} />
+            <CardHeader
+              eyebrow="MISSION 概览"
+              title={localizedMissionTitle(featuredMission.title)}
+            />
             <div className="mission-overview-hero">
               <span className="mission-overview-icon">
                 <AlarmTriangle size={20} />
               </span>
               <div>
-                <span className="mono">{turbine023.id} · MAIN BEARING</span>
+                <span className="mono">{turbine023.id} · 主轴承</span>
                 <p>{featuredNarrative.summary}</p>
               </div>
             </div>
             <div className="mission-overview-facts">
               <KeyValue
-                label="Lead Agent"
-                value={agents.find((item) => item.id === featuredMission.leadAgentId)?.shortName}
+                label="主导 Agent"
+                value={(() => {
+                  const leadAgent = agents.find((item) => item.id === featuredMission.leadAgentId);
+                  return leadAgent ? agentDisplayName(leadAgent.id, leadAgent.shortName) : "未指派";
+                })()}
               />
+              <KeyValue label="参与 Agent" value={`${featuredMission.agentIds.length} 个`} />
+              <KeyValue label="证据" value={`${featuredMission.evidenceIds.length} 项`} />
               <KeyValue
-                label="Participating Agents"
-                value={`${featuredMission.agentIds.length} Agents`}
-              />
-              <KeyValue label="Evidence" value={`${featuredMission.evidenceIds.length} items`} />
-              <KeyValue
-                label="Target Resolution"
+                label="目标解决时间"
                 value={new Date(featuredMission.targetResolutionAt).toLocaleString("zh-CN", {
                   month: "short",
                   day: "numeric",
@@ -509,15 +522,15 @@ function FeaturedMissionDetailPage() {
               />
             </div>
             <div className="mission-next-action">
-              <small>NEXT ACTION</small>
+              <small>下一步行动</small>
               <strong>{featuredNarrative.nextAction}</strong>
             </div>
           </Card>
 
           <Card className="collaboration-card">
             <CardHeader
-              eyebrow="PUBLIC EXECUTION TRACE"
-              title="Agent Collaboration Graph"
+              eyebrow="公开执行轨迹"
+              title="Agent 协作图"
               description="结构化协作过程 · 不展示隐藏推理"
             />
             <div className="agent-graph">
@@ -525,26 +538,26 @@ function FeaturedMissionDetailPage() {
                 <span className="graph-node graph-node--done">
                   <Bot size={14} />
                   <strong>SCADA</strong>
-                  <small>anomaly data</small>
+                  <small>异常数据</small>
                 </span>
                 <i className="graph-edge">
-                  <em>evidence</em>
+                  <em>证据</em>
                   <ChevronRight size={13} />
                 </i>
                 <span className="graph-node graph-node--done">
                   <Activity size={14} />
-                  <strong>Vibration</strong>
-                  <small>spectrum</small>
+                  <strong>振动分析</strong>
+                  <small>频谱</small>
                 </span>
               </div>
               <div className="agent-graph-row">
                 <span className="graph-node graph-node--done">
                   <Sparkles size={14} />
-                  <strong>Diagnosis</strong>
-                  <small>87% confidence</small>
+                  <strong>诊断</strong>
+                  <small>87% 置信度</small>
                 </span>
                 <i className="graph-edge">
-                  <em>decision</em>
+                  <em>决策</em>
                   <ChevronRight size={13} />
                 </i>
                 <span
@@ -556,8 +569,8 @@ function FeaturedMissionDetailPage() {
                   )}
                 >
                   <ShieldCheck size={14} />
-                  <strong>Review</strong>
-                  <small>human gate</small>
+                  <strong>审核</strong>
+                  <small>人工门禁</small>
                 </span>
               </div>
               <div className="agent-graph-row">
@@ -570,11 +583,19 @@ function FeaturedMissionDetailPage() {
                   )}
                 >
                   <UserCheck size={14} />
-                  <strong>Approval</strong>
-                  <small>{approval}</small>
+                  <strong>审批</strong>
+                  <small>
+                    {approval === "approve"
+                      ? "已批准"
+                      : approval === "pending"
+                        ? "待审批"
+                        : approval === "reject"
+                          ? "已拒绝"
+                          : "要求修订"}
+                  </small>
                 </span>
                 <i className="graph-edge">
-                  <em>approval</em>
+                  <em>审批</em>
                   <ChevronRight size={13} />
                 </i>
                 <span
@@ -588,36 +609,35 @@ function FeaturedMissionDetailPage() {
                   )}
                 >
                   <Wrench size={14} />
-                  <strong>Work Order</strong>
+                  <strong>工单</strong>
                   <small>
-                    {workOrder ? `${workOrder.id} · ${workflow.workOrderStatus}` : "pending"}
+                    {workOrder
+                      ? `${workOrder.id} · ${localizedStatusLabel(workflow.workOrderStatus)}`
+                      : "待处理"}
                   </small>
                 </span>
               </div>
             </div>
             <div className="graph-legend">
               <span>
-                <i className="graph-legend-dot graph-legend-dot--done" /> Complete
+                <i className="graph-legend-dot graph-legend-dot--done" /> 已完成
               </span>
               <span>
-                <i className="graph-legend-dot graph-legend-dot--active" /> Active
+                <i className="graph-legend-dot graph-legend-dot--active" /> 执行中
               </span>
               <span>
-                <i className="graph-legend-dot" /> Waiting
+                <i className="graph-legend-dot" /> 等待中
               </span>
             </div>
           </Card>
 
           <Card className="mission-agent-list">
-            <CardHeader
-              eyebrow="MISSION TEAM"
-              title={`${missionAgents.length} Participating Agents`}
-            />
+            <CardHeader eyebrow="MISSION 团队" title={`${missionAgents.length} 个参与 Agent`} />
             <div>
               {missionAgents.slice(0, 7).map((agent) => (
                 <a href={`/agents?agent=${encodeURIComponent(agent.id)}`} key={agent.id}>
                   <Avatar
-                    label={agent.shortName}
+                    label={agentDisplayName(agent.id, agent.shortName)}
                     tone={
                       agent.layer === "decision"
                         ? "teal"
@@ -628,7 +648,7 @@ function FeaturedMissionDetailPage() {
                     size="sm"
                   />
                   <span>
-                    <strong>{agent.shortName}</strong>
+                    <strong>{agentDisplayName(agent.id, agent.shortName)}</strong>
                     <small>{agent.currentTask ?? agent.role}</small>
                   </span>
                   <StatusBadge value={agent.status} compact />
@@ -653,13 +673,13 @@ function FeaturedMissionDetailPage() {
         <div className="decision-column">
           <Card className="current-decision-card">
             <CardHeader
-              eyebrow="CURRENT DECISION"
+              eyebrow="当前决策"
               title={approval === "approve" ? "人工批准方案" : "AI 推荐方案"}
               description={`综合置信度 ${featuredDecision.confidencePercent}%`}
             />
             <div className="decision-recommendation">
               <span className="decision-recommendation__badge">
-                <Sparkles size={14} /> {approval === "approve" ? "APPROVED" : "RECOMMENDED"} ·{" "}
+                <Sparkles size={14} /> {approval === "approve" ? "已批准" : "推荐"} ·{" "}
                 {recommended?.label}
               </span>
               <h3>{recommended?.title}</h3>
@@ -669,7 +689,7 @@ function FeaturedMissionDetailPage() {
                   <small>安全风险</small>
                   <StatusBadge
                     value={recommended?.safetyRisk ?? "medium"}
-                    label={(recommended?.safetyRisk ?? "medium").toUpperCase()}
+                    label={localizedSeverityLabel(recommended?.safetyRisk ?? "medium")}
                     tone="warning"
                     compact
                   />
@@ -704,7 +724,7 @@ function FeaturedMissionDetailPage() {
           </Card>
 
           <Card className="weather-resource-card">
-            <CardHeader eyebrow="EXECUTION READINESS" title="窗口与资源" />
+            <CardHeader eyebrow="执行就绪度" title="窗口与资源" />
             <div className="readiness-row">
               <span className="readiness-icon">
                 <WeatherSun size={15} />
@@ -743,7 +763,7 @@ function FeaturedMissionDetailPage() {
             className={cn("approval-card", approval !== "pending" && `approval-card--${approval}`)}
           >
             <CardHeader
-              eyebrow="HUMAN-IN-THE-LOOP"
+              eyebrow="人工参与审批"
               title="工程师审批"
               description="高风险动作必须经过人工授权并记录理由"
             />
@@ -753,17 +773,17 @@ function FeaturedMissionDetailPage() {
                   <div className="approval-flow">
                     <span>
                       <Bot size={14} />
-                      <small>AI Recommendation</small>
+                      <small>AI 建议</small>
                     </span>
                     <ChevronRight size={12} />
                     <span>
                       <ShieldCheck size={14} />
-                      <small>Safety Review</small>
+                      <small>安全审核</small>
                     </span>
                     <ChevronRight size={12} />
                     <span className="active">
                       <UserCheck size={14} />
-                      <small>Human Approval</small>
+                      <small>人工审批</small>
                     </span>
                   </div>
                   <div className="approval-notice">
@@ -792,28 +812,28 @@ function FeaturedMissionDetailPage() {
                     onClick={() => submitApproval("reject")}
                     disabled={!workflow.writable}
                   >
-                    <X size={14} /> Reject
+                    <X size={14} /> 拒绝
                   </Button>
                   <Button
                     variant="secondary"
                     onClick={() => submitApproval("request-revision")}
                     disabled={!workflow.writable}
                   >
-                    <RefreshCcw size={14} /> Request Revision
+                    <RefreshCcw size={14} /> 要求修订
                   </Button>
                   <Button
                     variant="secondary"
                     onClick={() => submitApproval("escalate")}
                     disabled={!workflow.writable}
                   >
-                    <ArrowUpRight size={14} /> Escalate
+                    <ArrowUpRight size={14} /> 升级处理
                   </Button>
                   <Button
                     variant="primary"
                     onClick={() => submitApproval("approve")}
                     disabled={!comment.trim() || !workflow.writable}
                   >
-                    <Check size={14} /> Approve
+                    <Check size={14} /> 批准
                   </Button>
                 </div>
               </>
@@ -872,7 +892,461 @@ function FeaturedMissionDetailPage() {
   );
 }
 
-export function MissionDetailPage({ missionId = "MISSION-2026-0823" }: { missionId?: string }) {
+interface ProductionMissionComment {
+  readonly comment_id: string;
+  readonly body: string;
+  readonly author_subject: string;
+  readonly author_email: string | null;
+  readonly created_at: string;
+}
+
+interface ProductionMissionDetail {
+  readonly mission_id: string;
+  readonly alarm_id: string;
+  readonly turbine_id: string;
+  readonly title: string;
+  readonly status: string;
+  readonly revision: number;
+  readonly public_state: Readonly<Record<string, unknown>>;
+  readonly work_order_id: string | null;
+  readonly evidence: readonly {
+    readonly evidence_id: string;
+    readonly evidence_type: string;
+    readonly summary: string;
+    readonly citation_uri: string | null;
+    readonly created_at: string;
+  }[];
+  readonly decision: {
+    readonly decision_id: string;
+    readonly status: string;
+    readonly recommendation_reason: string;
+    readonly recommended_alternative_id: string;
+    readonly selected_alternative_id: string | null;
+    readonly alternatives: readonly {
+      readonly alternative_id: string;
+      readonly title?: string;
+    }[];
+  } | null;
+  readonly approvals: readonly {
+    readonly approval_id: string;
+    readonly action: string;
+    readonly approver: string;
+    readonly reason: string;
+    readonly comment: string;
+    readonly created_at: string;
+  }[];
+  readonly executions: readonly {
+    readonly execution_id: string;
+    readonly node: string;
+    readonly agent_role: string;
+    readonly status: string;
+    readonly latency_ms: number;
+    readonly provider: string;
+    readonly model: string;
+    readonly started_at: string;
+  }[];
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+interface ProductionMissionCommentsResponse {
+  readonly comments: readonly ProductionMissionComment[];
+}
+
+async function persistMissionComment(
+  missionId: string,
+  body: string,
+): Promise<ProductionMissionComment> {
+  return apiPostCommand<ProductionMissionComment>(
+    `/api/backend/missions/${encodeURIComponent(missionId)}/comments`,
+    { body },
+    createIdempotencyKey("mission-comment"),
+  );
+}
+
+function ProductionMissionDetailPage({ missionId }: { readonly missionId: string }) {
+  const { can } = useWindOpsIdentity();
+  const canComment = can("mission.comment");
+  const [isCommenting, setIsCommenting] = useState(false);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [approvalReason, setApprovalReason] = useState("");
+  const [approvalComment, setApprovalComment] = useState("");
+  const [approvalMessage, setApprovalMessage] = useState<string | null>(null);
+  const approvalInFlight = useRef(false);
+  const queryClient = useQueryClient();
+  const detailQuery = useQuery({
+    queryKey: ["production-mission-detail", missionId],
+    queryFn: ({ signal }) =>
+      apiGet<ProductionMissionDetail>(
+        `/api/backend/missions/${encodeURIComponent(missionId)}`,
+        signal,
+      ),
+  });
+  const commentsQuery = useQuery({
+    queryKey: ["production-mission-comments", missionId],
+    queryFn: ({ signal }) =>
+      apiGet<ProductionMissionCommentsResponse>(
+        `/api/backend/missions/${encodeURIComponent(missionId)}/comments`,
+        signal,
+      ),
+  });
+  const commentMutation = useMutation({
+    mutationFn: (body: string) => {
+      if (!canComment) throw new Error("当前角色没有写入 Mission 评论的权限。");
+      return persistMissionComment(missionId, body);
+    },
+    onSuccess: async () => {
+      setCommentDraft("");
+      setIsCommenting(false);
+      await queryClient.invalidateQueries({
+        queryKey: ["production-mission-comments", missionId],
+      });
+    },
+  });
+  const mission = detailQuery.data;
+  const approvalMutation = useMutation({
+    mutationFn: (action: "approve" | "reject" | "request_revision" | "escalate") => {
+      if (!mission) throw new Error("Mission 尚未加载完成。");
+      const capability =
+        action === "approve"
+          ? "mission.approve"
+          : action === "reject"
+            ? "mission.reject"
+            : action === "request_revision"
+              ? "mission.request_revision"
+              : "mission.escalate";
+      if (!can(capability)) throw new Error("当前角色没有执行此审批动作的权限。");
+      return apiPostCommand<{
+        readonly mission_status: string;
+        readonly work_order_id: string | null;
+      }>(
+        `/api/backend/missions/${encodeURIComponent(missionId)}/approvals`,
+        {
+          action,
+          expected_revision: mission.revision,
+          selected_alternative_id:
+            action === "approve" ? mission.decision?.recommended_alternative_id : null,
+          reason: approvalReason.trim(),
+          comment: approvalComment.trim(),
+        },
+        createIdempotencyKey(`mission-${action}`),
+      );
+    },
+    onSuccess: async (result) => {
+      setApprovalReason("");
+      setApprovalComment("");
+      setApprovalMessage(
+        result.work_order_id
+          ? `审批已记录并创建工单 ${result.work_order_id}。`
+          : `审批已记录，Mission 状态为 ${result.mission_status}。`,
+      );
+      await queryClient.invalidateQueries({ queryKey: ["production-mission-detail", missionId] });
+    },
+    onSettled: () => {
+      approvalInFlight.current = false;
+    },
+  });
+  const submitProductionApproval = (
+    action: "approve" | "reject" | "request_revision" | "escalate",
+  ) => {
+    if (approvalInFlight.current) return;
+    approvalInFlight.current = true;
+    approvalMutation.mutate(action);
+  };
+
+  if (!mission) {
+    return (
+      <AppShell runtimeMode="production" activePath={`/missions/${missionId}`}>
+        <PageHeader
+          eyebrow="MISSION 详情"
+          title={missionId}
+          description="从权威 Mission、证据、决策、审批和 Agent 执行账本加载。"
+          breadcrumb={["AI 运营", "Mission 中心", missionId]}
+        />
+        <Card>
+          <CardHeader
+            eyebrow={detailQuery.isError ? "加载失败" : "加载中"}
+            title={detailQuery.isError ? "Mission 不可用" : "正在读取权威记录"}
+            description={
+              detailQuery.error instanceof Error
+                ? detailQuery.error.message
+                : "生产模式不会回退到演示 Mission。"
+            }
+          />
+          {detailQuery.isError ? (
+            <Button onClick={() => void detailQuery.refetch()}>重试</Button>
+          ) : null}
+        </Card>
+      </AppShell>
+    );
+  }
+
+  const diagnosis = mission.public_state.diagnosis;
+  const diagnosisText =
+    typeof diagnosis === "object" && diagnosis !== null
+      ? JSON.stringify(diagnosis, null, 2)
+      : "尚未形成结构化诊断。";
+
+  return (
+    <AppShell runtimeMode="production" activePath={`/missions/${mission.mission_id}`}>
+      <PageHeader
+        eyebrow="MISSION 详情"
+        title={mission.mission_id}
+        description={`${mission.turbine_id} · ${mission.title} · 权威协作与执行记录`}
+        breadcrumb={["AI 运营", "Mission 中心", mission.mission_id]}
+        meta={
+          <>
+            <StatusBadge value={mission.status} label={mission.status} tone="info" />
+            <span className="page-meta-text">修订 {mission.revision}</span>
+            <span className="page-meta-text">
+              更新于 {new Date(mission.updated_at).toLocaleString("zh-CN")}
+            </span>
+          </>
+        }
+        actions={
+          <>
+            <a
+              className="button button--secondary button--md"
+              href={`/turbines/${mission.turbine_id}`}
+            >
+              <TerminalSquare size={15} /> 查看资产
+            </a>
+            <Button
+              variant="primary"
+              onClick={() => setIsCommenting((current) => !current)}
+              aria-expanded={isCommenting}
+              disabled={!canComment}
+              title={canComment ? undefined : "当前角色没有 mission.comment capability"}
+            >
+              <MessageSquareText size={15} /> 添加评论
+            </Button>
+          </>
+        }
+      />
+
+      <section className="mission-detail-grid">
+        <div className="mission-context-column">
+          <Card className="mission-overview-card">
+            <CardHeader eyebrow="权威状态" title={mission.title} />
+            <div className="mission-overview-facts">
+              <KeyValue label="告警" value={mission.alarm_id} />
+              <KeyValue label="资产" value={mission.turbine_id} />
+              <KeyValue label="证据" value={`${mission.evidence.length} 项`} />
+              <KeyValue label="工单" value={mission.work_order_id ?? "尚未创建"} />
+            </div>
+          </Card>
+          <Card>
+            <CardHeader eyebrow="结构化诊断" title="公开诊断输出" />
+            <pre className="mono">{diagnosisText}</pre>
+          </Card>
+          <Card>
+            <CardHeader eyebrow="证据链" title={`${mission.evidence.length} 项可追溯证据`} />
+            <div className="mission-evidence-list">
+              {mission.evidence.map((item) => (
+                <div key={item.evidence_id}>
+                  <strong>{item.summary}</strong>
+                  <small>
+                    {item.evidence_id} · {item.evidence_type}
+                  </small>
+                  {item.citation_uri ? <code>{item.citation_uri}</code> : null}
+                </div>
+              ))}
+              {!mission.evidence.length ? <p>尚无持久化证据。</p> : null}
+            </div>
+          </Card>
+        </div>
+
+        <Card className="mission-timeline-card">
+          <CardHeader
+            eyebrow="持久化协作"
+            title="评论与 Agent 执行"
+            description="评论写入 PostgreSQL 并进入领域事件审计，不再局限于当前页面会话。"
+          />
+          {isCommenting && canComment ? (
+            <div className="approval-gate" id="mission-comment-composer">
+              <textarea
+                className="approval-comment"
+                aria-label="添加持久化评论"
+                placeholder="输入需要保留在 Mission 审计记录中的评论"
+                value={commentDraft}
+                onChange={(event) => setCommentDraft(event.target.value)}
+              />
+              <small>评论将使用当前委派身份写入不可变活动记录。</small>
+              {commentMutation.error instanceof Error ? (
+                <p role="alert">{commentMutation.error.message}</p>
+              ) : null}
+              <div className="approval-actions">
+                <Button variant="secondary" onClick={() => setIsCommenting(false)}>
+                  取消
+                </Button>
+                <Button
+                  variant="primary"
+                  loading={commentMutation.isPending}
+                  disabled={!commentDraft.trim()}
+                  onClick={() => commentMutation.mutate(commentDraft.trim())}
+                >
+                  写入评论
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          <div className="mission-timeline">
+            {mission.executions.map((execution) => (
+              <div className="timeline-event" key={execution.execution_id}>
+                <time>{new Date(execution.started_at).toLocaleString("zh-CN")}</time>
+                <span className="timeline-event__node timeline-event__node--success">
+                  <Bot size={13} />
+                </span>
+                <div className="timeline-event__body">
+                  <h3>{execution.node}</h3>
+                  <p>
+                    {execution.agent_role} · {execution.provider}/{execution.model} ·{" "}
+                    {execution.latency_ms} ms
+                  </p>
+                  <StatusBadge value={execution.status} label={execution.status} compact />
+                </div>
+              </div>
+            ))}
+            {(commentsQuery.data?.comments ?? []).map((comment) => (
+              <div className="timeline-event" key={comment.comment_id}>
+                <time>{new Date(comment.created_at).toLocaleString("zh-CN")}</time>
+                <span className="timeline-event__node timeline-event__node--in-progress">
+                  <MessageSquareText size={13} />
+                </span>
+                <div className="timeline-event__body">
+                  <h3>{comment.author_email ?? comment.author_subject}</h3>
+                  <p>{comment.body}</p>
+                  <StatusBadge value="persisted" label="已持久化" tone="success" compact />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <div className="decision-column">
+          <Card>
+            <CardHeader eyebrow="当前决策" title={mission.decision?.decision_id ?? "尚未形成"} />
+            {mission.decision ? (
+              <>
+                <StatusBadge
+                  value={mission.decision.status}
+                  label={mission.decision.status}
+                  tone="warning"
+                />
+                <p>{mission.decision.recommendation_reason}</p>
+                <KeyValue label="推荐方案" value={mission.decision.recommended_alternative_id} />
+                <KeyValue
+                  label="已选方案"
+                  value={mission.decision.selected_alternative_id ?? "等待人工审批"}
+                />
+              </>
+            ) : (
+              <p>Agent 分析仍在进行，尚无持久化决策。</p>
+            )}
+          </Card>
+          <Card>
+            <CardHeader eyebrow="人工门禁" title={`${mission.approvals.length} 条审批记录`} />
+            {mission.status === "under_review" &&
+            (can("mission.approve") ||
+              can("mission.reject") ||
+              can("mission.request_revision") ||
+              can("mission.escalate")) ? (
+              <div className="approval-gate" data-capability="mission.approval">
+                <label>
+                  <span>审批原因</span>
+                  <input
+                    value={approvalReason}
+                    onChange={(event) => setApprovalReason(event.target.value)}
+                    placeholder="关联风险审查或变更依据"
+                  />
+                </label>
+                <label>
+                  <span>补充意见</span>
+                  <textarea
+                    className="approval-comment"
+                    value={approvalComment}
+                    onChange={(event) => setApprovalComment(event.target.value)}
+                  />
+                </label>
+                <div className="approval-actions">
+                  {can("mission.request_revision") ? (
+                    <Button
+                      variant="secondary"
+                      disabled={approvalMutation.isPending || approvalReason.trim().length < 3}
+                      onClick={() => submitProductionApproval("request_revision")}
+                    >
+                      要求修订
+                    </Button>
+                  ) : null}
+                  {can("mission.escalate") ? (
+                    <Button
+                      variant="secondary"
+                      disabled={approvalMutation.isPending || approvalReason.trim().length < 3}
+                      onClick={() => submitProductionApproval("escalate")}
+                    >
+                      升级处理
+                    </Button>
+                  ) : null}
+                  {can("mission.reject") ? (
+                    <Button
+                      variant="secondary"
+                      disabled={approvalMutation.isPending || approvalReason.trim().length < 3}
+                      onClick={() => submitProductionApproval("reject")}
+                    >
+                      驳回
+                    </Button>
+                  ) : null}
+                  {can("mission.approve") ? (
+                    <Button
+                      variant="primary"
+                      loading={approvalMutation.isPending}
+                      disabled={approvalMutation.isPending || approvalReason.trim().length < 3}
+                      onClick={() => submitProductionApproval("approve")}
+                    >
+                      批准推荐方案
+                    </Button>
+                  ) : null}
+                </div>
+                {approvalMutation.error instanceof Error ? (
+                  <p role="alert">{approvalMutation.error.message}</p>
+                ) : null}
+                {approvalMessage ? <p role="status">{approvalMessage}</p> : null}
+              </div>
+            ) : null}
+            {mission.status === "under_review" &&
+            !can("mission.approve") &&
+            !can("mission.reject") &&
+            !can("mission.request_revision") &&
+            !can("mission.escalate") ? (
+              <p role="status">当前角色可审阅此 Mission，但没有可执行的审批动作。</p>
+            ) : null}
+            {mission.approvals.map((approval) => (
+              <div key={approval.approval_id}>
+                <strong>{approval.action}</strong>
+                <p>{approval.reason}</p>
+                <small>
+                  {approval.approver} · {new Date(approval.created_at).toLocaleString("zh-CN")}
+                </small>
+              </div>
+            ))}
+            {!mission.approvals.length ? <p>等待具备权限的人员审批。</p> : null}
+          </Card>
+        </div>
+      </section>
+    </AppShell>
+  );
+}
+
+export function MissionDetailPage({
+  missionId = "MISSION-2026-0823",
+  runtimeMode = "demo",
+}: {
+  missionId?: string;
+  runtimeMode?: WindOpsRuntimeMode;
+}) {
+  if (runtimeMode === "production") {
+    return <ProductionMissionDetailPage missionId={missionId} />;
+  }
   const mission = getMission(missionId);
   if (!mission) return null;
   return mission.id === featuredMission.id ? (

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   AlertTriangle,
@@ -25,8 +25,8 @@ import { StatusBadge, type StatusTone } from "@/components/data-display/status-b
 import { DataTable } from "@/components/data-display/data-table";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { EmptyState, Progress } from "@/components/ui/primitives";
-import { apiGet } from "@/lib/api-client";
+import { Button, Card, CardHeader, EmptyState, Progress } from "@/components/ui/primitives";
+import { apiGet, apiPost } from "@/lib/api-client";
 import {
   createMaintenancePlans,
   maintenancePlanMeta,
@@ -38,6 +38,7 @@ import {
 } from "@/lib/maintenance-plan-data";
 import type { RiskLevel } from "@/lib/types";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
+import type { WindOpsRuntimeMode } from "@/lib/production-runtime";
 
 import styles from "./maintenance-plan-page.module.css";
 
@@ -52,7 +53,13 @@ interface MaintenancePlanResponse {
     readonly count: number;
     readonly total: number;
     readonly filteredTotal: number;
-    readonly model: typeof maintenancePlanMeta;
+    readonly model: {
+      readonly mode: string;
+      readonly deterministic: boolean;
+      readonly readOnly: boolean;
+      readonly notice: string;
+      readonly provenance: readonly string[];
+    };
     readonly workflowPersistence?: string;
     readonly workflowRevision?: number;
   };
@@ -83,6 +90,22 @@ const riskLabels: Readonly<Record<RiskLevel, string>> = {
   high: "高",
   medium: "中",
   low: "低",
+};
+
+const conflictCodeLabels: Readonly<Record<string, string>> = {
+  APPROVAL_GATE: "审批门禁",
+  HIGH_OPERATIONAL_RISK: "高作业风险",
+  WEATHER_CONDITIONAL: "天气条件受限",
+  WEATHER_UNSAFE: "天气条件不安全",
+  WEATHER_UNMATCHED: "未匹配天气窗口",
+  CREW_CONFLICT: "班组冲突",
+  CREW_UNTRACKED: "班组未纳入台账",
+  VESSEL_CONFLICT: "船舶冲突",
+  TOOL_CONFLICT: "工具冲突",
+  TOOL_UNTRACKED: "工具未纳入台账",
+  PART_SHORTAGE: "备件短缺",
+  PART_UNTRACKED: "备件未纳入台账",
+  RESOURCE_OVERLAP: "资源占用重叠",
 };
 
 const windowLabels: Readonly<Record<MaintenancePlanWindowState, string>> = {
@@ -143,6 +166,11 @@ const timeFormatter = new Intl.DateTimeFormat("zh-CN", {
 const formatDate = (value: string): string => dateFormatter.format(new Date(value));
 const formatDateTime = (value: string): string => dateTimeFormatter.format(new Date(value));
 const formatTime = (value: string): string => timeFormatter.format(new Date(value));
+const toLocalDateTimeInput = (value: string): string => {
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+};
 
 const planColumns: readonly LegacyColumnDef<MaintenancePlan, unknown>[] = [
   {
@@ -314,13 +342,21 @@ function PlanCard({
   );
 }
 
-function PlanDetail({ plan }: { plan: MaintenancePlan }) {
+function PlanDetail({
+  plan,
+  runtimeMode,
+}: {
+  plan: MaintenancePlan;
+  runtimeMode: WindOpsRuntimeMode;
+}) {
   const criticalConflicts = plan.conflicts.filter((item) => item.severity === "critical").length;
   return (
     <aside className={styles.detailPanel} aria-label={`${plan.workOrderId} 计划详情`}>
       <header className={styles.detailHeader}>
         <div>
-          <span className={styles.detailEyebrow}>SELECTED PLAN · READ ONLY</span>
+          <span className={styles.detailEyebrow}>
+            已选计划 · {runtimeMode === "production" ? "权威排程" : "只读"}
+          </span>
           <h2>{plan.turbineId}</h2>
           <p>{plan.issue}</p>
         </div>
@@ -348,7 +384,7 @@ function PlanDetail({ plan }: { plan: MaintenancePlan }) {
 
       <div className={styles.readinessBlock}>
         <span>
-          <small>RESOURCE READINESS</small>
+          <small>资源就绪度</small>
           <strong>{plan.readinessPercent}%</strong>
         </span>
         <Progress
@@ -358,7 +394,12 @@ function PlanDetail({ plan }: { plan: MaintenancePlan }) {
           }
           label={`${plan.workOrderId} 资源就绪度 ${plan.readinessPercent}%`}
         />
-        <p>任务完成 {plan.taskProgressPercent}% · 数据来自演示台账，不执行真实资源预留。</p>
+        <p>
+          任务完成 {plan.taskProgressPercent}% ·
+          {runtimeMode === "production"
+            ? "数据来自 PostgreSQL 工单、真实资源预留与天气窗口。"
+            : "数据来自演示台账，不执行真实资源预留。"}
+        </p>
       </div>
 
       <section className={styles.weatherBlock} data-state={plan.weather.state}>
@@ -430,7 +471,7 @@ function PlanDetail({ plan }: { plan: MaintenancePlan }) {
               <li key={`${conflict.code}-${conflict.message}`} data-severity={conflict.severity}>
                 <span />
                 <div>
-                  <strong>{conflict.code.replaceAll("_", " ")}</strong>
+                  <strong>{conflictCodeLabels[conflict.code] ?? conflict.code}</strong>
                   <p>{conflict.message}</p>
                 </div>
               </li>
@@ -455,15 +496,23 @@ function PlanDetail({ plan }: { plan: MaintenancePlan }) {
   );
 }
 
-export function MaintenancePlanPage() {
+export function MaintenancePlanPage({ runtimeMode }: { runtimeMode: WindOpsRuntimeMode }) {
   const workflow = useDemoWorkflow();
+  const isProduction = runtimeMode === "production";
   const [view, setView] = useState<ViewMode>("calendar");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [risk, setRisk] = useState<RiskFilter>("all");
   const [team, setTeam] = useState("all");
   const [windowState, setWindowState] = useState<WindowFilter>("all");
-  const [selectedId, setSelectedId] = useState(featuredWorkOrderId);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    isProduction ? null : featuredWorkOrderId,
+  );
+  const [scheduleStart, setScheduleStart] = useState("");
+  const [scheduleDeadline, setScheduleDeadline] = useState("");
+  const [scheduleTeam, setScheduleTeam] = useState("");
+  const [scheduleReason, setScheduleReason] = useState("");
+  const queryClient = useQueryClient();
 
   const currentPlans = useMemo(
     () =>
@@ -473,7 +522,6 @@ export function MaintenancePlanPage() {
       }),
     [workflow.completedTaskIds, workflow.workOrderStatus],
   );
-  const teamFacets = useMemo(() => maintenancePlanTeamFacets(currentPlans), [currentPlans]);
 
   const endpoint = useMemo(() => {
     const params = new URLSearchParams({ sort: "start-asc", limit: "50" });
@@ -489,11 +537,11 @@ export function MaintenancePlanPage() {
     queryKey: ["maintenance-plans", endpoint],
     queryFn: ({ signal }) => apiGet<MaintenancePlanResponse>(endpoint, signal),
     initialData: {
-      data: currentPlans,
+      data: isProduction ? [] : currentPlans,
       meta: {
-        count: currentPlans.length,
-        total: currentPlans.length,
-        filteredTotal: currentPlans.length,
+        count: isProduction ? 0 : currentPlans.length,
+        total: isProduction ? 0 : currentPlans.length,
+        filteredTotal: isProduction ? 0 : currentPlans.length,
         model: maintenancePlanMeta,
       },
     },
@@ -505,7 +553,9 @@ export function MaintenancePlanPage() {
     const normalized = query.trim().toLowerCase();
     const featured = currentPlans.find((plan) => plan.workOrderId === featuredWorkOrderId);
     return planQuery.data.data
-      .map((plan) => (plan.workOrderId === featuredWorkOrderId && featured ? featured : plan))
+      .map((plan) =>
+        !isProduction && plan.workOrderId === featuredWorkOrderId && featured ? featured : plan,
+      )
       .filter(
         (plan) =>
           (!normalized ||
@@ -517,10 +567,41 @@ export function MaintenancePlanPage() {
           (team === "all" || plan.teamKey === team) &&
           (windowState === "all" || plan.weather.state === windowState),
       );
-  }, [currentPlans, planQuery.data.data, query, risk, status, team, windowState]);
+  }, [currentPlans, isProduction, planQuery.data.data, query, risk, status, team, windowState]);
+
+  const teamFacets = useMemo(() => maintenancePlanTeamFacets(visiblePlans), [visiblePlans]);
 
   const selectedPlan =
     visiblePlans.find((plan) => plan.workOrderId === selectedId) ?? visiblePlans[0] ?? null;
+  useEffect(() => {
+    if (!selectedPlan || !isProduction) return;
+    const timer = window.setTimeout(() => {
+      setScheduleStart(toLocalDateTimeInput(selectedPlan.startsAt));
+      setScheduleDeadline(toLocalDateTimeInput(selectedPlan.deadline));
+      setScheduleTeam(selectedPlan.assignedTeam);
+      setScheduleReason("");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isProduction, selectedPlan]);
+  const scheduleMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedPlan) throw new Error("请选择需要调整的工单计划。");
+      return apiPost(
+        `/api/backend/work-orders/${encodeURIComponent(selectedPlan.workOrderId)}/schedule`,
+        {
+          planned_start: new Date(scheduleStart).toISOString(),
+          deadline: new Date(scheduleDeadline).toISOString(),
+          assigned_team: scheduleTeam.trim() || null,
+          expected_updated_at: selectedPlan.updatedAt,
+          reason: scheduleReason.trim(),
+        },
+      );
+    },
+    onSuccess: async () => {
+      setScheduleReason("");
+      await queryClient.invalidateQueries({ queryKey: ["maintenance-plans"] });
+    },
+  });
   const calendarDays = useMemo(
     () => [...new Set(visiblePlans.map((plan) => plan.dayKey))].sort(),
     [visiblePlans],
@@ -537,7 +618,7 @@ export function MaintenancePlanPage() {
           visiblePlans.length,
       )
     : 0;
-  const nextSafeWindow = currentPlans.find(
+  const nextSafeWindow = visiblePlans.find(
     (plan) => plan.weather.state === "suitable" && plan.status !== "completed",
   );
   const hasFilters =
@@ -552,7 +633,7 @@ export function MaintenancePlanPage() {
   };
 
   return (
-    <AppShell activePath="/maintenance">
+    <AppShell runtimeMode={runtimeMode} activePath="/maintenance">
       <PageHeader
         eyebrow="执行与维护"
         title="维护计划"
@@ -562,10 +643,20 @@ export function MaintenancePlanPage() {
           <>
             <StatusBadge
               value={planQuery.isError ? "degraded" : "healthy"}
-              label={planQuery.isError ? "FALLBACK SNAPSHOT" : "DEMO · READ ONLY"}
+              label={
+                planQuery.isError
+                  ? isProduction
+                    ? "生产排程不可用"
+                    : "降级快照"
+                  : isProduction
+                    ? "权威排程"
+                    : "演示数据 · 只读"
+              }
             />
             <span className="page-meta-text">
-              {workflow.persistence.toUpperCase()} · REV {workflow.serverRevision}
+              {isProduction
+                ? "PostgreSQL 工单 / 资源 / 天气"
+                : `${workflow.persistence === "d1" ? "D1 持久化" : "本机内存"} · 修订 ${workflow.serverRevision}`}
             </span>
           </>
         }
@@ -584,8 +675,8 @@ export function MaintenancePlanPage() {
       <section className={styles.demoNotice} aria-label="演示数据声明">
         <CircleGauge size={17} />
         <div>
-          <strong>确定性演示排程</strong>
-          <p>{maintenancePlanMeta.notice}</p>
+          <strong>{isProduction ? "受治理生产排程" : "确定性演示排程"}</strong>
+          <p>{planQuery.data.meta.model.notice}</p>
         </div>
         <span>{planQuery.isFetching ? "正在核对计划快照" : "计划快照已核对"}</span>
       </section>
@@ -710,15 +801,73 @@ export function MaintenancePlanPage() {
         </div>
       </section>
 
+      {isProduction && selectedPlan ? (
+        <Card>
+          <CardHeader
+            eyebrow="受治理排期写入"
+            title={`调整 ${selectedPlan.workOrderId}`}
+            description="后端使用工单更新时间进行 CAS 校验，并要求新的起止时间完全落在合规天气窗口内；变更会进入领域事件与 EAM Outbox。"
+          />
+          <section className={styles.toolbar} aria-label="调整工单排期">
+            <label>
+              <span>计划开始</span>
+              <input
+                type="datetime-local"
+                value={scheduleStart}
+                onChange={(event) => setScheduleStart(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>截止时间</span>
+              <input
+                type="datetime-local"
+                value={scheduleDeadline}
+                onChange={(event) => setScheduleDeadline(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>执行班组</span>
+              <input
+                value={scheduleTeam}
+                onChange={(event) => setScheduleTeam(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>变更原因</span>
+              <input
+                value={scheduleReason}
+                onChange={(event) => setScheduleReason(event.target.value)}
+                placeholder="说明天气、资源或安全约束变化"
+              />
+            </label>
+            <Button
+              loading={scheduleMutation.isPending}
+              disabled={
+                !scheduleStart ||
+                !scheduleDeadline ||
+                scheduleReason.trim().length < 3 ||
+                Date.parse(scheduleStart) >= Date.parse(scheduleDeadline)
+              }
+              onClick={() => scheduleMutation.mutate()}
+            >
+              提交排期修订
+            </Button>
+          </section>
+          {scheduleMutation.error instanceof Error ? (
+            <p role="alert">{scheduleMutation.error.message}</p>
+          ) : null}
+        </Card>
+      ) : null}
+
       <div className={styles.workspace}>
         <section className={styles.schedulePanel} aria-label="维护计划排程">
           <header className={styles.panelHeader}>
             <div>
-              <span>MAINTENANCE SCHEDULE</span>
+              <span>维护排程</span>
               <h2>{view === "calendar" ? "计划日历" : "计划清单"}</h2>
             </div>
             <small>
-              {visiblePlans.length} / {currentPlans.length} 项 · Asia/Shanghai
+              {visiblePlans.length} / {planQuery.data.meta.total} 项 · Asia/Shanghai
             </small>
           </header>
 
@@ -801,7 +950,7 @@ export function MaintenancePlanPage() {
           )}
         </section>
 
-        {selectedPlan ? <PlanDetail plan={selectedPlan} /> : null}
+        {selectedPlan ? <PlanDetail plan={selectedPlan} runtimeMode={runtimeMode} /> : null}
       </div>
     </AppShell>
   );

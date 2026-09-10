@@ -12,15 +12,40 @@ from windops_backend.agents.tools import SQLToolAdapter
 from windops_backend.config import Settings
 from windops_backend.enums import ApprovalAction, DecisionStatus, MissionStatus
 from windops_backend.errors import ConflictError, InvalidTransitionError, NotFoundError
-from windops_backend.models import Alarm, Approval, Decision, Mission, WorkOrder
-from windops_backend.outbox import enqueue_mission_analysis
+from windops_backend.knowledge_graph.domain import GraphAccessPolicy
+from windops_backend.models import Alarm, Approval, Decision, Mission, Turbine, WindFarm, WorkOrder
+from windops_backend.outbox import enqueue_knowledge_graph_projection, enqueue_mission_analysis
 from windops_backend.schemas import ApprovalRequest
+from windops_backend.services.eam import enqueue_eam_work_order_publish
+from windops_backend.services.events import append_domain_event
 
 
 def _persistable_state(state: PublicWorkflowState) -> dict[str, Any]:
     value = dict(state)
     value.pop("resume_from", None)
     return value
+
+
+async def _mission_knowledge_policy(session: AsyncSession, turbine_id: str) -> GraphAccessPolicy:
+    row = (
+        await session.execute(
+            select(Turbine, WindFarm)
+            .join(WindFarm, WindFarm.id == Turbine.wind_farm_id)
+            .where(Turbine.id == turbine_id)
+        )
+    ).one_or_none()
+    if row is None:
+        raise NotFoundError(f"turbine {turbine_id} was not found")
+    _, farm = row
+    # Knowledge documents created with a farm or turbine target are resolved
+    # to their authoritative tenant as well. The workflow therefore carries
+    # the mission tenant boundary, while the relational case query below
+    # still narrows evidence to the mission turbine.
+    return GraphAccessPolicy.from_values(
+        tenant_ids=[farm.tenant_id],
+        data_scopes=["knowledge"],
+        allow_global=True,
+    )
 
 
 async def advance_mission_to_review(
@@ -54,13 +79,20 @@ async def advance_mission_to_review(
         "mission_id": mission.id,
         "turbine_id": mission.turbine_id,
         "alarm_id": mission.alarm_id,
+        "analysis_profile": mission.public_state.get("analysis_profile", {}),
         "workflow_status": (
             MissionStatus.INVESTIGATING.value if is_revision else MissionStatus.DETECTED.value
         ),
         "evidence": [],
     }
     graph = WindOpsWorkflowGraph(
-        session, SQLToolAdapter(session, settings=settings), build_reasoning_provider(settings)
+        session,
+        SQLToolAdapter(
+            session,
+            settings=settings,
+            knowledge_policy=await _mission_knowledge_policy(session, mission.turbine_id),
+        ),
+        build_reasoning_provider(settings),
     )
     final_state = await graph.invoke(state)
     if final_state.get("workflow_status") != MissionStatus.UNDER_REVIEW.value:
@@ -72,6 +104,25 @@ async def advance_mission_to_review(
     alarm = await session.get(Alarm, mission.alarm_id)
     if alarm is not None:
         alarm.ai_status = "awaiting_human_approval"
+    enqueue_knowledge_graph_projection(
+        session,
+        aggregate_type="mission",
+        aggregate_id=mission.id,
+        reason="mission-analysis-completed",
+    )
+    append_domain_event(
+        session,
+        event_type="mission.review_ready",
+        aggregate_type="mission",
+        aggregate_id=mission.id,
+        payload={
+            "mission_id": mission.id,
+            "turbine_id": mission.turbine_id,
+            "decision_id": final_state.get("decision_id"),
+            "status": mission.status,
+            "revision": mission.revision,
+        },
+    )
     await session.flush()
     return mission
 
@@ -93,21 +144,36 @@ async def record_approval(
         raise ConflictError(
             f"mission revision is {mission.revision}, not {request.expected_revision}"
         )
+    decision = await session.scalar(select(Decision).where(Decision.mission_id == mission.id))
+    if decision is None:
+        raise RuntimeError("mission reached approval without a persisted decision")
+    selected_alternative_id: str | None = None
+    if request.action is ApprovalAction.APPROVE:
+        selected_alternative_id = (
+            request.selected_alternative_id or decision.recommended_alternative_id
+        )
+        if selected_alternative_id not in {
+            str(item.get("alternative_id")) for item in decision.alternatives
+        }:
+            raise InvalidTransitionError(
+                "the selected alternative does not belong to this decision"
+            )
+        decision.selected_alternative_id = selected_alternative_id
+    elif request.selected_alternative_id is not None:
+        raise InvalidTransitionError("only approval may select a maintenance alternative")
+
     approval = Approval(
         id=str(uuid4()),
         mission_id=mission.id,
         mission_revision=mission.revision,
         action=request.action.value,
+        selected_alternative_id=selected_alternative_id,
         approver=request.approver,
         reason=request.reason,
         comment=request.comment,
     )
     session.add(approval)
     await session.flush()
-
-    decision = await session.scalar(select(Decision).where(Decision.mission_id == mission.id))
-    if decision is None:
-        raise RuntimeError("mission reached approval without a persisted decision")
 
     work_order: WorkOrder | None = None
     if request.action is ApprovalAction.APPROVE:
@@ -127,7 +193,13 @@ async def record_approval(
             },
         )
         graph = WindOpsWorkflowGraph(
-            session, SQLToolAdapter(session, settings=settings), build_reasoning_provider(settings)
+            session,
+            SQLToolAdapter(
+                session,
+                settings=settings,
+                knowledge_policy=await _mission_knowledge_policy(session, mission.turbine_id),
+            ),
+            build_reasoning_provider(settings),
         )
         final_state = await graph.invoke(resume_state)
         work_order_id = final_state.get("work_order_id")
@@ -174,5 +246,42 @@ async def record_approval(
 
     mission.revision += 1
     mission.updated_at = datetime.now(UTC)
+    append_domain_event(
+        session,
+        event_type=f"mission.approval.{request.action.value}",
+        aggregate_type="mission",
+        aggregate_id=mission.id,
+        payload={
+            "mission_id": mission.id,
+            "approval_id": approval.id,
+            "action": request.action.value,
+            "selected_alternative_id": selected_alternative_id,
+            "status": mission.status,
+            "revision": mission.revision,
+            "recorded_by": approval.approver,
+        },
+    )
+    if work_order is not None:
+        append_domain_event(
+            session,
+            event_type="work_order.created",
+            aggregate_type="work_order",
+            aggregate_id=work_order.id,
+            payload={
+                "work_order_id": work_order.id,
+                "mission_id": mission.id,
+                "turbine_id": work_order.turbine_id,
+                "status": work_order.status,
+                "selected_alternative_id": work_order.selected_alternative_id,
+            },
+        )
+        if settings.eam_enabled:
+            enqueue_eam_work_order_publish(session, work_order.id)
+    enqueue_knowledge_graph_projection(
+        session,
+        aggregate_type="mission",
+        aggregate_id=mission.id,
+        reason=f"approval-{request.action.value}",
+    )
     await session.flush()
     return mission, approval, work_order

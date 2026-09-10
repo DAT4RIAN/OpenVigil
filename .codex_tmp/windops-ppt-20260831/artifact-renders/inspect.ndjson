@@ -1,0 +1,346 @@
+{"kind":"slide","id":"sl/7qd5hj","slide":1,"title":"WINDOPS · AI-NATIVE WIND OPERATIONS","textShapes":6}
+{"kind":"textbox","id":"sh/h0j6x03y","slide":1,"text":"WINDOPS · AI-NATIVE WIND OPERATIONS","textPreview":"WINDOPS · AI-NATIVE WIND OPERATIONS","textChars":35,"textLines":1,"bbox":[58,48,520,28]}
+{"kind":"textbox","id":"sh/uxs72l4n","slide":1,"name":"cover-title","text":"风电运维智能体","textPreview":"风电运维智能体","textChars":7,"textLines":1,"bbox":[58,142,560,96]}
+{"kind":"textbox","id":"sh/vy1ovql8","slide":1,"text":"把异常感知、协同诊断、人工审批与工单执行\n连成一条可追踪、可恢复、可审计的业务闭环","textPreview":"把异常感知、协同诊断、人工审批与工单执行 | 连成一条可追踪、可恢复、可审计的业务闭环","textChars":41,"textLines":2,"bbox":[58,266,520,110]}
+{"kind":"shape","id":"sh/43ap8vmp","slide":1,"bbox":[58,414,82,5]}
+{"kind":"textbox","id":"sh/5436103a","slide":1,"text":"项目介绍 · 10 页","textPreview":"项目介绍 · 10 页","textChars":11,"textLines":1,"bbox":[58,440,260,28]}
+{"kind":"textbox","id":"sh/i1s7654j","slide":1,"text":"多智能体协作  ·  类型化工具  ·  Human-in-the-loop","textPreview":"多智能体协作  ·  类型化工具  ·  Human-in-the-loop","textChars":38,"textLines":1,"bbox":[58,492,535,32]}
+{"kind":"shape","id":"sh/321ozql4","slide":1,"name":"cover-image-frame","bbox":[654,38,568,600]}
+{"kind":"textbox","id":"sh/l8z6pgn6","slide":1,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[1150,667,72,22]}
+{"kind":"image","id":"im/h8zqhoj6","slide":1,"name":"","geometry":"roundRect","alt":"WindOps 运营指挥中心界面","bbox":[654,38,568,600]}
+{"kind":"notes","id":"nt/7qd5hj","slide":1,"text":"开场用一句话定义项目：WindOps 不是聊天界面，而是面向风电异常处置的受治理智能体闭环。\n\n[Sources]\n- C:\\coding\\project\\wind-agent\\README.md\n- C:\\coding\\project\\wind-agent\\public\\windops-command-center.png"}
+{"kind":"slide","id":"sl/9rci8q","slide":2,"title":"01 / 项目背景","textShapes":20}
+{"kind":"textbox","id":"sh/qpgn21on","slide":2,"text":"01 / 项目背景","textPreview":"01 / 项目背景","textChars":9,"textLines":1,"bbox":[58,34,480,25]}
+{"kind":"textbox","id":"sh/dc76dw7e","slide":2,"name":"slide-2-title","text":"问题不是告警不足，而是处置链路断裂","textPreview":"问题不是告警不足，而是处置链路断裂","textChars":17,"textLines":1,"bbox":[58,67,1164,72]}
+{"kind":"shape","id":"sh/cby54r6t","slide":2,"bbox":[58,142,1164,1]}
+{"kind":"textbox","id":"sh/ze9of6pk","slide":2,"text":"数据在，告警在，\n经验也在。","textPreview":"数据在，告警在， | 经验也在。","textChars":14,"textLines":2,"bbox":[58,193,390,115]}
+{"kind":"textbox","id":"sh/edgn61oz","slide":2,"text":"缺的是一条能跨越系统、角色与现场执行的可信闭环。","textPreview":"缺的是一条能跨越系统、角色与现场执行的可信闭环。","textChars":24,"textLines":1,"bbox":[58,330,410,85]}
+{"kind":"shape","id":"sh/1gr6hg7a","slide":2,"bbox":[58,449,370,2]}
+{"kind":"textbox","id":"sh/0fi58b6p","slide":2,"text":"项目目标","textPreview":"项目目标","textChars":4,"textLines":1,"bbox":[58,472,160,30]}
+{"kind":"textbox","id":"sh/fi5o3mp0","slide":2,"text":"让每一次异常都有证据、责任、审批和结果。","textPreview":"让每一次异常都有证据、责任、审批和结果。","textChars":20,"textLines":1,"bbox":[58,512,390,60]}
+{"kind":"shape","id":"sh/uhwnuh8f","slide":2,"bbox":[535,177,40,40]}
+{"kind":"textbox","id":"sh/4zmp0fa9","slide":2,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[535,179,40,34]}
+{"kind":"textbox","id":"sh/50fq9kru","slide":2,"text":"数据孤岛","textPreview":"数据孤岛","textChars":4,"textLines":1,"bbox":[593,174,629,30]}
+{"kind":"textbox","id":"sh/id47e5sj","slide":2,"text":"SCADA、告警、维护记录与知识文档彼此割裂。","textPreview":"SCADA、告警、维护记录与知识文档彼此割裂。","textChars":23,"textLines":1,"bbox":[593,210,629,43]}
+{"kind":"shape","id":"sh/jyd87a94","slide":2,"bbox":[593,260,629,1]}
+{"kind":"shape","id":"sh/s36p4zql","slide":2,"bbox":[535,287,40,40]}
+{"kind":"textbox","id":"sh/d4fqdkr6","slide":2,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[535,289,40,34]}
+{"kind":"textbox","id":"sh/q1o72p8f","slide":2,"text":"决策断点","textPreview":"决策断点","textChars":4,"textLines":1,"bbox":[593,284,629,30]}
+{"kind":"textbox","id":"sh/r2x8bu90","slide":2,"text":"从异常到诊断、方案、审批和工单缺少统一状态。","textPreview":"从异常到诊断、方案、审批和工单缺少统一状态。","textChars":22,"textLines":1,"bbox":[593,320,629,43]}
+{"kind":"shape","id":"sh/872p8va1","slide":2,"bbox":[593,370,629,1]}
+{"kind":"shape","id":"sh/98bq10rm","slide":2,"bbox":[535,397,40,40]}
+{"kind":"textbox","id":"sh/94365wjq","slide":2,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[535,399,40,34]}
+{"kind":"textbox","id":"sh/o3u5wr25","slide":2,"text":"Agent 难以约束","textPreview":"Agent 难以约束","textChars":10,"textLines":1,"bbox":[593,394,629,30]}
+{"kind":"textbox","id":"sh/n2lo3m1k","slide":2,"text":"模型能给建议，但来源、权限与行动边界往往不透明。","textPreview":"模型能给建议，但来源、权限与行动边界往往不透明。","textChars":24,"textLines":1,"bbox":[593,430,629,43]}
+{"kind":"shape","id":"sh/m1cnuhkz","slide":2,"bbox":[593,480,629,1]}
+{"kind":"shape","id":"sh/xsn69wjm","slide":2,"bbox":[535,507,40,40]}
+{"kind":"textbox","id":"sh/wre50r21","slide":2,"text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[535,509,40,34]}
+{"kind":"textbox","id":"sh/b65o7m1g","slide":2,"text":"执行难以追溯","textPreview":"执行难以追溯","textChars":6,"textLines":1,"bbox":[593,504,629,30]}
+{"kind":"textbox","id":"sh/a5wnyhkb","slide":2,"text":"重试和并发可能造成重复工单，现场证据难以核验。","textPreview":"重试和并发可能造成重复工单，现场证据难以核验。","textChars":23,"textLines":1,"bbox":[593,540,629,43]}
+{"kind":"textbox","id":"sh/lw76dgjy","slide":2,"text":"WindOps · 风电运维智能体","textPreview":"WindOps · 风电运维智能体","textChars":17,"textLines":1,"bbox":[58,675,500,22]}
+{"kind":"textbox","id":"sh/kve54b2d","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1150,673,72,22]}
+{"kind":"notes","id":"nt/9rci8q","slide":2,"text":"这一页把技术工作转译为业务问题：WindOps 的核心目标是闭环，而不是增加一个告警列表或聊天框。\n\n[Sources]\n- C:\\coding\\project\\wind-agent\\docs\\agent-engineer-interview-project-introduction.md"}
+{"kind":"slide","id":"sl/2rnd5t","slide":3,"title":"02 / 解决方案","textShapes":35}
+{"kind":"textbox","id":"sh/vulgb6ts","slide":3,"text":"02 / 解决方案","textPreview":"02 / 解决方案","textChars":9,"textLines":1,"bbox":[58,34,480,25]}
+{"kind":"textbox","id":"sh/wvuh4bud","slide":3,"name":"slide-3-title","text":"WindOps 把一次异常处置变成受治理的 Agent 闭环","textPreview":"WindOps 把一次异常处置变成受治理的 Agent 闭环","textChars":30,"textLines":1,"bbox":[58,67,1164,72]}
+{"kind":"shape","id":"sh/xwnydgby","slide":3,"bbox":[58,142,1164,1]}
+{"kind":"textbox","id":"sh/ixwz6lcj","slide":3,"text":"每个阶段都产生结构化状态，并为下一步提供可验证输入。","textPreview":"每个阶段都产生结构化状态，并为下一步提供可验证输入。","textChars":26,"textLines":1,"bbox":[58,162,800,32]}
+{"kind":"shape","id":"sh/jy5gfqt4","slide":3,"bbox":[186,283,18,18]}
+{"kind":"shape","id":"sh/kzeh8vap","slide":3,"bbox":[334,283,18,18]}
+{"kind":"shape","id":"sh/50nyh0ba","slide":3,"bbox":[482,283,18,18]}
+{"kind":"shape","id":"sh/e1sfu1cf","slide":3,"bbox":[630,283,18,18]}
+{"kind":"shape","id":"sh/z21g3mt0","slide":3,"bbox":[778,283,18,18]}
+{"kind":"shape","id":"sh/r6d4f2ho","slide":3,"bbox":[926,283,18,18]}
+{"kind":"shape","id":"sh/6l4nmxg3","slide":3,"bbox":[1074,283,18,18]}
+{"kind":"shape","id":"sh/t8vmhszu","slide":3,"bbox":[58,240,126,104]}
+{"kind":"textbox","id":"sh/s7m5ony9","slide":3,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[71,250,44,25]}
+{"kind":"textbox","id":"sh/jid4bihs","slide":3,"text":"感知","textPreview":"感知","textChars":2,"textLines":1,"bbox":[71,280,100,28]}
+{"kind":"textbox","id":"sh/ihknidg7","slide":3,"text":"SCADA / CMS","textPreview":"SCADA / CMS","textChars":11,"textLines":1,"bbox":[71,313,100,22]}
+{"kind":"shape","id":"sh/5kvmdszy","slide":3,"bbox":[206,240,126,104]}
+{"kind":"textbox","id":"sh/4jm5knyd","slide":3,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[219,250,44,25]}
+{"kind":"textbox","id":"sh/vet47yhg","slide":3,"text":"触发","textPreview":"触发","textChars":2,"textLines":1,"bbox":[219,280,100,28]}
+{"kind":"textbox","id":"sh/udknedgv","slide":3,"text":"Alarm + Mission","textPreview":"Alarm + Mission","textChars":15,"textLines":1,"bbox":[219,313,100,22]}
+{"kind":"shape","id":"sh/y90nqtk3","slide":3,"bbox":[354,240,126,104]}
+{"kind":"textbox","id":"sh/zatozy1o","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[367,250,44,25]}
+{"kind":"textbox","id":"sh/kb25s32t","slide":3,"text":"协作","textPreview":"协作","textChars":2,"textLines":1,"bbox":[367,280,100,28]}
+{"kind":"textbox","id":"sh/lcb618je","slide":3,"text":"专业 Agent","textPreview":"专业 Agent","textChars":8,"textLines":1,"bbox":[367,313,100,22]}
+{"kind":"shape","id":"sh/mdknudkz","slide":3,"bbox":[502,240,126,104]}
+{"kind":"textbox","id":"sh/7eto3i1k","slide":3,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[515,250,44,25]}
+{"kind":"textbox","id":"sh/8f25wn25","slide":3,"text":"取证","textPreview":"取证","textChars":2,"textLines":1,"bbox":[515,280,100,28]}
+{"kind":"textbox","id":"sh/9gb65sjq","slide":3,"text":"Evidence","textPreview":"Evidence","textChars":8,"textLines":1,"bbox":[515,313,100,22]}
+{"kind":"shape","id":"sh/uhk7ydkb","slide":3,"bbox":[650,240,126,104]}
+{"kind":"textbox","id":"sh/vido7i1g","slide":3,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[663,250,44,25]}
+{"kind":"textbox","id":"sh/5cfqxw3y","slide":3,"text":"决策","textPreview":"决策","textChars":2,"textLines":1,"bbox":[663,280,100,28]}
+{"kind":"textbox","id":"sh/4b69ormd","slide":3,"text":"候选方案","textPreview":"候选方案","textChars":4,"textLines":1,"bbox":[663,313,100,22]}
+{"kind":"shape","id":"sh/jax8vmls","slide":3,"bbox":[798,240,126,104]}
+{"kind":"textbox","id":"sh/i94rmh47","slide":3,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[811,250,44,25]}
+{"kind":"textbox","id":"sh/t0fq1w3u","slide":3,"text":"把关","textPreview":"把关","textChars":2,"textLines":1,"bbox":[811,280,100,28]}
+{"kind":"textbox","id":"sh/sz69srm9","slide":3,"text":"评审 + 审批","textPreview":"评审 + 审批","textChars":7,"textLines":1,"bbox":[811,313,100,22]}
+{"kind":"shape","id":"sh/ryx8zmlo","slide":3,"bbox":[946,240,126,104]}
+{"kind":"textbox","id":"sh/6dorqh4j","slide":3,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[959,250,44,25]}
+{"kind":"textbox","id":"sh/14za5g36","slide":3,"text":"执行","textPreview":"执行","textChars":2,"textLines":1,"bbox":[959,280,100,28]}
+{"kind":"textbox","id":"sh/03q9wb2l","slide":3,"text":"Work Order","textPreview":"Work Order","textChars":10,"textLines":1,"bbox":[959,313,100,22]}
+{"kind":"shape","id":"sh/czatofmt","slide":3,"bbox":[1094,240,126,104]}
+{"kind":"textbox","id":"sh/x03ux0ne","slide":3,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1107,250,44,25]}
+{"kind":"textbox","id":"sh/axsbm5on","slide":3,"text":"沉淀","textPreview":"沉淀","textChars":2,"textLines":1,"bbox":[1107,280,100,28]}
+{"kind":"textbox","id":"sh/by1cva58","slide":3,"text":"Knowledge","textPreview":"Knowledge","textChars":9,"textLines":1,"bbox":[1107,313,100,22]}
+{"kind":"shape","id":"sh/ovatkv6h","slide":3,"bbox":[58,442,350,4]}
+{"kind":"textbox","id":"sh/pwjut0n2","slide":3,"text":"类型化工具","textPreview":"类型化工具","textChars":5,"textLines":1,"bbox":[58,464,350,34]}
+{"kind":"textbox","id":"sh/2tsbilor","slide":3,"text":"事实来自受限查询与确定性计算，写入动作只暴露领域命令。","textPreview":"事实来自受限查询与确定性计算，写入动作只暴露领域命令。","textChars":27,"textLines":1,"bbox":[58,512,350,82]}
+{"kind":"shape","id":"sh/nu1crq5w","slide":3,"bbox":[463,442,350,4]}
+{"kind":"textbox","id":"sh/8rudwzm1","slide":3,"text":"人工硬门禁","textPreview":"人工硬门禁","textChars":5,"textLines":1,"bbox":[463,464,350,34]}
+{"kind":"textbox","id":"sh/9snu5knm","slide":3,"text":"方案必须经过多角色评审；高风险动作只有审批后才能执行。","textPreview":"方案必须经过多角色评审；高风险动作只有审批后才能执行。","textChars":27,"textLines":1,"bbox":[463,512,350,82]}
+{"kind":"shape","id":"sh/3y9obit0","slide":3,"bbox":[868,442,350,4]}
+{"kind":"textbox","id":"sh/ix0nidsf","slide":3,"text":"全链路审计","textPreview":"全链路审计","textChars":5,"textLines":1,"bbox":[868,464,350,34]}
+{"kind":"textbox","id":"sh/50r6dsbq","slide":3,"text":"工具输入输出、证据、决策、版本、耗时和错误都可追踪。","textPreview":"工具输入输出、证据、决策、版本、耗时和错误都可追踪。","textChars":26,"textLines":1,"bbox":[868,512,350,82]}
+{"kind":"textbox","id":"sh/4zi5kna5","slide":3,"text":"WindOps · 风电运维智能体","textPreview":"WindOps · 风电运维智能体","textChars":17,"textLines":1,"bbox":[58,675,500,22]}
+{"kind":"textbox","id":"sh/r29of2tw","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1150,673,72,22]}
+{"kind":"notes","id":"nt/2rnd5t","slide":3,"text":"沿着箭头讲清主线：数据触发 Mission，多 Agent 产生证据和方案，人类批准后才进入工单，现场结果再沉淀为知识。\n\n[Sources]\n- C:\\coding\\project\\wind-agent\\README.md\n- C:\\coding\\project\\wind-agent\\docs\\agent-engineer-interview-project-introduction.md"}
+{"kind":"slide","id":"sl/nrg9s9","slide":4,"title":"03 / 产品体验","textShapes":12}
+{"kind":"textbox","id":"sh/idsj2h8n","slide":4,"text":"03 / 产品体验","textPreview":"03 / 产品体验","textChars":9,"textLines":1,"bbox":[58,34,480,25]}
+{"kind":"textbox","id":"sh/5g32dwre","slide":4,"name":"slide-4-title","text":"一个运营工作台覆盖从风场态势到现场闭环","textPreview":"一个运营工作台覆盖从风场态势到现场闭环","textChars":19,"textLines":1,"bbox":[58,67,1164,72]}
+{"kind":"shape","id":"sh/kfa14rqt","slide":4,"bbox":[58,142,1164,1]}
+{"kind":"textbox","id":"sh/ba10729w","slide":4,"text":"首页同时回答：整个风场正在发生什么？AI 正在处理什么？","textPreview":"首页同时回答：整个风场正在发生什么？AI 正在处理什么？","textChars":28,"textLines":1,"bbox":[58,162,830,34]}
+{"kind":"shape","id":"sh/a9sjyxsr","slide":4,"bbox":[58,212,830,428]}
+{"kind":"shape","id":"sh/wba107qh","slide":4,"bbox":[930,212,292,5]}
+{"kind":"textbox","id":"sh/nmh03290","slide":4,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[930,237,292,78]}
+{"kind":"textbox","id":"sh/ml8juxsf","slide":4,"text":"核心闭环页面","textPreview":"核心闭环页面","textChars":6,"textLines":1,"bbox":[930,317,292,34]}
+{"kind":"textbox","id":"sh/ojatsnmd","slide":4,"text":"运营中心、风场、风机、SCADA、告警、Agent、Mission、决策与工单","textPreview":"运营中心、风场、风机、SCADA、告警、Agent、Mission、决策与工单","textChars":39,"textLines":1,"bbox":[930,360,292,62]}
+{"kind":"shape","id":"sh/pkju1s3y","slide":4,"bbox":[930,421,292,5]}
+{"kind":"textbox","id":"sh/2hsbqx47","slide":4,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[930,446,292,78]}
+{"kind":"textbox","id":"sh/ni1cz2ls","slide":4,"text":"专业 / 平台工作区","textPreview":"专业 / 平台工作区","textChars":10,"textLines":1,"bbox":[930,526,292,34]}
+{"kind":"textbox","id":"sh/0vqtonm1","slide":4,"text":"健康、预测维护、资源、知识、报告、数字孪生、数据、模型与设置","textPreview":"健康、预测维护、资源、知识、报告、数字孪生、数据、模型与设置","textChars":30,"textLines":1,"bbox":[930,569,292,62]}
+{"kind":"textbox","id":"sh/1wzuxs3m","slide":4,"text":"统一主故事：WT-023","textPreview":"统一主故事：WT-023","textChars":12,"textLines":1,"bbox":[930,603,292,34]}
+{"kind":"textbox","id":"sh/et8bmd4b","slide":4,"text":"WindOps · 风电运维智能体","textPreview":"WindOps · 风电运维智能体","textChars":17,"textLines":1,"bbox":[58,675,500,22]}
+{"kind":"textbox","id":"sh/fuhcvilw","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1150,673,72,22]}
+{"kind":"image","id":"im/gr2d8byd","slide":4,"name":"","geometry":"roundRect","alt":"WindOps 运营指挥中心概念界面","bbox":[58,212,830,428]}
+{"kind":"notes","id":"nt/nrg9s9","slide":4,"text":"强调页面并非孤立展示：Dashboard、Mission、Decision、Work Order、Health 与 Knowledge 读取同一业务故事和服务器状态。\n\n[Sources]\n- C:\\coding\\project\\wind-agent\\README.md\n- C:\\coding\\project\\wind-agent\\docs\\design\\windops-operations-command-center-concept-v2.png"}
+{"kind":"slide","id":"sl/ota92f","slide":5,"title":"04 / AGENT 设计","textShapes":27}
+{"kind":"textbox","id":"sh/54raxozi","slide":5,"text":"04 / AGENT 设计","textPreview":"04 / AGENT 设计","textChars":13,"textLines":1,"bbox":[58,34,480,25]}
+{"kind":"textbox","id":"sh/i10rmt0r","slide":5,"name":"slide-5-title","text":"多智能体的价值是职责隔离，而不是角色堆叠","textPreview":"多智能体的价值是职责隔离，而不是角色堆叠","textChars":20,"textLines":1,"bbox":[58,67,1164,72]}
+{"kind":"shape","id":"sh/329svehc","slide":5,"bbox":[58,142,1164,1]}
+{"kind":"textbox","id":"sh/gzy9kjil","slide":5,"text":"演示工作区组织 22 个 Agent；生产候选以 11 个类型化业务工具约束真实行动。","textPreview":"演示工作区组织 22 个 Agent；生产候选以 11 个类型化业务工具约束真实行动。","textChars":43,"textLines":1,"bbox":[58,151,990,34]}
+{"kind":"textbox","id":"sh/h07atoz6","slide":5,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[58,168,80,60]}
+{"kind":"textbox","id":"sh/uxgri90v","slide":5,"text":"Decision Layer","textPreview":"Decision Layer","textChars":14,"textLines":1,"bbox":[58,232,350,34]}
+{"kind":"textbox","id":"sh/vypsrehg","slide":5,"text":"读取数据、形成证据、提出受约束方案","textPreview":"读取数据、形成证据、提出受约束方案","textChars":17,"textLines":1,"bbox":[58,274,350,52]}
+{"kind":"shape","id":"sh/0v2tw3y5","slide":5,"bbox":[58,339,350,3]}
+{"kind":"shape","id":"sh/1wba58zq","slide":5,"bbox":[58,373,10,10]}
+{"kind":"textbox","id":"sh/1gr2tkze","slide":5,"text":"SCADA / 振动 / 历史案例分析","textPreview":"SCADA / 振动 / 历史案例分析","textChars":19,"textLines":1,"bbox":[82,360,326,47]}
+{"kind":"shape","id":"sh/0filkfit","slide":5,"bbox":[58,431,10,10]}
+{"kind":"textbox","id":"sh/zupkrah8","slide":5,"text":"健康度与 RUL 确定性计算","textPreview":"健康度与 RUL 确定性计算","textChars":14,"textLines":1,"bbox":[82,418,326,47]}
+{"kind":"shape","id":"sh/etg3i50n","slide":5,"bbox":[58,489,10,10]}
+{"kind":"textbox","id":"sh/ds72p0z2","slide":5,"text":"生成 3 个候选维护方案","textPreview":"生成 3 个候选维护方案","textChars":12,"textLines":1,"bbox":[82,476,326,47]}
+{"kind":"shape","id":"sh/crylgvih","slide":5,"bbox":[58,547,10,10]}
+{"kind":"textbox","id":"sh/rqpknqhw","slide":5,"text":"输出 Evidence 与 Decision","textPreview":"输出 Evidence 与 Decision","textChars":22,"textLines":1,"bbox":[82,534,326,47]}
+{"kind":"textbox","id":"sh/qpg3e50b","slide":5,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[465,168,80,60]}
+{"kind":"textbox","id":"sh/xobm14z6","slide":5,"text":"Review Layer","textPreview":"Review Layer","textChars":12,"textLines":1,"bbox":[465,232,350,34]}
+{"kind":"textbox","id":"sh/wn2lszi1","slide":5,"text":"工程、安全、资源与经济性独立评审","textPreview":"工程、安全、资源与经济性独立评审","textChars":16,"textLines":1,"bbox":[465,274,350,52]}
+{"kind":"shape","id":"sh/g3adk7a9","slide":5,"bbox":[465,339,350,3]}
+{"kind":"shape","id":"sh/h43edcbu","slide":5,"bbox":[465,373,10,10]}
+{"kind":"textbox","id":"sh/u1svixs3","slide":5,"text":"不同角色拥有不同权限","textPreview":"不同角色拥有不同权限","textChars":10,"textLines":1,"bbox":[489,360,326,47]}
+{"kind":"shape","id":"sh/f21wb2to","slide":5,"bbox":[465,431,10,10]}
+{"kind":"textbox","id":"sh/szadgnud","slide":5,"text":"每个结论必须引用公开证据","textPreview":"每个结论必须引用公开证据","textChars":12,"textLines":1,"bbox":[489,418,326,47]}
+{"kind":"shape","id":"sh/t0je9sbi","slide":5,"bbox":[465,489,10,10]}
+{"kind":"textbox","id":"sh/6xsvedc7","slide":5,"text":"不确定信息明确失败或升级","textPreview":"不确定信息明确失败或升级","textChars":12,"textLines":1,"bbox":[489,476,326,47]}
+{"kind":"shape","id":"sh/7y1w7its","slide":5,"bbox":[465,547,10,10]}
+{"kind":"textbox","id":"sh/kbqdcnu1","slide":5,"text":"人工批准 / 拒绝 / 退修 / 升级","textPreview":"人工批准 / 拒绝 / 退修 / 升级","textChars":19,"textLines":1,"bbox":[489,534,326,47]}
+{"kind":"textbox","id":"sh/lcje5sbm","slide":5,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[872,168,80,60]}
+{"kind":"textbox","id":"sh/n6hwvid8","slide":5,"text":"Execution Layer","textPreview":"Execution Layer","textChars":15,"textLines":1,"bbox":[872,232,350,34]}
+{"kind":"textbox","id":"sh/m58fmdw3","slide":5,"text":"审批后执行，并以现场证据完成闭环","textPreview":"审批后执行，并以现场证据完成闭环","textChars":16,"textLines":1,"bbox":[872,274,350,52]}
+{"kind":"shape","id":"sh/98zex8ve","slide":5,"bbox":[872,339,350,3]}
+{"kind":"shape","id":"sh/o7qxonet","slide":5,"bbox":[872,373,10,10]}
+{"kind":"textbox","id":"sh/bahwzidk","slide":5,"text":"原子预留班组、船舶与备件","textPreview":"原子预留班组、船舶与备件","textChars":12,"textLines":1,"bbox":[896,360,326,47]}
+{"kind":"shape","id":"sh/a98fqdwz","slide":5,"bbox":[872,431,10,10]}
+{"kind":"textbox","id":"sh/xwzy1svq","slide":5,"text":"按治理顺序完成现场任务","textPreview":"按治理顺序完成现场任务","textChars":11,"textLines":1,"bbox":[896,418,326,47]}
+{"kind":"shape","id":"sh/wvqxsne5","slide":5,"bbox":[872,489,10,10]}
+{"kind":"textbox","id":"sh/jy1g32dg","slide":5,"text":"URI + SHA-256 + measurement","textPreview":"URI + SHA-256 + measurement","textChars":27,"textLines":1,"bbox":[896,476,326,47]}
+{"kind":"shape","id":"sh/yxsfuxwv","slide":5,"bbox":[872,547,10,10]}
+{"kind":"textbox","id":"sh/ih0zq147","slide":5,"text":"回写健康度并生成知识案例","textPreview":"回写健康度并生成知识案例","textChars":12,"textLines":1,"bbox":[896,534,326,47]}
+{"kind":"shape","id":"sh/3290z6ls","slide":5,"bbox":[58,620,1164,42]}
+{"kind":"textbox","id":"sh/43ihsbmd","slide":5,"text":"工程价值 = 独立权限 + 独立验收标准 + 可追踪交接","textPreview":"工程价值 = 独立权限 + 独立验收标准 + 可追踪交接","textChars":28,"textLines":1,"bbox":[78,628,1124,26]}
+{"kind":"textbox","id":"sh/54ri1g3y","slide":5,"text":"WindOps · 风电运维智能体","textPreview":"WindOps · 风电运维智能体","textChars":17,"textLines":1,"bbox":[58,675,500,22]}
+{"kind":"textbox","id":"sh/q50zul4j","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1150,673,72,22]}
+{"kind":"notes","id":"nt/ota92f","slide":5,"text":"区分 UI 中的 Agent 组织与生产工具合同：多 Agent 不是为了增加角色名，而是为了把职责、权限和验收拆开。\n\n[Sources]\n- C:\\coding\\project\\wind-agent\\README.md\n- C:\\coding\\project\\wind-agent\\backend\\src\\windops_backend\\services\\seed.py\n- C:\\coding\\project\\wind-agent\\backend\\src\\windops_backend\\agents\\tools.py"}
+{"kind":"slide","id":"sl/boare9","slide":6,"title":"05 / 系统架构","textShapes":18}
+{"kind":"textbox","id":"sh/07i5g76t","slide":6,"text":"05 / 系统架构","textPreview":"05 / 系统架构","textChars":9,"textLines":1,"bbox":[58,34,480,25]}
+{"kind":"textbox","id":"sh/f69o7258","slide":6,"name":"slide-6-title","text":"双运行架构兼顾稳定演示与生产候选","textPreview":"双运行架构兼顾稳定演示与生产候选","textChars":16,"textLines":1,"bbox":[58,67,1164,72]}
+{"kind":"shape","id":"sh/e50nexo3","slide":6,"bbox":[58,142,1164,1]}
+{"kind":"textbox","id":"sh/9cb6dcnq","slide":6,"text":"共享前端领域契约，但数据来源、身份边界与执行可信度严格隔离。","textPreview":"共享前端领域契约，但数据来源、身份边界与执行可信度严格隔离。","textChars":30,"textLines":1,"bbox":[58,151,980,32]}
+{"kind":"shape","id":"sh/ob25k765","slide":6,"bbox":[337,284,28,26]}
+{"kind":"shape","id":"sh/natob25k","slide":6,"bbox":[337,360,28,26]}
+{"kind":"shape","id":"sh/m9knixoz","slide":6,"bbox":[337,436,28,26]}
+{"kind":"shape","id":"sh/x0v6hwnm","slide":6,"bbox":[945,284,28,26]}
+{"kind":"shape","id":"sh/wzm5or61","slide":6,"bbox":[945,360,28,26]}
+{"kind":"shape","id":"sh/2lsvqtgr","slide":6,"bbox":[945,436,28,26]}
+{"kind":"shape","id":"sh/nm1czyhc","slide":6,"bbox":[58,201,560,345]}
+{"kind":"shape","id":"sh/onads3yx","slide":6,"bbox":[662,201,560,345]}
+{"kind":"textbox","id":"sh/poju18z2","slide":6,"text":"DEMO · 可重复演示","textPreview":"DEMO · 可重复演示","textChars":12,"textLines":1,"bbox":[82,220,510,34]}
+{"kind":"textbox","id":"sh/apsvudgn","slide":6,"text":"PRODUCTION CANDIDATE · 受治理执行","textPreview":"PRODUCTION CANDIDATE · 受治理执行","textChars":28,"textLines":1,"bbox":[686,220,510,34]}
+{"kind":"shape","id":"sh/bq1c3ih8","slide":6,"bbox":[92,265,492,56]}
+{"kind":"textbox","id":"sh/crudwnyt","slide":6,"text":"React 19 运营工作区","textPreview":"React 19 运营工作区","textChars":14,"textLines":1,"bbox":[104,274,468,40]}
+{"kind":"shape","id":"sh/xs3u5sze","slide":6,"bbox":[92,341,492,56]}
+{"kind":"textbox","id":"sh/qt8bi9gj","slide":6,"text":"Sites Worker API + D1","textPreview":"Sites Worker API + D1","textChars":21,"textLines":1,"bbox":[104,350,468,40]}
+{"kind":"shape","id":"sh/ruhcreh4","slide":6,"bbox":[92,417,492,56]}
+{"kind":"textbox","id":"sh/vydsjaxw","slide":6,"text":"17-tool 确定性运行时","textPreview":"17-tool 确定性运行时","textChars":14,"textLines":1,"bbox":[104,426,468,40]}
+{"kind":"shape","id":"sh/ux4rqpwb","slide":6,"bbox":[92,493,492,56]}
+{"kind":"textbox","id":"sh/h0valkfm","slide":6,"text":"用途：稳定演示、截图与回归测试","textPreview":"用途：稳定演示、截图与回归测试","textChars":15,"textLines":1,"bbox":[104,502,468,40]}
+{"kind":"shape","id":"sh/gzm9sfeh","slide":6,"bbox":[696,265,492,56]}
+{"kind":"textbox","id":"sh/7adsfaxk","slide":6,"text":"Sites 身份网关 + 路由白名单","textPreview":"Sites 身份网关 + 路由白名单","textChars":18,"textLines":1,"bbox":[708,274,468,40]}
+{"kind":"shape","id":"sh/694rm5wz","slide":6,"bbox":[696,341,492,56]}
+{"kind":"textbox","id":"sh/twvahkfq","slide":6,"text":"FastAPI + LangGraph + LiteLLM","textPreview":"FastAPI + LangGraph + LiteLLM","textChars":29,"textLines":1,"bbox":[708,350,468,40]}
+{"kind":"shape","id":"sh/8vm9ofe5","slide":6,"bbox":[696,417,238,56]}
+{"kind":"textbox","id":"sh/r6xsrux4","slide":6,"text":"PostgreSQL / TimescaleDB / pgvector","textPreview":"PostgreSQL / TimescaleDB / pgvector","textChars":35,"textLines":1,"bbox":[708,426,214,40]}
+{"kind":"shape","id":"sh/q5oby9wj","slide":6,"bbox":[950,417,238,56]}
+{"kind":"textbox","id":"sh/ozyxw7qp","slide":6,"text":"Redis / MinIO / Neo4j","textPreview":"Redis / MinIO / Neo4j","textChars":21,"textLines":1,"bbox":[962,426,214,40]}
+{"kind":"shape","id":"sh/p07y5cra","slide":6,"bbox":[696,493,492,56]}
+{"kind":"textbox","id":"sh/2xgfux8j","slide":6,"text":"用途：真实依赖下的可靠、可审计执行","textPreview":"用途：真实依赖下的可靠、可审计执行","textChars":17,"textLines":1,"bbox":[708,502,468,40]}
+{"kind":"shape","id":"sh/3ypg3294","slide":6,"bbox":[58,574,1164,78]}
+{"kind":"textbox","id":"sh/c3yx07ql","slide":6,"text":"运行边界","textPreview":"运行边界","textChars":4,"textLines":1,"bbox":[82,593,120,30]}
+{"kind":"textbox","id":"sh/d4ry9cr6","slide":6,"text":"Demo 结果不等于生产 Agent 调用；生产候选仍需真实身份、模型供应商、现场系统与发布环境联合验收。","textPreview":"Demo 结果不等于生产 Agent 调用；生产候选仍需真实身份、模型供应商、现场系统与发布环境联合验收。","textChars":53,"textLines":1,"bbox":[198,590,1000,42]}
+{"kind":"textbox","id":"sh/q1gfyh8v","slide":6,"text":"WindOps · 风电运维智能体","textPreview":"WindOps · 风电运维智能体","textChars":17,"textLines":1,"bbox":[58,675,500,22]}
+{"kind":"textbox","id":"sh/b2pg729g","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1150,673,72,22]}
+{"kind":"notes","id":"nt/boare9","slide":6,"text":"这一页主动说明诚实边界：双运行形态是架构选择，不应把 Demo 结果包装成生产执行。\n\n[Sources]\n- C:\\coding\\project\\wind-agent\\README.md\n- C:\\coding\\project\\wind-agent\\backend\\README.md"}
+{"kind":"slide","id":"sl/n90t9w","slide":7,"title":"06 / 工程治理","textShapes":24}
+{"kind":"textbox","id":"sh/d0be9wvy","slide":7,"text":"06 / 工程治理","textPreview":"06 / 工程治理","textChars":9,"textLines":1,"bbox":[58,34,480,25]}
+{"kind":"textbox","id":"sh/qxkvehw7","slide":7,"name":"slide-7-title","text":"关键动作由四道工程门禁共同约束","textPreview":"关键动作由四道工程门禁共同约束","textChars":15,"textLines":1,"bbox":[58,67,1164,72]}
+{"kind":"shape","id":"sh/rytw7mds","slide":7,"bbox":[58,142,1164,1]}
+{"kind":"textbox","id":"sh/4b2dcre1","slide":7,"text":"Prompt 负责推理引导；真正的权限、状态与提交由服务端控制。","textPreview":"Prompt 负责推理引导；真正的权限、状态与提交由服务端控制。","textChars":32,"textLines":1,"bbox":[58,151,900,34]}
+{"kind":"textbox","id":"sh/pwbe5wvm","slide":7,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[58,212,70,42]}
+{"kind":"textbox","id":"sh/290vahwb","slide":7,"text":"状态机","textPreview":"状态机","textChars":3,"textLines":1,"bbox":[146,208,190,36]}
+{"kind":"textbox","id":"sh/3atc3mdw","slide":7,"text":"Mission、Decision、Approval、Work Order 的转换由服务端校验，模型文本不能伪造“已批准”。","textPreview":"Mission、Decision、Approval、Work Order 的转换由服务端校验，模型文本不能伪造“已批准”。","textChars":61,"textLines":1,"bbox":[335,208,600,68]}
+{"kind":"shape","id":"sh/g7id87e5","slide":7,"bbox":[146,291,790,1]}
+{"kind":"textbox","id":"sh/h8ru1cvq","slide":7,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[58,315,70,42]}
+{"kind":"textbox","id":"sh/10jqhg3e","slide":7,"text":"工具与权限","textPreview":"工具与权限","textChars":5,"textLines":1,"bbox":[146,311,190,36]}
+{"kind":"textbox","id":"sh/0zapob29","slide":7,"text":"Pydantic / JSON Schema、租户与资产范围、最小权限工具；不提供任意 SQL、Shell 或万能写接口。","textPreview":"Pydantic / JSON Schema、租户与资产范围、最小权限工具；不提供任意 SQL、Shell 或万能写接口。","textChars":61,"textLines":1,"bbox":[335,311,600,68]}
+{"kind":"shape","id":"sh/zy1of6lo","slide":7,"bbox":[146,394,790,1]}
+{"kind":"textbox","id":"sh/ex87m143","slide":7,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[58,418,70,42]}
+{"kind":"textbox","id":"sh/dwz6dw3i","slide":7,"text":"可靠执行","textPreview":"可靠执行","textChars":4,"textLines":1,"bbox":[146,414,190,36]}
+{"kind":"textbox","id":"sh/cvqpkbmx","slide":7,"text":"Idempotency-Key、revision / CAS、transactional outbox、可恢复租约与 fencing token 共同处理重试和并发。","textPreview":"Idempotency-Key、revision / CAS、transactional outbox、可恢复租约与 fencing token 共同处理重试和并发。","textChars":83,"textLines":1,"bbox":[335,414,600,68]}
+{"kind":"shape","id":"sh/ruhor6lc","slide":7,"bbox":[146,497,790,1]}
+{"kind":"textbox","id":"sh/q987i14r","slide":7,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[58,521,70,42]}
+{"kind":"textbox","id":"sh/p8z6pw3m","slide":7,"text":"证据与人工","textPreview":"证据与人工","textChars":5,"textLines":1,"bbox":[146,517,190,36]}
+{"kind":"textbox","id":"sh/47qpgrm1","slide":7,"text":"Evidence → Decision → 多角色评审 → HITL；现场任务必须提交 URI、SHA-256 与结构化 measurement。","textPreview":"Evidence → Decision → 多角色评审 → HITL；现场任务必须提交 URI、SHA-256 与结构化 measurement。","textChars":73,"textLines":1,"bbox":[335,517,600,68]}
+{"kind":"shape","id":"sh/gbapwrux","slide":7,"bbox":[146,600,790,1]}
+{"kind":"shape","id":"sh/hc3q5wb2","slide":7,"bbox":[973,207,249,410]}
+{"kind":"textbox","id":"sh/ups7uhcr","slide":7,"text":"审计可见","textPreview":"审计可见","textChars":4,"textLines":1,"bbox":[999,235,197,42]}
+{"kind":"shape","id":"sh/va183mtc","slide":7,"bbox":[999,292,58,4]}
+{"kind":"shape","id":"sh/8napsrul","slide":7,"bbox":[1002,330,9,9]}
+{"kind":"textbox","id":"sh/toj61wb6","slide":7,"text":"工具输入 / 输出","textPreview":"工具输入 / 输出","textChars":9,"textLines":1,"bbox":[1022,318,170,34]}
+{"kind":"shape","id":"sh/6ls7qhcf","slide":7,"bbox":[1002,376,9,9]}
+{"kind":"textbox","id":"sh/7m1ozmt0","slide":7,"text":"证据与来源引用","textPreview":"证据与来源引用","textChars":7,"textLines":1,"bbox":[1022,364,170,34]}
+{"kind":"shape","id":"sh/sjep4bup","slide":7,"bbox":[1002,422,9,9]}
+{"kind":"textbox","id":"sh/dknqdgba","slide":7,"text":"模型与版本","textPreview":"模型与版本","textChars":5,"textLines":1,"bbox":[1022,410,170,34]}
+{"kind":"shape","id":"sh/nq9kjeho","slide":7,"bbox":[1002,468,9,9]}
+{"kind":"textbox","id":"sh/mp0jq90j","slide":7,"text":"延迟、token 与错误","textPreview":"延迟、token 与错误","textChars":12,"textLines":1,"bbox":[1022,456,170,34]}
+{"kind":"shape","id":"sh/9cr2lozu","slide":7,"bbox":[1002,514,9,9]}
+{"kind":"textbox","id":"sh/8bi1sji9","slide":7,"text":"审批与现场凭证","textPreview":"审批与现场凭证","textChars":7,"textLines":1,"bbox":[1022,502,170,34]}
+{"kind":"textbox","id":"sh/ve9kneh0","slide":7,"text":"不保存或伪造\n隐藏 Chain-of-Thought","textPreview":"不保存或伪造 | 隐藏 Chain-of-Thought","textChars":26,"textLines":2,"bbox":[999,553,197,52]}
+{"kind":"textbox","id":"sh/ad0ju90f","slide":7,"text":"WindOps · 风电运维智能体","textPreview":"WindOps · 风电运维智能体","textChars":17,"textLines":1,"bbox":[58,675,500,22]}
+{"kind":"textbox","id":"sh/xgb2poz6","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1150,673,72,22]}
+{"kind":"notes","id":"nt/n90t9w","slide":7,"text":"技术亮点不是模型会说什么，而是模型不能越过什么：状态机、工具合同、权限、幂等和证据门禁共同构成行动边界。\n\n[Sources]\n- C:\\coding\\project\\wind-agent\\docs\\agent-engineer-interview-project-introduction.md\n- C:\\coding\\project\\wind-agent\\backend\\src\\windops_backend\\agents\\graph.py\n- C:\\coding\\project\\wind-agent\\backend\\src\\windops_backend\\services\\agent_governance.py"}
+{"kind":"slide","id":"sl/t1bcla","slide":8,"title":"07 / 数据与评估","textShapes":29}
+{"kind":"textbox","id":"sh/bypsbypo","slide":8,"text":"07 / 数据与评估","textPreview":"07 / 数据与评估","textChars":10,"textLines":1,"bbox":[58,34,480,25]}
+{"kind":"textbox","id":"sh/czy9k36t","slide":8,"name":"slide-8-title","text":"真实数据评估把模型效果纳入可发布的工程门禁","textPreview":"真实数据评估把模型效果纳入可发布的工程门禁","textChars":21,"textLines":1,"bbox":[58,67,1164,72]}
+{"kind":"shape","id":"sh/d07ad87e","slide":8,"bbox":[58,142,1164,1]}
+{"kind":"textbox","id":"sh/29wretor","slide":8,"text":"CARE v6 路径覆盖数据合同、质量、真值隔离、离线评估与有界在线回放。","textPreview":"CARE v6 路径覆盖数据合同、质量、真值隔离、离线评估与有界在线回放。","textChars":37,"textLines":1,"bbox":[58,151,1000,34]}
+{"kind":"shape","id":"sh/3aps7ypc","slide":8,"bbox":[58,213,350,5]}
+{"kind":"textbox","id":"sh/4by9g36x","slide":8,"text":"5,242,948","textPreview":"5,242,948","textChars":9,"textLines":1,"bbox":[58,238,350,78]}
+{"kind":"textbox","id":"sh/pw7a987i","slide":8,"text":"数据行","textPreview":"数据行","textChars":3,"textLines":1,"bbox":[58,318,350,34]}
+{"kind":"textbox","id":"sh/m50bqxob","slide":8,"text":"101 个 CSV，95 个事件；原始数据只读，不进入仓库。","textPreview":"101 个 CSV，95 个事件；原始数据只读，不进入仓库。","textChars":30,"textLines":1,"bbox":[58,361,350,62]}
+{"kind":"shape","id":"sh/n69sjipw","slide":8,"bbox":[465,213,350,5]}
+{"kind":"textbox","id":"sh/fy5kruhw","slide":8,"text":"36","textPreview":"36","textChars":2,"textLines":1,"bbox":[465,238,350,78]}
+{"kind":"textbox","id":"sh/udwjypgb","slide":8,"text":"场内留一资产 fold","textPreview":"场内留一资产 fold","textChars":11,"textLines":1,"bbox":[465,318,350,34]}
+{"kind":"textbox","id":"sh/h072t4z2","slide":8,"text":"覆盖 95 个事件；失败与不可评分也计入汇总。","textPreview":"覆盖 95 个事件；失败与不可评分也计入汇总。","textChars":23,"textLines":1,"bbox":[465,361,350,62]}
+{"kind":"shape","id":"sh/gzy10zyh","slide":8,"bbox":[872,213,350,5]}
+{"kind":"textbox","id":"sh/32pkvuxs","slide":8,"text":"281,249","textPreview":"281,249","textChars":7,"textLines":1,"bbox":[872,238,350,78]}
+{"kind":"textbox","id":"sh/21g329gn","slide":8,"text":"预测点","textPreview":"预测点","textChars":3,"textLines":1,"bbox":[872,318,350,34]}
+{"kind":"textbox","id":"sh/p472x4fy","slide":8,"text":"预测先冻结，最终 evaluator 才能读取真值。","textPreview":"预测先冻结，最终 evaluator 才能读取真值。","textChars":26,"textLines":1,"bbox":[872,361,350,62]}
+{"kind":"textbox","id":"sh/43yl4zyd","slide":8,"text":"候选门禁结果","textPreview":"候选门禁结果","textChars":6,"textLines":1,"bbox":[58,470,220,34]}
+{"kind":"textbox","id":"sh/b69kzex4","slide":8,"text":"12 通过","textPreview":"12 通过","textChars":5,"textLines":1,"bbox":[58,518,160,44]}
+{"kind":"textbox","id":"sh/q5g369gj","slide":8,"text":"24 未通过","textPreview":"24 未通过","textChars":6,"textLines":1,"bbox":[228,518,190,44]}
+{"kind":"shape","id":"sh/m1knyd0r","slide":8,"bbox":[58,571,120,18]}
+{"kind":"shape","id":"sh/n2t4rihc","slide":8,"bbox":[178,571,240,18]}
+{"kind":"textbox","id":"sh/8n250nix","slide":8,"text":"失败候选完整登记，不用删除样本换取更好指标。","textPreview":"失败候选完整登记，不用删除样本换取更好指标。","textChars":22,"textLines":1,"bbox":[58,602,400,36]}
+{"kind":"shape","id":"sh/9ob6tszi","slide":8,"bbox":[617,555,24,16]}
+{"kind":"shape","id":"sh/yx0nut0v","slide":8,"bbox":[762,555,24,16]}
+{"kind":"shape","id":"sh/zyt4ny10","slide":8,"bbox":[907,555,24,16]}
+{"kind":"shape","id":"sh/0z25w3il","slide":8,"bbox":[1052,555,24,16]}
+{"kind":"shape","id":"sh/l0bmp8z6","slide":8,"bbox":[500,493,120,126]}
+{"kind":"textbox","id":"sh/it4n6x0z","slide":8,"text":"只读源数据","textPreview":"只读源数据","textChars":5,"textLines":1,"bbox":[510,514,100,28]}
+{"kind":"textbox","id":"sh/judoz2hk","slide":8,"text":"授权位置","textPreview":"授权位置","textChars":4,"textLines":1,"bbox":[510,552,100,52]}
+{"kind":"shape","id":"sh/tofqpwjm","slide":8,"bbox":[645,493,120,126]}
+{"kind":"textbox","id":"sh/sn6pwr21","slide":8,"text":"合同与质量","textPreview":"合同与质量","textChars":5,"textLines":1,"bbox":[655,514,100,28]}
+{"kind":"textbox","id":"sh/7mx8nm1g","slide":8,"text":"unknown / missing 失败关闭","textPreview":"unknown / missing 失败关闭","textChars":22,"textLines":1,"bbox":[655,552,100,52]}
+{"kind":"shape","id":"sh/6lo7uhkv","slide":8,"bbox":[790,493,120,126]}
+{"kind":"textbox","id":"sh/5kfqlcjq","slide":8,"text":"宽表 Parquet","textPreview":"宽表 Parquet","textChars":10,"textLines":1,"bbox":[800,514,100,28]}
+{"kind":"textbox","id":"sh/kj6psr25","slide":8,"text":"分块、列裁剪、有界内存","textPreview":"分块、列裁剪、有界内存","textChars":11,"textLines":1,"bbox":[800,552,100,52]}
+{"kind":"shape","id":"sh/jix8jm1k","slide":8,"bbox":[935,493,120,126]}
+{"kind":"textbox","id":"sh/iho7qhkz","slide":8,"text":"LOAO 评估","textPreview":"LOAO 评估","textChars":7,"textLines":1,"bbox":[945,514,100,28]}
+{"kind":"textbox","id":"sh/pgjqxgju","slide":8,"text":"场内泛化，不宣称跨场","textPreview":"场内泛化，不宣称跨场","textChars":10,"textLines":1,"bbox":[945,552,100,52]}
+{"kind":"shape","id":"sh/4fq94b29","slide":8,"bbox":[1080,493,120,126]}
+{"kind":"textbox","id":"sh/wzehob25","slide":8,"text":"有界回放","textPreview":"有界回放","textChars":4,"textLines":1,"bbox":[1090,514,100,28]}
+{"kind":"textbox","id":"sh/x07yxgja","slide":8,"text":"prediction → Alarm → Mission","textPreview":"prediction → Alarm → Mission","textChars":28,"textLines":1,"bbox":[1090,552,100,52]}
+{"kind":"textbox","id":"sh/axwzm1kz","slide":8,"text":"数据口径：仓库记录的 2026-08-27/29 本地候选与只读复核证据，不等同于生产上线。","textPreview":"数据口径：仓库记录的 2026-08-27/29 本地候选与只读复核证据，不等同于生产上线。","textChars":46,"textLines":1,"bbox":[500,631,722,24]}
+{"kind":"textbox","id":"sh/by5gv61k","slide":8,"text":"WindOps · 风电运维智能体","textPreview":"WindOps · 风电运维智能体","textChars":17,"textLines":1,"bbox":[58,675,500,22]}
+{"kind":"textbox","id":"sh/knyhsv21","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1150,673,72,22]}
+{"kind":"notes","id":"nt/t1bcla","slide":8,"text":"CARE v6 让 Agent 与异常检测不只依赖手写 fixture；同时用真值隔离、失败关闭和版本化制品控制评估可信度。\n\n[Sources]\n- C:\\coding\\project\\wind-agent\\README.md\n- C:\\coding\\project\\wind-agent\\docs\\agent-engineer-interview-project-introduction.md"}
+{"kind":"slide","id":"sl/lbe6rj","slide":9,"title":"08 / 业务案例","textShapes":27}
+{"kind":"textbox","id":"sh/l43m18z6","slide":9,"text":"08 / 业务案例","textPreview":"08 / 业务案例","textChars":9,"textLines":1,"bbox":[58,34,480,25]}
+{"kind":"textbox","id":"sh/y1c3qd0f","slide":9,"name":"slide-9-title","text":"WT-023 展示从异常到闭环的完整业务价值","textPreview":"WT-023 展示从异常到闭环的完整业务价值","textChars":22,"textLines":1,"bbox":[58,67,1164,72]}
+{"kind":"shape","id":"sh/z2l4zih0","slide":9,"bbox":[58,142,1164,1]}
+{"kind":"textbox","id":"sh/czulo3i9","slide":9,"text":"主轴承振动、温度与多变量异常共同触发 P1 事件。","textPreview":"主轴承振动、温度与多变量异常共同触发 P1 事件。","textChars":25,"textLines":1,"bbox":[58,151,750,32]}
+{"kind":"shape","id":"sh/d03mx8zu","slide":9,"bbox":[58,210,390,164]}
+{"kind":"textbox","id":"sh/byl4vyho","slide":9,"text":"振动 RMS","textPreview":"振动 RMS","textChars":6,"textLines":1,"bbox":[58,406,135,28]}
+{"kind":"textbox","id":"sh/obalkjid","slide":9,"text":"4.81 mm/s","textPreview":"4.81 mm/s","textChars":9,"textLines":1,"bbox":[192,402,135,34]}
+{"kind":"textbox","id":"sh/pwjmtozy","slide":9,"text":"阈值 4.5","textPreview":"阈值 4.5","textChars":6,"textLines":1,"bbox":[332,406,116,28]}
+{"kind":"shape","id":"sh/xs7udsjm","slide":9,"bbox":[58,443,390,1]}
+{"kind":"textbox","id":"sh/wryd4n21","slide":9,"text":"主轴承温度","textPreview":"主轴承温度","textChars":5,"textLines":1,"bbox":[58,472,135,28]}
+{"kind":"textbox","id":"sh/vqpcbi1g","slide":9,"text":"76.4°C","textPreview":"76.4°C","textChars":6,"textLines":1,"bbox":[192,468,135,34]}
+{"kind":"textbox","id":"sh/apgb2dkv","slide":9,"text":"阈值 75°C","textPreview":"阈值 75°C","textChars":7,"textLines":1,"bbox":[332,472,116,28]}
+{"kind":"shape","id":"sh/94nu98jq","slide":9,"bbox":[58,509,390,1]}
+{"kind":"textbox","id":"sh/83et0n25","slide":9,"text":"异常分数","textPreview":"异常分数","textChars":4,"textLines":1,"bbox":[58,538,135,28]}
+{"kind":"textbox","id":"sh/n25c7i1k","slide":9,"text":"0.86","textPreview":"0.86","textChars":4,"textLines":1,"bbox":[192,534,135,34]}
+{"kind":"textbox","id":"sh/m1wbydkz","slide":9,"text":"阈值 0.65","textPreview":"阈值 0.65","textChars":7,"textLines":1,"bbox":[332,538,116,28]}
+{"kind":"shape","id":"sh/l0nu58je","slide":9,"bbox":[58,575,390,1]}
+{"kind":"shape","id":"sh/0zetw32t","slide":9,"bbox":[523,221,3,385]}
+{"kind":"shape","id":"sh/cvil87e1","slide":9,"bbox":[506,220,36,36]}
+{"kind":"textbox","id":"sh/dgbm1cvm","slide":9,"text":"A","textPreview":"A","textChars":1,"textLines":1,"bbox":[506,225,36,24]}
+{"kind":"textbox","id":"sh/qt036xwv","slide":9,"text":"异常触发","textPreview":"异常触发","textChars":4,"textLines":1,"bbox":[566,202,230,32]}
+{"kind":"textbox","id":"sh/bu94z2dg","slide":9,"text":"SCADA 样本、Alarm、Mission 与 outbox event 在同一事务提交。","textPreview":"SCADA 样本、Alarm、Mission 与 outbox event 在同一事务提交。","textChars":46,"textLines":1,"bbox":[566,241,635,52]}
+{"kind":"shape","id":"sh/oril4ne5","slide":9,"bbox":[506,328,36,36]}
+{"kind":"textbox","id":"sh/psr2xsva","slide":9,"text":"B","textPreview":"B","textChars":1,"textLines":1,"bbox":[506,333,36,24]}
+{"kind":"textbox","id":"sh/2p032xwz","slide":9,"text":"协同诊断","textPreview":"协同诊断","textChars":4,"textLines":1,"bbox":[566,310,230,32]}
+{"kind":"textbox","id":"sh/3q9kvidk","slide":9,"text":"Agent 查询时序、振动、历史维护与相似案例，形成结构化 Evidence。","textPreview":"Agent 查询时序、振动、历史维护与相似案例，形成结构化 Evidence。","textChars":39,"textLines":1,"bbox":[566,349,635,52]}
+{"kind":"shape","id":"sh/8n2lgre9","slide":9,"bbox":[506,436,36,36]}
+{"kind":"textbox","id":"sh/9ovm9wvu","slide":9,"text":"C","textPreview":"C","textChars":1,"textLines":1,"bbox":[506,441,36,24]}
+{"kind":"textbox","id":"sh/jixozqxw","slide":9,"text":"方案与审批","textPreview":"方案与审批","textChars":5,"textLines":1,"bbox":[566,418,230,32]}
+{"kind":"textbox","id":"sh/iho76lgb","slide":9,"text":"生成 A / B / C 三个方案，多角色评审后由人工批准或退修。","textPreview":"生成 A / B / C 三个方案，多角色评审后由人工批准或退修。","textChars":33,"textLines":1,"bbox":[566,457,635,52]}
+{"kind":"shape","id":"sh/5kf610f2","slide":9,"bbox":[506,544,36,36]}
+{"kind":"textbox","id":"sh/kj6p8vyh","slide":9,"text":"D","textPreview":"D","textChars":1,"textLines":1,"bbox":[506,549,36,24]}
+{"kind":"textbox","id":"sh/r6xo3qxs","slide":9,"text":"现场闭环","textPreview":"现场闭环","textChars":4,"textLines":1,"bbox":[566,526,230,32]}
+{"kind":"textbox","id":"sh/6lo7algn","slide":9,"text":"5 项任务逐项提交证据；健康度回写至 82，并生成知识案例。","textPreview":"5 项任务逐项提交证据；健康度回写至 82，并生成知识案例。","textChars":30,"textLines":1,"bbox":[566,565,635,52]}
+{"kind":"shape","id":"sh/t8z650fy","slide":9,"bbox":[506,622,696,39]}
+{"kind":"textbox","id":"sh/s7qpcvyd","slide":9,"text":"展示的不是一次 LLM 回复，而是一条完整、可审计的业务状态变化。","textPreview":"展示的不是一次 LLM 回复，而是一条完整、可审计的业务状态变化。","textChars":33,"textLines":1,"bbox":[526,630,656,24]}
+{"kind":"textbox","id":"sh/nador6xo","slide":9,"text":"WindOps · 风电运维智能体","textPreview":"WindOps · 风电运维智能体","textChars":17,"textLines":1,"bbox":[58,675,500,22]}
+{"kind":"textbox","id":"sh/mp4ny1g3","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1150,673,72,22]}
+{"kind":"image","id":"im/fmdkbqpc","slide":9,"name":"","geometry":"roundRect","alt":"WT-023 P1 主轴承振动异常移动端事件卡片","bbox":[76,225,354,134]}
+{"kind":"notes","id":"nt/lbe6rj","slide":9,"text":"WT-023 是贯穿页面的主故事。重点不是故障结论本身，而是从证据到审批、执行和知识沉淀的完整状态闭环。\n\n[Sources]\n- C:\\coding\\project\\wind-agent\\README.md\n- C:\\coding\\project\\wind-agent\\tests\\e2e\\__screenshots__\\dashboard-p1-incident-390.png"}
+{"kind":"slide","id":"sl/afff0e","slide":10,"title":"09 / 总结与下一步","textShapes":11}
+{"kind":"textbox","id":"sh/hsbaxcnm","slide":10,"text":"09 / 总结与下一步","textPreview":"09 / 总结与下一步","textChars":11,"textLines":1,"bbox":[58,42,300,24]}
+{"kind":"textbox","id":"sh/gr294761","slide":10,"name":"closing-title","text":"从“可演示”\n走向“可验收”","textPreview":"从“可演示” | 走向“可验收”","textChars":14,"textLines":2,"bbox":[58,103,540,128]}
+{"kind":"textbox","id":"sh/3utszm5c","slide":10,"text":"当前已具备","textPreview":"当前已具备","textChars":5,"textLines":1,"bbox":[58,272,210,32]}
+{"kind":"shape","id":"sh/2tkr6hor","slide":10,"bbox":[62,326,9,9]}
+{"kind":"textbox","id":"sh/pwva1wni","slide":10,"text":"端到端异常处置闭环与统一业务状态","textPreview":"端到端异常处置闭环与统一业务状态","textChars":16,"textLines":1,"bbox":[83,313,510,35]}
+{"kind":"shape","id":"sh/ovm98r6x","slide":10,"bbox":[62,371,9,9]}
+{"kind":"textbox","id":"sh/jy98ni58","slide":10,"text":"受约束多 Agent、类型化工具与人工门禁","textPreview":"受约束多 Agent、类型化工具与人工门禁","textChars":21,"textLines":1,"bbox":[83,358,510,35]}
+{"kind":"shape","id":"sh/ix0rudon","slide":10,"bbox":[62,416,9,9]}
+{"kind":"textbox","id":"sh/ofip8nax","slide":10,"text":"Demo / Production Candidate 双运行边界","textPreview":"Demo / Production Candidate 双运行边界","textChars":33,"textLines":1,"bbox":[83,403,510,35]}
+{"kind":"shape","id":"sh/pgb61sri","slide":10,"bbox":[62,461,9,9]}
+{"kind":"textbox","id":"sh/2t076ds7","slide":10,"text":"CARE v6 数据评估与工程质量门禁","textPreview":"CARE v6 数据评估与工程质量门禁","textChars":19,"textLines":1,"bbox":[83,448,510,35]}
+{"kind":"shape","id":"sh/3e9ozi9c","slide":10,"bbox":[58,508,540,1]}
+{"kind":"textbox","id":"sh/cj2pcna9","slide":10,"text":"下一阶段","textPreview":"下一阶段","textChars":4,"textLines":1,"bbox":[58,531,210,32]}
+{"kind":"textbox","id":"sh/dkbq5sru","slide":10,"text":"真实身份与模型供应商联调 · 现场 SCADA/CMS/EAM 接入 · 签名制品与集群准入 · 风场试点指标与 SOP 验收","textPreview":"真实身份与模型供应商联调 · 现场 SCADA/CMS/EAM 接入 · 签名制品与集群准入 · 风场试点指标与 SOP 验收","textChars":63,"textLines":1,"bbox":[58,573,540,68]}
+{"kind":"textbox","id":"sh/qhk7ads3","slide":10,"text":"让 Agent 在工业现场可用、可控、可追责。","textPreview":"让 Agent 在工业现场可用、可控、可追责。","textChars":23,"textLines":1,"bbox":[58,655,540,34]}
+{"kind":"textbox","id":"sh/bito3i9o","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1150,674,72,22]}
+{"kind":"image","id":"im/zu50fa9s","slide":10,"name":"","alt":"WindOps AI-Native 风电运维平台总览视觉","bbox":[662,0,618,720]}
+{"kind":"notes","id":"nt/afff0e","slide":10,"text":"结尾明确项目成熟度和下一步：当前是生产候选而非已上线系统，后续价值取决于真实依赖、现场系统与发布环境的联合验收。\n\n[Sources]\n- C:\\coding\\project\\wind-agent\\README.md\n- C:\\coding\\project\\wind-agent\\docs\\demo-gap-audit.md\n- C:\\coding\\project\\wind-agent\\public\\og.png"}

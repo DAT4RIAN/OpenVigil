@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { MaintenancePlanPage } from "@/components/pages/maintenance-plan-page";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "维护计划",
@@ -7,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <MaintenancePlanPage />;
+  return <MaintenancePlanPage runtimeMode={getProductionBackendConfig().mode} />;
 }

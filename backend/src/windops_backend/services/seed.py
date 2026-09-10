@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from windops_backend.agents.tools import TOOL_CATALOG, TOOL_CATALOG_VERSION
 from windops_backend.models import (
+    DEFAULT_TENANT_ID,
     AgentDefinition,
     AgentSkillLink,
     AgentToolLink,
@@ -13,6 +14,7 @@ from windops_backend.models import (
     KnowledgeDocument,
     Resource,
     SkillDefinition,
+    Tenant,
     ToolDefinition,
     Turbine,
     WeatherWindow,
@@ -39,7 +41,7 @@ AGENT_CATALOG: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
         "knowledge_agent",
         "Knowledge Agent",
         "knowledge-retrieval",
-        ("query_similar_failures", "query_maintenance_history"),
+        ("query_similar_failures", "query_maintenance_history", "query_manual"),
     ),
     (
         "failure_diagnosis_agent",
@@ -70,7 +72,16 @@ AGENT_CATALOG: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
         "work_order_agent",
         "Work Order Agent",
         "work-order-orchestration",
-        ("get_turbine_status", "query_weather", "create_work_order"),
+        (
+            "get_turbine_status",
+            "query_weather",
+            "create_work_order",
+            "query_work_orders",
+            "query_spare_parts",
+            "query_crew",
+            "query_vessels",
+            "update_work_order",
+        ),
     ),
 )
 
@@ -85,6 +96,10 @@ async def seed_agent_catalog(session: AsyncSession) -> None:
                 active=True,
             )
         )
+    # The catalog id is referenced by the rows below.  Flush the parent
+    # explicitly so PostgreSQL enforces the foreign key in the same order as
+    # the development SQLite test store, including partial existing catalogs.
+    await session.flush()
 
     for item in TOOL_CATALOG:
         tool_id = f"tool:{item['name']}@{CATALOG_VERSION}"
@@ -158,10 +173,26 @@ async def seed_wt023_demo(session: AsyncSession) -> None:
 
     await seed_agent_catalog(session)
 
+    if await session.get(Tenant, DEFAULT_TENANT_ID) is None:
+        session.add(
+            Tenant(
+                id=DEFAULT_TENANT_ID,
+                name="East China Wind Operations",
+                status="active",
+            )
+        )
+        await session.flush()
+
     if await session.scalar(select(WindFarm.id).where(WindFarm.id == "WF-EAST-01")) is None:
         session.add(
-            WindFarm(id="WF-EAST-01", name="East China Offshore Wind Farm", capacity_mw=384)
+            WindFarm(
+                id="WF-EAST-01",
+                tenant_id=DEFAULT_TENANT_ID,
+                name="East China Offshore Wind Farm",
+                capacity_mw=384,
+            )
         )
+        await session.flush()
 
     if await session.get(Turbine, "WT-023") is None:
         session.add(
@@ -173,6 +204,7 @@ async def seed_wt023_demo(session: AsyncSession) -> None:
                 health_score=96,
             )
         )
+        await session.flush()
         session.add(
             AssetHealthEvent(
                 id="HEALTH-WT023-BASELINE",
@@ -188,6 +220,8 @@ async def seed_wt023_demo(session: AsyncSession) -> None:
         session.add(
             KnowledgeDocument(
                 id="KB-MB-GW165-001",
+                tenant_id=DEFAULT_TENANT_ID,
+                data_scope="knowledge",
                 title="GW165 Main Bearing Inspection Procedure",
                 document_type="manufacturer_manual",
                 body=(
@@ -207,6 +241,29 @@ async def seed_wt023_demo(session: AsyncSession) -> None:
         ("VESSEL-HAIDONG-7", "vessel", "Haidong 7", 1),
         ("SPARE-MB-GW165", "spare_part", "GW165 Main Bearing Kit", 2),
     )
+    resource_attributes = {
+        "CREW-MECH-A": {
+            "specialties": ["mechanical", "main_bearing", "vibration"],
+            "member_count": 6,
+            "certifications": ["offshore-survival", "high-voltage-awareness", "LOTO"],
+            "current_location": "East China O&M Base",
+        },
+        "VESSEL-HAIDONG-7": {
+            "vessel_type": "CTV",
+            "capacity": 12,
+            "max_wave_height_m": 1.8,
+            "berth": "East China O&M Berth 2",
+            "eta": None,
+        },
+        "SPARE-MB-GW165": {
+            "part_number": "GW165-MB-KIT",
+            "category": "main-bearing",
+            "warehouse": "East China O&M Warehouse A",
+            "reorder_point": 1,
+            "unit": "kit",
+            "compatible_turbine_models": ["Goldwind GW165-6.0MW"],
+        },
+    }
     for resource_id, resource_type, name, quantity in resources:
         if await session.get(Resource, resource_id) is None:
             session.add(
@@ -215,6 +272,7 @@ async def seed_wt023_demo(session: AsyncSession) -> None:
                     resource_type=resource_type,
                     name=name,
                     quantity=quantity,
+                    attributes=resource_attributes[resource_id],
                 )
             )
 
@@ -225,10 +283,19 @@ async def seed_wt023_demo(session: AsyncSession) -> None:
                 id="WEATHER-WINDOW-WT023",
                 wind_farm_id="WF-EAST-01",
                 starts_at=start,
-                ends_at=start + timedelta(hours=8),
+                ends_at=start + timedelta(hours=12),
                 wind_speed_ms=8.1,
                 wave_height_m=1.4,
                 suitable=True,
+                attributes={
+                    "gust_speed_mps": 11.2,
+                    "visibility_km": 18,
+                    "precipitation_mm": 0,
+                    "lightning_risk": "none",
+                    "temperature_c": 24,
+                    "reason": "wind, wave, visibility, and lightning controls are within limits",
+                    "recommended_for": ["inspection", "crew-transfer", "condition-monitoring"],
+                },
             )
         )
     await session.commit()

@@ -1,0 +1,43 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+    send_batch_size: 1024
+    timeout: 5s
+
+exporters:
+  otlphttp/managed:
+    endpoint: ${env:WINDOPS_OBSERVABILITY_EXPORT_ENDPOINT}
+    headers:
+      Authorization: ${env:WINDOPS_OBSERVABILITY_EXPORT_AUTHORIZATION}
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 2048
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/managed]

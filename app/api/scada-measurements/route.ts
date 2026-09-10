@@ -1,5 +1,7 @@
 import { SCADA_ARCHIVE_MAX_PAGE_SIZE, queryScadaMeasurements } from "@/lib";
 import type { ScadaMetric } from "@/lib/types";
+import { productionScadaMeasurementsResponse } from "@/lib/production-domain-adapter";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 import { collectionResponse, errorResponse } from "../_shared";
 
@@ -22,7 +24,10 @@ const parseInteger = (
   return value;
 };
 
-export function GET(request: Request): Response {
+export function GET(request: Request): Response | Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return productionScadaMeasurementsResponse(request);
+  }
   const searchParams = new URL(request.url).searchParams;
   const offset = parseInteger(searchParams.get("offset"), "offset", 0, Number.MAX_SAFE_INTEGER);
   if (offset instanceof Response) return offset;

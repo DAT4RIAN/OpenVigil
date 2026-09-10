@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "windops-backend"
 version = "0.1.0"
-description = "Auditable FastAPI and LangGraph vertical slice for the WindOps WT-023 workflow"
+description = "Auditable FastAPI and LangGraph platform for governed wind operations"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
@@ -14,23 +14,45 @@ dependencies = [
   "asyncpg>=0.30,<1",
   "dramatiq[redis]>=1.18,<2",
   "fastapi>=0.116,<1",
-  "langgraph>=0.6,<1",
+  "httpx>=0.28,<1",
+  "langgraph>=1.0.10,<2",
+  "jsonschema>=4.25,<5",
   "litellm>=1.75,<2",
   "minio>=7.2,<8",
+  "neo4j>=5.28,<7",
   "pgvector>=0.4,<1",
+  "pypdf>=6.14.2,<7",
+  "pyyaml>=6,<7",
+  "PyJWT>=2.13,<3",
   "pydantic>=2.11,<3",
   "pydantic-settings>=2.10,<3",
+  "python-docx>=1.2,<2",
   "redis>=6,<7",
   "sqlalchemy[asyncio]>=2.0.42,<3",
   "uvicorn[standard]>=0.35,<1",
+  "prometheus-client>=0.22,<1",
+  "opentelemetry-api>=1.36,<2",
+  "opentelemetry-sdk>=1.36,<2",
+  "opentelemetry-exporter-otlp-proto-http>=1.36,<2",
+  "opentelemetry-instrumentation-fastapi>=0.57b0,<1",
+  "opentelemetry-instrumentation-httpx>=0.57b0,<1",
+  "orjson>=3.11,<4",
 ]
 
 [project.optional-dependencies]
+connectors = [
+  "aiomqtt>=2.5.1,<3",
+  "asyncua>=2.0.1,<3",
+]
+benchmark = [
+  "pyarrow>=23.0.1,<24",
+  "scikit-learn>=1.7,<2",
+]
 test = [
   "aiosqlite>=0.21,<1",
-  "httpx>=0.28,<1",
-  "pytest>=8.4,<9",
+  "pytest>=9.0.3,<10",
   "pytest-asyncio>=1.1,<2",
+  "pytest-cov>=7,<8",
 ]
 dev = [
   "mypy>=1.17,<2",
@@ -41,6 +63,23 @@ dev = [
 windops-api = "windops_backend.main:run"
 windops-reference-import = "windops_backend.reference_import:main"
 windops-outbox-relay = "windops_backend.workers:run_outbox_relay"
+windops-telemetry-connector = "windops_backend.connectors:main"
+windops-backup = "windops_backend.operations.backups:backup_main"
+windops-restore = "windops_backend.operations.backups:restore_main"
+windops-dr-drill = "windops_backend.operations.dr_drill:main"
+windops-release-gate = "windops_backend.operations.release_gate:main"
+windops-deployment-policy = "windops_backend.operations.deployment_policy:main"
+windops-container-artifact = "windops_backend.operations.container_artifact:main"
+windops-release-smoke = "windops_backend.operations.release_smoke:main"
+windops-care-contract = "windops_backend.benchmarks.care.contract:main"
+windops-care-quality = "windops_backend.benchmarks.care.quality:main"
+windops-care-score = "windops_backend.benchmarks.care.scoring:main"
+windops-care-replay-contract = "windops_backend.benchmarks.care.replay:main"
+windops-care-anomaly-contract = "windops_backend.benchmarks.care.anomaly:main"
+windops-care-pipeline = "windops_backend.benchmarks.care.pipeline:main"
+windops-care-minimal-import = "windops_backend.benchmarks.care.importer:main"
+windops-care-offline-evaluate = "windops_backend.benchmarks.care.evaluation:main"
+windops-care-full-scale = "windops_backend.benchmarks.care.fullscale:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/windops_backend"]
@@ -49,7 +88,10 @@ packages = ["src/windops_backend"]
 addopts = "-q"
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
+markers = [
+  "external_release: requires explicitly isolated production dependencies and provider credentials",
+]
 
 [tool.ruff]
 target-version = "py312"
@@ -60,9 +102,16 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/windops_backend/api.py" = ["B008"]
+"src/windops_backend/api/*.py" = ["B008"]
+"src/windops_backend/knowledge_graph/api.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
+
+[dependency-groups]
+dev = [
+    "bandit>=1.8,<2",
+    "pip-audit>=2.9,<3",
+]

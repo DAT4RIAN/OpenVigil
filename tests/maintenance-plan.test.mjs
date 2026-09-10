@@ -117,7 +117,7 @@ test("maintenance plan page renders calendar, list, resource, weather, and confl
   const html = await response.text();
   assert.match(html, /维护计划/);
   assert.match(html, /确定性演示排程/);
-  assert.match(html, /DEMO · READ ONLY/);
+  assert.match(html, /演示数据 · 只读/);
   assert.match(html, /计划日历/);
   assert.match(html, /日历/);
   assert.match(html, /列表/);

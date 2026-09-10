@@ -1,0 +1,32 @@
+minimum_pre_commit_version: "3.6.0"
+default_stages: [pre-commit]
+
+# These hooks intentionally call the repository's locked package managers.
+# They are local hooks so Windows, Linux and CI use the same commands.
+repos:
+  - repo: local
+    hooks:
+      - id: frontend-format-check
+        name: frontend format check
+        entry: pnpm format:check
+        language: system
+        pass_filenames: false
+        files: '^(app|components|db|docs|examples|lib|tests|worker)/|^(README\.md|.*\.(json|css|mjs|ts|tsx|yml|yaml))$'
+      - id: frontend-typecheck
+        name: frontend typecheck
+        entry: pnpm typecheck
+        language: system
+        pass_filenames: false
+        files: '^(app|components|db|lib|worker)/.*\.(ts|tsx)$|^(tsconfig\.json|package\.json)$'
+      - id: backend-ruff-format
+        name: backend Ruff format check
+        entry: python backend/scripts/run_ruff.py format --check src tests alembic scripts
+        language: system
+        pass_filenames: false
+        files: '^backend/.*\.py$'
+      - id: backend-ruff
+        name: backend Ruff lint
+        entry: python backend/scripts/run_ruff.py check src tests alembic scripts
+        language: system
+        pass_filenames: false
+        files: '^backend/.*\.py$'

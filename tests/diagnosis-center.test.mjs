@@ -144,8 +144,8 @@ test("diagnosis center SSR renders anomaly intake, differential diagnosis, colla
   assert.match(html, /Agent 协作记录/);
   assert.match(html, /证据引用/);
   assert.match(html, /HITL 门禁锁定/);
-  assert.match(html, /readOnly=true/);
-  assert.match(html, /realInference=false/);
+  assert.match(html, /只读演示/);
+  assert.match(html, /无真实推理/);
   assert.match(html, /查看现有 Mission|查看 WT-023 Mission/);
   assert.doesNotMatch(html, /chain.of.thought|思维链|隐藏推理|internal reasoning/i);
   assert.doesNotMatch(html, />启动诊断</);

@@ -1,4 +1,6 @@
 import { errorResponse, jsonResponse } from "@/app/api/_shared";
+import { productionModelsResponse } from "@/lib/production-domain-adapter";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
 import {
   PLATFORM_SNAPSHOT_AT,
   modelKinds,
@@ -11,7 +13,10 @@ import {
 
 const allowedParameters = new Set(["q", "kind", "status"]);
 
-export function GET(request: Request): Response {
+export async function GET(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return productionModelsResponse(request);
+  }
   const url = new URL(request.url);
   const unknown = [...url.searchParams.keys()].find((key) => !allowedParameters.has(key));
   if (unknown) {

@@ -1,11 +1,16 @@
 import { resourceCenterSnapshot } from "@/lib";
+import { productionResourcesResponse } from "@/lib/production-domain-adapter";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 import { errorResponse, jsonResponse } from "../_shared";
 
 const categories = ["all", "spare-parts", "crews", "vessels", "tools", "weather"] as const;
 type ResourceCategory = (typeof categories)[number];
 
-export function GET(request: Request): Response {
+export async function GET(request: Request): Promise<Response> {
+  if (getProductionBackendConfig().mode === "production") {
+    return productionResourcesResponse(request);
+  }
   const url = new URL(request.url);
   const category = (url.searchParams.get("category") ?? "all").trim().toLowerCase();
   const query = (url.searchParams.get("q") ?? "").trim().toLowerCase();

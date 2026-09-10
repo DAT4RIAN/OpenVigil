@@ -1,0 +1,38 @@
+apiVersion: windops.io/v1
+kind: ServiceLevelObjectives
+metadata:
+  service: windops-backend
+  owner: wind-operations-platform
+  reviewCadence: quarterly
+spec:
+  window: 30d
+  objectives:
+    - id: http-availability
+      targetFromMetric: windops_slo_target{objective="http_availability",unit="ratio"}
+      sli: >-
+        1 - (5xx responses excluding health, readiness, and metrics probes /
+        all responses excluding those probes)
+      errorBudgetPolicy:
+        fastBurn:
+          factor: 14.4
+          windows: [5m, 1h]
+          severity: page
+        slowBurn:
+          factor: 6
+          windows: [30m, 6h]
+          severity: ticket
+    - id: http-p95-latency
+      targetFromMetric: windops_slo_target{objective="http_p95_latency",unit="seconds"}
+      sli: p95 of windops_http_request_duration_seconds excluding probe routes
+    - id: agent-success
+      targetFromMetric: windops_slo_target{objective="agent_success",unit="ratio"}
+      sli: succeeded / (succeeded + failed) durable agent executions over 30 days
+      minimumSampleSize: 20
+    - id: telemetry-freshness
+      targetFromMetric: windops_slo_target{objective="telemetry_freshness",unit="seconds"}
+      sli: age of the most recently received governed telemetry sample
+  evidence:
+    metricsEndpoint: /metrics
+    targetEndpoint: /metrics/slo
+    authentication: dedicated bearer token
+    alertRules: prometheus-alerts.yaml

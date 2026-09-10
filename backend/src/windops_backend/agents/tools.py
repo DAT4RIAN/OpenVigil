@@ -1,19 +1,27 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 import struct
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from time import perf_counter
 from typing import Any, Protocol, cast
 from uuid import uuid4
 
-from sqlalchemy import desc, select, update
+from sqlalchemy import desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from windops_backend.config import Settings, get_settings
-from windops_backend.enums import ApprovalAction, DecisionStatus, MissionStatus, ResourceStatus
+from windops_backend.enums import (
+    ApprovalAction,
+    DecisionStatus,
+    Environment,
+    MissionStatus,
+    ResourceStatus,
+)
 from windops_backend.errors import ApprovalGateError, ConflictError, NotFoundError
+from windops_backend.knowledge_graph.domain import GraphAccessPolicy
 from windops_backend.models import (
     Alarm,
     Approval,
@@ -27,12 +35,31 @@ from windops_backend.models import (
     ScadaSample,
     Turbine,
     WeatherWindow,
+    WindFarm,
     WorkOrder,
     WorkOrderTask,
 )
+from windops_backend.schemas import MissionAnalysisProfile
+from windops_backend.services.knowledge_access import (
+    knowledge_document_query,
+    knowledge_scope_clause,
+)
+from windops_backend.work_order_templates import default_work_order_plan
 
 EMBEDDING_DIMENSIONS = 1536
+# text-embedding-3-small accepts a much larger token window, but keeping each
+# request near 3k tokens leaves room for non-ASCII tokenization and provider
+# envelope differences.  The body extractor has a separate document limit.
+EMBEDDING_MAX_INPUT_CHARACTERS = 12_000
+EMBEDDING_CHUNK_OVERLAP_CHARACTERS = 1_000
+MAX_EMBEDDING_CHUNKS_PER_DOCUMENT = 512
+MAX_QUERY_AUTO_INDEX_DOCUMENTS = 8
 TOOL_CATALOG_VERSION = "2026.08.1"
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
 
 TOOL_CATALOG: tuple[dict[str, str], ...] = (
     {"name": "get_turbine_status", "mode": "read"},
@@ -46,6 +73,12 @@ TOOL_CATALOG: tuple[dict[str, str], ...] = (
     {"name": "predict_rul", "mode": "compute"},
     {"name": "create_decision", "mode": "draft-write-gated"},
     {"name": "create_work_order", "mode": "human-approval-gated-write"},
+    {"name": "query_manual", "mode": "read"},
+    {"name": "query_work_orders", "mode": "read"},
+    {"name": "query_spare_parts", "mode": "read"},
+    {"name": "query_crew", "mode": "read"},
+    {"name": "query_vessels", "mode": "read"},
+    {"name": "update_work_order", "mode": "governed-write"},
 )
 
 
@@ -92,6 +125,104 @@ class LiteLLMEmbeddingProvider:
         return vectors
 
 
+def chunk_embedding_text(title: str, body: str) -> list[str]:
+    """Split one document into bounded, overlapping model inputs."""
+
+    title_prefix = title.strip()
+    normalized_body = body.strip()
+    if not title_prefix and not normalized_body:
+        raise ValueError("knowledge document has no text to embed")
+
+    prefix = f"{title_prefix}\n" if title_prefix and normalized_body else title_prefix
+    available_body_characters = EMBEDDING_MAX_INPUT_CHARACTERS - len(prefix)
+    if available_body_characters <= EMBEDDING_CHUNK_OVERLAP_CHARACTERS:
+        raise ValueError("knowledge document title leaves no room for an embedding chunk")
+    if not normalized_body:
+        return [prefix[:EMBEDDING_MAX_INPUT_CHARACTERS]]
+    if len(normalized_body) <= available_body_characters:
+        return [f"{prefix}{normalized_body}"]
+
+    chunks: list[str] = []
+    start = 0
+    while start < len(normalized_body):
+        end = min(start + available_body_characters, len(normalized_body))
+        chunks.append(f"{prefix}{normalized_body[start:end]}")
+        if len(chunks) > MAX_EMBEDDING_CHUNKS_PER_DOCUMENT:
+            raise ValueError(
+                "knowledge document exceeds the maximum number of safe embedding chunks"
+            )
+        if end == len(normalized_body):
+            break
+        start = end - EMBEDDING_CHUNK_OVERLAP_CHARACTERS
+    return chunks
+
+
+async def embed_texts_with_controls(
+    provider: EmbeddingProvider,
+    texts: list[str],
+    *,
+    settings: Settings,
+) -> list[list[float]]:
+    """Embed bounded batches with a timeout and finite retry budget."""
+
+    if not texts:
+        return []
+    if any(len(text) > EMBEDDING_MAX_INPUT_CHARACTERS for text in texts):
+        raise ValueError("embedding input exceeds the configured model input limit")
+
+    vectors: list[list[float]] = []
+    for start in range(0, len(texts), settings.embedding_batch_size):
+        batch = texts[start : start + settings.embedding_batch_size]
+        batch_vectors: list[list[float]] | None = None
+        for attempt in range(settings.embedding_max_retries + 1):
+            try:
+                async with asyncio.timeout(settings.embedding_timeout_seconds):
+                    candidate_vectors = await provider.embed(batch)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                if attempt >= settings.embedding_max_retries:
+                    raise RuntimeError(
+                        f"embedding batch failed after {attempt + 1} attempts: {exc}"
+                    ) from exc
+                await asyncio.sleep(min(0.25 * (2**attempt), 2.0))
+                continue
+
+            if len(candidate_vectors) != len(batch):
+                raise RuntimeError(
+                    f"embedding provider returned {len(candidate_vectors)} vectors; "
+                    f"expected {len(batch)}"
+                )
+            batch_vectors = []
+            for vector in candidate_vectors:
+                if len(vector) != EMBEDDING_DIMENSIONS:
+                    raise RuntimeError(
+                        f"embedding provider returned {len(vector)} dimensions; "
+                        f"expected {EMBEDDING_DIMENSIONS}"
+                    )
+                batch_vectors.append([float(value) for value in vector])
+            break
+        if batch_vectors is None:  # pragma: no cover - retry loop always raises or succeeds
+            raise RuntimeError("embedding batch did not return vectors")
+        vectors.extend(batch_vectors)
+    return vectors
+
+
+def aggregate_embedding_vectors(vectors: list[list[float]]) -> list[float]:
+    """Store one normalized document vector while indexing many passages."""
+
+    if not vectors:
+        raise ValueError("cannot aggregate an empty embedding result")
+    if any(len(vector) != EMBEDDING_DIMENSIONS for vector in vectors):
+        raise RuntimeError("embedding vectors cannot be aggregated with mixed dimensions")
+    aggregate = [0.0] * EMBEDDING_DIMENSIONS
+    for vector in vectors:
+        for index, value in enumerate(vector):
+            aggregate[index] += value
+    norm = math.sqrt(sum(value * value for value in aggregate)) or 1.0
+    return [value / norm for value in aggregate]
+
+
 def _deterministic_embedding(text: str) -> list[float]:
     values = [0.0] * EMBEDDING_DIMENSIONS
     tokens = [token for token in text.lower().replace("_", " ").split() if token]
@@ -103,7 +234,7 @@ def _deterministic_embedding(text: str) -> list[float]:
     return [value / norm for value in values]
 
 
-def _pack_vector(vector: list[float]) -> bytes:
+def pack_embedding_vector(vector: list[float]) -> bytes:
     return struct.pack(f"!{len(vector)}f", *vector)
 
 
@@ -152,7 +283,9 @@ class WindOpsToolAdapter(Protocol):
 
     async def calculate_health_score(self, turbine_id: str) -> dict[str, Any]: ...
 
-    async def predict_rul(self, turbine_id: str, component: str) -> dict[str, Any]: ...
+    async def predict_rul(
+        self, turbine_id: str, component: str, primary_variable: str | None = None
+    ) -> dict[str, Any]: ...
 
     async def create_decision(
         self,
@@ -216,9 +349,11 @@ class SQLToolAdapter:
         session: AsyncSession,
         embedding_provider: EmbeddingProvider | None = None,
         settings: Settings | None = None,
+        knowledge_policy: GraphAccessPolicy | None = None,
     ) -> None:
         self.session = session
         runtime_settings = settings or get_settings()
+        self.settings = runtime_settings
         self.minio_public_base = runtime_settings.minio_public_base
         dialect = session.bind.dialect.name if session.bind is not None else "unknown"
         selected_provider: EmbeddingProvider
@@ -227,15 +362,25 @@ class SQLToolAdapter:
                 EmbeddingProvider,
                 (
                     DeterministicTestEmbeddingProvider()
-                    if dialect == "sqlite"
+                    if dialect == "sqlite" or runtime_settings.environment is Environment.TEST
                     else LiteLLMEmbeddingProvider(runtime_settings.embedding_model)
                 ),
             )
         else:
             selected_provider = embedding_provider
-        if dialect == "postgresql" and not selected_provider.production_ready:
+        if (
+            dialect == "postgresql"
+            and runtime_settings.environment is not Environment.TEST
+            and not selected_provider.production_ready
+        ):
             raise RuntimeError("production PostgreSQL RAG requires a production embedding provider")
         self.embedding_provider = selected_provider
+        # SQLite is only used by the deterministic test double. Production
+        # PostgreSQL callers must pass an explicit policy; an absent policy
+        # therefore fails closed instead of becoming a global RAG read.
+        self.knowledge_policy = knowledge_policy or GraphAccessPolicy.from_values(
+            unrestricted=dialect == "sqlite"
+        )
         self._tool_calls: list[dict[str, Any]] = []
 
     def reset_tool_calls(self) -> None:
@@ -299,10 +444,14 @@ class SQLToolAdapter:
             {
                 "sample_id": row.id,
                 "source_event_id": row.source_event_id,
+                "source_id": row.source_id,
+                "source_sequence": row.source_sequence,
                 "variable": row.variable,
                 "value": row.value,
                 "unit": row.unit,
                 "observed_at": row.observed_at.isoformat(),
+                "received_at": row.received_at.isoformat(),
+                "late": row.is_late,
                 "quality": row.quality,
                 "attributes": row.attributes,
             }
@@ -427,30 +576,117 @@ class SQLToolAdapter:
         missing = [document for document in documents if not document.vectorized]
         if not missing:
             return
-        vectors = await self.embedding_provider.embed(
-            [f"{document.title}\n{document.body}" for document in missing]
+        document_chunks = [
+            chunk_embedding_text(document.title, document.body) for document in missing
+        ]
+        vectors = await embed_texts_with_controls(
+            self.embedding_provider,
+            [chunk for chunks in document_chunks for chunk in chunks],
+            settings=self.settings,
         )
         dialect = self.session.bind.dialect.name if self.session.bind is not None else "unknown"
-        for document, vector in zip(missing, vectors, strict=True):
-            document.embedding = _pack_vector(vector) if dialect == "sqlite" else vector
+        vector_offset = 0
+        for document, chunks in zip(missing, document_chunks, strict=True):
+            chunk_vectors = vectors[vector_offset : vector_offset + len(chunks)]
+            vector_offset += len(chunks)
+            vector = aggregate_embedding_vectors(chunk_vectors)
+            indexed_at = datetime.now(UTC)
+            document.embedding = pack_embedding_vector(vector) if dialect == "sqlite" else vector
             document.vectorized = True
-            document.updated_at = datetime.now(UTC)
+            document.ingestion_status = "indexed"
+            document.embedding_provider = self.embedding_provider.provider_name
+            document.embedding_model = self.embedding_provider.model_name
+            document.indexed_at = indexed_at
+            document.updated_at = indexed_at
         await self.session.flush()
 
+    async def index_knowledge_documents(self) -> dict[str, Any]:
+        """Persist embeddings for controlled documents without running a graph query."""
+
+        document_count = int(
+            await self.session.scalar(select(func.count()).select_from(KnowledgeDocument)) or 0
+        )
+        indexed_count = 0
+        while True:
+            documents = list(
+                (
+                    await self.session.scalars(
+                        select(KnowledgeDocument)
+                        .where(KnowledgeDocument.vectorized.is_(False))
+                        .order_by(KnowledgeDocument.id)
+                        .limit(self.settings.embedding_batch_size)
+                    )
+                ).all()
+            )
+            if not documents:
+                break
+            await self._ensure_document_vectors(documents)
+            indexed_count += len(documents)
+        return {
+            "document_count": document_count,
+            "indexed_count": indexed_count,
+            "embedding_provider": self.embedding_provider.provider_name,
+            "embedding_model": self.embedding_provider.model_name,
+        }
+
+    async def visible_knowledge_documents(self) -> list[KnowledgeDocument]:
+        return list(
+            (
+                await self.session.scalars(
+                    knowledge_document_query(self.knowledge_policy).order_by(KnowledgeDocument.id)
+                )
+            ).all()
+        )
+
     async def query_similar_failures(
-        self, query: str, turbine_id: str | None = None, limit: int = 5
+        self,
+        query: str,
+        turbine_id: str | None = None,
+        limit: int = 5,
+        *,
+        vectorize_missing: bool = True,
     ) -> list[dict[str, Any]]:
         started = perf_counter()
-        documents = (await self.session.scalars(select(KnowledgeDocument))).all()
-        await self._ensure_document_vectors(list(documents))
-        query_vector = (await self.embedding_provider.embed([query]))[0]
         dialect = self.session.bind.dialect.name if self.session.bind is not None else "unknown"
+        if dialect == "postgresql":
+            documents: list[KnowledgeDocument] = []
+            if vectorize_missing:
+                missing_documents = list(
+                    (
+                        await self.session.scalars(
+                            knowledge_document_query(self.knowledge_policy)
+                            .where(KnowledgeDocument.vectorized.is_(False))
+                            .order_by(KnowledgeDocument.id)
+                            .limit(MAX_QUERY_AUTO_INDEX_DOCUMENTS)
+                        )
+                    ).all()
+                )
+                await self._ensure_document_vectors(missing_documents)
+        else:
+            documents = await self.visible_knowledge_documents()
+            if vectorize_missing:
+                await self._ensure_document_vectors(documents[:MAX_QUERY_AUTO_INDEX_DOCUMENTS])
+        query_vector = (
+            await embed_texts_with_controls(
+                self.embedding_provider, [query], settings=self.settings
+            )
+        )[0]
         if dialect == "postgresql":
             distance = KnowledgeDocument.embedding.cosine_distance(query_vector)
             ranked = (
                 await self.session.execute(
                     select(KnowledgeDocument, distance.label("distance"))
-                    .where(KnowledgeDocument.vectorized.is_(True))
+                    .where(
+                        KnowledgeDocument.vectorized.is_(True),
+                        knowledge_scope_clause(
+                            self.knowledge_policy,
+                            tenant_column=KnowledgeDocument.tenant_id,
+                            wind_farm_column=KnowledgeDocument.wind_farm_id,
+                            turbine_column=KnowledgeDocument.turbine_id,
+                            entity_column=KnowledgeDocument.id,
+                            data_scope_column=KnowledgeDocument.data_scope,
+                        ),
+                    )
                     .order_by(distance)
                     .limit(limit)
                 )
@@ -500,6 +736,16 @@ class SQLToolAdapter:
             cases = (
                 await self.session.scalars(
                     select(KnowledgeCase)
+                    .join(Turbine, Turbine.id == KnowledgeCase.turbine_id)
+                    .join(WindFarm, WindFarm.id == Turbine.wind_farm_id)
+                    .where(
+                        knowledge_scope_clause(
+                            self.knowledge_policy,
+                            tenant_column=WindFarm.tenant_id,
+                            wind_farm_column=WindFarm.id,
+                            turbine_column=Turbine.id,
+                        )
+                    )
                     .where(KnowledgeCase.turbine_id == turbine_id)
                     .order_by(desc(KnowledgeCase.created_at))
                     .limit(limit)
@@ -520,7 +766,12 @@ class SQLToolAdapter:
         self._record_call(
             "query_similar_failures",
             started,
-            {"query": query, "turbine_id": turbine_id, "limit": limit},
+            {
+                "query": query,
+                "turbine_id": turbine_id,
+                "limit": limit,
+                "vectorize_missing": vectorize_missing,
+            },
             len(result),
         )
         return result
@@ -554,11 +805,38 @@ class SQLToolAdapter:
         self._record_call("calculate_health_score", started, {"turbine_id": turbine_id})
         return result
 
-    async def predict_rul(self, turbine_id: str, component: str) -> dict[str, Any]:
+    async def predict_rul(
+        self, turbine_id: str, component: str, primary_variable: str | None = None
+    ) -> dict[str, Any]:
         started = perf_counter()
-        vibration = await self.query_vibration(turbine_id)
-        anomaly = max(0.0, min(1.0, float(vibration.get("anomaly_score", 0.0))))
-        trend = max(0.0, float(vibration.get("trend_pct", 0.0)))
+        selected_variable = primary_variable or "main_bearing_vibration_rms"
+        if selected_variable == "main_bearing_vibration_rms":
+            condition = await self.query_vibration(turbine_id)
+        else:
+            samples = await self.query_scada(turbine_id, [selected_variable], limit=24)
+            latest: dict[str, Any]
+            if samples:
+                latest = samples[0]
+            else:
+                alarms = await self.query_alarm_history(turbine_id, limit=100)
+                matching_alarm = next(
+                    (
+                        alarm
+                        for alarm in alarms
+                        if alarm.get("evidence", {}).get("variable") == selected_variable
+                    ),
+                    None,
+                )
+                latest = dict(matching_alarm.get("evidence", {})) if matching_alarm else {}
+            attributes = latest.get("attributes", {})
+            latest_value = float(latest.get("value", 0.0))
+            baseline = float(attributes.get("baseline", latest_value)) or 1.0
+            condition = {
+                "anomaly_score": float(attributes.get("anomaly_score", 0.0)),
+                "trend_pct": ((latest_value - baseline) / abs(baseline)) * 100,
+            }
+        anomaly = max(0.0, min(1.0, float(condition.get("anomaly_score", 0.0))))
+        trend = max(0.0, float(condition.get("trend_pct", 0.0)))
         daily_damage = 0.15 + (anomaly * 2.2) + (trend / 35.0)
         estimated_days = max(7, round(180 / daily_damage))
         failure_probability = round(min(0.95, anomaly * 0.32 + trend / 240.0), 3)
@@ -567,11 +845,21 @@ class SQLToolAdapter:
             "component": component,
             "estimated_rul_days": estimated_days,
             "failure_probability_30d": failure_probability,
-            "inputs": {"anomaly_score": anomaly, "trend_pct": trend},
+            "inputs": {
+                **({"primary_variable": selected_variable} if primary_variable is not None else {}),
+                "anomaly_score": anomaly,
+                "trend_pct": trend,
+            },
             "model_version": "physics-informed-rul-2026.08",
         }
         self._record_call(
-            "predict_rul", started, {"turbine_id": turbine_id, "component": component}
+            "predict_rul",
+            started,
+            {
+                "turbine_id": turbine_id,
+                "component": component,
+                "primary_variable": selected_variable,
+            },
         )
         return result
 
@@ -649,8 +937,7 @@ class SQLToolAdapter:
         await self.session.flush()
         return {"health_event_id": event.id, "score": score, "status": status}
 
-    async def _reserve_resources(self, mission_id: str) -> list[str]:
-        required_types = {"crew", "vessel", "spare_part"}
+    async def _reserve_resources(self, mission_id: str, required_types: set[str]) -> list[str]:
         statement = (
             select(Resource)
             .where(
@@ -664,7 +951,8 @@ class SQLToolAdapter:
         resources = (await self.session.scalars(statement)).all()
         if {resource.resource_type for resource in resources} != required_types:
             raise ConflictError(
-                "crew, vessel, and spare-part resources must all be available atomically"
+                "every resource type required by the approved work plan must be "
+                "available atomically"
             )
         reservation_ids: list[str] = []
         claimed_types: set[str] = set()
@@ -677,7 +965,7 @@ class SQLToolAdapter:
                     Resource.id == resource.id,
                     Resource.status == ResourceStatus.AVAILABLE.value,
                 )
-                .values(status=ResourceStatus.RESERVED.value)
+                .values(status=ResourceStatus.RESERVED.value, updated_at=datetime.now(UTC))
             )
             if int(getattr(claimed, "rowcount", 0)) != 1:
                 continue
@@ -699,6 +987,24 @@ class SQLToolAdapter:
     ) -> dict[str, Any]:
         started = perf_counter()
         await ApprovalGate.require_approved(self.session, mission_id, approval_id)
+        mission = await self.session.get(Mission, mission_id)
+        if mission is None:  # pragma: no cover - approval gate has already checked this
+            raise NotFoundError(f"mission {mission_id} was not found")
+        raw_profile = mission.public_state.get("analysis_profile", {})
+        if not raw_profile:
+            raw_profile = {
+                "component": "main_bearing",
+                "primary_variable": "main_bearing_vibration_rms",
+                "related_variables": ["main_bearing_temperature", "active_power"],
+                "failure_mode_hint": "main-bearing degradation",
+                "knowledge_query": "main bearing rising RMS temperature inspection",
+            }
+        profile = MissionAnalysisProfile.model_validate(raw_profile)
+        plan = profile.work_order_plan or default_work_order_plan(
+            component=profile.component,
+            turbine_id=turbine_id,
+            primary_variable=profile.primary_variable,
+        )
         decision = await self.session.scalar(
             select(Decision).where(Decision.mission_id == mission_id)
         )
@@ -706,6 +1012,22 @@ class SQLToolAdapter:
             raise ApprovalGateError("an approved mission must have a persisted decision")
         if decision.approval_id not in {None, approval_id}:
             raise ApprovalGateError("the approval does not belong to the persisted decision")
+        selected_alternative_id = (
+            decision.selected_alternative_id or decision.recommended_alternative_id
+        )
+        selected_alternative = next(
+            (
+                item
+                for item in decision.alternatives
+                if str(item.get("alternative_id")) == selected_alternative_id
+            ),
+            None,
+        )
+        if selected_alternative is None:
+            raise ApprovalGateError("the approved alternative is absent from the decision")
+        selected_action = str(selected_alternative.get("action", "")).strip()
+        if not selected_action:
+            raise ApprovalGateError("the approved alternative has no executable action")
         decision.approval_id = approval_id
         decision.status = DecisionStatus.APPROVED.value
         decision.updated_at = datetime.now(UTC)
@@ -721,44 +1043,100 @@ class SQLToolAdapter:
                     .order_by(WorkOrderTask.sequence)
                 )
             ).all()
+            reservations = (
+                await self.session.scalars(
+                    select(ResourceReservation).where(ResourceReservation.mission_id == mission_id)
+                )
+            ).all()
             result = {
                 "work_order_id": existing.id,
                 "task_ids": [task.id for task in tasks],
-                "resource_reservation_ids": [],
+                "resource_reservation_ids": [row.id for row in reservations],
+                "created": False,
             }
             self._record_call("create_work_order", started, {"mission_id": mission_id})
             return result
 
-        work_order_id = f"WO-{datetime.now(UTC):%Y%m%d}-{uuid4().hex[:6].upper()}"
+        turbine = await self.session.get(Turbine, turbine_id)
+        if turbine is None:
+            raise NotFoundError(f"turbine {turbine_id} was not found")
+        raw_weather_window_id = selected_alternative.get("weather_window_id")
+        if not isinstance(raw_weather_window_id, str) or not raw_weather_window_id.strip():
+            raise ConflictError("the approved alternative does not identify a weather window")
+        weather_window_id = raw_weather_window_id.strip()
+        weather_window = await self.session.get(WeatherWindow, weather_window_id)
+        if weather_window is None:
+            raise ConflictError(f"the approved weather window {weather_window_id} was not found")
+        if weather_window.wind_farm_id != turbine.wind_farm_id:
+            raise ConflictError(
+                f"the approved weather window {weather_window_id} is not assigned "
+                "to the turbine farm"
+            )
+
+        now = datetime.now(UTC)
+        window_start = _as_utc(weather_window.starts_at)
+        window_end = _as_utc(weather_window.ends_at)
+        if not weather_window.suitable or window_end <= now:
+            raise ConflictError(
+                f"the approved weather window {weather_window_id} is no longer suitable"
+            )
+        if window_end <= window_start:
+            raise ConflictError(f"the approved weather window {weather_window_id} is invalid")
+        try:
+            estimated_duration_hours = float(plan.safety_plan.get("estimated_duration_hours", 0))
+        except (TypeError, ValueError) as exc:
+            raise ConflictError("the approved work plan has an invalid estimated duration") from exc
+        if not math.isfinite(estimated_duration_hours) or estimated_duration_hours <= 0:
+            raise ConflictError("the approved work plan must have a positive estimated duration")
+        planned_start = max(now, window_start)
+        planned_end = planned_start + timedelta(hours=estimated_duration_hours)
+        if planned_end > window_end:
+            raise ConflictError(
+                f"the approved weather window {weather_window_id} does not cover the "
+                "estimated work duration"
+            )
+
+        work_order_id = f"WO-{now:%Y%m%d}-{uuid4().hex[:6].upper()}"
         work_order = WorkOrder(
             id=work_order_id,
             mission_id=mission_id,
             approval_id=approval_id,
             turbine_id=turbine_id,
-            title="WT-023 Main Bearing Inspection",
+            title=plan.title,
+            selected_alternative_id=selected_alternative_id,
+            selected_action=selected_action,
+            priority=plan.priority,
             safety_plan={
-                "ppe": ["offshore survival PPE", "fall-arrest harness", "electrical gloves"],
-                "required_tools": ["vibration analyzer", "thermal camera", "borescope"],
-                "spare_parts": ["GW165 main-bearing kit"],
-                "procedures": ["LOTO", "offshore access permit", "toolbox talk"],
-                "estimated_duration_hours": 10,
-                "risk_level": "high",
+                **plan.safety_plan,
+                "decision_alternative_id": selected_alternative_id,
+                "approved_action": selected_action,
+                "weather_window_id": weather_window_id,
             },
+            closure_policy={
+                "health_score_field": plan.closure_health_score_field,
+                "healthy_threshold": plan.healthy_threshold,
+                "component": profile.component,
+            },
+            planned_start=planned_start,
+            deadline=planned_end,
+            estimated_duration_hours=estimated_duration_hours,
         )
         self.session.add(work_order)
-        task_titles = (
-            "Inspect main-bearing lubrication condition",
-            "Acquire vibration spectrum and RMS data",
-            "Measure and record bearing temperature",
-            "Perform main-bearing borescope inspection",
-            "Upload traceable field photographs",
-        )
         tasks = [
-            WorkOrderTask(id=str(uuid4()), work_order_id=work_order_id, sequence=index, title=title)
-            for index, title in enumerate(task_titles, start=1)
+            WorkOrderTask(
+                id=str(uuid4()),
+                work_order_id=work_order_id,
+                sequence=index,
+                title=task.title,
+                schema_version=task.schema_version,
+                measurement_schema=task.measurement_schema,
+            )
+            for index, task in enumerate(plan.tasks, start=1)
         ]
         self.session.add_all(tasks)
-        reservation_ids = await self._reserve_resources(mission_id)
+        reservation_ids = await self._reserve_resources(
+            mission_id, set(plan.required_resource_types)
+        )
         if not reservation_ids:
             raise ConflictError("no unclaimed maintenance resources are available")
         await self.session.flush()
@@ -766,6 +1144,7 @@ class SQLToolAdapter:
             "work_order_id": work_order_id,
             "task_ids": [task.id for task in tasks],
             "resource_reservation_ids": reservation_ids,
+            "created": True,
         }
         self._record_call(
             "create_work_order", started, {"mission_id": mission_id, "turbine_id": turbine_id}

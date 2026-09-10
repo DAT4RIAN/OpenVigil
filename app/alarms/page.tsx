@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { AlarmCenterPage } from "@/components/pages/alarm-center-page";
+import { getProductionBackendConfig } from "@/lib/production-runtime";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "告警中心",
@@ -7,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <AlarmCenterPage />;
+  return <AlarmCenterPage runtimeMode={getProductionBackendConfig().mode} />;
 }

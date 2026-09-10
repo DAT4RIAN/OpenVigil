@@ -27,6 +27,16 @@ class ApprovalGateError(DomainError):
     status_code = 403
 
 
+class KnowledgeScopeError(DomainError):
+    code = "FORBIDDEN"
+    status_code = 403
+
+
 class InvalidTransitionError(DomainError):
     code = "INVALID_TRANSITION"
     status_code = 422
+
+
+class KnowledgeGraphUnavailableError(DomainError):
+    code = "KNOWLEDGE_GRAPH_UNAVAILABLE"
+    status_code = 503

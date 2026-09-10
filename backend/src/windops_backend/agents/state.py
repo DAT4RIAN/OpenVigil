@@ -7,6 +7,7 @@ class PublicWorkflowState(TypedDict):
     mission_id: str
     turbine_id: str
     alarm_id: str
+    analysis_profile: NotRequired[dict[str, Any]]
     workflow_status: str
     evidence: list[dict[str, Any]]
     diagnosis: NotRequired[dict[str, Any]]

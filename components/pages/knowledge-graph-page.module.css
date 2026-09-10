@@ -1,0 +1,312 @@
+.controls {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.controls input,
+.controls select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 10px;
+  height: 34px;
+  outline: none;
+  padding: 0 10px;
+}
+
+.controls input {
+  min-width: 220px;
+}
+
+.controls input:focus,
+.controls select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.error {
+  align-items: center;
+  background: var(--critical-soft);
+  border: 1px solid color-mix(in srgb, var(--critical) 24%, var(--border));
+  border-radius: 8px;
+  color: var(--critical);
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 11px 13px;
+}
+
+.error div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.error small {
+  color: var(--foreground-muted);
+}
+
+.kpis {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 10px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 92px;
+  padding: 14px;
+}
+
+.metric span {
+  align-items: center;
+  color: var(--foreground-muted);
+  display: flex;
+  font-size: 8px;
+  font-weight: 700;
+  gap: 6px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.metric strong {
+  font-size: 24px;
+  letter-spacing: -0.04em;
+}
+
+.metric small {
+  color: var(--foreground-subtle);
+  font-family: var(--font-geist-mono);
+  font-size: 7px;
+}
+
+.retrieval {
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.retrievalForm {
+  display: flex;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+
+.retrievalForm input {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--foreground);
+  flex: 1;
+  font: inherit;
+  font-size: 10px;
+  min-width: 0;
+  outline: none;
+  padding: 0 11px;
+}
+
+.retrievalForm input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.retrievalHint,
+.retrievalError,
+.retrievalResult {
+  border-top: 1px solid var(--border);
+  margin: 0;
+  padding: 12px 14px;
+}
+
+.retrievalHint {
+  color: var(--foreground-subtle);
+  font-size: 9px;
+}
+
+.retrievalError {
+  color: var(--critical);
+  font-size: 9px;
+}
+
+.retrievalResult > p {
+  font-size: 10px;
+  margin: 0 0 10px;
+}
+
+.matchGrid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.matchGrid article {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.matchGrid span,
+.matchGrid small,
+.retrievalMeta {
+  color: var(--foreground-subtle);
+  font-family: var(--font-geist-mono);
+  font-size: 7px;
+}
+
+.matchGrid strong {
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+.retrievalMeta {
+  display: block;
+  margin-top: 9px;
+}
+
+.workspace {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 290px;
+}
+
+.canvas {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.canvasBody {
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      color-mix(in srgb, var(--primary) 8%, transparent),
+      transparent 44%
+    ),
+    var(--surface-subtle);
+  border-top: 1px solid var(--border);
+  min-height: 560px;
+}
+
+.inspector {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.inspectorBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+}
+
+.entityType {
+  background: var(--primary-soft);
+  border-radius: 999px;
+  color: var(--primary);
+  font-size: 8px;
+  font-weight: 700;
+  padding: 4px 7px;
+  width: fit-content;
+}
+
+.entityId {
+  font-family: var(--font-geist-mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.properties {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+}
+
+.properties div {
+  background: var(--surface-subtle);
+  display: grid;
+  gap: 5px;
+  grid-template-columns: 92px minmax(0, 1fr);
+  padding: 8px;
+}
+
+.properties dt {
+  color: var(--foreground-subtle);
+  font-size: 8px;
+}
+
+.properties dd {
+  font-size: 8px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.legend span {
+  align-items: center;
+  color: var(--foreground-muted);
+  display: flex;
+  font-size: 7px;
+  gap: 4px;
+}
+
+.legend i {
+  background: var(--primary);
+  border-radius: 50%;
+  display: inline-block;
+  height: 7px;
+  width: 7px;
+}
+
+@media (max-width: 1080px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .controls {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .controls input {
+    min-width: 0;
+  }
+
+  .kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .retrievalForm {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .retrievalForm input {
+    min-height: 36px;
+  }
+
+  .matchGrid {
+    grid-template-columns: 1fr;
+  }
+}
