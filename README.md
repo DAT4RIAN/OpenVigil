@@ -3,25 +3,26 @@
 > AI-Native Multi-Agent Operations Platform for Wind Farms  
 > 风电运维多智能体平台
 
-WindOps 是一个可运行的海上风电智能运维 Web 演示。它把风场态势、SCADA 时序、工业告警、设备健康、Multi-Agent Mission、可解释决策、人工审批、工单执行和知识反馈串成一条可追踪的业务闭环。
+WindOps 是一个可运行的海上风电智能运维平台候选实现。它把风场态势、SCADA 时序、工业告警、设备健康、Multi-Agent Mission、可解释决策、人工审批、工单执行和知识反馈串成一条可追踪的业务闭环，并提供独立的 CARE v6 离线故障检测基准、受治理评估和平台回放链路。
 
 首页不是聊天框，而是回答两个问题：**整个风场正在发生什么，以及 AI 正在处理什么。**
 
 ## 项目状态
 
 > [!IMPORTANT]
-> 本仓库包含两个边界清晰的运行形态：Cloudflare Sites 上的完整 Worker/D1 产品演示，以及 `backend/` 中面向 WT-023 的 Python 3.12 真实纵切。二者都使用合成领域数据，不是生产 SCADA 或自动控制系统，不得用于真实设备控制、安全判断或维护决策。
+> 本仓库包含两个边界清晰的运行形态：默认 `demo` 保留 Worker/D1 确定性产品演示；`production` 由 Sites Worker 作为每用户身份网关，连接独立部署的 Python 3.12 权威后端。生产候选代码已经具备，但真实依赖、现场系统和发布环境尚未完成联合验收，因此不得将仓库状态表述为“生产已上线”，也不得在验收前用于真实设备控制、安全判断或维护决策。
 
-| 当前真实实现                                                                | 仍需生产集成的能力                                             |
-| --------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| React 19 + TypeScript 严格模式的 10 个核心闭环页面与 11 个专业/平台工作区   | 真实 SCADA、CMS、气象、ERP/EAM 接入                            |
-| vinext/Vite + Cloudflare Worker/Sites，D1 持久化 WT-023 演示闭环            | D1 备份恢复、跨区域治理、生产身份接入与持续事件总线            |
-| Worker 混合读写 API、有限 SSE、模拟 WebSocket 与 17-tool 确定性运行时       | Worker 工具仍为确定性演示；不等同于 Python Agent 服务          |
-| Python FastAPI/Pydantic/SQLAlchemy + LangGraph/LiteLLM 的 WT-023 后端纵切   | 扩展到 64 台资产及通用 Mission/工单，并完成真实遥测与 EAM 集成 |
-| PostgreSQL/TimescaleDB/pgvector、Redis/Dramatiq、MinIO 的生产形态代码与迁移 | 真实依赖栈、模型供应商、备份、SLO 和发布环境的端到端验证       |
-| Bearer RBAC、人工审批、事务 outbox、顺序现场任务与可校验的证据/哈希门禁     | 企业 SSO、集中式密钥管理、生产审批策略、安全审计与灾难演练     |
+| 仓库内已实现的生产候选能力                                                                                       | 仍需外部发布验收的能力                               |
+| ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| React 19 + TypeScript 严格模式的完整业务工作区；生产 SSR/API 禁止 fixture 回退                                   | 浏览器 WCAG、视觉回归和受支持终端验收                |
+| Sites 每用户短期委托身份、生产路由白名单、请求边界，以及后端 release ID/镜像摘要强制匹配                         | 生产 Sites 变量/密钥、发布、回滚和发布后验证         |
+| FastAPI/LangGraph/LiteLLM 的通用 Mission、诊断、审批、工单、资源、知识、模型、报告和 Agent 治理后端              | 真实身份目录、模型供应商、审批策略与业务数据联合验收 |
+| OPC UA、MQTT、HTTPS 遥测连接器与质量码、时序、乱序、隔离、重放；外部 EAM、MinIO 制品和 Neo4j/pgvector 适配器     | 现场 SCADA/CMS/气象/EAM 端点和生产数据契约联调       |
+| CARE v6 数据合同、质量规则、宽表 Parquet、场内留一资产评估、受治理 API/UI、选择性在线回放与告警闭环              | 数据许可复核、生产对象存储/数据库重放和跨场 ontology |
+| PostgreSQL/TimescaleDB/pgvector、Redis/Dramatiq、MinIO、Neo4j 迁移/配置/就绪探针，以及备份恢复、SLO、OTLP 和告警 | 真实依赖栈的迁移、负载、故障、灾难恢复和告警路由演练 |
+| 锁定依赖的非 root 镜像、Kubernetes 基线、迁移/备份任务和内容寻址发布证据门禁                                     | 镜像构建扫描、SBOM、签名、集群策略、DAST 与人工渗透  |
 
-Cloudflare Sites 只托管 Worker/D1 演示，不托管 `backend/` Python 服务。Python 纵切已通过 SQLite 自动化测试与 PostgreSQL 离线迁移渲染；本地未启动 Docker、PostgreSQL、TimescaleDB、Redis、MinIO 或真实 LiteLLM，也未部署 Python 服务。
+Cloudflare Sites 只托管 Worker 网关，不托管 `backend/` Python 服务。源码级本地门禁和 2026-08-27 的隔离 PostgreSQL/MinIO/DR 候选证据已经通过；2026-08-29 复核时 Docker Engine 未响应，因此没有把依赖型门禁冒充为当日重跑结果。仓库仍没有生产后端 URL、委托密钥、批准的注册表镜像摘要或集群发布授权；完整状态与证据见 [`docs/demo-gap-audit.md`](docs/demo-gap-audit.md) 和 [`EXECUTION_PROGRESS.md`](EXECUTION_PROGRESS.md)。
 
 ## 10 个核心闭环页面
 
@@ -49,9 +50,9 @@ Cloudflare Sites 只托管 Worker/D1 演示，不托管 `backend/` Python 服务
 | Maintenance Plan       | `/maintenance`            | 维护日历/列表、天气与资源准备度、冲突检查和 WT-023 状态覆盖                                           |
 | Report Center          | `/reports`                | 六类确定性报告、预览，以及有效 PDF/DOCX 文件导出                                                      |
 | Digital Twin           | `/digital-twin`           | 64 台资产与 12 子系统的 2D 运行态示意、SCADA/告警/RUL 和工作流上下文；不声称物理仿真                  |
-| Diagnosis Center       | `/diagnosis`              | 异常输入、差异诊断、支持/反证、下一步动作、来源引用与人工复核                                         |
-| Data Center            | `/data`                   | 数据域目录、实时/归档/API/Schema 数据集、质量、新鲜度、保留期与查询                                   |
-| Model Management       | `/models`                 | 确定性模型登记、版本、输入输出、指标和运行边界；不声称真实推理服务                                    |
+| Diagnosis Center       | `/diagnosis`              | 异常输入、差异诊断、CARE prediction→Alarm→Mission 证据、下一步动作、来源引用与人工复核                |
+| Data Center            | `/data`                   | 数据域目录、实时/归档/API/Schema/CARE 基准数据、质量、新鲜度、保留期与受限查询                        |
+| Model Management       | `/models`                 | 模型登记、CARE 场内评估与门禁、版本、输入输出、指标和运行边界；不把失败候选伪报上线                   |
 | System Settings        | `/settings`               | 运行时、D1、WebSocket、身份、主题、数据策略和诊断状态；不显示密钥，状态只读且仅本机显示主题可真实生效 |
 
 `/turbines/:id` 和 `/missions/:id` 都会按动态 ID 查询真实的确定性数据。`WT-023` 与 `MISSION-2026-0823` 展示完整主故事，其余合法 ID 展示对应资产或 Mission 的通用详情；未知 ID 进入应用的 `not-found` 页面。风机详情 API 对未知 ID 同样返回结构化 `404`。
@@ -97,7 +98,8 @@ D1 服务器基线从“高风险方案待人工选择与审批、工单草稿�
 ```mermaid
 flowchart TB
   repo["WindOps repository"] --> demo["Sites Worker/D1 product demo"]
-  repo --> slice["backend/ · Python 3.12 WT-023 vertical slice"]
+  repo --> platform["backend/ · Python 3.12 production candidate"]
+  repo --> care["CARE v6 governed benchmark"]
 
   browser["Browser"] --> demo
   demo --> pages["vinext pages · ECharts · TanStack Query/Table · Zustand"]
@@ -106,19 +108,27 @@ flowchart TB
   worker --> workerTools["17-tool deterministic runtime"]
   worker --> d1["D1 workflow, passages, audit and AgentExecution ledger"]
 
-  slice --> fastapi["FastAPI · Pydantic · SQLAlchemy async"]
+  platform --> fastapi["FastAPI · Pydantic · SQLAlchemy async"]
   fastapi --> pg["PostgreSQL · TimescaleDB · pgvector"]
   fastapi --> outbox["Transactional outbox"]
   outbox --> queue["Redis · Dramatiq worker"]
   queue --> graph["LangGraph public-state orchestration"]
   graph --> llm["LiteLLM reasoning and embeddings"]
   graph --> pg
-  fastapi --> minio["MinIO field evidence verification"]
+  fastapi --> minio["MinIO governed artifacts"]
+  care --> contract["Contract · quality · truth freeze"]
+  contract --> parquet["Wide Parquet · bounded PyArrow workers"]
+  parquet --> evaluation["Within-farm leave-one-asset-out evaluation"]
+  evaluation --> minio
+  evaluation --> fastapi
+  evaluation --> replay["Selected bounded replay windows"]
+  replay --> pg
+  replay --> fastapi
 ```
 
-这不是一个已经合并部署的单体系统。浏览器当前读取 Worker API，Sites 部署只包含 Worker/D1 产品演示；`backend/` 是可独立启动、可独立部署的 Python API/worker 纵切，前端尚未切换到它。Worker 侧的 17 个工具和 passage 检索保持确定性；Python 侧另有 11 个 SQL/计算/受控写工具、LangGraph 编排、LiteLLM 推理/embedding 适配器与 pgvector 检索，不能把两套运行时混称为同一实现。
+这不是一个已经合并部署的单体系统。Demo 模式读取 Worker/D1 fixture、17-tool 确定性运行时和本地 passage；Production 模式通过 Sites Worker 的允许列表和每用户委托令牌访问独立 FastAPI/worker 部署，并对就绪探针及每个代理响应核对发布身份。两套运行时有意隔离，不能把 Demo 工具结果称为生产 Agent 执行。
 
-页面和 Worker API 共享 `lib/` 中的规范化领域对象。SCADA、健康、预测、资源与知识工作台通过统一 API 客户端和 TanStack Query 读取 Worker API。WT-023 D1 状态会覆盖 Mission、Decision、Agent、告警、工单、风机健康、风场汇总和知识目录的对应 fixture，因此闭环状态在相关读 API 中保持同源。ECharts 可切换 `LIVE/1H/6H/24H/7D/30D` 六个不同采样窗口，24 小时窗口为 17 组、每组 97 点；逻辑 SCADA 归档按请求页即时生成，不在内存中一次性物化 131,072 行。
+页面和 Worker API 共享 `lib/` 中的规范化领域对象。生产域适配器把 FastAPI 权威对象转换为同一前端契约，失败时不保留 fixture 初始数据；Demo 模式仍保持 WT-023 D1 闭环与确定性大规模数据，便于截图、演示和回归测试。
 
 ## 数据规模
 
@@ -134,8 +144,30 @@ flowchart TB
 | 历史故障案例      |                                      `20` | 与历史工单保持有效引用                                                           |
 | Mission / Agent   |                    `12（10 active） / 22` | 22 个 Agent 分为 Decision、Review、Execution 三层；Mission 另保留 2 个已完成案例 |
 | WT-023 子系统健康 |                                      `12` | 包含主轴承、齿轮箱、发电机等                                                     |
+| CARE v6 源数据    |    `101 CSV / 95 events / 5,242,948 rows` | 36 个场内命名空间资产；45 anomaly / 50 normal；原始数据不进入仓库                |
+| CARE v6 预测      |                              `281,249` 点 | 36 个场内留一资产 fold；所有 95 个事件均计入结果                                 |
 
-物理 SCADA 归档有 16 个指标；实时预览额外包含模型输出的多变量异常分数，因此是 17 组。所有 ID、时间、数值、排序和跨实体引用都是确定性的，便于截图和回归测试。
+物理 SCADA 归档有 16 个指标；实时预览额外包含模型输出的多变量异常分数，因此是 17 组。所有 Demo ID、时间、数值、排序和跨实体引用都是确定性的，便于截图和回归测试。CARE 行数来自只读源数据与不可变全量 manifest，不属于固定在 `2026-08-13` 的 Demo 快照。
+
+## CARE v6 基准子系统
+
+仓库实现了 CARE v6（Wind Turbine SCADA Data For Early Fault Detection）的独立离线基准路径。原始数据集和 ZIP 不随仓库分发；运行者必须从获授权的只读位置显式提供数据源，流水线只向项目 `.artifacts/` 或专用 CARE MinIO bucket 写派生制品。
+
+当前已验证候选的事实边界如下：
+
+| 项目       | 当前合同 / 结果                                                                                                                               |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 数据合同   | A/B/C 为 `22 / 15 / 58` 个事件，按 A→C→B 导入；信号映射分别为 `81 / 252 / 952`，默认模型输入 Avg 特征为 `54 / 63 / 238`                       |
+| 存储       | 全信号保留为分区宽表 Parquet；不把约 8.77 亿标量值展开写入 TimescaleDB，在线库只接收经过选择的有界回放窗口                                    |
+| 质量与真值 | 原值不改写，异常质量写独立 mask；预测先冻结，再由最终 evaluator 打开 truth；训练、校准、在线推理和普通浏览权限不能读取真值                    |
+| 评估       | `within-farm-leave-one-turbine-out-v1` 覆盖 36 fold / 95 events / 281,249 prediction points；12 个候选通过、24 个候选失败，失败结果仍完整登记 |
+| 跨场结论   | 明确禁用；只有建立版本化跨场 ontology 并取得人工审核记录后才能启用，当前结果不得宣传为跨场泛化                                                |
+| 平台闭环   | 受治理目录和评估进入 Data/Model/Diagnosis 页面；选定事件可回放到 TimescaleDB，串联 prediction、Alarm、Mission、Decision 和受控导出            |
+| 许可       | 数据集及其受许可约束的派生分发制品遵循 CC BY-SA 4.0、归属、许可链接和 ShareAlike 复核；WindOps 自有源码仍为 MIT                               |
+
+全量候选在 2026-08-27 完成 `5,242,948` 行导入，实测 693.52 rows/s、进程峰值 521,977,856 bytes；36-fold 评估耗时 125.83 s、进程峰值 235,524,096 bytes。2026-08-29 再次使用当前 verifier 对全部 95 个事件、36 个 fold 和引用制品做只读复算并通过。这些是本地候选证据，不等于生产 registry 签名、SBOM、集群准入或现场系统验收。
+
+实现方案、不可变制品治理和运维步骤分别见 [`docs/adr/0001-care-v6-columnar-pipeline.md`](docs/adr/0001-care-v6-columnar-pipeline.md)、[`docs/runbooks/care-artifact-governance.md`](docs/runbooks/care-artifact-governance.md) 与 [`docs/runbooks/care-full-scale-operations.md`](docs/runbooks/care-full-scale-operations.md)。
 
 ## Worker API 与确定性数据接口
 
@@ -251,18 +283,18 @@ create_work_order
 
 知识助手从 D1 的 `knowledge_passages` 读取 passage 正文；没有 D1 binding 时使用内容相同的确定性 fixture 回退。检索先按风机/Mission 元数据限定可见范围，再只按查询词、领域短语和确定性 CJK n-gram 在 passage 正文中的命中次数评分，不调用 embedding、向量索引或 LLM。主轴承诊断必须同时满足问题意图和至少两项带 citation 的 finding；安全等其他问题不会借用 87% 主故事结论。每条 citation 都明确返回 `passageId`、`docId`、`page`、`section`、`quote`、`score` 与 `href`，finding 通过 passage/citation ID 关联证据；没有匹配证据时返回零置信度，不拼接臆测结论。响应持续标记 `realEmbedding: false`，并区分 `deterministic-d1-passage-retrieval` 与 fixture 回退模式。
 
-## Python WT-023 后端纵切
+## Python 生产候选后端
 
-`backend/` 是独立的 Python 3.12 服务，真实实现以下窄纵切：
+`backend/` 是独立的 Python 3.12 服务，真实实现以下通用任务链路（WT-023 为默认参考模板）：
 
 ```text
 SCADA ingest → Alarm/Mission + transactional outbox → Redis/Dramatiq
 → LangGraph public-state analysis → Evidence/Decision → human approval
 → approval-gated Work Order + atomic resource reservation
-→ five ordered, evidenced field tasks → health/alarm/mission closure → knowledge case
+→ governed ordered field tasks → measured health/alarm/mission closure → knowledge case
 ```
 
-FastAPI 提供 `/api/v1` 路由，Pydantic 校验线协议，SQLAlchemy async 负责持久化。生产配置要求 PostgreSQL/asyncpg、TimescaleDB hypertable、pgvector `Vector(1536)` + HNSW cosine index、Redis/Dramatiq、MinIO 与 LiteLLM。四个 Alembic 迁移依次建立领域/时序/向量模型，Evidence/Decision/AgentExecution 审计字段，outbox/现场证据，以及 fencing lease、读访问审计和版本化 Agent/Skill/Tool 目录。
+FastAPI 提供 `/api/v1` 路由，Pydantic 校验线协议，SQLAlchemy async 负责持久化。生产配置要求 PostgreSQL/asyncpg、TimescaleDB hypertable、pgvector `Vector(1536)` + HNSW cosine index、Redis/Dramatiq、MinIO 与 LiteLLM。单一连续 Alembic 链当前 head 为 `0026_schema_contract_alignment`；迁移建立领域/时序/向量模型、审计与 Outbox、资产范围授权、平台配置秘密治理、有界集合索引、委托写请求防重放、主体级命令幂等，以及 CARE 数据集/事件/评估/回放、结构化 anomaly prediction 与双告警来源边界，并区分点级可评分事件和可能缺少总体 CARE score 的单类评估 fold，最终对 PostgreSQL 必填时间戳与 ORM 索引合同执行数据安全的 schema 对齐，同时对遗留 ingest 凭据提供严格引用校验与隔离审计。`backend/scripts/verify_migration_head.py` 会同时校验真实 head 与本声明，防止文档静默漂移。
 
 ### Python 11-tool 真实语义
 
@@ -280,7 +312,7 @@ Python 工具目录恰好暴露 11 个工具。所有调用写入公开的 tool-
 | `calculate_health_score`    | 基于异常、振动趋势和数据质量计算版本化健康分，不直接回写资产                                                                                    |
 | `predict_rul`               | 基于异常与趋势计算 RUL/30 天失效概率及模型版本                                                                                                  |
 | `create_decision`           | 只为开放 Mission 持久化恰好三个方案的 `pending-approval` Decision，推荐项唯一，已终结 Decision 不可改写                                         |
-| `create_work_order`         | 仅接受属于该 Mission 的有效人工批准；持久化工单与 5 项任务，并以 PostgreSQL 行锁/条件更新原子预留班组、船舶和备件                               |
+| `create_work_order`         | 仅接受属于该 Mission 的有效人工批准；按治理计划持久化 1–20 个 JSON Schema 任务，并以 PostgreSQL 行锁/条件更新原子预留所需资源                   |
 
 ### HITL、RBAC、outbox 与现场证据
 
@@ -288,9 +320,25 @@ Python 工具目录恰好暴露 11 个工具。所有调用写入公开的 tool-
 
 SCADA 请求先在一个事务中提交样本、Alarm、Mission 与 outbox event，再由 Redis/Dramatiq 分发 LangGraph 分析；模型或图执行失败不会回滚已接收遥测，并会在独立事务中保留失败的 AgentExecution/outbox 状态。worker 使用可恢复租约和 fencing token 处理重投递；过期 worker 无法提交图事务或覆盖较新的终态。测试环境才允许显式内联 drain。
 
-5 项现场任务必须按顺序完成。每项都要求 `artifact_uri`、64 位 SHA-256、非空结构化 measurement，以及来自认证主体的 `verified_by`；生产只接受 `minio://bucket/object`，并校验对象存在性及元数据或实际内容哈希。只有恰好 5 条已验证任务证据存在后，系统才允许健康度 `68→82`、主轴承 `63→78`、Alarm/Mission 关闭与知识案例生成。
+现场任务必须按治理计划顺序完成。每项都持久化独立 JSON Schema，并要求 `artifact_uri`、64 位 SHA-256、通过 Schema 门禁的结构化 measurement，以及来自认证主体的 `verified_by`；生产只接受 `minio://bucket/object`，并校验对象存在性及元数据或实际内容哈希。只有计划内全部任务各有一条已验证证据，且最后一步实测健康分达到闭环阈值后，系统才允许 Alarm/Mission 关闭、健康回写与知识案例生成。未提供计划时，主轴承场景保持原五步模板，其他部件使用受控三步模板。
 
 主要只读/写入端点包括 `POST /api/v1/scada/ingest`、`GET /api/v1/missions/{id}`（内含 Evidence、Decision、审批与 AgentExecution）、`POST /api/v1/missions/{id}/approvals`、`GET /api/v1/agent-executions`、`GET /api/v1/observability/agent-executions/24h`、`GET /api/v1/catalog`、`GET /api/v1/tools`、`GET /api/v1/work-orders/{id}`、`POST /api/v1/work-orders/{id}/tasks/{taskId}/complete`、受鉴权的知识正文/案例端点，以及风机 SCADA/健康端点。24 小时观测聚合返回成功/失败/running、平均值与 p95 延迟、工具/token、逐节点统计和去敏后的公开失败上下文。
+
+### CARE 受治理 API
+
+CARE 元数据和派生结果复用 `/api/v1` 的生产鉴权、租户范围、审计和分页边界。浏览器不会直接下载原始 CSV，也不能通过普通 benchmark 权限读取 prediction truth。
+
+| Method | Endpoint                                      | 用途与边界                                                                  |
+| ------ | --------------------------------------------- | --------------------------------------------------------------------------- |
+| `GET`  | `/api/v1/benchmarks/datasets`                 | 有界数据集目录、覆盖范围、质量与许可证摘要                                  |
+| `GET`  | `/api/v1/benchmarks/datasets/{id}/events`     | 事件列表；truth 字段另需 `benchmark_truth` scope                            |
+| `GET`  | `/api/v1/benchmarks/evaluations`              | 分页评估运行、模型、协议和发布门禁                                          |
+| `GET`  | `/api/v1/benchmarks/evaluations/{id}/results` | 有界事件结果，保留 failed/unscorable 结果                                   |
+| `GET`  | `/api/v1/benchmarks/diagnoses`                | prediction、质量、时间、阈值、Alarm 和 Mission 证据链                       |
+| `GET`  | `/api/v1/benchmarks/replay-runs/{id}/curve`   | 服务端裁剪的回放曲线，不加载原始 CSV                                        |
+| `POST` | `/api/v1/benchmarks/evaluations/{id}/exports` | 受控 JSON/CSV 导出；要求 `Idempotency-Key`、`benchmark_export` 和许可证确认 |
+
+普通读取按 `benchmark` / `model` / `mission` scope 分离；真值使用独立 `benchmark_truth`，分发使用 `benchmark_export`。外部分发必须确认 attribution、许可链接和 ShareAlike，响应记录来源制品 SHA-256 与不可变审计；失败或权限不足不会降级为 Demo 数据。
 
 ## Drizzle 数据模型
 
@@ -353,25 +401,33 @@ worker/                        Cloudflare Worker 入口
 tests/                         页面、API、迁移、检索、导出、工作流和工具运行时测试
 backend/
   src/windops_backend/         FastAPI、LangGraph、SQL 工具、outbox、worker 与领域服务
-  alembic/                     PostgreSQL/TimescaleDB/pgvector 与审计/outbox 迁移
-  tests/                       SQLite 纵切、RBAC、工具、RAG、租约与失败审计测试
+    api/benchmarks.py          CARE 数据集、评估、诊断、回放与受控导出 API
+    benchmarks/care/           合同、质量、评分、Parquet、评估、回放、全量任务与许可
+  alembic/                     PostgreSQL/TimescaleDB/pgvector、CARE 元数据与审计/outbox 迁移
+  tests/                       SQLite 纵切、CARE、RBAC、工具、RAG、租约与失败审计测试
+  tests/external/              PostgreSQL/TimescaleDB/CARE 与受保护 release 环境门禁
   docker-compose.yml           仅供本地的生产形态依赖栈
   example.env                  变量名称与不可部署的开发示例值
+docs/
+  care-v6-*.md                 CARE 实施计划与需求评审
+  adr/                         列式存储等架构决策
+  runbooks/                    发布、备份恢复、CARE 全量运行与制品治理
 ```
 
 ## 技术栈
 
-| 范畴                  | 当前使用                                                                                          |
-| --------------------- | ------------------------------------------------------------------------------------------------- |
-| UI                    | React 19、TypeScript、Tailwind CSS 4、项目内 shadcn 风格 primitives、Lucide Icons                 |
-| Worker Runtime/Build  | vinext、Vite 8、React Server Components、Cloudflare Worker/Sites                                  |
-| Visualization         | Apache ECharts 6                                                                                  |
-| Client State          | TanStack Query（SCADA、健康、预测、资源、知识、执行账本）、TanStack Table、Zustand 乐观闭环客户端 |
-| Worker Data/Schema    | 确定性 TypeScript fixture、Drizzle ORM、SQLite/D1 七个迁移与 `DB` binding                         |
-| Python API/Domain     | Python 3.12、FastAPI、Pydantic 2、SQLAlchemy asyncio、Alembic                                     |
-| Agent/RAG             | LangGraph、LiteLLM、pgvector 1536 维 embedding 与 HNSW cosine 检索                                |
-| Production-shape Data | PostgreSQL/asyncpg、TimescaleDB、Redis/Dramatiq、MinIO                                            |
-| Quality               | TypeScript strict、ESLint、Prettier、Node test runner、pytest、Ruff、mypy、离线迁移渲染           |
+| 范畴                  | 当前使用                                                                                                                     |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| UI                    | React 19、TypeScript、Tailwind CSS 4、项目内 shadcn 风格 primitives、Lucide Icons                                            |
+| Worker Runtime/Build  | vinext、Vite 8、React Server Components、Cloudflare Worker/Sites                                                             |
+| Visualization         | Apache ECharts 6                                                                                                             |
+| Client State          | TanStack Query（SCADA、健康、预测、资源、知识、执行账本）、TanStack Table、Zustand 乐观闭环客户端                            |
+| Worker Data/Schema    | 确定性 TypeScript fixture、Drizzle ORM、SQLite/D1 七个迁移与 `DB` binding                                                    |
+| Python API/Domain     | Python 3.12、FastAPI、Pydantic 2、SQLAlchemy asyncio、Alembic                                                                |
+| Agent/RAG             | LangGraph、LiteLLM、pgvector 1536 维 embedding 与 HNSW cosine 检索                                                           |
+| Benchmark Data/ML     | PyArrow 23、宽表 Parquet、scikit-learn 1.x、CARE v6 评分与场内留一资产评估                                                   |
+| Production-shape Data | PostgreSQL/asyncpg、TimescaleDB、Redis/Dramatiq、MinIO、Neo4j                                                                |
+| Quality               | TypeScript strict、ESLint、Prettier、覆盖率/Bundle 预算、Node/Playwright、pytest、Ruff、mypy、真实 PostgreSQL 与离线迁移门禁 |
 
 ## Getting Started
 
@@ -392,6 +448,24 @@ pnpm dev
 
 打开 `http://localhost:3000`。仓库使用 `pnpm-lock.yaml`，**不存在 `package-lock.json`**；请不要在同一变更中混用 npm 与 pnpm 锁文件。
 
+### 生产运行模式与 Python 后端网关
+
+Worker 现在具有显式的 `demo/production` 运行边界。默认 `demo` 模式保留现有确定性产品演示；设置 `WINDOPS_RUNTIME_MODE=production` 后，系统会执行以下失败关闭策略：
+
+- Python 后端地址必须使用 HTTPS，并使用 48 字符以上的非示例 Sites 委托密钥；生产禁止共享 service token 模式；
+- 未迁移的 fixture API 返回 `503 PRODUCTION_ROUTE_NOT_MIGRATED`，不会静默返回演示数据；
+- 三条确定性 WebSocket 返回 `503 PRODUCTION_REALTIME_NOT_MIGRATED`，不会冒充生产事件总线；
+- `/api/runtime` 通过后端 `/api/v1/readyz` 返回脱敏的生产就绪状态、release ID、完整 commit SHA 和镜像摘要；
+- `/api/backend/:path+` 只代理明确允许的 FastAPI 路径；浏览器 Authorization 不会透传，Worker 为每个 Sites 用户签发绑定 method、target 和 body digest 的 60 秒委托令牌；
+- 网关限制请求体大小、请求超时、响应头和重定向，并转发 correlation/trace 与托管身份上下文。
+- Worker 对就绪探针和每个生产代理响应核对批准的 release ID 与镜像摘要，缺失或不匹配返回 503；
+- 已迁移业务域在生产模式下转换并返回 FastAPI 权威数据；动态页面不会在请求失败后保留 fixture 初始数据。
+- Mission 中心的生产创建面板会提交带 `Idempotency-Key` 的真实命令；演示模式保持禁用。工单仍只能由已审批 Mission 的门禁节点创建，不能绕过审批直接新建。
+- 告警确认、指派给当前用户和解除指派会提交带幂等键与期望 revision 的生产命令；服务端持久化审计身份、理由及领域事件，并拒绝陈旧写入或关闭后的非法变更。
+- 告警、SCADA、Agent 与数字孪生工作区通过生产 SSE 从当前事件边界开始订阅，使用 session 游标断点续传和有界指数退避，并保留低频查询对账；确定性 WebSocket 仍仅属于 Demo。
+
+参考 `.dev.vars.example` 配置运行模式、后端 URL、委托密钥、批准的 release ID/镜像摘要和超时。任何未迁移路由都会保持失败关闭，而不是回退到 fixture。
+
 ### 质量检查
 
 ```bash
@@ -403,9 +477,11 @@ pnpm test
 ```
 
 - `pnpm format` 使用 Prettier 写入格式，`pnpm format:check` 只检查。
-- `pnpm test` 会先执行生产构建，再用 Node test runner 验证核心与 11 个专业/平台工作区、fixture API、归档分页与过滤、六个 SCADA 时间窗、12 子系统评估、维护计划、差异诊断、数字孪生、数据/模型/设置目录、PDF/DOCX 导出、D1 passage 初始化与引用、资源关联、WebSocket/D1 overlay、告警 mutation、A/B/C 决策、WT-023 状态机及 Agent Tool Runtime。当前门禁为 99/99。
+- `pnpm test` 会先执行生产构建和 Bundle 预算，再用 Node test runner 验证 Demo 闭环、生产工作区、失败关闭边界、权威业务域适配器、每用户委托身份、生产 SSE 和发布身份匹配；`pnpm test:e2e` 另以真实 Chromium 验证桌面/移动身份、权限、错误恢复和关键业务链路。测试数量以命令和 CI 自动发现结果为准，不在此处维护易漂移的“当前总数”。
+- `pnpm test:coverage` 输出 V8 覆盖率并强制执行行、分支和函数阈值；后端同时执行全局、关键模块和变更行覆盖率门禁。预算与本地命令见 `docs/testing-quality-gates.md`。
 - `pnpm db:generate` 可根据 Drizzle Schema 生成新迁移；运行时初始化不替代部署环境的正式迁移与备份策略。
-- 本地生产构建可通过 `pnpm start` 启动。
+- 本地生产构建可通过 `pnpm build && pnpm start` 启动；`pnpm test:start-smoke`
+  会真实启动同一标准产物，验证默认 Demo 与缺失生产配置的失败关闭响应，并可靠停止进程。
 
 ### 本地运行 Python 纵切
 
@@ -436,17 +512,32 @@ Python 质量门禁：
 
 ```powershell
 python -m pytest tests -q
-python -m ruff format --check src tests alembic
-python -m ruff check src tests alembic
+python -m ruff format --check src tests alembic scripts
+python -m ruff check src tests alembic scripts
 python -m mypy --no-incremental src
 alembic upgrade head --sql
 ```
 
-SQLite 仅用于自动化测试；它使用显式的确定性 embedding 与内存 artifact verifier。仓库当前已通过 Python 39/39 测试、Ruff、mypy、依赖完整性检查，以及 Alembic `0001→0004` PostgreSQL 离线迁移渲染，但尚未在本地对真实 PostgreSQL/TimescaleDB/pgvector、Redis/Dramatiq、MinIO 或 LiteLLM 做发布级集成测试。
+### 本地验证 CARE
+
+CARE 的 PyArrow/scikit-learn 依赖是独立可选组，不会被普通 API import 自动加载。需要运行 CARE 命令时再安装：
+
+```powershell
+cd C:\coding\project\wind-agent\backend
+python -m pip install -e ".[benchmark,test,dev]"
+python -m pytest tests -q -k "care and not external_release"
+windops-care-contract --help
+windops-care-quality --help
+windops-care-full-scale --help
+```
+
+合同、质量、最小导入、离线评估和全量任务必须使用显式的只读数据源与项目内输出目录；不要把原始 CARE 数据复制进仓库，也不要把本地 filesystem adapter 的成功写成生产 MinIO 发布。全量资源预算、恢复、取消、登记和 verifier 命令见 [CARE 全量运行手册](docs/runbooks/care-full-scale-operations.md)。
+
+SQLite 仅用于快速自动化测试；它使用显式的确定性 embedding、内存 artifact verifier 和内存图存储替身，不能替代生产数据库门禁。2026-08-29 当前源码复核中，前端 coverage 门禁为 `143/143`，Chromium 本地合同为 `6 passed + 1 个真实跨层外部环境 skip`，CARE 专项为 `105/105`；后端全量收集 393 项，即 `369 passed + 24 个外部环境 skip`，覆盖率为 `75.82%`。生产构建、bundle、类型、lint、格式、启动 smoke、Ruff、mypy、Bandit、依赖审计、Compose 静态配置、唯一迁移 head 和完整 offline migration render 均通过。外部 PostgreSQL/TimescaleDB/MinIO/真实跨层测试在依赖不可用时会显式 skip，这些 skip 不被描述为发布通过；PR PostgreSQL job 和受保护 release job 均启用“出现 skip 即失败”。实时结果、完整计数和证据分类以 CI 制品、[`EXECUTION_PROGRESS.md`](EXECUTION_PROGRESS.md) 和[质量门禁说明](docs/testing-quality-gates.md)为准。
 
 ## Multi-Agent Architecture
 
-Worker 产品演示中的 22 个 Agent 按职责分为三层：其中 21 个对应规格命名角色，另增加 `Maintenance Strategy` 用于方案与成本风险权衡。它们声明的工具都来自 Worker 的 17-tool 确定性目录；Python WT-023 纵切则使用独立的 LangGraph 角色与 11-tool SQL 目录。
+Worker 产品演示中的 22 个 Agent 按职责分为三层：其中 21 个对应规格命名角色，另增加 `Maintenance Strategy` 用于方案与成本风险权衡。它们声明的工具都来自 Worker 的 17-tool 确定性目录；Python 通用 Mission 工作流使用独立的 LangGraph 角色与 11-tool SQL 目录。
 
 | 层级      | Agent                                                                                                                                                                                      | 职责                                                     |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
@@ -466,25 +557,24 @@ flowchart LR
   workorder --> feedback["Health verification and knowledge feedback"]
 ```
 
-界面和 Python API 只展示可公开、可审计的事件、证据、工具结果和决策摘要，**不展示也不伪造模型的隐藏 Chain-of-Thought**。Worker 知识问答对 D1 `knowledge_passages` 正文做确定性匹配和评分，并返回 passage 级来源引用及 `realEmbedding: false`。Python 代码提供 LangGraph、FastAPI、LiteLLM embedding/reasoning 与 pgvector 路径，但本仓库的本地验证没有调用真实模型服务。
+界面和 Python API 只展示可公开、可审计的事件、证据、工具结果和决策摘要，**不展示也不伪造模型的隐藏 Chain-of-Thought**。Demo 知识问答对 D1 `knowledge_passages` 做确定性匹配并明确标记 `realEmbedding: false`；Production 使用受治理的 LiteLLM reasoning/embedding 与 pgvector 路径。本地门禁使用替身，没有调用真实模型服务，真实供应商结果仍属于外部发布验收。
 
 ## 诚实边界与 Roadmap
 
-当前实现与生产系统之间仍有明确边界：
+当前边界不是“功能仍为 Demo”，而是“生产候选实现尚未获得真实环境证据”：
 
-- Worker/Sites 是完整可交互的产品演示，但其 64 台资产、SCADA、告警、Agent 活动、知识 passage 和 17 个工具都来自确定性数据/逻辑；模拟 WebSocket 不是生产消息总线，dry-run 工具不会调度现场动作。
-- Python 服务只实现 WT-023 单资产、单异常类型的纵切，不是 64 台资产的通用后端，也尚未连接当前 Worker 前端。
-- PostgreSQL/TimescaleDB/pgvector、Redis/Dramatiq、MinIO 与 LiteLLM 的适配器、迁移、配置门禁和 Docker Compose 依赖清单已实现；本地没有启动这些容器、调用真实 LLM/embedding 服务或完成发布级集成测试。
-- Python 服务没有部署；Cloudflare Sites 不能也不会托管该 Python API/worker。Sites 上线不应被解读为 Python 后端上线。
-- 尚无 OPC UA/MQTT/IEC 数据接入、质量码与乱序处理、真实 CMS/气象/ERP/EAM、生产文档摄取或真实现场 artifact 流程。
-- Python Bearer RBAC 是五个静态角色密钥与服务器主体映射，不是企业 SSO、细粒度 IAM 或完整密钥轮换方案；D1 Demo principal 同样不是生产认证。outbox 使用固定 5 分钟租约且没有 heartbeat，fencing 会阻止过期 worker 提交，但超长任务需要回滚并重试。
-- 尚未完成生产 SLO、分布式追踪、备份恢复、灾难演练、渗透测试、完整 WCAG 或 Playwright 视觉回归。
+- Demo 模式仍有意保留 64 台确定性资产、WT-023 D1 闭环、有限 SSE/模拟 WebSocket 和 17-tool 预览；这些能力不会进入 Production 回退路径。
+- Python API/worker 尚未部署到批准的集群；不可部署的零镜像摘要必须由已扫描、生成 SBOM 并签名的制品摘要替换。
+- 固定版本 PostgreSQL/TimescaleDB、五个 MinIO bucket、CARE 回放和隔离 DR 已有本地候选证据，但仍须在批准环境重新执行；Redis、Neo4j、LiteLLM/embedding、在线模型、现场 SCADA/CMS/气象与 EAM 仍需联合验收。
+- CARE 只完成场内留一资产评估，跨场泛化保持失败关闭；在版本化 ontology 和人工审核就绪前不得启用或宣传跨场结果。
+- 灾难恢复、DAST/人工渗透、浏览器 WCAG/视觉、SLO 负载/告警及 Sites 发布后验证必须形成内容寻址证据，并通过 `windops-release-gate`。
+- Cloudflare Sites 只承载 Worker 网关；Sites 发布成功不能替代 Python 后端和真实依赖验收。
 
-下一阶段应先用真实 PostgreSQL/TimescaleDB/pgvector、Redis/Dramatiq、MinIO 与 LiteLLM 做集成/故障演练，再把 WT-023 状态机推广到通用 Mission/工单并接入真实遥测与 EAM，最后让前端通过受控网关消费 Python API。
+逐项状态、完成标准和 go/no-go 规则见 [`docs/demo-gap-audit.md`](docs/demo-gap-audit.md) 与 [`docs/runbooks/release-acceptance.md`](docs/runbooks/release-acceptance.md)。
 
 ## 许可证
 
-WindOps 自有源码以 [MIT License](./LICENSE) 发布。第三方项目、依赖、名称和商标仍遵循各自许可证与权利边界；审计提交、许可证链接和 clean-room 声明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+WindOps 自有源码以 [MIT License](./LICENSE) 发布。CARE v6 数据集 **不是 MIT 资产，也不随本仓库分发**；数据集及受其许可约束的派生分发制品遵循 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)，需要保留来源归属、许可链接、变更说明和 ShareAlike。数据集引用为 Christian Gück、Cyriana M. A. Roelofs / Fraunhofer IEE，Zenodo DOI [`10.5281/zenodo.15846963`](https://doi.org/10.5281/zenodo.15846963)。第三方项目、依赖、名称和商标仍遵循各自许可证与权利边界；完整归属、审计提交、许可证链接和 clean-room 声明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
 ## 开源参考与致谢
 
