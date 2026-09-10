@@ -166,3 +166,8 @@ export const knowledgeDocuments: readonly KnowledgeDocument[] = [
     relatedMissionIds: ["MISSION-2026-0823"],
   },
 ] as const;
+
+export const getKnowledgeDocument = (id: string): KnowledgeDocument | undefined => {
+  const normalized = id.trim().toUpperCase();
+  return knowledgeDocuments.find((document) => document.id === normalized);
+};

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MissionDetailPage } from "@/components/pages/mission-detail-page";
-import { getMission } from "@/lib";
+import { getMission } from "@/lib/operations-data";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 export const dynamic = "force-dynamic";

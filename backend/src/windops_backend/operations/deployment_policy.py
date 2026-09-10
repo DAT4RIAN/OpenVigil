@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import ipaddress
 import json
-import os
 import re
 import sys
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
 import yaml  # type: ignore[import-untyped]
+
+from windops_backend.operations.report_io import sha256_file as _sha256
+from windops_backend.operations.report_io import write_atomic_json
 
 PLACEHOLDER_DIGEST = "sha256:" + "0" * 64
 EXPECTED_NAMESPACE = "windops"
@@ -63,14 +63,6 @@ RELEASE_ENV = {
 
 class DeploymentPolicyError(ValueError):
     """Raised when rendered deployment manifests violate the OpenVigil policy."""
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _mapping(value: object, field: str) -> dict[str, Any]:
@@ -718,23 +710,14 @@ def verify_deployment_policy(
 
 
 def _write_report(path: Path, report: dict[str, Any]) -> None:
-    if path.is_symlink():
-        raise DeploymentPolicyError("deployment-policy report cannot overwrite a symbolic link")
-    target = path.resolve()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(report, indent=2, sort_keys=True) + "\n"
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{target.name}.", suffix=".tmp", dir=target.parent
+    write_atomic_json(
+        path,
+        report,
+        symlink_error=DeploymentPolicyError(
+            "deployment-policy report cannot overwrite a symbolic link"
+        ),
+        temporary_suffix=".tmp",
     )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(payload)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def main() -> None:

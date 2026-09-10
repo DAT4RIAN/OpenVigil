@@ -95,14 +95,29 @@ test("command intent, scoped pages, honest controls and accessible drawers are s
   ] = await Promise.all([
     source("components/layout/app-shell.tsx"),
     source("components/pages/mission-center-page.tsx"),
-    source("components/pages/work-order-page.tsx"),
+    Promise.all([
+      source("components/pages/work-order-page.tsx"),
+      source("components/pages/work-order-drawer.tsx"),
+      source("components/pages/work-order-support.tsx"),
+    ]).then((parts) => parts.join("\n")),
     source("components/pages/scada-page.tsx"),
     source("components/pages/decision-center-page.tsx"),
     source("components/pages/wind-farm-page.tsx"),
-    source("components/pages/agent-control-page.tsx"),
+    Promise.all([
+      source("components/pages/agent-control-page.tsx"),
+      source("components/pages/agent-control-drawer.tsx"),
+      source("components/pages/agent-control-support.ts"),
+    ]).then((parts) => parts.join("\n")),
     source("components/pages/agent-control-table.tsx"),
-    source("components/pages/mission-detail-page.tsx"),
-    source("components/pages/dashboard-page.tsx"),
+    Promise.all([
+      source("components/pages/mission-detail-featured.tsx"),
+      source("components/pages/mission-detail-generic.tsx"),
+      source("components/pages/mission-detail-production.tsx"),
+    ]).then((parts) => parts.join("\n")),
+    Promise.all([
+      source("components/pages/dashboard-demo-page.tsx"),
+      source("components/pages/dashboard-production-page.tsx"),
+    ]).then((parts) => parts.join("\n")),
     source("components/pages/knowledge-base-page.tsx"),
     source("components/data-display/data-table.tsx"),
     source("lib/use-accessible-dialog.ts"),
@@ -156,9 +171,9 @@ test("command intent, scoped pages, honest controls and accessible drawers are s
 test("all five drawers use the shared accessible dialog", async () => {
   const drawerFiles = [
     "components/pages/wind-farm-page.tsx",
-    "components/pages/alarm-center-page.tsx",
-    "components/pages/work-order-page.tsx",
-    "components/pages/agent-control-page.tsx",
+    "components/pages/alarm-center-drawer.tsx",
+    "components/pages/work-order-drawer.tsx",
+    "components/pages/agent-control-drawer.tsx",
     "components/pages/knowledge-base-page.tsx",
   ];
   for (const file of drawerFiles) {
@@ -168,7 +183,11 @@ test("all five drawers use the shared accessible dialog", async () => {
 
 test("production branches never render fixture drawer, approval, summary, or diagnosis data", async () => {
   const [alarmPage, decisionPage, missionPage, diagnosisPage] = await Promise.all([
-    source("components/pages/alarm-center-page.tsx"),
+    Promise.all([
+      source("components/pages/alarm-center-page.tsx"),
+      source("components/pages/alarm-center-drawer.tsx"),
+      source("components/pages/alarm-center-support.tsx"),
+    ]).then((parts) => parts.join("\n")),
     source("components/pages/decision-center-page.tsx"),
     source("components/pages/mission-center-page.tsx"),
     source("components/pages/diagnosis-center-page.tsx"),

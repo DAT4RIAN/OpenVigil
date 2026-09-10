@@ -10,9 +10,18 @@ const pageFiles = [
 ];
 
 const pageSources = await Promise.all(
-  pageFiles.map((filename) =>
-    readFile(new URL(`../components/pages/${filename}`, import.meta.url), "utf8"),
-  ),
+  pageFiles.map(async (filename) => {
+    const source = await readFile(
+      new URL(`../components/pages/${filename}`, import.meta.url),
+      "utf8",
+    );
+    if (filename !== "data-center-page.tsx") return source;
+    const support = await readFile(
+      new URL("../components/pages/data-center-support.tsx", import.meta.url),
+      "utf8",
+    );
+    return `${source}\n${support}`;
+  }),
 );
 
 test("remaining high-value ledgers use the shared operational DataTable", () => {

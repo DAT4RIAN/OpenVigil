@@ -1,4 +1,5 @@
-import { activityEvents, windFarm } from "@/lib";
+import { windFarm } from "@/lib/farm-data";
+import { activityEvents } from "@/lib/operations-data";
 import {
   getProductionBackendConfig,
   proxyProductionBackendRequest,

@@ -1,4 +1,4 @@
-import { errorResponse, jsonResponse } from "@/app/api/_shared";
+import { errorResponse, jsonResponse, parseBoundedInteger } from "@/app/api/_shared";
 import { productionDiagnosesResponse } from "@/lib/production-domain-adapter";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 import { readWorkflowForApi } from "@/app/api/_workflow";
@@ -13,18 +13,6 @@ import {
 } from "@/lib/diagnosis-data";
 
 const allowedParameters = new Set(["q", "turbineId", "status", "risk", "sort", "offset", "limit"]);
-
-const integerParameter = (
-  value: string | null,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number | null => {
-  if (value === null) return fallback;
-  if (!/^\d+$/.test(value)) return null;
-  const parsed = Number(value);
-  return parsed >= minimum && parsed <= maximum ? parsed : null;
-};
 
 export async function GET(request: Request): Promise<Response> {
   if (getProductionBackendConfig().mode === "production") {
@@ -44,8 +32,8 @@ export async function GET(request: Request): Promise<Response> {
   const status = url.searchParams.get("status")?.trim().toLowerCase() ?? null;
   const risk = url.searchParams.get("risk")?.trim().toLowerCase() ?? null;
   const sort = url.searchParams.get("sort")?.trim().toLowerCase() ?? "priority-desc";
-  const offset = integerParameter(url.searchParams.get("offset"), 0, 0, 64);
-  const limit = integerParameter(url.searchParams.get("limit"), 64, 1, 64);
+  const offset = parseBoundedInteger(url.searchParams.get("offset"), 0, 0, 64);
+  const limit = parseBoundedInteger(url.searchParams.get("limit"), 64, 1, 64);
 
   if (query.length > 100) {
     return errorResponse("INVALID_QUERY", "q must contain at most 100 characters.");

@@ -18,6 +18,7 @@ from minio import Minio
 from minio.error import S3Error
 
 from windops_backend.config import Settings, get_settings
+from windops_backend.operations.report_io import sha256_file as sha256_file
 
 BACKUP_FORMAT_VERSION = 2
 LEGACY_BACKUP_FORMAT_VERSION = 1
@@ -90,14 +91,6 @@ SELECT json_build_object(
 """.strip()
 MANIFEST_NAME = "manifest.json"
 MANIFEST_DIGEST_NAME = "manifest.sha256"
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def database_connection(database_url: str) -> tuple[str, str, str]:

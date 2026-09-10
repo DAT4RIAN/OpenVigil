@@ -51,6 +51,9 @@ yarn-error.log*
 # Project-local scratch. Existing reviewed fixtures under tmp remain tracked,
 # while new databases, clones, wheels, and candidate indexes stay local.
 /tmp/*
+!/tmp/external/
+/tmp/external/*
+!/tmp/external/EnergyFaultDetector-v0.6.2/
 
 # Python backend local environment and caches
 /backend/.venv/

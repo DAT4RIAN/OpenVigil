@@ -10,7 +10,7 @@ from pypdf import PdfReader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from windops_backend.agents.tools import (
+from windops_backend.agents.embeddings import (
     DeterministicTestEmbeddingProvider,
     EmbeddingProvider,
     LiteLLMEmbeddingProvider,

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
 import stat
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +22,8 @@ from windops_backend.benchmarks.care.runtime import (
     care_minio_client,
     get_care_worker_settings,
 )
+from windops_backend.operations.report_io import sha256_file as _sha256
+from windops_backend.operations.report_io import write_atomic_json
 
 CARE_QUEUE = "care-v6-offline"
 CARE_MAX_CONCURRENCY = 1
@@ -35,14 +35,6 @@ _COMMIT_SHA = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 
 class CareExecutionPlaneError(RuntimeError):
     pass
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        while chunk := stream.read(1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _required_environment(name: str) -> str:
@@ -120,21 +112,11 @@ def _minio_store() -> tuple[MinioImmutableArtifactStore, list[str]]:
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
-    if path.is_symlink():
-        raise CareExecutionPlaneError("CARE smoke report cannot overwrite a symbolic link")
-    target = path.resolve()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            json.dump(payload, stream, indent=2, sort_keys=True)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    finally:
-        temporary.unlink(missing_ok=True)
+    write_atomic_json(
+        path,
+        payload,
+        symlink_error=CareExecutionPlaneError("CARE smoke report cannot overwrite a symbolic link"),
+    )
 
 
 def run_execution_plane_smoke(

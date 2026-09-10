@@ -1,0 +1,54 @@
+/* Production authentication/capability feedback remains visible above every workspace. */
+.access-recovery-banner {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--warning, #b76500) 32%, transparent);
+  background: color-mix(in srgb, var(--surface, #fff) 94%, #f8c15c);
+}
+
+.access-recovery-banner div {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+}
+
+.access-recovery-banner span {
+  color: var(--text-secondary, #55656f);
+  font-size: 12px;
+}
+
+.access-recovery-banner button,
+.root-session-gate a {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--border, #d8e0e5);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: inherit;
+  cursor: pointer;
+}
+
+.root-session-gate {
+  width: min(560px, calc(100% - 32px));
+  margin: 12vh auto;
+  padding: 32px;
+  border: 1px solid #d8e0e5;
+  border-radius: 18px;
+  background: #fff;
+}
+
+@media (max-width: 740px) {
+  .access-recovery-banner {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .access-recovery-banner div {
+    flex-basis: 100%;
+  }
+}

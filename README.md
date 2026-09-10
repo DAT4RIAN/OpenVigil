@@ -354,6 +354,7 @@ CARE 元数据和派生结果复用 `/api/v1` 的生产鉴权、租户范围、�
 ```text
 app/
   api/                         Worker API、Decision/Evidence、报告导出、有限 SSE 与工具路由
+  styles/                      按原选择器顺序拆分的 foundations、shell/shared 与页面样式
   turbines/[id]/               动态风机详情与 404 路由
   missions/[id]/               动态 Mission 详情与 404 路由
   maintenance/                 维护计划工作区
@@ -368,9 +369,11 @@ components/
   charts/                      ECharts 时序组件
   data-display/                指标卡、状态、健康语义和表格组件
   layout/                      App Shell、Sidebar、Topbar、Command Palette
-  pages/                       核心闭环与专业工作台页面
+  pages/                       核心工作台入口及同目录 view、drawer、hook、contract/support 模块
   providers/query-provider.tsx TanStack Query Provider
 lib/
+  index.ts                     只做兼容 re-export；运行时模块直接引用领域 owner
+  domain-data-validation.ts    跨领域 Demo fixture 一致性检查
   api-client.ts                统一浏览器 API 客户端与结构化错误
   archive-data.ts              大规模确定性归档与按页生成器
   demo-workflow.ts             WT-023 合法状态迁移和完成门禁
@@ -405,7 +408,11 @@ tests/                         页面、API、迁移、检索、导出、工作�
 backend/
   src/windops_backend/         FastAPI、LangGraph、SQL 工具、outbox、worker 与领域服务
     api/benchmarks.py          CARE 数据集、评估、诊断、回放与受控导出 API
-    benchmarks/care/           合同、质量、评分、Parquet、评估、回放、全量任务与许可
+    model_*.py schema_*.py     ORM/Pydantic bounded-context owner；旧模块保留显式兼容导出
+    services/                  领域服务；operational/catalog/metadata/model 按查询、命令与序列化拆分
+    agents/embeddings.py       embedding provider、分块与向量 primitive
+    benchmarks/care/           合同、制品、质量、导入/评估、预测、回放、全量编排与兼容 CLI facade
+    operations/report_io.py    发布/CARE 报告共用的流式摘要与原子 JSON I/O
   alembic/                     PostgreSQL/TimescaleDB/pgvector、CARE 元数据与审计/outbox 迁移
   tests/                       SQLite 纵切、CARE、RBAC、工具、RAG、租约与失败审计测试
   tests/external/              PostgreSQL/TimescaleDB/CARE 与受保护 release 环境门禁

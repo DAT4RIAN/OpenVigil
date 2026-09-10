@@ -12,6 +12,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from windops_backend.benchmarks.care.artifact_utils import (
+    canonical_json_sha256 as _sha256_json,
+)
 from windops_backend.benchmarks.care.contract import DATASET_ID, DATASET_VERSION
 
 REPLAY_CONTRACT_VERSION = "care-v6-replay-contract-v1"
@@ -34,19 +37,6 @@ TERMINAL_RUN_STATUSES = frozenset({"cancelled", "completed", "failed"})
 
 class CareReplayError(ValueError):
     """Raised when a replay would violate the frozen CARE isolation contract."""
-
-
-def _canonical_json_bytes(value: object) -> bytes:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-
-
-def _sha256_json(value: object) -> str:
-    return hashlib.sha256(_canonical_json_bytes(value)).hexdigest()
 
 
 def _require_utc(value: datetime, *, field: str) -> datetime:

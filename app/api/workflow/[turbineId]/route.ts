@@ -14,14 +14,11 @@ import {
 } from "@/lib/server-workflow-contract";
 import { getWorkerEnv } from "@/lib/worker-env";
 
+import { isNonEmptyString, isRecord, jsonResponse } from "../../_shared";
+
 interface WorkflowRouteContext {
   readonly params: Promise<{ readonly turbineId: string }>;
 }
-
-const JSON_HEADERS = {
-  "cache-control": "no-store",
-  "content-type": "application/json; charset=utf-8",
-} as const;
 
 const actions = new Set<ServerWorkflowAction>([
   "approve",
@@ -51,9 +48,6 @@ const meta = (
   authenticated: false,
 });
 
-const response = <T>(body: T, status = 200): Response =>
-  Response.json(body, { status, headers: JSON_HEADERS });
-
 const errorResponse = (
   code: string,
   message: string,
@@ -68,14 +62,8 @@ const errorResponse = (
     error: { code, message, ...(details ? { details } : {}) },
     meta: meta(persistence, writable, false, correlationId),
   };
-  return response(body, status);
+  return jsonResponse(body, status);
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const nonEmptyString = (value: unknown): value is string =>
-  typeof value === "string" && value.trim().length > 0;
 
 function parseFieldEvidence(
   value: unknown,
@@ -88,24 +76,24 @@ function parseFieldEvidence(
       400,
     );
   }
-  const artifactUri = nonEmptyString(value.artifactUri) ? value.artifactUri.trim() : "";
-  const artifactSha256 = nonEmptyString(value.artifactSha256)
+  const artifactUri = isNonEmptyString(value.artifactUri) ? value.artifactUri.trim() : "";
+  const artifactSha256 = isNonEmptyString(value.artifactSha256)
     ? value.artifactSha256.trim().toLowerCase()
     : "";
   const measurement = value.measurement;
-  const observedAt = nonEmptyString(measurement.observedAt) ? measurement.observedAt.trim() : "";
+  const observedAt = isNonEmptyString(measurement.observedAt) ? measurement.observedAt.trim() : "";
   if (
     value.verificationMode !== "deterministic-fixture" ||
     !/^fixture:\/\/windops-field-evidence\/\S+$/i.test(artifactUri) ||
     !/^[a-f0-9]{64}$/.test(artifactSha256) ||
-    !nonEmptyString(measurement.metric) ||
+    !isNonEmptyString(measurement.metric) ||
     typeof measurement.value !== "number" ||
     !Number.isFinite(measurement.value) ||
-    !nonEmptyString(measurement.unit) ||
+    !isNonEmptyString(measurement.unit) ||
     !observedAt ||
     Number.isNaN(Date.parse(observedAt)) ||
     !isRecord(value.verifiedBy) ||
-    !nonEmptyString(value.verifiedBy.id)
+    !isNonEmptyString(value.verifiedBy.id)
   ) {
     throw new ServerWorkflowTransitionError(
       "INVALID_FIELD_EVIDENCE",
@@ -135,7 +123,7 @@ function parseMutation(value: unknown): ServerWorkflowMutationRequest {
       400,
     );
   }
-  if (!nonEmptyString(value.action) || !actions.has(value.action as ServerWorkflowAction)) {
+  if (!isNonEmptyString(value.action) || !actions.has(value.action as ServerWorkflowAction)) {
     throw new ServerWorkflowTransitionError(
       "INVALID_ACTION",
       "The workflow action is not supported.",
@@ -144,8 +132,8 @@ function parseMutation(value: unknown): ServerWorkflowMutationRequest {
   }
   if (
     !isRecord(value.actor) ||
-    !nonEmptyString(value.actor.id) ||
-    !nonEmptyString(value.actor.name)
+    !isNonEmptyString(value.actor.id) ||
+    !isNonEmptyString(value.actor.name)
   ) {
     throw new ServerWorkflowTransitionError(
       "INVALID_ACTOR",
@@ -153,14 +141,14 @@ function parseMutation(value: unknown): ServerWorkflowMutationRequest {
       400,
     );
   }
-  if (value.actor.role !== undefined && !nonEmptyString(value.actor.role)) {
+  if (value.actor.role !== undefined && !isNonEmptyString(value.actor.role)) {
     throw new ServerWorkflowTransitionError(
       "INVALID_ACTOR",
       "actor.role must be a non-empty string when supplied.",
       400,
     );
   }
-  if (!nonEmptyString(value.correlationId) || !nonEmptyString(value.idempotencyKey)) {
+  if (!isNonEmptyString(value.correlationId) || !isNonEmptyString(value.idempotencyKey)) {
     throw new ServerWorkflowTransitionError(
       "INVALID_REQUEST_IDENTITY",
       "correlationId and idempotencyKey are required.",
@@ -178,7 +166,7 @@ function parseMutation(value: unknown): ServerWorkflowMutationRequest {
   const action = value.action as ServerWorkflowAction;
   const actor = authorizeServerWorkflowDemoActor(value.actor.id, action);
   const isApprovalAction = ["approve", "reject", "request-revision", "escalate"].includes(action);
-  if (isApprovalAction && (!nonEmptyString(value.reason) || !nonEmptyString(value.comment))) {
+  if (isApprovalAction && (!isNonEmptyString(value.reason) || !isNonEmptyString(value.comment))) {
     throw new ServerWorkflowTransitionError(
       "APPROVAL_CONTEXT_REQUIRED",
       "Approval actions require non-empty reason and comment fields.",
@@ -194,7 +182,7 @@ function parseMutation(value: unknown): ServerWorkflowMutationRequest {
   }
   if (
     action === "set-task-completion" &&
-    (!nonEmptyString(value.taskId) || typeof value.completed !== "boolean")
+    (!isNonEmptyString(value.taskId) || typeof value.completed !== "boolean")
   ) {
     throw new ServerWorkflowTransitionError(
       "INVALID_TASK_MUTATION",
@@ -216,9 +204,9 @@ function parseMutation(value: unknown): ServerWorkflowMutationRequest {
     ...(isServerWorkflowAlternativeId(value.selectedAlternativeId)
       ? { selectedAlternativeId: value.selectedAlternativeId }
       : {}),
-    ...(nonEmptyString(value.reason) ? { reason: value.reason } : {}),
-    ...(nonEmptyString(value.comment) ? { comment: value.comment } : {}),
-    ...(nonEmptyString(value.taskId) ? { taskId: value.taskId } : {}),
+    ...(isNonEmptyString(value.reason) ? { reason: value.reason } : {}),
+    ...(isNonEmptyString(value.comment) ? { comment: value.comment } : {}),
+    ...(isNonEmptyString(value.taskId) ? { taskId: value.taskId } : {}),
     ...(typeof value.completed === "boolean" ? { completed: value.completed } : {}),
     ...(fieldEvidence ? { fieldEvidence } : {}),
   };
@@ -249,7 +237,7 @@ export async function GET(_request: Request, context: WorkflowRouteContext): Pro
       data: result.snapshot,
       meta: meta(result.persistence, result.writable, false, null),
     };
-    return response(body);
+    return jsonResponse(body);
   } catch (error) {
     const workflowError =
       error instanceof ServerWorkflowTransitionError
@@ -290,7 +278,7 @@ export async function POST(request: Request, context: WorkflowRouteContext): Pro
   }
 
   const correlationId =
-    isRecord(raw) && nonEmptyString(raw.correlationId) ? raw.correlationId : null;
+    isRecord(raw) && isNonEmptyString(raw.correlationId) ? raw.correlationId : null;
   try {
     const mutation = parseMutation(raw);
     const result = await mutateServerWorkflow(getDatabase(), mutation);
@@ -298,7 +286,7 @@ export async function POST(request: Request, context: WorkflowRouteContext): Pro
       data: result.snapshot,
       meta: meta("d1", true, result.replayed, mutation.correlationId),
     };
-    return response(body);
+    return jsonResponse(body);
   } catch (error) {
     const workflowError =
       error instanceof ServerWorkflowTransitionError

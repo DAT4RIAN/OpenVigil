@@ -42,16 +42,10 @@ import {
 import { Avatar, Button } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { RuntimeHealthBadge } from "@/components/ui/query-state";
-import {
-  agents,
-  alarms,
-  decisions,
-  missions,
-  turbines,
-  weatherWindows,
-  windFarm,
-  workOrders,
-} from "@/lib";
+import { agents } from "@/lib/agent-data";
+import { turbines, windFarm } from "@/lib/farm-data";
+import { alarms, decisions, missions, workOrders } from "@/lib/operations-data";
+import { weatherWindows } from "@/lib/telemetry-data";
 import { cn } from "@/lib/utils";
 import { hydrateDemoWorkflow, useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { useAccessibleDialog } from "@/lib/use-accessible-dialog";

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { TurbineDetailPage } from "@/components/pages/turbine-detail-page";
-import { getTurbine } from "@/lib";
+import { getTurbine } from "@/lib/farm-data";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 export const dynamic = "force-dynamic";

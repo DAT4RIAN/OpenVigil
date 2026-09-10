@@ -1,4 +1,5 @@
-import { failureCases, windFarm } from "@/lib";
+import { failureCases } from "@/lib/archive-data";
+import { windFarm } from "@/lib/farm-data";
 
 import { collectionResponse } from "../_shared";
 

@@ -2,10 +2,22 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const pageSource = await readFile(
-  new URL("../components/pages/data-center-page.tsx", import.meta.url),
-  "utf8",
-);
+const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+workerUrl.searchParams.set("care-benchmark-catalog-test", `${process.pid}-${Date.now()}`);
+const { default: worker } = await import(workerUrl.href);
+
+const environment = {
+  ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+};
+const context = { waitUntil() {}, passThroughOnException() {} };
+
+const pageSource = (
+  await Promise.all(
+    ["data-center-page.tsx", "data-center-support.tsx", "use-data-center-workspace.ts"].map(
+      (filename) => readFile(new URL(`../components/pages/${filename}`, import.meta.url), "utf8"),
+    ),
+  )
+).join("\n");
 const gatewaySource = await readFile(
   new URL("../app/api/backend/[...path]/route.ts", import.meta.url),
   "utf8",
@@ -57,11 +69,24 @@ test("CARE data center implements disabled, loading, empty, error, stale, and pe
   assert.match(pageSource, /placeholderData: \(previous\) => previous/);
 });
 
-test("governed catalog declares benchmark category and stable pagination", () => {
+test("governed catalog declares benchmark category and stable pagination", async () => {
   assert.match(catalogDataSource, /"schema", "benchmark"/);
   assert.match(catalogRouteSource, /"offset", "limit"/);
-  assert.match(catalogRouteSource, /limit > 64/);
+  assert.match(catalogRouteSource, /parseBoundedInteger\(limitValue, 64, 1, 64\)/);
   assert.match(catalogRouteSource, /nextOffset/);
   assert.match(pageSource, /benchmark: "Benchmark"/);
   assert.match(pageSource, /benchmark: Activity/);
+
+  const invalidLimit = await worker.fetch(
+    new Request("http://openvigil.test/api/data-catalog?limit=65"),
+    environment,
+    context,
+  );
+  assert.equal(invalidLimit.status, 400);
+  assert.deepEqual(await invalidLimit.json(), {
+    error: {
+      code: "INVALID_LIMIT",
+      message: "limit must be an integer within 1..64.",
+    },
+  });
 });

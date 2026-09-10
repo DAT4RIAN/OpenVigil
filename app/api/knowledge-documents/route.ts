@@ -4,7 +4,7 @@ import { getProductionBackendConfig } from "@/lib/production-runtime";
 import { overlayWorkflowKnowledge } from "@/lib/server-workflow-overlays";
 import type { KnowledgeDocument, KnowledgeDocumentType } from "@/lib/types";
 
-import { jsonResponse } from "../_shared";
+import { jsonResponse, parseBoundedInteger } from "../_shared";
 import { readWorkflowForApi } from "../_workflow";
 
 const documentTypes: readonly KnowledgeDocumentType[] = [
@@ -58,17 +58,8 @@ const parseInteger = (
   fallback: number,
   maximum: number,
 ): number | Response => {
-  if (value === null) return fallback;
-  if (!/^\d+$/.test(value)) {
-    return errorResponse(
-      "INVALID_PAGINATION",
-      `${name} must be an integer between 1 and ${maximum}.`,
-      400,
-      { argument: name, received: value },
-    );
-  }
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) {
+  const parsed = parseBoundedInteger(value, fallback, 1, maximum);
+  if (parsed === null) {
     return errorResponse(
       "INVALID_PAGINATION",
       `${name} must be an integer between 1 and ${maximum}.`,

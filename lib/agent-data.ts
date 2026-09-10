@@ -551,3 +551,6 @@ export const agentLayers = {
   review: agents.filter((agent) => agent.layer === "review"),
   execution: agents.filter((agent) => agent.layer === "execution"),
 } as const;
+
+export const getAgent = (id: string): Agent | undefined =>
+  agents.find((agent) => agent.id === id.trim().toLowerCase());

@@ -35,3 +35,21 @@ export const errorResponse = (code: string, message: string, status = 400): Resp
 
 export const turbineNotFoundResponse = (id: string): Response =>
   errorResponse("TURBINE_NOT_FOUND", `Wind turbine ${id} was not found.`, 404);
+
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+export const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
+
+export const parseBoundedInteger = (
+  value: string | null,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number | null => {
+  if (value === null) return fallback;
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : null;
+};

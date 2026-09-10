@@ -8,7 +8,7 @@ import {
   type OpenVigilReport,
 } from "@/lib/report-data";
 
-import { jsonResponse } from "../_shared";
+import { jsonResponse, parseBoundedInteger } from "../_shared";
 
 const reportPeriods = ["daily", "weekly", "incident", "snapshot"] as const;
 const sortableFields = ["generatedAt", "title", "type"] as const;
@@ -45,15 +45,8 @@ const parseInteger = (
   fallback: number,
   maximum: number,
 ): number | Response => {
-  if (value === null) return fallback;
-  if (!/^\d+$/.test(value)) {
-    return errorResponse("INVALID_PAGINATION", `${name} must be an integer from 1 to ${maximum}.`, {
-      argument: name,
-      received: value,
-    });
-  }
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) {
+  const parsed = parseBoundedInteger(value, fallback, 1, maximum);
+  if (parsed === null) {
     return errorResponse("INVALID_PAGINATION", `${name} must be an integer from 1 to ${maximum}.`, {
       argument: name,
       received: value,

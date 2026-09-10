@@ -3,13 +3,18 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
+
+from windops_backend.operations.report_io import (
+    sha256_file as _sha256_file,
+)
+from windops_backend.operations.report_io import (
+    write_atomic_json,
+)
 
 MANIFEST_NAME = "release-evidence.json"
 MANIFEST_DIGEST_NAME = "release-evidence.sha256"
@@ -280,14 +285,6 @@ RELEASE_EVIDENCE_SCHEMA: dict[str, Any] = {
 }
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _aware_datetime(value: str, field: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -476,17 +473,11 @@ def _write_qualification(path: Path, result: dict[str, Any]) -> None:
         **{key: value for key, value in result.items() if key != "status"},
         "verifier": {"name": "windops-release-gate", "version": "2"},
     }
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            json.dump(qualification, stream, indent=2, sort_keys=True)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    finally:
-        temporary.unlink(missing_ok=True)
+    write_atomic_json(
+        target,
+        qualification,
+        symlink_error=ValueError("release qualification output cannot be a symbolic link"),
+    )
 
 
 def main() -> None:

@@ -522,3 +522,11 @@ export const weatherWindows: readonly WeatherWindow[] = [
     recommendedFor: ["CTV transfer", "tower access", "minor lifting"],
   },
 ] as const;
+
+export const getScadaSeries = (
+  metric: ScadaMetric,
+  turbineId = "WT-023",
+): ScadaSeries | undefined => {
+  const normalized = turbineId.trim().toUpperCase();
+  return scadaSeries.find((series) => series.turbineId === normalized && series.metric === metric);
+};

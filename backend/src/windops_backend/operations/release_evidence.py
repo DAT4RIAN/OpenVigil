@@ -3,8 +3,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -21,7 +19,12 @@ from windops_backend.operations.release_gate import (
     REQUIRED_GATE_CHECKS,
     REQUIRED_RELEASE_GATES,
     _safe_report_path,
-    _sha256_file,
+)
+from windops_backend.operations.report_io import (
+    sha256_file as _sha256_file,
+)
+from windops_backend.operations.report_io import (
+    write_atomic_json,
 )
 
 
@@ -35,21 +38,13 @@ def release_evidence_set_id(release_id: str, commit_sha: str, image_digest: str)
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
-    if path.is_symlink():
-        raise ReleaseEvidenceError("release evidence output cannot overwrite a symbolic link")
-    target = path.resolve()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            json.dump(payload, stream, indent=2, sort_keys=True)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    finally:
-        temporary.unlink(missing_ok=True)
+    write_atomic_json(
+        path,
+        payload,
+        symlink_error=ReleaseEvidenceError(
+            "release evidence output cannot overwrite a symbolic link"
+        ),
+    )
 
 
 def _parse_artifact(value: str) -> tuple[str, str]:

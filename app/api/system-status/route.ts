@@ -1,6 +1,6 @@
 import { errorResponse, jsonResponse } from "@/app/api/_shared";
 import { readWorkflowForApi } from "@/app/api/_workflow";
-import { validateDomainData } from "@/lib";
+import { validateDomainData } from "@/lib/domain-data-validation";
 import { PLATFORM_SNAPSHOT_AT, buildSystemStatusSnapshot } from "@/lib/platform-admin-data";
 import { getWorkerEnv } from "@/lib/worker-env";
 

@@ -22,7 +22,7 @@ import { useOpenVigilIdentity } from "@/components/providers/identity-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, EmptyState, Progress } from "@/components/ui/primitives";
 import { apiGet, apiPost } from "@/lib/api-client";
-import { resourceCenterSnapshot } from "@/lib";
+import { resourceCenterSnapshot } from "@/lib/resource-data";
 import type { ResourceCenterSnapshot, SparePart } from "@/lib/types";
 import { cn } from "@/lib/utils";
 

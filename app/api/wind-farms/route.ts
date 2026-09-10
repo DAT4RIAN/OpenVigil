@@ -1,4 +1,4 @@
-import { fleetSummary, getTurbine, windFarm } from "@/lib";
+import { fleetSummary, getTurbine, windFarm } from "@/lib/farm-data";
 
 import { collectionResponse } from "../_shared";
 import { readWorkflowForApi } from "../_workflow";

@@ -1,27 +1,29 @@
+import { agents } from "@/lib/agent-data";
+import { agentToolCatalog } from "@/lib/agent-tool-runtime";
 import {
-  activityEvents,
-  agentToolCatalog,
-  agents,
   alarmArchive,
-  alarms,
-  decisions,
   demoDatasetCounts,
-  evidenceItems,
   failureCases,
   historicalWorkOrders,
-  knowledgeDocuments,
+} from "@/lib/archive-data";
+import { validateDomainData } from "@/lib/domain-data-validation";
+import { turbines } from "@/lib/farm-data";
+import { knowledgeDocuments } from "@/lib/knowledge-data";
+import {
+  activityEvents,
+  alarms,
+  decisions,
+  evidenceItems,
+  missions,
+  workOrders,
+} from "@/lib/operations-data";
+import {
   maintenanceCrews,
   maintenanceTools,
-  missions,
-  scadaSeries,
   serviceVessels,
   spareParts,
-  subsystemHealth,
-  turbines,
-  validateDomainData,
-  weatherWindows,
-  workOrders,
-} from "@/lib";
+} from "@/lib/resource-data";
+import { scadaSeries, subsystemHealth, weatherWindows } from "@/lib/telemetry-data";
 
 import { jsonResponse } from "../_shared";
 import { readWorkflowForApi } from "../_workflow";

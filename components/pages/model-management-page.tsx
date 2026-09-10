@@ -1,15 +1,9 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
-import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
 import {
-  Activity,
-  BarChart3,
   BrainCircuit,
   ExternalLink,
   FileText,
-  HeartPulse,
   LoaderCircle,
   Rocket,
   RotateCcw,
@@ -19,463 +13,49 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import Link from "next/link";
+
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { AppShell } from "@/components/layout/app-shell";
-import { useOpenVigilIdentity } from "@/components/providers/identity-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, EmptyState } from "@/components/ui/primitives";
-import { apiGet, apiPost } from "@/lib/api-client";
-import {
-  PLATFORM_SNAPSHOT_AT,
-  modelKinds,
-  modelRegistry,
-  modelStatuses,
-  type ModelKind,
-  type ModelRegistryEntry,
-  type ModelStatus,
-} from "@/lib/platform-admin-data";
+import { modelKinds, modelRegistry, modelStatuses } from "@/lib/platform-admin-data";
+
 import styles from "./model-management-page.module.css";
-
-type ModelEnvelope = {
-  data: readonly ModelRegistryEntry[];
-  meta: {
-    count: number;
-    total: number;
-    deterministic: boolean;
-    readOnly: boolean;
-    snapshotAt: string;
-    realInferenceCount: number;
-    embeddingBackedCount: number;
-    artifactCount?: number;
-    activeDeploymentCount?: number;
-    monitoring?: {
-      predictionCount: number;
-      succeededCount: number;
-      failedCount: number;
-      successRate: number | null;
-      p95LatencyMs: number;
-      lastPredictionAt: string | null;
-    };
-    disclosure: string;
-  };
-};
-
-type ModelUploadGrant = {
-  model_id: string;
-  artifact_uri: string;
-  upload_url: string;
-  required_headers: Record<string, string>;
-};
-
-type BenchmarkMetric = {
-  readonly name: string;
-  readonly value: number;
-  readonly unit: string;
-  readonly is_release_metric: boolean;
-  readonly threshold_value: number | null;
-  readonly threshold_direction: string | null;
-  readonly passed: boolean | null;
-};
-
-type BenchmarkEvaluation = {
-  readonly evaluation_run_id: string;
-  readonly model: {
-    readonly model_id: string;
-    readonly version: string;
-    readonly kind: string;
-    readonly algorithm: string | null;
-    readonly evaluation_role: string | null;
-    readonly artifact: { readonly present: boolean; readonly sha256: string | null };
-  };
-  readonly run: {
-    readonly kind: string;
-    readonly status: string;
-    readonly farm: string | null;
-    readonly protocol_version: string;
-    readonly feature_set_version: string;
-    readonly quality_rule_version: string;
-    readonly threshold_policy_version: string;
-    readonly threshold_policy_sha256: string;
-    readonly random_seed: number;
-    readonly input_identity_sha256: string;
-    readonly prediction_truth_used: boolean | null;
-    readonly dependency_identity: Readonly<Record<string, string>> | null;
-    readonly invalidated_at: string | null;
-  };
-  readonly event_accounting: {
-    readonly requested: number;
-    readonly scored: number;
-    readonly failed: number;
-    readonly unscorable: number;
-  };
-  readonly evaluation_artifact: {
-    readonly uri: string | null;
-    readonly sha256: string | null;
-    readonly present: boolean;
-    readonly immutable: boolean;
-  };
-  readonly metrics: readonly BenchmarkMetric[];
-  readonly metrics_truncated: boolean;
-  readonly server_gate: {
-    readonly eligible: boolean;
-    readonly reasons: readonly string[];
-    readonly release_metric_count: number;
-  };
-  readonly deployments: readonly {
-    readonly deployment_id: string;
-    readonly status: string;
-    readonly target_id: string;
-    readonly authorization_state: "current" | "stale" | "inactive" | "not-authorized-for-run";
-  }[];
-};
-
-type BenchmarkEvaluationEnvelope = {
-  readonly data: readonly BenchmarkEvaluation[];
-  readonly meta: {
-    readonly count: number;
-    readonly filtered_total: number;
-    readonly bounds: {
-      readonly evaluation_page_max: number;
-      readonly metrics_per_evaluation_max: number;
-    };
-  };
-};
-
-type BenchmarkEventResultEnvelope = {
-  readonly data: readonly {
-    readonly result_id: string;
-    readonly event_id: number;
-    readonly farm: string;
-    readonly status: "scored" | "failed" | "unscorable";
-    readonly scorable: boolean;
-    readonly anomaly_detected: boolean | null;
-    readonly scores: {
-      readonly care: number | null;
-      readonly coverage: number | null;
-      readonly accuracy: number | null;
-      readonly reliability: number | null;
-      readonly earliness: number | null;
-    };
-    readonly failure_code: string | null;
-    readonly result_sha256: string;
-    readonly prediction_artifact: { readonly present: boolean; readonly sha256: string | null };
-    readonly truth: {
-      readonly access: "restricted" | "revealed";
-      readonly event_label: string | null;
-      readonly failure_type: string | null;
-      readonly description: string | null;
-    };
-  }[];
-  readonly meta: {
-    readonly count: number;
-    readonly filtered_total: number;
-    readonly truth_revealed: boolean;
-    readonly truth_reveal_allowed: boolean;
-    readonly bounds: { readonly event_result_page_max: number };
-  };
-};
-
-const predictiveInputSchema = JSON.stringify(
-  {
-    $schema: "https://json-schema.org/draft/2020-12/schema",
-    type: "object",
-    additionalProperties: false,
-    required: ["turbine_id", "observed_at", "signals"],
-    properties: {
-      turbine_id: { type: "string" },
-      turbine_model: { type: "string" },
-      health_score: { type: "number" },
-      active_alarm_count: { type: "integer", minimum: 0 },
-      observed_at: { type: "string", format: "date-time" },
-      signals: { type: "object", additionalProperties: { type: "number" } },
-    },
-  },
-  null,
-  2,
-);
-
-const predictiveOutputSchema = JSON.stringify(
-  {
-    $schema: "https://json-schema.org/draft/2020-12/schema",
-    type: "object",
-    additionalProperties: false,
-    required: [
-      "component",
-      "failure_probability_30d",
-      "remaining_useful_life_days",
-      "anomaly_score",
-      "primary_finding",
-    ],
-    properties: {
-      component: { type: "string" },
-      component_health: { type: "number", minimum: 0, maximum: 100 },
-      failure_probability_30d: { type: "number", minimum: 0, maximum: 100 },
-      remaining_useful_life_days: { type: "number", minimum: 0 },
-      anomaly_score: { type: "number", minimum: 0, maximum: 1 },
-      primary_finding: { type: "string" },
-      trend: { enum: ["improving", "stable", "declining"] },
-    },
-  },
-  null,
-  2,
-);
-
-const initialEnvelope: ModelEnvelope = {
-  data: modelRegistry,
-  meta: {
-    count: modelRegistry.length,
-    total: modelRegistry.length,
-    deterministic: true,
-    readOnly: true,
-    snapshotAt: PLATFORM_SNAPSHOT_AT,
-    realInferenceCount: 0,
-    embeddingBackedCount: 0,
-    disclosure:
-      "Registry availability describes demo capability, not the presence of trained weights or hosted inference.",
-  },
-};
-
-const kindLabels: Readonly<Record<ModelKind, string>> = {
-  anomaly: "异常检测",
-  predictive: "预测维护",
-  health: "健康评分",
-  retrieval: "知识检索",
-  report: "报告生成",
-};
-
-const kindIcons = {
-  anomaly: Activity,
-  predictive: BarChart3,
-  health: HeartPulse,
-  retrieval: BrainCircuit,
-  report: FileText,
-} as const;
+import { initialEnvelope, kindIcons, kindLabels } from "./model-management-support";
+import { useModelManagement } from "./use-model-management";
 
 export function ModelManagementPage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
-  const { can } = useOpenVigilIdentity();
-  const canManageModels = runtimeMode === "demo" || can("model.manage");
-  const [query, setQuery] = useState("");
-  const [kind, setKind] = useState<"all" | ModelKind>("all");
-  const [status, setStatus] = useState<"all" | ModelStatus>("all");
-  const [selectedId, setSelectedId] = useState(modelRegistry[0]?.id ?? "");
-  const [registrationOpen, setRegistrationOpen] = useState(false);
-  const [artifact, setArtifact] = useState<File | null>(null);
-  const [registration, setRegistration] = useState({
-    modelId: "",
-    name: "",
-    version: "1.0.0",
-    description: "",
-    inputSchema: predictiveInputSchema,
-    outputSchema: predictiveOutputSchema,
-    metrics: '{"validation_set":"required","approval_ticket":"required"}',
-  });
-  const [mutationState, setMutationState] = useState<{
-    busy: boolean;
-    error: string | null;
-    message: string | null;
-  }>({ busy: false, error: null, message: null });
-
-  const endpoint = useMemo(() => {
-    const parameters = new URLSearchParams();
-    if (query.trim()) parameters.set("q", query.trim());
-    if (kind !== "all") parameters.set("kind", kind);
-    if (status !== "all") parameters.set("status", status);
-    const suffix = parameters.toString();
-    return `/api/model-registry${suffix ? `?${suffix}` : ""}`;
-  }, [kind, query, status]);
-
-  const registryQuery = useQuery({
-    queryKey: ["model-registry", endpoint],
-    queryFn: ({ signal }) => apiGet<ModelEnvelope>(endpoint, signal),
-    initialData:
-      runtimeMode === "demo" && endpoint === "/api/model-registry" ? initialEnvelope : undefined,
-    initialDataUpdatedAt: 0,
-    placeholderData: (previous) => previous,
-  });
-
-  const models = registryQuery.data?.data ?? [];
-  const selected = models.find((model) => model.id === selectedId) ?? models[0] ?? null;
-  const [selectedEvaluationId, setSelectedEvaluationId] = useState("");
-  const [revealEvaluationTruth, setRevealEvaluationTruth] = useState(false);
-  const benchmarkEvaluationEndpoint =
-    runtimeMode === "production" && selected?.kind === "anomaly"
-      ? `/api/backend/benchmarks/evaluations?modelId=${encodeURIComponent(selected.id)}&limit=16`
-      : null;
-  const benchmarkEvaluationsQuery = useQuery({
-    queryKey: ["care-benchmark-evaluations", benchmarkEvaluationEndpoint],
-    queryFn: ({ signal }) =>
-      apiGet<BenchmarkEvaluationEnvelope>(benchmarkEvaluationEndpoint ?? "", signal),
-    enabled: Boolean(benchmarkEvaluationEndpoint),
-    staleTime: 0,
-  });
-  const benchmarkEvaluations = benchmarkEvaluationsQuery.data?.data ?? [];
-  const selectedEvaluation =
-    benchmarkEvaluations.find(
-      (evaluation) => evaluation.evaluation_run_id === selectedEvaluationId,
-    ) ??
-    benchmarkEvaluations[0] ??
-    null;
-  const benchmarkResultsEndpoint = selectedEvaluation
-    ? `/api/backend/benchmarks/evaluations/${encodeURIComponent(selectedEvaluation.evaluation_run_id)}/results?limit=64&revealTruth=${revealEvaluationTruth}`
-    : null;
-  const benchmarkResultsQuery = useQuery({
-    queryKey: ["care-benchmark-event-results", benchmarkResultsEndpoint],
-    queryFn: ({ signal }) =>
-      apiGet<BenchmarkEventResultEnvelope>(benchmarkResultsEndpoint ?? "", signal),
-    enabled: runtimeMode === "production" && Boolean(benchmarkResultsEndpoint),
-    staleTime: 0,
-  });
-
-  const registerArtifact = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!canManageModels) {
-      setMutationState({ busy: false, error: "当前角色没有登记模型制品的权限。", message: null });
-      return;
-    }
-    if (!artifact) {
-      setMutationState({ busy: false, error: "请选择模型制品文件。", message: null });
-      return;
-    }
-    setMutationState({ busy: true, error: null, message: null });
-    try {
-      const inputSchema = JSON.parse(registration.inputSchema) as object;
-      const outputSchema = JSON.parse(registration.outputSchema) as object;
-      const metrics = JSON.parse(registration.metrics) as object;
-      const bytes = await artifact.arrayBuffer();
-      const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]
-        .map((value) => value.toString(16).padStart(2, "0"))
-        .join("");
-      const extension = artifact.name.split(".").pop()?.toLowerCase();
-      const contentType =
-        extension === "onnx"
-          ? "application/onnx"
-          : extension === "json"
-            ? "application/json"
-            : extension === "zip"
-              ? "application/zip"
-              : "application/octet-stream";
-      const grant = await apiPost<ModelUploadGrant>("/api/backend/models/uploads/presign", {
-        model_id: registration.modelId,
-        file_name: artifact.name,
-        content_type: contentType,
-        artifact_sha256: digest,
-      });
-      const uploaded = await fetch(grant.upload_url, {
-        method: "PUT",
-        headers: { ...grant.required_headers, "content-type": contentType },
-        body: artifact,
-      });
-      if (!uploaded.ok) throw new Error(`对象存储上传失败（${uploaded.status}）`);
-      await apiPost("/api/backend/models", {
-        model_id: registration.modelId,
-        name: registration.name,
-        version: registration.version,
-        kind: "predictive",
-        description: registration.description,
-        artifact_uri: grant.artifact_uri,
-        artifact_sha256: digest,
-        content_type: contentType,
-        input_schema: inputSchema,
-        output_schema: outputSchema,
-        metrics,
-      });
-      setRegistrationOpen(false);
-      setArtifact(null);
-      setSelectedId(registration.modelId);
-      setMutationState({ busy: false, error: null, message: "模型制品已校验并登记。" });
-      await registryQuery.refetch();
-    } catch (error) {
-      setMutationState({
-        busy: false,
-        error: error instanceof Error ? error.message : "模型登记失败。",
-        message: null,
-      });
-    }
-  };
-
-  const stageDeployment = async () => {
-    if (!canManageModels) {
-      setMutationState({ busy: false, error: "当前角色没有创建模型部署的权限。", message: null });
-      return;
-    }
-    if (!selected) return;
-    const targetId = window.prompt("输入已由运维配置的推理目标 ID：", "predictive-primary");
-    if (!targetId) return;
-    const approvalTicket = window.prompt("输入上线审批/变更单号：");
-    if (!approvalTicket) return;
-    setMutationState({ busy: true, error: null, message: null });
-    try {
-      await apiPost(`/api/backend/models/${encodeURIComponent(selected.id)}/deployments`, {
-        target_id: targetId,
-        stage: "production",
-        evaluation_gate: { approval_ticket: approvalTicket },
-      });
-      setMutationState({ busy: false, error: null, message: "部署已进入待激活状态。" });
-      await registryQuery.refetch();
-    } catch (error) {
-      setMutationState({
-        busy: false,
-        error: error instanceof Error ? error.message : "部署创建失败。",
-        message: null,
-      });
-    }
-  };
-
-  const activate = async (deploymentId: string) => {
-    if (!canManageModels) {
-      setMutationState({ busy: false, error: "当前角色没有激活模型部署的权限。", message: null });
-      return;
-    }
-    const percentageText = window.prompt("本次承载生产流量百分比（1-100）：", "100");
-    if (!percentageText) return;
-    const trafficPercent = Number(percentageText);
-    if (!Number.isInteger(trafficPercent) || trafficPercent < 1 || trafficPercent > 100) {
-      setMutationState({ busy: false, error: "流量百分比必须是 1-100 的整数。", message: null });
-      return;
-    }
-    const reason = window.prompt("输入激活原因或变更单说明：");
-    if (!reason) return;
-    setMutationState({ busy: true, error: null, message: null });
-    try {
-      await apiPost(`/api/backend/models/deployments/${deploymentId}/activate`, {
-        traffic_percent: trafficPercent,
-        reason,
-      });
-      setMutationState({ busy: false, error: null, message: "部署流量已原子切换。" });
-      await registryQuery.refetch();
-    } catch (error) {
-      setMutationState({
-        busy: false,
-        error: error instanceof Error ? error.message : "激活失败。",
-        message: null,
-      });
-    }
-  };
-
-  const rollback = async (deploymentId: string) => {
-    if (!canManageModels) {
-      setMutationState({ busy: false, error: "当前角色没有回滚模型部署的权限。", message: null });
-      return;
-    }
-    if (!selected) return;
-    const reason = window.prompt("输入回滚原因或事件单号：");
-    if (!reason) return;
-    setMutationState({ busy: true, error: null, message: null });
-    try {
-      await apiPost(`/api/backend/models/${encodeURIComponent(selected.id)}/rollback`, {
-        target_deployment_id: deploymentId,
-        reason,
-      });
-      setMutationState({ busy: false, error: null, message: "已回滚到所选部署并恢复 100% 流量。" });
-      await registryQuery.refetch();
-    } catch (error) {
-      setMutationState({
-        busy: false,
-        error: error instanceof Error ? error.message : "回滚失败。",
-        message: null,
-      });
-    }
-  };
+  const {
+    canManageModels,
+    query,
+    setQuery,
+    kind,
+    setKind,
+    status,
+    setStatus,
+    setSelectedId,
+    registrationOpen,
+    setRegistrationOpen,
+    setArtifact,
+    registration,
+    setRegistration,
+    mutationState,
+    setSelectedEvaluationId,
+    revealEvaluationTruth,
+    setRevealEvaluationTruth,
+    registryQuery,
+    models,
+    selected,
+    benchmarkEvaluationsQuery,
+    benchmarkEvaluations,
+    selectedEvaluation,
+    benchmarkResultsQuery,
+    registerArtifact,
+    stageDeployment,
+    activate,
+    rollback,
+  } = useModelManagement(runtimeMode);
 
   return (
     <AppShell runtimeMode={runtimeMode} activePath="/models">

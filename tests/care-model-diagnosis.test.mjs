@@ -2,10 +2,18 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const modelPage = await readFile(
-  new URL("../components/pages/model-management-page.tsx", import.meta.url),
-  "utf8",
-);
+const modelPage = (
+  await Promise.all(
+    [
+      "model-management-page.tsx",
+      "model-management-contracts.ts",
+      "model-management-support.ts",
+      "use-model-management.ts",
+    ].map((filename) =>
+      readFile(new URL(`../components/pages/${filename}`, import.meta.url), "utf8"),
+    ),
+  )
+).join("\n");
 const modelCss = await readFile(
   new URL("../components/pages/model-management-page.module.css", import.meta.url),
   "utf8",

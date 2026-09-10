@@ -26,18 +26,11 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, KeyValue, Progress } from "@/components/ui/primitives";
 import { HealthBadge, StatusBadge } from "@/components/data-display/status-badge";
 import { TimeSeriesChart, type TimeSeriesPoint } from "@/components/charts/time-series-chart";
-import {
-  alarms,
-  featuredMission,
-  getFeaturedMissionNarrative,
-  getTurbine,
-  knowledgeDocuments,
-  missions,
-  scadaSeries,
-  subsystemHealth,
-  turbine023,
-  workOrders,
-} from "@/lib";
+import { getFeaturedMissionNarrative } from "@/lib/demo-workflow";
+import { getTurbine, turbine023 } from "@/lib/farm-data";
+import { knowledgeDocuments } from "@/lib/knowledge-data";
+import { alarms, featuredMission, missions, workOrders } from "@/lib/operations-data";
+import { scadaSeries, subsystemHealth } from "@/lib/telemetry-data";
 import type { WindTurbine, WorkOrderStatus } from "@/lib/types";
 import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";

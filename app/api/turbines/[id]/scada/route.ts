@@ -1,4 +1,5 @@
-import { getTurbine, scadaSeries, windFarm } from "@/lib";
+import { getTurbine, windFarm } from "@/lib/farm-data";
+import { scadaSeries } from "@/lib/telemetry-data";
 
 import { collectionResponse, turbineNotFoundResponse } from "../../../_shared";
 

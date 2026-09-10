@@ -1,4 +1,4 @@
-import { SCADA_ARCHIVE_MAX_PAGE_SIZE, queryScadaMeasurements } from "@/lib";
+import { SCADA_ARCHIVE_MAX_PAGE_SIZE, queryScadaMeasurements } from "@/lib/archive-data";
 import type { ScadaMetric } from "@/lib/types";
 import { productionScadaMeasurementsResponse } from "@/lib/production-domain-adapter";
 import { getProductionBackendConfig } from "@/lib/production-runtime";

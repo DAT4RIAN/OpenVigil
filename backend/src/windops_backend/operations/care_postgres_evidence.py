@@ -4,13 +4,13 @@ import argparse
 import hashlib
 import json
 import math
-import os
 import re
-import tempfile
 import xml.etree.ElementTree as ET  # nosec B405
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from windops_backend.operations.report_io import write_atomic_json
 
 EXPECTED_MIGRATION_HEAD = "0028_read_audit_pipeline"
 MIN_REPLAY_ROWS_PER_SECOND = 50.0
@@ -379,21 +379,13 @@ def verify_care_postgres_evidence(
 
 
 def _write_report(path: Path, report: dict[str, Any]) -> None:
-    if path.is_symlink():
-        raise CarePostgresEvidenceError("CARE PostgreSQL report cannot overwrite a symlink")
-    target = path.resolve()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            json.dump(report, stream, indent=2, sort_keys=True)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    finally:
-        temporary.unlink(missing_ok=True)
+    write_atomic_json(
+        path,
+        report,
+        symlink_error=CarePostgresEvidenceError(
+            "CARE PostgreSQL report cannot overwrite a symlink"
+        ),
+    )
 
 
 def main() -> None:

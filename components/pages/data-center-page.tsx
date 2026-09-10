@@ -1,611 +1,100 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   Activity,
-  Archive,
-  Braces,
   ChevronRight,
   Database,
   ExternalLink,
   Lock,
-  Radio,
   Search,
   Server,
   TableProperties,
   TowerControl,
 } from "lucide-react";
-import { StatusBadge } from "@/components/data-display/status-badge";
+import Link from "next/link";
+
 import { DataTable } from "@/components/data-display/data-table";
+import { StatusBadge } from "@/components/data-display/status-badge";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, Card, CardHeader, EmptyState } from "@/components/ui/primitives";
-import { apiGet, apiPost, OpenVigilApiError } from "@/lib/api-client";
-import {
-  PLATFORM_SNAPSHOT_AT,
-  assetCatalogHierarchy,
-  dataCatalog,
-  dataCatalogCategories,
-  dataCatalogStatuses,
-  schemaObjects,
-  type DataCatalogCategory,
-  type DataCatalogEntry,
-  type DataCatalogStatus,
-} from "@/lib/platform-admin-data";
-import styles from "./data-center-page.module.css";
-import { localizedMetricLabel } from "@/lib/ui-localization";
+import { dataCatalogCategories, dataCatalogStatuses } from "@/lib/platform-admin-data";
 import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
+import { localizedMetricLabel } from "@/lib/ui-localization";
 
-type CatalogEnvelope = {
-  data: readonly DataCatalogEntry[];
-  meta: {
-    count: number;
-    total: number;
-    deterministic: boolean;
-    readOnly: boolean;
-    snapshotAt: string | null;
-    hierarchy: typeof assetCatalogHierarchy;
-    schemaObjects: readonly string[];
-    schemaObjectCount: number;
-    scadaArchiveCount: number;
-  };
-};
-
-type PlatformDataGovernanceEnvelope = {
-  data_sources: readonly {
-    source_id: string;
-    display_name: string;
-    source_kind: string;
-    enabled: boolean;
-    policy: Readonly<Record<string, unknown>>;
-    secret_configured: boolean;
-    updated_at: string;
-  }[];
-  data_contracts: readonly {
-    contract_id: string;
-    source_id: string;
-    variable: string;
-    revision: number;
-    contract: Readonly<Record<string, unknown>>;
-  }[];
-};
-
-type BenchmarkDataset = {
-  readonly dataset_version_id: string;
-  readonly dataset_id: string;
-  readonly version: string;
-  readonly status: string;
-  readonly manifest: { readonly uri: string; readonly sha256: string };
-  readonly archive: {
-    readonly size_bytes: number;
-    readonly file_count: number;
-    readonly content_sha256: string;
-    readonly md5: string | null;
-    readonly sha256: string | null;
-  };
-  readonly license: {
-    readonly name: string;
-    readonly url: string;
-    readonly doi: string;
-    readonly citation: string;
-    readonly attribution: Readonly<Record<string, unknown>>;
-  };
-  readonly coverage: {
-    readonly registered_file_count: number;
-    readonly registered_event_count: number;
-    readonly farm_count: number;
-    readonly asset_count: number;
-    readonly train_row_count: number;
-    readonly prediction_row_count: number;
-    readonly time_point_count: number;
-    readonly truth_summary: {
-      readonly access: "restricted" | "revealed";
-      readonly anomaly_event_count: number | null;
-      readonly normal_event_count: number | null;
-    };
-  };
-  readonly layers: Readonly<
-    Record<
-      string,
-      { readonly status: string; readonly event_count?: number; readonly file_count?: number }
-    >
-  >;
-  readonly mapping: {
-    readonly total: number;
-    readonly enabled: number;
-    readonly disabled: number;
-    readonly unknown_unit: number;
-    readonly failed: number;
-  };
-  readonly quality: {
-    readonly report_count: number;
-    readonly completed_count: number;
-    readonly failed_count: number;
-    readonly mask_count: number;
-    readonly raw_values_modified: boolean;
-    readonly quality_rule_versions: readonly string[];
-    readonly feature_set_versions: readonly string[];
-  };
-  readonly runs: {
-    readonly import: { readonly status: string };
-    readonly evaluation: Readonly<Record<string, number>>;
-    readonly replay: Readonly<Record<string, number>>;
-  };
-  readonly created_at: string;
-};
-
-type BenchmarkDatasetEnvelope = {
-  readonly data: readonly BenchmarkDataset[];
-  readonly meta: {
-    readonly count: number;
-    readonly total: number;
-    readonly filtered_total: number;
-    readonly offset: number;
-    readonly limit: number;
-    readonly has_more: boolean;
-    readonly next_offset: number | null;
-    readonly bounds: Readonly<Record<string, number>>;
-  };
-};
-
-type BenchmarkReplaySummary = {
-  readonly replay_run_id: string;
-  readonly status: string;
-  readonly online_turbine_id: string;
-  readonly replay_anchor_at: string;
-  readonly variables: readonly string[];
-  readonly variable_count: number;
-  readonly variables_truncated: boolean;
-};
-
-type BenchmarkEvent = {
-  readonly benchmark_event_id: string;
-  readonly event_id: number;
-  readonly farm: "A" | "B" | "C";
-  readonly source_asset_id: string;
-  readonly logical_asset_id: string;
-  readonly rows: {
-    readonly train: number;
-    readonly prediction: number;
-    readonly total: number;
-  };
-  readonly truth: {
-    readonly access: "restricted" | "revealed";
-    readonly event_label: string | null;
-  };
-  readonly quality: {
-    readonly status: string;
-    readonly quality_rule_version: string | null;
-    readonly feature_set_version: string | null;
-    readonly mask_count: number;
-    readonly raw_values_modified: boolean;
-  };
-  readonly evaluation_results: Readonly<Record<string, number>>;
-  readonly recent_replays: readonly BenchmarkReplaySummary[];
-};
-
-type BenchmarkEventEnvelope = {
-  readonly data: readonly BenchmarkEvent[];
-  readonly meta: {
-    readonly count: number;
-    readonly filtered_total: number;
-    readonly offset: number;
-    readonly limit: number;
-    readonly has_more: boolean;
-    readonly next_offset: number | null;
-    readonly truth_revealed: boolean;
-  };
-};
-
-type BenchmarkCurveEnvelope = {
-  readonly data: readonly {
-    readonly observed_at: string;
-    readonly value: number;
-    readonly unit: string;
-    readonly quality: string;
-    readonly source_row_id: number | null;
-    readonly observed_at_is_synthetic: boolean;
-  }[];
-  readonly meta: {
-    readonly replay_run_id: string;
-    readonly variable: string;
-    readonly count: number;
-    readonly source_point_count: number;
-    readonly max_points: number;
-    readonly downsample_algorithm: string;
-    readonly bounded: boolean;
-    readonly raw_csv_loaded: boolean;
-    readonly truth_included: boolean;
-    readonly time_semantics: string;
-  };
-};
-
-const initialEnvelope: CatalogEnvelope = {
-  data: dataCatalog,
-  meta: {
-    count: dataCatalog.length,
-    total: dataCatalog.length,
-    deterministic: true,
-    readOnly: true,
-    snapshotAt: PLATFORM_SNAPSHOT_AT,
-    hierarchy: assetCatalogHierarchy,
-    schemaObjects,
-    schemaObjectCount: schemaObjects.length,
-    scadaArchiveCount: 131_072,
-  },
-};
-
-const productionEmptyHierarchy: CatalogEnvelope["meta"]["hierarchy"] = {
-  farm: { id: "unavailable", name: "未加载", turbineCount: 0, capacityMW: 0 },
-  focusTurbine: { id: "unavailable", model: "未加载", healthScore: 0 },
-  subsystems: [],
-};
-
-const categoryLabels: Readonly<Record<DataCatalogCategory, string>> = {
-  live: "实时数据",
-  archive: "历史归档",
-  api: "查询 API",
-  schema: "Schema",
-  benchmark: "Benchmark",
-};
-
-const statusLabels: Readonly<Record<DataCatalogStatus, string>> = {
-  ready: "就绪",
-  demo: "演示",
-  "read-only": "只读",
-};
-
-const categoryIcons = {
-  live: Radio,
-  archive: Archive,
-  api: Braces,
-  schema: TableProperties,
-  benchmark: Activity,
-} as const;
-
-function formatCount(value: number): string {
-  return new Intl.NumberFormat("zh-CN").format(value);
-}
-
-function compactHash(value: string | null): string {
-  return value ? `${value.slice(0, 10)}…${value.slice(-8)}` : "—";
-}
-
-function summarizeRunCounts(counts: Readonly<Record<string, number>>): string {
-  const summary = Object.entries(counts)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([state, count]) => `${state} ${count}`)
-    .join(" · ");
-  return summary || "尚无运行";
-}
-
-function curvePolyline(points: BenchmarkCurveEnvelope["data"]): string {
-  if (!points.length) return "";
-  const values = points.map((point) => point.value).filter(Number.isFinite);
-  if (!values.length) return "";
-  const minimum = Math.min(...values);
-  const maximum = Math.max(...values);
-  const span = maximum - minimum || 1;
-  return points
-    .map((point, index) => {
-      const x = points.length === 1 ? 0 : (index / (points.length - 1)) * 100;
-      const y = 38 - ((point.value - minimum) / span) * 34;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(" ");
-}
-
-const catalogColumns: readonly LegacyColumnDef<DataCatalogEntry, unknown>[] = [
-  {
-    id: "dataset",
-    header: "数据集",
-    accessorFn: (entry) => `${entry.name} ${entry.id}`,
-    cell: ({ row }) => {
-      const Icon = categoryIcons[row.original.category];
-      return (
-        <span className={styles.datasetName}>
-          <span>
-            <Icon size={15} />
-          </span>
-          <span>
-            <strong>{row.original.name}</strong>
-            <small>{row.original.id}</small>
-            <em>{row.original.description}</em>
-          </span>
-        </span>
-      );
-    },
-  },
-  {
-    accessorKey: "category",
-    header: "分类 / 状态",
-    cell: ({ row }) => (
-      <span className={styles.badgeStack}>
-        <span>{categoryLabels[row.original.category]}</span>
-        <StatusBadge
-          value={row.original.status}
-          label={statusLabels[row.original.status]}
-          tone={row.original.status === "ready" ? "success" : "neutral"}
-          compact
-        />
-      </span>
-    ),
-  },
-  {
-    accessorKey: "recordCount",
-    header: "规模",
-    cell: ({ row }) => (
-      <span>
-        <strong className={styles.monoValue}>{formatCount(row.original.recordCount)}</strong>
-        <small>{row.original.schemaObjectCount} 个数据模型对象</small>
-      </span>
-    ),
-  },
-  {
-    accessorKey: "freshness",
-    header: "新鲜度 / 质量",
-    cell: ({ row }) => (
-      <span>
-        <strong>{row.original.freshness}</strong>
-        <small>{row.original.quality}</small>
-      </span>
-    ),
-  },
-  {
-    accessorKey: "retention",
-    header: "保留策略 / 来源",
-    cell: ({ row }) => (
-      <span>
-        <strong>{row.original.retention}</strong>
-        <small>{row.original.source}</small>
-      </span>
-    ),
-  },
-  {
-    id: "query",
-    header: "查询",
-    enableSorting: false,
-    cell: ({ row }) => (
-      <Link className={styles.queryLink} href={row.original.queryHref}>
-        {row.original.queryLabel} <ExternalLink size={12} />
-      </Link>
-    ),
-  },
-];
+import styles from "./data-center-page.module.css";
+import {
+  catalogColumns,
+  categoryLabels,
+  compactHash,
+  formatCount,
+  statusLabels,
+  summarizeRunCounts,
+} from "./data-center-support";
+import { useDataCenterWorkspace } from "./use-data-center-workspace";
 
 export function DataCenterPage({ runtimeMode }: { runtimeMode: OpenVigilRuntimeMode }) {
-  const isProduction = runtimeMode === "production";
-  const [category, setCategory] = useState<"all" | DataCatalogCategory>("all");
-  const [status, setStatus] = useState<"all" | DataCatalogStatus>("all");
-  const [selectedSubsystemKey, setSelectedSubsystemKey] = useState("main-bearing");
-  const [sourceId, setSourceId] = useState("");
-  const [sourceName, setSourceName] = useState("");
-  const [sourceKind, setSourceKind] = useState("opcua");
-  const [sourceSecret, setSourceSecret] = useState("");
-  const [sourceReason, setSourceReason] = useState("");
-  const [contractSourceId, setContractSourceId] = useState("");
-  const [contractVariable, setContractVariable] = useState("");
-  const [contractJson, setContractJson] = useState(
-    '{\n  "label": "Main bearing temperature",\n  "unit": "celsius",\n  "normal_min": -20,\n  "normal_max": 75,\n  "warning_threshold": 80,\n  "critical_threshold": 90\n}',
-  );
-  const [contractReason, setContractReason] = useState("");
-  const [benchmarkQueryText, setBenchmarkQueryText] = useState("");
-  const [benchmarkOffset, setBenchmarkOffset] = useState(0);
-  const [selectedBenchmarkId, setSelectedBenchmarkId] = useState("");
-  const [benchmarkFarm, setBenchmarkFarm] = useState<"all" | "A" | "B" | "C">("all");
-  const [benchmarkEventOffset, setBenchmarkEventOffset] = useState(0);
-  const [selectedReplayId, setSelectedReplayId] = useState("");
-  const [selectedReplayVariable, setSelectedReplayVariable] = useState("");
-  const queryClient = useQueryClient();
-
-  const endpoint = useMemo(() => {
-    const parameters = new URLSearchParams();
-    if (category !== "all") parameters.set("category", category);
-    if (status !== "all") parameters.set("status", status);
-    const suffix = parameters.toString();
-    return `/api/data-catalog${suffix ? `?${suffix}` : ""}`;
-  }, [category, status]);
-
-  const catalogQuery = useQuery({
-    queryKey: ["data-catalog", endpoint],
-    queryFn: ({ signal }) => apiGet<CatalogEnvelope>(endpoint, signal),
-    initialData:
-      endpoint === "/api/data-catalog"
-        ? isProduction
-          ? {
-              data: [],
-              meta: {
-                count: 0,
-                total: 0,
-                deterministic: false,
-                readOnly: false,
-                snapshotAt: null,
-                hierarchy: productionEmptyHierarchy,
-                schemaObjects: [],
-                schemaObjectCount: 0,
-                scadaArchiveCount: 0,
-              },
-            }
-          : initialEnvelope
-        : undefined,
-    initialDataUpdatedAt: 0,
-    placeholderData: (previous) => previous,
-  });
-  const governanceQuery = useQuery({
-    queryKey: ["data-governance"],
-    queryFn: ({ signal }) =>
-      apiGet<PlatformDataGovernanceEnvelope>("/api/backend/platform/configurations", signal),
-    enabled: isProduction,
-    retry: false,
-  });
-  const benchmarkDatasetEndpoint = useMemo(() => {
-    const parameters = new URLSearchParams({
-      limit: "10",
-      offset: String(benchmarkOffset),
-    });
-    if (benchmarkQueryText.trim()) parameters.set("q", benchmarkQueryText.trim());
-    return `/api/backend/benchmarks/datasets?${parameters.toString()}`;
-  }, [benchmarkOffset, benchmarkQueryText]);
-  const benchmarkDatasetsQuery = useQuery({
-    queryKey: ["care-benchmark-datasets", benchmarkDatasetEndpoint],
-    queryFn: async ({ signal }) => {
-      const payload = await apiGet<BenchmarkDatasetEnvelope>(benchmarkDatasetEndpoint, signal);
-      if (
-        payload.meta.limit > 50 ||
-        payload.data.length > payload.meta.limit ||
-        payload.meta.count !== payload.data.length
-      ) {
-        throw new Error("Benchmark 数据集响应违反服务端分页上限。");
-      }
-      return payload;
-    },
-    enabled: isProduction,
-    retry: false,
-    placeholderData: (previous) => previous,
-  });
-  const benchmarkDatasets = benchmarkDatasetsQuery.data?.data ?? [];
-  const activeBenchmarkId = benchmarkDatasets.some(
-    (dataset) => dataset.dataset_version_id === selectedBenchmarkId,
-  )
-    ? selectedBenchmarkId
-    : (benchmarkDatasets[0]?.dataset_version_id ?? "");
-  const activeBenchmark = benchmarkDatasets.find(
-    (dataset) => dataset.dataset_version_id === activeBenchmarkId,
-  );
-  const benchmarkEventsEndpoint = useMemo(() => {
-    if (!activeBenchmarkId) return "";
-    const parameters = new URLSearchParams({
-      limit: "12",
-      offset: String(benchmarkEventOffset),
-    });
-    if (benchmarkFarm !== "all") parameters.set("farm", benchmarkFarm);
-    return `/api/backend/benchmarks/datasets/${encodeURIComponent(activeBenchmarkId)}/events?${parameters.toString()}`;
-  }, [activeBenchmarkId, benchmarkEventOffset, benchmarkFarm]);
-  const benchmarkEventsQuery = useQuery({
-    queryKey: ["care-benchmark-events", benchmarkEventsEndpoint],
-    queryFn: async ({ signal }) => {
-      const payload = await apiGet<BenchmarkEventEnvelope>(benchmarkEventsEndpoint, signal);
-      if (
-        payload.meta.limit > 64 ||
-        payload.data.length > payload.meta.limit ||
-        payload.meta.count !== payload.data.length
-      ) {
-        throw new Error("Benchmark 事件响应违反服务端分页上限。");
-      }
-      return payload;
-    },
-    enabled: isProduction && Boolean(benchmarkEventsEndpoint),
-    retry: false,
-    placeholderData: (previous) => previous,
-  });
-  const benchmarkEvents = benchmarkEventsQuery.data?.data ?? [];
-  const replayOptions = benchmarkEvents.flatMap((event) => event.recent_replays);
-  const activeReplay =
-    replayOptions.find((replay) => replay.replay_run_id === selectedReplayId) ?? replayOptions[0];
-  const activeReplayVariable = activeReplay?.variables.includes(selectedReplayVariable)
-    ? selectedReplayVariable
-    : (activeReplay?.variables[0] ?? "");
-  const benchmarkCurveEndpoint =
-    activeReplay && activeReplayVariable
-      ? `/api/backend/benchmarks/replay-runs/${encodeURIComponent(activeReplay.replay_run_id)}/curve?variable=${encodeURIComponent(activeReplayVariable)}&maxPoints=128`
-      : "";
-  const benchmarkCurveQuery = useQuery({
-    queryKey: ["care-benchmark-curve", benchmarkCurveEndpoint],
-    queryFn: async ({ signal }) => {
-      const payload = await apiGet<BenchmarkCurveEnvelope>(benchmarkCurveEndpoint, signal);
-      if (
-        !payload.meta.bounded ||
-        payload.meta.raw_csv_loaded ||
-        payload.meta.truth_included ||
-        payload.data.length > payload.meta.max_points
-      ) {
-        throw new Error("Benchmark 曲线响应违反降采样或真值隔离合同。");
-      }
-      return payload;
-    },
-    enabled: isProduction && Boolean(benchmarkCurveEndpoint),
-    retry: false,
-    placeholderData: (previous) => previous,
-  });
-  const sourceMutation = useMutation({
-    mutationFn: () => {
-      const existing = governanceQuery.data?.data_sources.find(
-        (source) => source.source_id === sourceId.trim(),
-      );
-      return apiPost("/api/backend/platform/data-sources", {
-        source_id: sourceId.trim(),
-        display_name: sourceName.trim(),
-        source_kind: sourceKind,
-        enabled: true,
-        sequence_required: true,
-        max_lateness_seconds: 300,
-        max_future_skew_seconds: 120,
-        expected_heartbeat_seconds: 60,
-        allowed_turbines: [],
-        allowed_variables: [],
-        secret_reference: sourceSecret.trim() || null,
-        expected_updated_at: existing?.updated_at ?? null,
-        reason: sourceReason.trim(),
-      });
-    },
-    onSuccess: async () => {
-      setSourceReason("");
-      setSourceSecret("");
-      await queryClient.invalidateQueries({ queryKey: ["data-governance"] });
-      await queryClient.invalidateQueries({ queryKey: ["data-catalog"] });
-    },
-  });
-  const contractMutation = useMutation({
-    mutationFn: () => {
-      const parsed = JSON.parse(contractJson) as unknown;
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        throw new Error("数据契约必须是 JSON 对象。");
-      }
-      const current = governanceQuery.data?.data_contracts.find(
-        (contract) =>
-          contract.source_id === contractSourceId.trim() &&
-          contract.variable === contractVariable.trim(),
-      );
-      return apiPost("/api/backend/platform/data-contracts", {
-        source_id: contractSourceId.trim(),
-        variable: contractVariable.trim(),
-        contract: parsed,
-        expected_revision: current?.revision ?? 0,
-        reason: contractReason.trim(),
-      });
-    },
-    onSuccess: async () => {
-      setContractReason("");
-      await queryClient.invalidateQueries({ queryKey: ["data-governance"] });
-      await queryClient.invalidateQueries({ queryKey: ["data-catalog"] });
-    },
-  });
-
-  const hierarchy =
-    catalogQuery.data?.meta.hierarchy ??
-    (isProduction ? productionEmptyHierarchy : assetCatalogHierarchy);
-  const selectedSubsystem =
-    hierarchy.subsystems.find((subsystem) => subsystem.key === selectedSubsystemKey) ??
-    hierarchy.subsystems[0];
-  const entries = catalogQuery.data?.data ?? [];
-  const filtered = category !== "all" || status !== "all";
-  const scadaArchiveCount =
-    catalogQuery.data?.meta.scadaArchiveCount ?? (isProduction ? 0 : 131_072);
-  const schemaObjectCount =
-    catalogQuery.data?.meta.schemaObjectCount ?? (isProduction ? 0 : schemaObjects.length);
-  const catalogTotal = catalogQuery.data?.meta.total ?? (isProduction ? 0 : dataCatalog.length);
-  const benchmarkPermissionDenied =
-    benchmarkDatasetsQuery.error instanceof OpenVigilApiError &&
-    benchmarkDatasetsQuery.error.status === 403;
-  const benchmarkShowsPreviousData =
-    benchmarkDatasetsQuery.isPlaceholderData ||
-    benchmarkEventsQuery.isPlaceholderData ||
-    benchmarkCurveQuery.isPlaceholderData;
-  const benchmarkCurvePoints = benchmarkCurveQuery.data?.data ?? [];
-  const benchmarkCurveLine = curvePolyline(benchmarkCurvePoints);
+  const {
+    isProduction,
+    category,
+    setCategory,
+    status,
+    setStatus,
+    setSelectedSubsystemKey,
+    sourceId,
+    setSourceId,
+    sourceName,
+    setSourceName,
+    sourceKind,
+    setSourceKind,
+    sourceSecret,
+    setSourceSecret,
+    sourceReason,
+    setSourceReason,
+    contractSourceId,
+    setContractSourceId,
+    contractVariable,
+    setContractVariable,
+    contractJson,
+    setContractJson,
+    contractReason,
+    setContractReason,
+    benchmarkQueryText,
+    setBenchmarkQueryText,
+    benchmarkOffset,
+    setBenchmarkOffset,
+    setSelectedBenchmarkId,
+    benchmarkFarm,
+    setBenchmarkFarm,
+    benchmarkEventOffset,
+    setBenchmarkEventOffset,
+    setSelectedReplayId,
+    setSelectedReplayVariable,
+    catalogQuery,
+    governanceQuery,
+    benchmarkDatasetsQuery,
+    benchmarkDatasets,
+    activeBenchmarkId,
+    activeBenchmark,
+    benchmarkEventsQuery,
+    benchmarkEvents,
+    replayOptions,
+    activeReplay,
+    activeReplayVariable,
+    benchmarkCurveQuery,
+    sourceMutation,
+    contractMutation,
+    hierarchy,
+    selectedSubsystem,
+    entries,
+    filtered,
+    scadaArchiveCount,
+    schemaObjectCount,
+    catalogTotal,
+    benchmarkPermissionDenied,
+    benchmarkShowsPreviousData,
+    benchmarkCurveLine,
+  } = useDataCenterWorkspace(runtimeMode);
 
   return (
     <AppShell runtimeMode={runtimeMode} activePath="/data">

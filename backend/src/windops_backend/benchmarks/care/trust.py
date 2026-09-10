@@ -11,6 +11,12 @@ from typing import Any
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from windops_backend.benchmarks.care.artifact_utils import (
+    canonical_json_bytes as _canonical_bytes,
+)
+from windops_backend.benchmarks.care.artifact_utils import (
+    canonical_json_sha256 as _canonical_hash,
+)
 from windops_backend.benchmarks.care.contract import (
     DATASET_ID,
     DATASET_VERSION,
@@ -37,19 +43,6 @@ OFFICIAL_APPROVAL_PUBLIC_KEY_BASE64 = "WgeeMfyYhZAqV/418FzEXfzyqx+bE0BltPozBlBo9
 class CareTrustAnchor:
     approved_root: Mapping[str, Any]
     public_key_base64: str
-
-
-def _canonical_bytes(value: object) -> bytes:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-
-
-def _canonical_hash(value: object) -> str:
-    return hashlib.sha256(_canonical_bytes(value)).hexdigest()
 
 
 def canonical_source_contract(manifest: Mapping[str, Any]) -> dict[str, Any]:

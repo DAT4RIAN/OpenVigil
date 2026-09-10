@@ -1,11 +1,6 @@
-import {
-  getAlarmsForTurbine,
-  getTurbine,
-  missions,
-  subsystemHealth,
-  windFarm,
-  workOrders,
-} from "@/lib";
+import { getTurbine, windFarm } from "@/lib/farm-data";
+import { getAlarmsForTurbine, missions, workOrders } from "@/lib/operations-data";
+import { subsystemHealth } from "@/lib/telemetry-data";
 import { overlayWorkflowTurbine } from "@/lib/server-workflow-overlays";
 
 import { jsonResponse, turbineNotFoundResponse } from "../../_shared";

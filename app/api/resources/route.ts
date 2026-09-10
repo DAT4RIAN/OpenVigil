@@ -1,4 +1,4 @@
-import { resourceCenterSnapshot } from "@/lib";
+import { resourceCenterSnapshot } from "@/lib/resource-data";
 import { productionResourcesResponse } from "@/lib/production-domain-adapter";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 

@@ -3,16 +3,15 @@ from __future__ import annotations
 import argparse
 import http.client
 import json
-import os
 import re
 import subprocess  # nosec B404
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Any, cast
 
 from windops_backend.operations.container_artifact import ContainerArtifactError
+from windops_backend.operations.report_io import write_atomic_json
 
 
 def _run(command: list[str], *, capture: bool = True) -> str:
@@ -244,21 +243,11 @@ def smoke_release_image(
 
 
 def _write_report(path: Path, report: dict[str, Any]) -> None:
-    if path.is_symlink():
-        raise ContainerArtifactError("smoke report cannot overwrite a symbolic link")
-    target = path.resolve()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            json.dump(report, stream, indent=2, sort_keys=True)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    finally:
-        temporary.unlink(missing_ok=True)
+    write_atomic_json(
+        path,
+        report,
+        symlink_error=ContainerArtifactError("smoke report cannot overwrite a symbolic link"),
+    )
 
 
 def main() -> None:

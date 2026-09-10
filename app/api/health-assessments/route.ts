@@ -1,4 +1,4 @@
-import { healthAssessments } from "@/lib";
+import { healthAssessments } from "@/lib/health-data";
 import { overlayWorkflowHealth } from "@/lib/server-workflow-overlays";
 import type { HealthState, RiskLevel } from "@/lib/types";
 import { productionHealthAssessmentsResponse } from "@/lib/production-domain-adapter";

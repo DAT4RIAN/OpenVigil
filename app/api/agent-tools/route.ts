@@ -9,26 +9,24 @@ import {
   AGENT_TOOL_NAMES,
   AgentToolRuntimeError,
   agentToolCatalog,
-  agents,
-  decisions,
   getAgentToolExecutionHistory,
   getDefaultAgentIdForTool,
-  historicalWorkOrders,
   isAgentToolName,
-  missions,
   normalizeAgentToolExecutionRequest,
-  windFarm,
-  workOrders,
   type AgentToolExecution,
   type AgentToolRequest,
-} from "@/lib";
+} from "@/lib/agent-tool-runtime";
+import { agents } from "@/lib/agent-data";
+import { historicalWorkOrders } from "@/lib/archive-data";
+import { windFarm } from "@/lib/farm-data";
+import { decisions, missions, workOrders } from "@/lib/operations-data";
 import { getWorkerEnv } from "@/lib/worker-env";
 import {
   getProductionBackendConfig,
   proxyProductionBackendRequest,
 } from "@/lib/production-runtime";
 
-import { jsonResponse } from "../_shared";
+import { isRecord, jsonResponse } from "../_shared";
 import { readWorkflowForApi } from "../_workflow";
 
 type ApiPersistence = AgentExecutionPersistence | "unavailable";
@@ -45,9 +43,6 @@ const POST_KEYS = new Set(["tool", "args", "agentId", "missionId", "idempotencyK
 const GET_KEYS = new Set(["agentId", "missionId", "status", "toolName", "limit"]);
 const EXECUTION_STATUSES = new Set<AgentToolExecution["status"]>(["succeeded", "failed"]);
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const meta = (persistence: ApiPersistence, extra: Readonly<Record<string, unknown>> = {}) => ({
   snapshotAt: windFarm.lastUpdatedAt,

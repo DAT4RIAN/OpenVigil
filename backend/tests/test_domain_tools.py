@@ -218,10 +218,10 @@ def test_second_migration_adds_domain_entities_and_execution_audit() -> None:
 
 
 def test_production_rag_source_requires_provider_vectors_and_pgvector_cosine() -> None:
-    tools_source = (
-        Path(__file__).parents[1] / "src" / "windops_backend" / "agents" / "tools.py"
-    ).read_text(encoding="utf-8")
-    assert "await litellm.aembedding" in tools_source
+    agents_root = Path(__file__).parents[1] / "src" / "windops_backend" / "agents"
+    tools_source = (agents_root / "tools.py").read_text(encoding="utf-8")
+    embeddings_source = (agents_root / "embeddings.py").read_text(encoding="utf-8")
+    assert "await litellm.aembedding" in embeddings_source
     assert "KnowledgeDocument.embedding.cosine_distance(query_vector)" in tools_source
     assert 'retrieval_method = "pgvector_hnsw_cosine"' in tools_source
     assert "production PostgreSQL RAG requires a production embedding provider" in tools_source

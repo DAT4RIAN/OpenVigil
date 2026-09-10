@@ -41,7 +41,7 @@ import {
   type OperationViewState,
 } from "@/components/ui/query-state";
 import { apiGet, apiPostCommand, createIdempotencyKey, OpenVigilApiError } from "@/lib/api-client";
-import { scadaSeries } from "@/lib";
+import { scadaSeries } from "@/lib/telemetry-data";
 import type { DemoWorkflowState } from "@/lib/demo-workflow";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import type { RiskLevel, TrendDirection } from "@/lib/types";

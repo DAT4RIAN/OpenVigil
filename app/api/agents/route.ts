@@ -1,4 +1,4 @@
-import { agents } from "@/lib";
+import { agents } from "@/lib/agent-data";
 import { productionAgentsResponse } from "@/lib/production-domain-adapter";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 import { overlayWorkflowAgents } from "@/lib/server-workflow-overlays";

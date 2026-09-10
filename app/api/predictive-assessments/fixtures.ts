@@ -1,4 +1,6 @@
-import { healthAssessments, subsystemHealth, turbines, windFarm } from "@/lib";
+import { turbines, windFarm } from "@/lib/farm-data";
+import { healthAssessments } from "@/lib/health-data";
+import { subsystemHealth } from "@/lib/telemetry-data";
 import type { HealthAssessment, RiskLevel, TrendDirection, TurbineStatus } from "@/lib/types";
 
 export const predictiveRiskLevels = ["critical", "high", "medium", "low"] as const;

@@ -1,4 +1,4 @@
-import { jsonResponse } from "@/app/api/_shared";
+import { jsonResponse, parseBoundedInteger } from "@/app/api/_shared";
 import { readWorkflowForApi } from "@/app/api/_workflow";
 import { productionPredictiveAssessmentsResponse } from "@/lib/production-domain-adapter";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
@@ -15,18 +15,6 @@ import {
 
 const sortModes = ["risk-desc", "anomaly-desc", "health-asc"] as const;
 type SortMode = (typeof sortModes)[number];
-
-const integerParameter = (
-  value: string | null,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number | null => {
-  if (value === null) return fallback;
-  if (!/^\d+$/.test(value)) return null;
-  const parsed = Number(value);
-  return parsed >= minimum && parsed <= maximum ? parsed : null;
-};
 
 const sortAssessments = (
   data: readonly PredictiveAssessment[],
@@ -59,8 +47,8 @@ export async function GET(request: Request): Promise<Response> {
   const trend = url.searchParams.get("trend")?.trim().toLowerCase() ?? null;
   const query = url.searchParams.get("q")?.trim().toLowerCase() ?? "";
   const sort = url.searchParams.get("sort")?.trim().toLowerCase() ?? "risk-desc";
-  const offset = integerParameter(url.searchParams.get("offset"), 0, 0, 64);
-  const limit = integerParameter(url.searchParams.get("limit"), 64, 1, 64);
+  const offset = parseBoundedInteger(url.searchParams.get("offset"), 0, 0, 64);
+  const limit = parseBoundedInteger(url.searchParams.get("limit"), 64, 1, 64);
 
   if (risk && !predictiveRiskLevels.includes(risk as (typeof predictiveRiskLevels)[number])) {
     return jsonResponse(

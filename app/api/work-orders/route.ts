@@ -1,4 +1,6 @@
-import { historicalWorkOrders, windFarm, workOrders } from "@/lib";
+import { historicalWorkOrders } from "@/lib/archive-data";
+import { windFarm } from "@/lib/farm-data";
+import { workOrders } from "@/lib/operations-data";
 import { productionWorkOrdersResponse } from "@/lib/production-domain-adapter";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 import { overlayWorkflowWorkOrder } from "@/lib/server-workflow-overlays";

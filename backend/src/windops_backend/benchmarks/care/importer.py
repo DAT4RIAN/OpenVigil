@@ -15,6 +15,12 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from windops_backend.benchmarks.care.artifact_utils import (
+    canonical_json_sha256 as _canonical_hash,
+)
+from windops_backend.benchmarks.care.artifact_utils import (
+    sha256_file,
+)
 from windops_backend.benchmarks.care.contract import (
     COLUMN_MAPPING_VERSION,
     DATASET_ID,
@@ -68,6 +74,8 @@ from windops_backend.services.benchmark_metadata import (
     register_quality_report,
 )
 
+_sha256_file = sha256_file
+
 MINIMAL_IMPORT_SCHEMA_VERSION = "care-v6-a-minimal-import-v1"
 MINIMAL_EVENT_IDS = (0, 24)
 MINIMAL_FARM: Literal["A"] = "A"
@@ -117,27 +125,6 @@ class _ImportContract:
     selected_columns: tuple[str, ...]
     model_input_columns: tuple[str, ...]
     source_dataset_sha256: str
-
-
-def _canonical_json_bytes(value: object) -> bytes:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-
-
-def _canonical_hash(value: object) -> str:
-    return hashlib.sha256(_canonical_json_bytes(value)).hexdigest()
-
-
-def _sha256_file(path: Path, *, chunk_size: int = 4 * 1024 * 1024) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        while chunk := stream.read(chunk_size):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _hash_archive(path: Path) -> dict[str, int | str]:

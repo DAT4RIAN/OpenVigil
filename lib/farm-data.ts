@@ -193,3 +193,9 @@ export const fleetSummary = {
   currentPowerMW: windFarm.currentPowerMW,
   averageHealthScore: windFarm.averageHealthScore,
 } as const;
+
+/** Return a turbine by canonical ID (for example, `WT-023`). */
+export const getTurbine = (id: string): WindTurbine | undefined => {
+  const normalized = id.trim().toUpperCase();
+  return turbines.find((turbine) => turbine.id === normalized);
+};

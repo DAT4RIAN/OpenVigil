@@ -1,4 +1,4 @@
-import { fleetSummary, turbines, windFarm } from "@/lib";
+import { fleetSummary, turbines, windFarm } from "@/lib/farm-data";
 import { overlayWorkflowTurbine } from "@/lib/server-workflow-overlays";
 import { productionTurbinesResponse } from "@/lib/production-domain-adapter";
 import { getProductionBackendConfig } from "@/lib/production-runtime";

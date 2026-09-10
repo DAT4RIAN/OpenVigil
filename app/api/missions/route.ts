@@ -1,4 +1,4 @@
-import { missions } from "@/lib";
+import { missions } from "@/lib/operations-data";
 import { productionMissionsResponse } from "@/lib/production-domain-adapter";
 import {
   getProductionBackendConfig,

@@ -18,14 +18,15 @@ async function cssSources(directory) {
   );
 }
 
-const sources = [...(await cssSources("app")), ...(await cssSources("components"))];
+const appSources = await cssSources("app");
+const sources = [...appSources, ...(await cssSources("components"))];
+const applicationCss = appSources.map(([, source]) => source).join("\n");
 
-test("the design system declares the required body, secondary, and metadata scale", async () => {
-  const globalCss = await readFile(new URL("app/globals.css", root), "utf8");
-  assert.match(globalCss, /--font-body:\s*13px/);
-  assert.match(globalCss, /--font-secondary:\s*12px/);
-  assert.match(globalCss, /--font-metadata:\s*11px/);
-  assert.match(globalCss, /body\s*\{[\s\S]*?font-size:\s*var\(--font-body\)/);
+test("the design system declares the required body, secondary, and metadata scale", () => {
+  assert.match(applicationCss, /--font-body:\s*13px/);
+  assert.match(applicationCss, /--font-secondary:\s*12px/);
+  assert.match(applicationCss, /--font-metadata:\s*11px/);
+  assert.match(applicationCss, /body\s*\{[\s\S]*?font-size:\s*var\(--font-body\)/);
 });
 
 test("stylesheets cannot reintroduce text below the 11px metadata floor", () => {
@@ -38,13 +39,12 @@ test("stylesheets cannot reintroduce text below the 11px metadata floor", () => 
 });
 
 test("shared business controls and tables use the semantic type scale", async () => {
-  const globalCss = await readFile(new URL("app/globals.css", root), "utf8");
   const tableCss = await readFile(
     new URL("components/data-display/data-table.module.css", root),
     "utf8",
   );
-  assert.match(globalCss, /\.button\s*\{[\s\S]*?font-size:\s*13px/);
-  assert.match(globalCss, /\.status-badge\s*\{[\s\S]*?font-size:\s*var\(--font-secondary\)/);
+  assert.match(applicationCss, /\.button\s*\{[\s\S]*?font-size:\s*13px/);
+  assert.match(applicationCss, /\.status-badge\s*\{[\s\S]*?font-size:\s*var\(--font-secondary\)/);
   assert.match(tableCss, /\.table th\s*\{[\s\S]*?font-size:\s*var\(--font-body\)/);
   assert.match(tableCss, /\.table td\s*\{[\s\S]*?font-size:\s*13px/);
 });

@@ -1,4 +1,4 @@
-import { errorResponse, jsonResponse } from "@/app/api/_shared";
+import { errorResponse, jsonResponse, parseBoundedInteger } from "@/app/api/_shared";
 import { productionDataCatalogResponse } from "@/lib/production-domain-adapter";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 import {
@@ -30,8 +30,8 @@ export function GET(request: Request): Response | Promise<Response> {
   const status = url.searchParams.get("status")?.trim().toLowerCase() ?? null;
   const offsetValue = url.searchParams.get("offset")?.trim() ?? "0";
   const limitValue = url.searchParams.get("limit")?.trim() ?? "64";
-  const offset = Number(offsetValue);
-  const limit = Number(limitValue);
+  const offset = parseBoundedInteger(offsetValue, 0, 0, 10_000);
+  const limit = parseBoundedInteger(limitValue, 64, 1, 64);
 
   if (query.length > 100) {
     return errorResponse("INVALID_QUERY", "q must contain at most 100 characters.");
@@ -45,10 +45,10 @@ export function GET(request: Request): Response | Promise<Response> {
   if (status && !dataCatalogStatuses.includes(status as (typeof dataCatalogStatuses)[number])) {
     return errorResponse("INVALID_STATUS", `Unknown data catalog status: ${status}`);
   }
-  if (!/^\d+$/.test(offsetValue) || !Number.isSafeInteger(offset) || offset > 10_000) {
+  if (offset === null) {
     return errorResponse("INVALID_OFFSET", "offset must be an integer within 0..10000.");
   }
-  if (!/^\d+$/.test(limitValue) || !Number.isSafeInteger(limit) || limit < 1 || limit > 64) {
+  if (limit === null) {
     return errorResponse("INVALID_LIMIT", "limit must be an integer within 1..64.");
   }
 

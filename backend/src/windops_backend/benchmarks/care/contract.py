@@ -11,6 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from windops_backend.benchmarks.care.artifact_utils import (
+    canonical_json_sha256 as _sha256_json,
+)
+
 DATASET_ID = "care"
 DATASET_VERSION = "v6"
 MANIFEST_SCHEMA_VERSION = "care-v6-manifest-v1"
@@ -129,19 +133,6 @@ class EventFileScan:
     maximum_source_row_id: int
     split_counts: tuple[tuple[str, int], ...]
     source_assets: tuple[str, ...]
-
-
-def _canonical_json_bytes(value: object) -> bytes:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-
-
-def _sha256_json(value: object) -> str:
-    return hashlib.sha256(_canonical_json_bytes(value)).hexdigest()
 
 
 def verify_care_contract(manifest: Mapping[str, Any]) -> None:

@@ -11,6 +11,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from windops_backend.benchmarks.care.artifact_utils import (
+    canonical_json_sha256 as _canonical_hash,
+)
 from windops_backend.benchmarks.care.contract import (
     DATASET_ID,
     DATASET_VERSION,
@@ -303,16 +306,6 @@ class _FeatureAccumulator:
             "min_avg_max_violation_count": self.min_avg_max_violation_count,
             "counter_regression_or_reset_count": self.counter_regression_count,
         }
-
-
-def _canonical_hash(value: object) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def normalize_unit(

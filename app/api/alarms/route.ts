@@ -1,4 +1,6 @@
-import { alarmArchive, alarms, windFarm } from "@/lib";
+import { alarmArchive } from "@/lib/archive-data";
+import { windFarm } from "@/lib/farm-data";
+import { alarms } from "@/lib/operations-data";
 import {
   mutateAlarmRuntimeState,
   overlayAlarmRuntimeState,
@@ -12,13 +14,14 @@ import {
   proxyProductionBackendRequest,
 } from "@/lib/production-runtime";
 
-import { collectionResponse, errorResponse, jsonResponse } from "../_shared";
+import {
+  collectionResponse,
+  errorResponse,
+  isNonEmptyString,
+  isRecord,
+  jsonResponse,
+} from "../_shared";
 import { readWorkflowForApi } from "../_workflow";
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-const nonEmpty = (value: unknown): value is string =>
-  typeof value === "string" && value.trim().length > 0;
 
 export async function GET(request: Request): Promise<Response> {
   if (getProductionBackendConfig().mode === "production") {
@@ -55,14 +58,14 @@ export async function POST(request: Request): Promise<Response> {
     }
     if (
       !isRecord(raw) ||
-      !nonEmpty(raw.alarmId) ||
-      !nonEmpty(raw.action) ||
+      !isNonEmptyString(raw.alarmId) ||
+      !isNonEmptyString(raw.action) ||
       !["acknowledge", "assign"].includes(raw.action) ||
-      !nonEmpty(raw.correlationId) ||
-      !nonEmpty(raw.idempotencyKey) ||
+      !isNonEmptyString(raw.correlationId) ||
+      !isNonEmptyString(raw.idempotencyKey) ||
       !Number.isInteger(raw.expectedRevision) ||
       Number(raw.expectedRevision) < 1 ||
-      (raw.reason !== undefined && !nonEmpty(raw.reason))
+      (raw.reason !== undefined && !isNonEmptyString(raw.reason))
     ) {
       return errorResponse(
         "INVALID_ALARM_COMMAND",
@@ -81,7 +84,7 @@ export async function POST(request: Request): Promise<Response> {
       body: JSON.stringify({
         action,
         expected_revision: raw.expectedRevision,
-        ...(nonEmpty(raw.reason) ? { reason: raw.reason.trim() } : {}),
+        ...(isNonEmptyString(raw.reason) ? { reason: raw.reason.trim() } : {}),
       }),
     });
     return proxyProductionBackendRequest(
@@ -105,11 +108,11 @@ export async function POST(request: Request): Promise<Response> {
   }
   if (
     !isRecord(raw) ||
-    !nonEmpty(raw.alarmId) ||
-    !nonEmpty(raw.action) ||
+    !isNonEmptyString(raw.alarmId) ||
+    !isNonEmptyString(raw.action) ||
     !["acknowledge", "assign"].includes(raw.action) ||
-    !nonEmpty(raw.correlationId) ||
-    !nonEmpty(raw.idempotencyKey)
+    !isNonEmptyString(raw.correlationId) ||
+    !isNonEmptyString(raw.idempotencyKey)
   ) {
     return errorResponse(
       "INVALID_ALARM_MUTATION",
@@ -117,7 +120,7 @@ export async function POST(request: Request): Promise<Response> {
       400,
     );
   }
-  if (raw.action === "assign" && raw.assignee !== null && !nonEmpty(raw.assignee)) {
+  if (raw.action === "assign" && raw.assignee !== null && !isNonEmptyString(raw.assignee)) {
     return errorResponse("INVALID_ASSIGNEE", "assign requires a non-empty assignee or null.", 400);
   }
   const alarmId = String(raw.alarmId).toUpperCase();

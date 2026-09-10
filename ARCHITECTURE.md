@@ -54,7 +54,9 @@ Demo D1 and production PostgreSQL are intentionally separate bounded contexts. D
 
 ### 3.1 Page layer
 
-`app/` contains 22 product routes. `components/pages/` owns page composition, `components/layout/` owns the application shell, and `components/data-display/`, `components/charts/` and `components/ui/` contain reusable presentation primitives.
+`app/` contains 22 product routes. `components/pages/` owns feature entry containers and bounded view/state/support modules, `components/layout/` owns the application shell, and `components/data-display/`, `components/charts/` and `components/ui/` contain reusable presentation primitives. Large workspaces keep route-facing filenames stable while their Demo/Production views, drawers, contracts and hooks live beside them.
+
+`lib/index.ts` is a compatibility-only re-export facade; application runtime modules import their domain owners directly. Global CSS keeps one stable `app/globals.css` entry and imports 13 numerically ordered modules from `app/styles/`, preserving the original selector order while separating foundations, shell/shared UI and page families.
 
 TanStack Query owns production query lifecycle. Zustand and the demo workflow helpers are used for local/demo interaction state. Three.js is confined to the digital-twin viewer; ECharts is used for operational charts.
 
@@ -82,13 +84,13 @@ The backend package is `backend/src/windops_backend/`:
 
 - `main.py`: application/lifespan, middleware, error envelopes, metrics and router registration.
 - `api/`: HTTP transport, authentication dependencies and response serialization.
-- `services/`: domain operations, idempotent commands, reports, operational views, model runtime and integrations.
-- `agents/`: governed reasoning and review orchestration.
+- `services/`: domain operations, idempotent commands, reports and integrations. Broad read/model services expose stable facade modules while contracts, queries, command transactions, inference and serialization live in bounded owner modules (`operational_*`, `benchmark_catalog_*`, `benchmark_metadata_*` and `model_*`).
+- `agents/`: governed reasoning and review orchestration; embedding providers/vector primitives are isolated in `embeddings.py`, while governed SQL tool execution remains in `tools.py`.
 - `knowledge_graph/`: Neo4j projection/query layer.
-- `benchmarks/care/`: CARE contract, quality, scoring, import, evaluation, replay, online inference and full-scale CLI pipeline.
-- `models.py` / `storage.py`: SQLAlchemy entities.
+- `benchmarks/care/`: CARE contract, quality, scoring, import, evaluation, replay, online inference and full-scale CLI pipeline. Historical CLI modules remain compatibility facades over dependency-neutral artifact contracts and bounded runtime/import/evaluation/prediction owners.
+- `models.py` / `schemas.py`: explicit compatibility facades over bounded `model_*` SQLAlchemy owners and `schema_*` Pydantic owners; `storage.py` owns artifact/outbox storage adapters.
 - `workers.py` / `outbox.py`: Dramatiq actors, durable claims and relay.
-- `operations/`: backup, restore, release evidence, deployment policy and release smoke tools.
+- `operations/`: backup, restore, release evidence, deployment policy and release smoke tools. `report_io.py` owns only byte-equivalent streaming hashes and atomic JSON output; each verifier retains its own policy, schema and error semantics.
 
 The API process never treats Neo4j as authoritative. PostgreSQL writes domain state and outbox rows transactionally; workers may rebuild graph projections from that source.
 
