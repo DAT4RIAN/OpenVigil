@@ -21,8 +21,8 @@
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "format": "prettier --write app build components db docs drizzle examples lib tests worker \"*.{js,mjs,cjs,jsx,ts,tsx,json,css,md,yml,yaml}\" backend/README.md backend/docker-compose.yml backend/ops backend/deploy",
-    "format:check": "prettier --check app build components db docs drizzle examples lib tests worker \"*.{js,mjs,cjs,jsx,ts,tsx,json,css,md,yml,yaml}\" backend/README.md backend/docker-compose.yml backend/ops backend/deploy",
+    "format": "prettier --write app build components db docs drizzle lib tests worker \"*.{js,mjs,cjs,jsx,ts,tsx,json,css,md,yml,yaml}\" backend/README.md backend/docker-compose.yml backend/ops backend/deploy",
+    "format:check": "prettier --check app build components db docs drizzle lib tests worker \"*.{js,mjs,cjs,jsx,ts,tsx,json,css,md,yml,yaml}\" backend/README.md backend/docker-compose.yml backend/ops backend/deploy",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
