@@ -9,14 +9,7 @@
     "backend/.venv/",
     "tmp/"
   ],
-  "forbiddenPathAllowlist": [
-    "tmp/pdfs/care-to-compare-data-09-00138-v2.pdf",
-    "tmp/pdfs/render/care-score/page-07.png",
-    "tmp/pdfs/render/care-score/page-08.png",
-    "tmp/pdfs/render/care-score/page-09.png",
-    "tmp/pdfs/render/care-score/page-10.png",
-    "tmp/verify_care_reference.py"
-  ],
+  "forbiddenPathAllowlist": [],
   "forbiddenSegments": ["/node_modules/", "/__pycache__/", "/.pytest_cache/"],
   "largeArtifactAllowlist": []
 }

@@ -10,15 +10,12 @@ backend/.pytest_cache
 backend/.ruff_cache
 backend/.venv
 node_modules
-backend/.venv
 **/__pycache__
 .pytest_cache
 .ruff_cache
 .mypy_cache
 pnpm-lock.yaml
 public/og.png
-# Task prompts are reference material, not source files.
-docs/项目代码优化与重构提示词.md
 
 # Agent/audit control records preserve their authoritative hand-maintained layout.
 AGENTS.md
