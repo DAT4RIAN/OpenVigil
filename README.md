@@ -476,7 +476,7 @@ Worker 现在具有显式的 `demo/production` 运行边界。默认 `demo` 模�
 
 参考 `.dev.vars.example` 配置运行模式、后端 URL、委托密钥、批准的 release ID/镜像摘要和超时。任何未迁移路由都会保持失败关闭，而不是回退到 fixture。
 
-顶栏当前天气由服务端调用和风天气实时天气 v1，不会把 API Key 下发到浏览器或写入构建产物。`pnpm dev` 与 `pnpm start` 会在进程启动时读取根目录 `.env` 中的 `WINDOPS_QWEATHER_API_HOST`、`WINDOPS_QWEATHER_API_KEY`、地点名称和经纬度；开发者 ID 与凭据 ID 仅作为本地凭据登记信息，API Key 请求实际使用 `X-QW-Api-Key`。API Host 必须使用和风天气控制台“设置”中的账号专属 `*.qweatherapi.com` 域名。默认建议每 10 分钟更新，失败时最多保留 30 分钟的最后一次成功数据并标记为陈旧；生产部署应把同名变量作为 Worker Secret/环境绑定注入，而不是提交真实凭据。
+顶栏当前天气由服务端调用和风天气实时天气 v1，不会把 API Key 下发到浏览器或写入构建产物。首次配置可执行 `Copy-Item .env.example .env`，然后只在被 Git 忽略的根目录 `.env` 中填写真实值。`pnpm dev` 与 `pnpm start` 会在进程启动时读取其中的 `WINDOPS_QWEATHER_API_HOST`、`WINDOPS_QWEATHER_API_KEY`、地点名称和经纬度；开发者 ID 与凭据 ID 仅作为本地凭据登记信息，API Key 请求实际使用 `X-QW-Api-Key`。API Host 必须使用和风天气控制台“设置”中的账号专属 `*.qweatherapi.com` 域名。默认建议每 10 分钟更新，失败时最多保留 30 分钟的最后一次成功数据并标记为陈旧；生产部署应把同名变量作为 Worker Secret/环境绑定注入，而不是提交真实凭据。
 
 ### 质量检查
 
