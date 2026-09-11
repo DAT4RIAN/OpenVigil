@@ -8,9 +8,9 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "vinext dev",
+    "dev": "node scripts/run-vinext.mjs dev",
     "build": "vinext build",
-    "start": "vinext start",
+    "start": "node scripts/run-vinext.mjs start",
     "test": "pnpm run build && pnpm run check:bundle && node --experimental-strip-types --test tests/*.test.mjs",
     "test:coverage": "pnpm run build && pnpm run check:bundle && node --experimental-strip-types --experimental-test-coverage --test-coverage-lines=89 --test-coverage-branches=49 --test-coverage-functions=32 --test tests/*.test.mjs",
     "pretest:e2e": "pnpm run build",

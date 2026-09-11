@@ -61,6 +61,7 @@ const migratedProductionApiPrefixes = [
 
 const migratedProductionApiExactPaths = [
   "/api/runtime",
+  "/api/weather",
   "/api/agent-events",
   "/api/scada-history",
   "/api/scada-measurements",

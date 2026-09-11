@@ -12,6 +12,16 @@ export interface OpenVigilWorkerEnv {
   readonly WINDOPS_BACKEND_EXPECTED_RELEASE_ID?: string;
   readonly WINDOPS_BACKEND_EXPECTED_COMMIT_SHA?: string;
   readonly WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST?: string;
+  readonly WINDOPS_QWEATHER_API_HOST?: string;
+  readonly WINDOPS_QWEATHER_API_KEY?: string;
+  readonly WINDOPS_QWEATHER_DEVELOPER_ID?: string;
+  readonly WINDOPS_QWEATHER_CREDENTIAL_ID?: string;
+  readonly WINDOPS_WEATHER_LOCATION_NAME?: string;
+  readonly WINDOPS_WEATHER_LATITUDE?: string;
+  readonly WINDOPS_WEATHER_LONGITUDE?: string;
+  readonly WINDOPS_WEATHER_REFRESH_SECONDS?: string;
+  readonly WINDOPS_WEATHER_STALE_SECONDS?: string;
+  readonly WINDOPS_WEATHER_TIMEOUT_MS?: string;
   readonly IMAGES?: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {

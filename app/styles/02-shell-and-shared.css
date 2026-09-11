@@ -403,6 +403,15 @@
   margin-top: 1px;
 }
 
+.weather-chip a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
+
+.weather-chip a:hover {
+  color: var(--foreground);
+}
+
 .global-search {
   background: var(--surface-subtle);
   border: 1px solid var(--border);

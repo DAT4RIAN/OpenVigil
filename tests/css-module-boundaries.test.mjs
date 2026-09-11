@@ -32,6 +32,6 @@ test("the global stylesheet is an ordered import entry with an unchanged rule st
   const ruleStream = modules.join("").replaceAll(/\s+/g, "");
   assert.equal(
     createHash("sha256").update(ruleStream).digest("hex"),
-    "1c9f749afefdcd42362501687849100270b73b71da5b82aa51f6617478c7b81e",
+    "6953a922bcab45fba6c56bd52bf2d76fe1d72ab5198c68c3f855d24e951db964",
   );
 });

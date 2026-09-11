@@ -14,3 +14,16 @@ WINDOPS_BACKEND_EXPECTED_IMAGE_DIGEST=sha256:replace-with-approved-image-digest
 # Optional only for non-production service-token development.
 WINDOPS_BACKEND_API_TOKEN=replace-with-a-configured-windops-role-token
 WINDOPS_BACKEND_REQUEST_TIMEOUT_MS=8000
+
+# Current weather is fetched server-side. Use the account-specific API Host
+# from QWeather Console > Settings; legacy shared hosts are not supported.
+WINDOPS_QWEATHER_API_HOST=replace-with-account-host.xy.qweatherapi.com
+WINDOPS_QWEATHER_DEVELOPER_ID=replace-with-developer-id
+WINDOPS_QWEATHER_CREDENTIAL_ID=replace-with-credential-id
+WINDOPS_QWEATHER_API_KEY=replace-with-api-key
+WINDOPS_WEATHER_LOCATION_NAME=南京
+WINDOPS_WEATHER_LATITUDE=32.06
+WINDOPS_WEATHER_LONGITUDE=118.80
+WINDOPS_WEATHER_REFRESH_SECONDS=600
+WINDOPS_WEATHER_STALE_SECONDS=1800
+WINDOPS_WEATHER_TIMEOUT_MS=5000

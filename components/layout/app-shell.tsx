@@ -15,6 +15,11 @@ import {
   ChevronRight,
   CircleGauge,
   ClipboardCheck,
+  Cloud,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
   CloudSun,
   Database,
   FileBarChart,
@@ -43,9 +48,9 @@ import { Avatar, Button } from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { RuntimeHealthBadge } from "@/components/ui/query-state";
 import { agents } from "@/lib/agent-data";
+import type { CurrentWeather, CurrentWeatherCondition } from "@/lib/current-weather";
 import { turbines, windFarm } from "@/lib/farm-data";
 import { alarms, decisions, missions, workOrders } from "@/lib/operations-data";
-import { weatherWindows } from "@/lib/telemetry-data";
 import { cn } from "@/lib/utils";
 import { hydrateDemoWorkflow, useDemoWorkflow } from "@/lib/use-demo-workflow";
 import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
@@ -84,6 +89,10 @@ type RuntimeEnvelope = {
   };
 };
 
+type CurrentWeatherEnvelope = {
+  readonly data: CurrentWeather;
+};
+
 type NavigationGroup = {
   label: string;
   items: NavigationItem[];
@@ -106,8 +115,26 @@ const snapshotTime = new Date(windFarm.lastUpdatedAt).toLocaleTimeString("zh-CN"
   hour12: false,
   timeZone: windFarm.timezone,
 });
-const nextWeatherWindow =
-  weatherWindows.find((window) => window.suitability === "suitable") ?? weatherWindows[0];
+
+const weatherIcons: Readonly<Partial<Record<CurrentWeatherCondition, LucideIcon>>> = {
+  clear: Sun,
+  "partly-cloudy": CloudSun,
+  cloudy: Cloud,
+  overcast: Cloud,
+  rain: CloudRain,
+  snow: CloudSnow,
+  storm: CloudLightning,
+  fog: CloudFog,
+};
+
+async function fetchCurrentWeather(signal: AbortSignal): Promise<CurrentWeatherEnvelope> {
+  const response = await fetch("/api/weather", {
+    headers: { accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) throw new Error(`Current weather returned ${response.status}.`);
+  return (await response.json()) as CurrentWeatherEnvelope;
+}
 
 const navigation: NavigationGroup[] = [
   {
@@ -619,6 +646,17 @@ export function AppShell({
     refetchInterval: 30_000,
     staleTime: 45_000,
   });
+  const weatherQuery = useQuery({
+    queryKey: ["current-weather"],
+    queryFn: ({ signal }) => fetchCurrentWeather(signal),
+    retry: 1,
+    refetchInterval: 600_000,
+    staleTime: 300_000,
+  });
+  const currentWeather = weatherQuery.data?.data;
+  const WeatherIcon = currentWeather
+    ? (weatherIcons[currentWeather.condition] ?? CloudSun)
+    : CloudSun;
   const runtimeState = deriveQueryViewState({
     data: runtimeQuery.data?.data,
     dataUpdatedAt: runtimeQuery.dataUpdatedAt,
@@ -935,16 +973,42 @@ export function AppShell({
             </div>
           </div>
           <div className="topbar__right">
-            <div className="weather-chip">
-              <CloudSun size={17} />
+            <div
+              className="weather-chip"
+              aria-live="polite"
+              title={
+                currentWeather
+                  ? `和风天气 · 获取于 ${new Date(currentWeather.fetchedAt).toLocaleString("zh-CN")}${
+                      currentWeather.stale ? " · 当前显示陈旧缓存" : ""
+                    }`
+                  : weatherQuery.isPending
+                    ? "正在获取实时天气"
+                    : "实时天气暂不可用，请检查服务端配置或网络"
+              }
+            >
+              <WeatherIcon size={17} aria-hidden="true" />
               <span>
                 <strong>
-                  {isProduction ? "气象窗口" : `${nextWeatherWindow.windSpeedMps} m/s`}
+                  {currentWeather
+                    ? `${currentWeather.locationName} · ${currentWeather.conditionText} ${currentWeather.temperatureC.toFixed(0)}°C`
+                    : weatherQuery.isPending
+                      ? "实时天气同步中"
+                      : "实时天气暂不可用"}
                 </strong>
                 <small>
-                  {isProduction
-                    ? "见维护计划与资源台账"
-                    : `下一窗口 · ${nextWeatherWindow.temperatureC}°C`}
+                  {currentWeather
+                    ? `${currentWeather.windDirection} ${currentWeather.windSpeedMps.toFixed(1)} m/s${currentWeather.stale ? " · 陈旧" : ""}`
+                    : weatherQuery.isPending
+                      ? "正在连接和风天气"
+                      : "保留业务页面，稍后自动重试"}
+                  {currentWeather ? (
+                    <>
+                      {" · "}
+                      <a href="https://www.qweather.com/" target="_blank" rel="noreferrer">
+                        和风天气
+                      </a>
+                    </>
+                  ) : null}
                 </small>
               </span>
             </div>

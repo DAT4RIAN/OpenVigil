@@ -161,9 +161,9 @@ test("the application page and Worker route inventories remain stable", () => {
     inventoryHash(pages),
     "84b674dd7ef3300972960504ee610e6662bd3abaa74ad0d4d3fa453c613d4a51",
   );
-  assert.equal(routes.length, 37);
+  assert.equal(routes.length, 38);
   assert.equal(
     inventoryHash(routes),
-    "178580c55f039f5d4e702a29210032b81bf8000160df98acf216c66ed5354352",
+    "0d6083f5ca5a43e4a1ff27638db5649eb32a41123712588330245290e2597fbb",
   );
 });
