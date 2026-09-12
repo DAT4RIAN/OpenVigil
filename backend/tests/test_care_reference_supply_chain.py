@@ -6,6 +6,42 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+from scripts import verify_care_reference
+
+
+@pytest.mark.parametrize(
+    "index_record",
+    [
+        "",
+        (
+            "100644 a338b6efb3a650536930c6e67247694071d2f63e 0"
+            "\ttmp/external/EnergyFaultDetector-v0.6.2\n"
+        ),
+        (
+            "160000 0000000000000000000000000000000000000000 0"
+            "\ttmp/external/EnergyFaultDetector-v0.6.2\n"
+        ),
+    ],
+)
+def test_local_reference_clone_cannot_replace_the_pinned_gitlink(
+    monkeypatch: pytest.MonkeyPatch,
+    index_record: str,
+) -> None:
+    monkeypatch.setattr(
+        verify_care_reference.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=index_record, stderr=""
+        ),
+    )
+
+    with pytest.raises(
+        verify_care_reference.CareReferenceVerificationError,
+        match="gitlink is missing or is not pinned",
+    ):
+        verify_care_reference._verify_superproject_gitlink()
+
 
 def test_pinned_official_care_reference_is_reproducible(tmp_path: Path) -> None:
     backend_root = Path(__file__).resolve().parents[1]

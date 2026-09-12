@@ -14,7 +14,8 @@
 - Active Issues：`AUDIT_REPORT.md` 16 项 + `UI_AUDIT_REPORT.md` 8 项
 - Execution Rules：`EXECUTION_GOAL.md` + `AGENTS.md`
 - Started：`2026-09-04 09:48 +08:00`
-- Last Updated：`2026-09-04 22:29 +08:00`
+- Last Updated：`2026-09-12 03:35 +08:00`
+- Post-completion CI maintenance：`LOCAL_FIX_VALIDATED / REMOTE_CI_PENDING`
 
 ### Overall Status
 
@@ -97,6 +98,14 @@
 | H — Persistent State | PASS | 本节 Metadata、统计、Issue register、阶段、Gate 表与最终状态已同步为当前真实树 |
 
 ### Execution Log
+
+#### Post-completion CI reproducibility repair (2026-09-12 03:35 +08:00)
+
+- GitHub Actions run `34566337155` 在提交 `0a4815f` 上暴露两个独立回归：`backend` 的官方 CARE reference 校验失败，`browser-e2e` 在 Ubuntu runner 失败；`care-postgres-contract` 未失败，而是在等待标签为 `self-hosted, linux, x64, windops-care-v6` 的 runner（GitHub job `runner_id=0`）。
+- `backend` 根因是 `.gitmodules` 仍声明官方仓库，但 superproject index 不再包含 `tmp/external/EnergyFaultDetector-v0.6.2` 的 `160000` gitlink；本机未跟踪的同路径 clone 使旧 verifier 产生了不可复现的本地通过。现已恢复固定到 `a338b6efb3a650536930c6e67247694071d2f63e` 的 gitlink，并让 verifier 在读取目录前校验 mode、commit 与 path；缺失 gitlink、普通 blob mode、错误 commit 均有负向测试。
+- `browser-e2e` 的四张像素基线是在 Windows 上生成和评审，但 job 原先运行于 Ubuntu；本机以 `CI=true`、`WINDOPS_FAIL_ON_SKIPPED=1` 执行生产 build 与全套 Playwright 为 `29/29`。像素基线 job 已固定到 `windows-2025` 并只安装 Chromium；真实 Worker→FastAPI 跨层 job 继续保留在 `ubuntu-24.04`，没有放宽截图阈值、跳过测试或删除断言。
+- 本地复验通过：CARE verifier 输出 approved commit/tree/MIT/source 与 evidence root `661f3844...7508a34a`；供应链和 release pipeline 定向 pytest `35/35`；Ruff format/lint；workflow YAML 解析；前端 production build、bundle budget、Node tests `184/184`、TypeScript、ESLint、Prettier、repository artifact gate；严格模式 Playwright `29/29`。
+- 远端状态仍为 `PENDING`：本轮未获得 commit/push 授权，因此旧红色 run 不会被改写；需要提交并推送后用新 run 验证 `backend` 与 Windows `browser-e2e`。main-only 的 CARE PostgreSQL required job 仍必须由上述自托管 runner 和两个只读 artifact root 接手，不能把 queued 伪记为通过。
 
 #### Initialization / CARE-C001 Investigation Start (2026-09-04 09:48 +08:00)
 

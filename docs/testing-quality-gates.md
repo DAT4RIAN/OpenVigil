@@ -39,6 +39,10 @@ The `browser-e2e` suite runs the built application in Chromium at desktop and 39
 viewports against the deterministic gateway fixture. Its production-mode scenarios verify trusted
 identity and role capabilities, guarded navigation, the alarm-to-mission-to-approval-to-work-order
 path, error and retry states, repeated click protection, keyboard access, and SSE resume behavior.
+The pixel baselines are generated and compared on the explicitly pinned `windows-2025` runner;
+the runner must not be changed without regenerating and reviewing the complete baseline set because
+Chromium font rasterization is operating-system dependent. The real cross-layer browser smoke
+remains on Ubuntu and continues to validate the production-shaped Linux path independently.
 
 The separate `real-cross-layer-e2e` CI job is the release smoke and is never counted as the mock
 browser suite: it starts the real FastAPI application against an isolated, migrated PostgreSQL

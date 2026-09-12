@@ -101,6 +101,32 @@ def _verify_submodule_mapping() -> None:
         raise CareReferenceVerificationError("CARE reference submodule mapping is not canonical")
 
 
+def _verify_superproject_gitlink() -> None:
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(REPOSITORY_ROOT),
+            "ls-files",
+            "--stage",
+            "--",
+            REFERENCE_PATH.as_posix(),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise CareReferenceVerificationError("CARE reference superproject Git check failed")
+    fields = result.stdout.strip().split(maxsplit=3)
+    expected = ["160000", REFERENCE_COMMIT, "0", REFERENCE_PATH.as_posix()]
+    if fields != expected:
+        raise CareReferenceVerificationError(
+            "CARE reference gitlink is missing or is not pinned to the approved commit"
+        )
+
+
 def _load_module(name: str, path: Path) -> types.ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
@@ -194,6 +220,7 @@ def _windops_vectors() -> dict[str, Any]:
 
 def verify_care_reference() -> dict[str, Any]:
     _verify_submodule_mapping()
+    _verify_superproject_gitlink()
     if not REFERENCE_ROOT.is_dir():
         raise CareReferenceVerificationError(
             "CARE reference submodule is absent; run git submodule update --init"

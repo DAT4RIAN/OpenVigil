@@ -63,6 +63,10 @@ test("required browser jobs fail closed on skipped tests and preserve UI evidenc
   const roleMatrix = read("./e2e/identity-and-mobile.spec.ts");
 
   assert.match(workflow, /browser-e2e:[\s\S]*?WINDOPS_FAIL_ON_SKIPPED: "1"/);
+  assert.match(
+    workflow,
+    /browser-e2e:[\s\S]*?runs-on: windows-2025[\s\S]*?playwright install chromium/,
+  );
   assert.match(workflow, /real-cross-layer-e2e:[\s\S]*?WINDOPS_FAIL_ON_SKIPPED: "1"/);
   assert.match(workflow, /tests\/e2e\/__screenshots__/);
   assert.match(config, /playwright-no-skips-reporter\.mjs/);

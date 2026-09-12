@@ -39,7 +39,9 @@ jobs:
 
   browser-e2e:
     name: browser-e2e
-    runs-on: ubuntu-latest
+    # Pixel baselines are generated and reviewed on Windows. Keeping this runner
+    # explicit prevents cross-OS font rasterization from invalidating unchanged UI.
+    runs-on: windows-2025
     env:
       WINDOPS_FAIL_ON_SKIPPED: "1"
     steps:
@@ -52,7 +54,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Install isolated Chromium runtime
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install chromium
       - name: Build and run desktop/mobile browser contracts
         run: pnpm test:e2e
       - name: Preserve browser report, screenshots, traces, and failure videos
