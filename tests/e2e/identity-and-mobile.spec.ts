@@ -41,7 +41,7 @@ test("production authenticates before business rendering and rejects machine she
   const anonymous = await request.get("/missions?status=open", { maxRedirects: 0 });
   expect(anonymous.status()).toBe(302);
   const location = new URL(anonymous.headers().location, baseURL);
-  expect(location.pathname).toBe("/signin-with-chatgpt");
+  expect(location.pathname).toBe("/login");
   expect(location.searchParams.get("return_to")).toBe("/missions?status=open");
   expect(await anonymous.text()).not.toContain("Mission 中心");
 

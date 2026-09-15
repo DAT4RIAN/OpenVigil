@@ -283,7 +283,7 @@ test("production documents authenticate and authorize before rendering business 
     context,
   );
   assert.equal(anonymous.status, 302);
-  assert.equal(new URL(anonymous.headers.get("location")).pathname, "/signin-with-chatgpt");
+  assert.equal(new URL(anonymous.headers.get("location")).pathname, "/login");
   assert.equal(
     new URL(anonymous.headers.get("location")).searchParams.get("return_to"),
     "/missions?status=open",

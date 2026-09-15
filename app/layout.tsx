@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
 import { headers } from "next/headers";
-import { requireChatGPTUser, chatGPTSignOutPath } from "@/app/chatgpt-auth";
+import { getChatGPTUser, chatGPTSignOutPath } from "@/app/chatgpt-auth";
+import { LoginPage } from "@/components/pages/login-page";
 import { IdentityProvider } from "@/components/providers/identity-provider";
 import { QueryProvider } from "@/components/providers/query-provider";
 import {
@@ -89,32 +89,23 @@ export default async function RootLayout({
 }>) {
   const runtime = getProductionBackendConfig();
   let session: OpenVigilIdentitySession | null = null;
+  let content = children;
   if (runtime.mode === "production") {
-    const user = await requireChatGPTUser("/");
+    const user = await getChatGPTUser();
     const requestHeaders = await headers();
-    const backendSession = decodeTrustedSession(
-      requestHeaders.get(TRUSTED_SESSION_HEADER),
-      user.userId,
-    );
-    if (!backendSession) {
-      return (
-        <html lang="zh-CN">
-          <body>
-            <main className="root-session-gate" role="alert">
-              <strong>OpenVigil Production</strong>
-              <h1>生产身份会话不可用</h1>
-              <p>可信 capability 会话缺失或无效，业务页面已安全停止。</p>
-              <Link href="/">重新检查</Link>
-            </main>
-          </body>
-        </html>
-      );
+    const backendSession = user
+      ? decodeTrustedSession(requestHeaders.get(TRUSTED_SESSION_HEADER), user.userId)
+      : null;
+    if (user && backendSession) {
+      session = {
+        ...backendSession,
+        displayName: user.displayName,
+        signOutPath: chatGPTSignOutPath("/"),
+      };
+    } else {
+      // Never render protected children with a missing or invalid capability session.
+      content = <LoginPage runtimeMode="production" />;
     }
-    session = {
-      ...backendSession,
-      displayName: user.displayName,
-      signOutPath: chatGPTSignOutPath("/"),
-    };
   }
   return (
     <html lang="zh-CN" suppressHydrationWarning>
@@ -123,7 +114,7 @@ export default async function RootLayout({
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <IdentityProvider runtimeMode={runtime.mode} session={session}>
-          <QueryProvider>{children}</QueryProvider>
+          <QueryProvider>{content}</QueryProvider>
         </IdentityProvider>
       </body>
     </html>

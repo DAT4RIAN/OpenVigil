@@ -2,6 +2,16 @@
 
 # Long-running Execution Progress
 
+## 登录页与生成图片：2026-09-15
+
+- 状态：`DONE / LOCAL_UI_VALIDATED`。
+- 已实施：独立 `/login`、生成海上风场图片、深浅主题与移动端布局、生产身份入口及安全返回地址、演示入口、离线与跳转状态。
+- 已验证：构建、bundle budget、TypeScript、修改源码/测试 ESLint；四档视口深浅主题与 WCAG、图片加载、生产跳转和伪造能力隔离。
+- 完整回归：Node `185/185`，Playwright `37/37`，无 skip；格式检查及 `git diff --check` 通过。原有 22 个业务页面与 38 个 API 路由清单校验保持，新增登录页单独校验。
+- 本地运行：`http://localhost:3001/login` 返回 200，已验证“登录页 → 演示工作台 → 返回登录页”，页面运行错误为 0；已审视实际本地截图 `.artifacts/login/local-demo-login.png`。
+- 首轮问题已解决：测试改用现有 `axe-core`；控制字符检查符合 ESLint；演示入口返回改为完整文档导航；页面清单精确更新为原 22 页加登录页。现有 >500kB 分块提示保留，bundle budget 通过。
+- 说明与实际生图提示词：[login-page.md](docs/design/login-page.md)。当前内置工具无法确认具体 Image 2.5 型号；本次不声明真实外部身份或生产发布验证通过。
+
 ## 前端视觉优化：2026-09-15
 
 本节单独跟踪用户确认的前端美化任务；后文技术整改与外部发布门禁保留原有状态。

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { chatGPTSignInPath, chatGPTSignOutPath } from "../lib/auth-paths.ts";
+import {
+  chatGPTSignInPath,
+  chatGPTSignOutPath,
+  loginPath,
+  safeRelativeReturnPath,
+} from "../lib/auth-paths.ts";
 import {
   decodeTrustedSession,
   encodeTrustedSession,
@@ -61,4 +66,30 @@ test("ChatGPT auth paths preserve safe local returns and reject redirects or aut
   );
   assert.equal(chatGPTSignInPath("//evil.example/steal"), "/signin-with-chatgpt?return_to=%2F");
   assert.equal(chatGPTSignOutPath("/signout-with-chatgpt"), "/signout-with-chatgpt?return_to=%2F");
+});
+
+test("login return destinations reject external URLs, control characters and authentication loops", () => {
+  assert.equal(
+    loginPath("/missions?status=open#review"),
+    "/login?return_to=%2Fmissions%3Fstatus%3Dopen%23review",
+  );
+  for (const unsafe of [
+    "https://evil.example",
+    "//evil.example",
+    "/\\evil.example",
+    "/\nevil.example",
+    "/login",
+    "/login/?return_to=/login",
+    "/%6cogin",
+    "/callback",
+    "/signin-with-chatgpt/",
+    "/signout-with-chatgpt",
+    "/%zz",
+  ]) {
+    assert.equal(safeRelativeReturnPath(unsafe), "/", unsafe);
+  }
+  assert.equal(
+    safeRelativeReturnPath("/missions?status=open#review"),
+    "/missions?status=open#review",
+  );
 });

@@ -1,4 +1,4 @@
-import { chatGPTSignInPath, chatGPTSignOutPath } from "./auth-paths.ts";
+import { loginPath, LOGIN_PATH, chatGPTSignOutPath } from "./auth-paths.ts";
 import {
   encodeTrustedSession,
   parseBackendIdentitySession,
@@ -87,13 +87,19 @@ export async function authorizeProductionDocument(
     return { request: sanitizedRequest, response: null };
   }
 
+  // The login document is public, but never receives a client-supplied capability session.
+  // RootLayout renders only the login surface without a trusted backend identity.
+  if (new URL(sanitizedRequest.url).pathname === LOGIN_PATH) {
+    return { request: sanitizedRequest, response: null };
+  }
+
   const userId = sanitizedHeaders.get("oai-authenticated-user-id")?.trim();
   if (!userId) {
     const source = new URL(request.url);
     const returnTo = `${source.pathname}${source.search}`;
     return {
       request: null,
-      response: Response.redirect(new URL(chatGPTSignInPath(returnTo), request.url), 302),
+      response: Response.redirect(new URL(loginPath(returnTo), request.url), 302),
     };
   }
 
@@ -113,7 +119,7 @@ export async function authorizeProductionDocument(
     return {
       request: null,
       response: Response.redirect(
-        new URL(chatGPTSignInPath(`${source.pathname}${source.search}`), request.url),
+        new URL(loginPath(`${source.pathname}${source.search}`), request.url),
         302,
       ),
     };

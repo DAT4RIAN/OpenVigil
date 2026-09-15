@@ -15,7 +15,7 @@ import {
   type ApiAccessFailure,
   type ApiAccessRecovery,
 } from "@/lib/api-access-events";
-import { chatGPTSignInPath } from "@/lib/auth-paths";
+import { loginPath } from "@/lib/auth-paths";
 import type { OpenVigilCapability, OpenVigilIdentitySession } from "@/lib/identity-session";
 import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
 
@@ -44,9 +44,7 @@ function RecoveryBanner({
         : "网络连接失败";
   const retry = () => {
     if (authentication) {
-      window.location.assign(
-        chatGPTSignInPath(`${window.location.pathname}${window.location.search}`),
-      );
+      window.location.assign(loginPath(`${window.location.pathname}${window.location.search}`));
       return;
     }
     window.location.reload();

@@ -1120,14 +1120,14 @@ export function AppShell({
                 <ChevronDown size={14} />
               </a>
             ) : (
-              <div className="user-menu">
+              <a className="user-menu" href="/login" aria-label="打开登录页面">
                 <Avatar label="林 工" tone="slate" size="sm" />
                 <span>
                   <strong>林工</strong>
                   <small>值班工程师</small>
                 </span>
                 <ChevronDown size={14} />
-              </div>
+              </a>
             )}
           </div>
         </header>
