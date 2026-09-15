@@ -1,18 +1,26 @@
+/* finesse · register=product · shell=sidebar-light-content · palette=mist-teal
+ * SOUL=5 SPECTACLE=2 DENSITY=7 · 2026-09-15 */
 :root {
-  --background: #f5f7f8;
-  --surface: #ffffff;
-  --surface-subtle: #f8fafb;
-  --surface-strong: #edf1f3;
-  --foreground: #182025;
-  --foreground-muted: #59666e;
-  --foreground-subtle: #59666e;
-  --border: #dfe4e7;
-  --border-strong: #cdd4d8;
+  --background: #edf2f3;
+  --surface: #fcfefe;
+  --surface-subtle: #f3f7f7;
+  --surface-strong: #e7eeee;
+  --foreground: #172c32;
+  --foreground-muted: #52676e;
+  --foreground-subtle: #52676e;
+  --border: rgb(32 70 78 / 0.12);
+  --border-strong: #b8c9cd;
   --primary: #176b75;
   --primary-strong: #0d555e;
   --primary-soft: #e5f3f2;
-  --sidebar: #132127;
-  --sidebar-elevated: #1a2c33;
+  --on-primary: #f5fcfc;
+  --on-critical: #fff7f7;
+  --on-success: #f2fcf8;
+  --sidebar: #11282e;
+  --sidebar-elevated: #1b353c;
+  --sidebar-active: #254b51;
+  --sidebar-active-text: #e6faf6;
+  --sidebar-accent: #9bdbce;
   --sidebar-foreground: #dce7e9;
   --sidebar-muted: #9aaeb4;
   --success: #076c50;
@@ -33,10 +41,10 @@
   --text-muted: var(--foreground-muted);
   --surface-elevated: var(--surface-subtle);
   --border-subtle: var(--border);
-  --shadow-sm: 0 1px 2px rgb(17 35 42 / 0.045);
+  --shadow-sm: 0 2px 4px -2px rgb(17 52 59 / 0.06), 0 6px 18px -12px rgb(17 52 59 / 0.1);
   --shadow-md: 0 12px 34px rgb(14 31 38 / 0.1);
   --radius-sm: 6px;
-  --radius-md: 9px;
+  --radius-md: 10px;
   --radius-lg: 12px;
   --font-body: 13px;
   --font-secondary: 12px;
@@ -412,22 +420,25 @@
 }
 
 :root[data-theme="dark"] {
-  --background: #10181c;
-  --surface: #172126;
-  --surface-subtle: #1b282e;
-  --surface-strong: #223139;
+  --background: #0f1b20;
+  --surface: #17282e;
+  --surface-subtle: #1c3037;
+  --surface-strong: #263e46;
   --foreground: #e8eef0;
   --foreground-muted: #a1afb5;
-  --foreground-subtle: #77888f;
-  --border: #2b3a40;
+  --foreground-subtle: #a1afb5;
+  --border: rgb(157 196 204 / 0.15);
   --border-strong: #3b4c53;
   --primary: #54a9ab;
   --primary-strong: #76c2c2;
   --primary-soft: #193538;
+  --on-primary: #0d252a;
+  --on-critical: #2d1015;
+  --on-success: #082c22;
   --sidebar: #0c1417;
   --sidebar-elevated: #152228;
   --sidebar-foreground: #d9e4e7;
-  --sidebar-muted: #788a91;
+  --sidebar-muted: #9aaeb4;
   --success: #45b894;
   --success-soft: #18362e;
   --warning: #e1a53e;
@@ -441,8 +452,8 @@
   --offline: #9ba6ab;
   --offline-soft: #273136;
   --chart-grid: #28363c;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.18);
-  --shadow-md: 0 16px 40px rgb(0 0 0 / 0.28);
+  --shadow-sm: 0 2px 5px -2px rgb(3 16 21 / 0.3);
+  --shadow-md: 0 16px 40px rgb(3 16 21 / 0.35);
   color-scheme: dark;
 }
 
@@ -459,6 +470,7 @@
 
 html {
   background: var(--background);
+  overflow-x: clip;
   scroll-behavior: smooth;
 }
 
@@ -470,6 +482,7 @@ body {
   line-height: var(--line-body);
   margin: 0;
   min-width: 320px;
+  overflow-x: clip;
   text-rendering: optimizeLegibility;
 }
 
@@ -504,7 +517,7 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--primary) 70%, white);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -578,10 +591,10 @@ textarea:focus-visible {
 .button--primary {
   background: var(--primary);
   border-color: var(--primary);
-  color: white;
+  color: var(--on-primary);
 }
 
-.button--primary:hover {
+.button--primary:hover:not(:disabled) {
   background: var(--primary-strong);
   border-color: var(--primary-strong);
 }
@@ -593,8 +606,8 @@ textarea:focus-visible {
   box-shadow: var(--shadow-sm);
 }
 
-.button--secondary:hover,
-.button--ghost:hover {
+.button--secondary:hover:not(:disabled),
+.button--ghost:hover:not(:disabled) {
   background: var(--surface-strong);
 }
 
@@ -605,7 +618,7 @@ textarea:focus-visible {
 
 .button--danger {
   background: var(--critical);
-  color: white;
+  color: var(--on-critical);
 }
 
 .card {
@@ -618,14 +631,14 @@ textarea:focus-visible {
 .card-header {
   align-items: flex-start;
   display: flex;
-  gap: 24px;
+  gap: 16px;
   justify-content: space-between;
   padding: 18px 20px 14px;
 }
 
 .card-header h2 {
-  font-size: 14px;
-  font-weight: 650;
+  font-size: 15px;
+  font-weight: 680;
   letter-spacing: -0.012em;
   margin: 3px 0 0;
 }
@@ -639,4 +652,14 @@ textarea:focus-visible {
 
 .card-header__action {
   flex: none;
+}
+
+.card-header > :first-child {
+  min-width: 0;
+}
+
+.card-header h2,
+.page-header h1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }

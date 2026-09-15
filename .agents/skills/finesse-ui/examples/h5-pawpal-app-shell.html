@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#08090a">
+<title>PAWPAL 毛毛档案 · 宠物养护 App — 移动端 UI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* finesse · register=h5 · morph=A-app-shell · wraps=product
+   * A=true-black+coral-with-tri-ring-accents · B=Jakarta-800/400
+   * C=ring-hero+capsule-bars+floating-pill-tabbar · D=SVG-ring&bar-suite · E=night-tracker
+   * SOUL=7 SPECTACLE=5 DENSITY=8
+   *
+   * 语料库参考页 —— h5-mobile.md 的 §1 框架 + §4 形态 A + §5 全套原生家具。
+   * 要读的东西，按 h5-mobile.md 的章节号：
+   *   §1.B  body{overflow:hidden} + 滚动容器{overflow-y:auto} —— 整个 register 的架构反转。
+   *         这里滚动容器是每个 tab 各自的 .view（多 tab 应用的常见变体），
+   *         单屏页面用 h5-mobile.md §1.B 里那个单一 #app 即可，架构完全一样
+   *   §1.C  @media(min-width:560px) 的手机画框，box-shadow 第二段 0 0 0 10px 是机身边框
+   *   §2.A  env(safe-area-inset-*) 出现在状态栏 / TabBar / sheet / .view 底部内距四个地方
+   *   §2.C  .view 的 padding-bottom = 安全区 + 108px（实测 116px），
+   *         最后一行内容才不会被 TabBar 吃掉
+   *   §5.B  悬浮胶囊 TabBar：blur(22px) + 46px 圆形按钮（>44 ✓）+ 填充式选中态
+   *   §5.B  中间凸起 FAB 替掉中间那个 tab，:active{scale(.92)}
+   *   §5.A  白色底部 sheet：translateY(102%)（不是 100%）+ grab handle + 可点击 scrim
+   *   §5.C  home indicator，118×4px / opacity .16
+   *   §6    三宠物切换整页重绘，但家具一动不动 —— §11 的「灵魂轮换、家具不轮换」
+   *   图表  三段粗圆环 + 胶囊柱状图 + 浮动 tooltip，画法同 chart-crafting.md §3/§4
+   *
+   * 图片是代码生成的 SVG 占位符（见 <script> 顶部的 PH），不是真实资源。 */
+  :root {
+    --bg: #08090a;
+    --card: #111316;
+    --card-2: #171a1e;
+    --line: rgba(255,255,255,.07);
+    --line-2: rgba(255,255,255,.13);
+    --txt: #f4f5f6;
+    --dim: rgba(244,245,246,.52);
+    --dim-2: rgba(244,245,246,.3);
+    --acc: #ff5a45;
+    --acc-2: #ff9457;
+    --c1: #5ee9c8;
+    --c2: #a78bfa;
+    --c3: #ffd451;
+    --r: 26px; --r-sm: 18px; --r-xs: 13px;
+    --ease: cubic-bezier(.22,.9,.28,1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow-x: clip; }
+  body {
+    background: #030304; color: var(--txt); overflow: hidden;
+    font-family: "Plus Jakarta Sans", "Noto Sans SC", -apple-system, "PingFang SC", sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .phone {
+    position: relative; width: 100%; height: 100%; overflow: hidden;
+    background: var(--bg); display: flex; flex-direction: column;
+  }
+  /* 底部透出的彩色光晕 —— 参考图里深色页都有这一层 */
+  .phone::before {
+    content: ""; position: absolute; left: -30%; right: -30%; bottom: -34%; height: 62%;
+    background: radial-gradient(50% 50% at 50% 50%, rgba(255,90,69,.34), rgba(167,139,250,.16) 46%, transparent 72%);
+    filter: blur(28px); pointer-events: none; z-index: 0;
+    transition: background .6s ease;
+  }
+  @media (min-width: 560px) {
+    body { background: radial-gradient(120% 90% at 50% 0%, #17181b 0%, #030304 62%); }
+    .phone {
+      width: 406px; height: min(880px, 94vh);
+      border-radius: 46px; border: 1px solid rgba(255,255,255,.1);
+      box-shadow: 0 46px 120px -30px rgba(0,0,0,.96), 0 0 0 10px #0b0c0e;
+    }
+  }
+
+  .status {
+    position: relative; z-index: 5; flex: none;
+    height: calc(env(safe-area-inset-top) + 44px);
+    padding: env(safe-area-inset-top) 24px 0;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px; font-weight: 600;
+  }
+  .status .ic { display: flex; align-items: center; gap: 6px; }
+  .status svg { height: 11px; fill: currentColor; }
+
+  .stage { position: relative; z-index: 5; flex: 1; overflow: hidden; }
+  .view {
+    position: absolute; inset: 0; overflow-y: auto; overflow-x: clip;
+    padding: 0 18px calc(env(safe-area-inset-bottom) + 116px);
+    opacity: 0; transform: translateY(10px); pointer-events: none;
+    transition: opacity .3s ease, transform .42s var(--ease);
+  }
+  .view::-webkit-scrollbar { width: 0; }
+  .view.on { opacity: 1; transform: none; pointer-events: auto; }
+
+  /* ── 顶栏：圆按钮 + 标题 ──────────────────────────── */
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 4px 0 6px; }
+  .rnd {
+    width: 40px; height: 40px; min-width: 40px; border-radius: 50%; border: 0; cursor: pointer;
+    background: var(--card-2); color: var(--txt); display: grid; place-items: center;
+    position: relative; transition: background .2s;
+  }
+  .rnd:active { background: var(--card); }
+  .rnd svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .rnd .dot { position: absolute; top: 9px; right: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--acc); border: 2px solid var(--card-2); }
+  .topbar .t { flex: 1; min-width: 0; }
+  .topbar .t h1 { font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+  .topbar .t p { font-size: 11.5px; color: var(--dim-2); margin-top: 3px; }
+
+  /* ── 宠物头像：各自带彩色光晕 ─────────────────────── */
+  .pets {
+    display: flex; gap: 16px; align-items: center; padding: 10px 0 14px;
+    overflow-x: auto; scrollbar-width: none; margin: 0 -18px; padding-inline: 18px;
+  }
+  .pets::-webkit-scrollbar { display: none; }
+  .pet {
+    flex: none; border: 0; background: none; cursor: pointer; padding: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 9px; font-family: inherit;
+  }
+  .pet .ph {
+    position: relative; width: 52px; height: 52px; border-radius: 50%;
+    transition: all .36s var(--ease);
+  }
+  .pet .ph img {
+    width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;
+    filter: grayscale(1) brightness(.62); transition: filter .36s ease;
+    position: relative; z-index: 2;
+  }
+  .pet .ph::after {   /* 光晕 */
+    content: ""; position: absolute; inset: -6px; border-radius: 50%;
+    background: var(--glow); filter: blur(11px); opacity: 0;
+    transition: opacity .36s ease; z-index: 1;
+  }
+  .pet span { font-size: 11px; color: var(--dim-2); transition: color .3s; }
+  .pet.on .ph { width: 66px; height: 66px; }
+  .pet.on .ph img { filter: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.6px var(--glow); }
+  .pet.on .ph::after { opacity: .95; }
+  .pet.on span { color: var(--txt); font-weight: 700; }
+  .pet .add {
+    width: 52px; height: 52px; border-radius: 50%; border: 1.4px dashed var(--line-2);
+    display: grid; place-items: center; color: var(--dim-2);
+  }
+  .pet .add svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+
+  /* ── 周日期条 ─────────────────────────────────────── */
+  .week {
+    display: flex; justify-content: space-between; gap: 4px; padding: 2px 0 16px;
+  }
+  .week button {
+    flex: 1; border: 0; background: none; cursor: pointer; padding: 0; font-family: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .week small { font-size: 10.5px; color: var(--dim-2); }
+  .week i {
+    width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 13px; font-weight: 700; font-style: normal; color: var(--dim);
+    border: 1px solid var(--line); transition: all .26s var(--ease);
+  }
+  .week button.today i { background: var(--acc); border-color: transparent; color: #180703; }
+  .week button.on i { border-color: var(--line-2); color: var(--txt); }
+  .week button.today.on i { box-shadow: 0 0 0 3px rgba(255,90,69,.22); }
+
+  /* ── 圆环主卡（照参考图的粗环 + 右侧指标列） ──────── */
+  .ringcard {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 20px 18px; display: flex; align-items: center; gap: 16px;
+  }
+  .ring { position: relative; width: 148px; height: 148px; flex: none; }
+  .ring svg { transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 13; stroke-linecap: round; }
+  .ring .tr { stroke: rgba(255,255,255,.055); }
+  .ring .sg { stroke-dasharray: 0 999; transition: stroke-dasharray .9s var(--ease); }
+  .ring .mid {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px;
+  }
+  .ring .mid .pill {
+    font-size: 9.5px; font-weight: 700; letter-spacing: .06em; color: var(--dim);
+    background: var(--card-2); border-radius: 99px; padding: 3px 10px; margin-bottom: 4px;
+  }
+  .ring .mid b { font-size: 31px; font-weight: 800; letter-spacing: -.035em; line-height: 1; }
+  .ring .mid small { font-size: 10px; color: var(--dim-2); }
+  .metrics { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .metric { display: flex; align-items: center; gap: 10px; }
+  .metric .bar2 { width: 3px; height: 26px; border-radius: 99px; flex: none; }
+  .metric .t { min-width: 0; }
+  .metric b { font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
+  .metric b i { font-size: 11px; font-weight: 500; font-style: normal; color: var(--dim-2); }
+  .metric small { display: block; font-size: 10.5px; color: var(--dim-2); margin-top: 2px; }
+
+  /* ── 渐变推广卡 ───────────────────────────────────── */
+  .promo {
+    position: relative; margin-top: 12px; border-radius: var(--r); overflow: hidden;
+    background: linear-gradient(100deg, var(--acc), var(--acc-2));
+    padding: 18px 130px 18px 18px; min-height: 116px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .promo h3 { font-size: 17px; font-weight: 800; color: #1a0703; line-height: 1.35; letter-spacing: -.01em; }
+  .promo p { font-size: 11.5px; color: rgba(26,7,3,.7); margin-top: 5px; }
+  .promo button {
+    margin-top: 12px; align-self: flex-start; border: 0; border-radius: 99px; cursor: pointer;
+    background: #14100f; color: #fff; font-family: inherit; font-size: 12px; font-weight: 700;
+    padding: 9px 15px; min-height: 34px; display: flex; align-items: center; gap: 7px;
+  }
+  .promo button svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .promo .ph2 {
+    position: absolute; right: -6px; bottom: -10px; width: 132px; height: 132px; border-radius: 50%;
+    overflow: hidden; border: 5px solid rgba(255,255,255,.22);
+  }
+  .promo .ph2 img { width: 100%; height: 100%; object-fit: cover; }
+  .promo .badge {
+    position: absolute; right: 96px; top: 20px; width: 26px; height: 26px; border-radius: 50%;
+    background: #14100f; display: grid; place-items: center;
+  }
+  .promo .badge svg { width: 12px; height: 12px; fill: var(--c3); }
+
+  /* ── 卡片通用 ─────────────────────────────────────── */
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 18px; margin-top: 12px;
+  }
+  .card > .hd { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .card > .hd h3 { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; }
+  .card > .hd .seg { display: flex; gap: 4px; background: var(--card-2); border-radius: 99px; padding: 3px; }
+  .card > .hd .seg button {
+    border: 0; background: none; color: var(--dim-2); font-family: inherit; font-size: 10.5px;
+    font-weight: 700; padding: 5px 11px; border-radius: 99px; cursor: pointer; min-height: 26px;
+    transition: all .22s var(--ease);
+  }
+  .card > .hd .seg button.on { background: var(--acc); color: #180703; }
+
+  /* ── 胶囊柱状图 + 浮动 tooltip ────────────────────── */
+  .bars { position: relative; margin-top: 20px; display: flex; align-items: flex-end; gap: 8px; height: 150px; }
+  .bars .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 9px; height: 100%; cursor: pointer; }
+  .bars .cap {
+    flex: 1; width: 100%; max-width: 30px; border-radius: 99px; background: rgba(255,255,255,.05);
+    display: flex; align-items: flex-end; overflow: hidden; position: relative;
+  }
+  .bars .cap i {
+    display: block; width: 100%; border-radius: 99px; height: 0;
+    background: linear-gradient(var(--c1), #2fbf9f); transition: height .8s var(--ease);
+  }
+  .bars .col.on .cap i { background: linear-gradient(var(--acc-2), var(--acc)); }
+  .bars .col small { font-size: 10px; color: var(--dim-2); }
+  .bars .col.on small { color: var(--txt); font-weight: 700; }
+  .bars .tag {
+    position: absolute; transform: translate(-50%, -100%); z-index: 4;
+    background: var(--txt); color: #101112; font-size: 10px; font-weight: 800;
+    padding: 3px 8px; border-radius: 99px; white-space: nowrap; pointer-events: none;
+    transition: left .3s var(--ease), top .3s var(--ease);
+  }
+  .tip {
+    margin-top: 16px; background: var(--card-2); border: 1px solid var(--line); border-radius: var(--r-xs);
+    padding: 12px 14px; display: flex; align-items: center; gap: 14px;
+  }
+  .tip .kv { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--dim); }
+  .tip .kv i { width: 8px; height: 8px; border-radius: 3px; }
+  .tip .kv b { color: var(--txt); font-weight: 700; margin-left: 2px; }
+  .tip .day { margin-left: auto; font-size: 11px; color: var(--dim-2); }
+
+  /* ── 今日计划（可勾选，完成划掉） ─────────────────── */
+  .plan { margin-top: 14px; display: flex; flex-direction: column; gap: 9px; }
+  .plan button {
+    display: flex; align-items: center; gap: 12px; padding: 12px 13px; min-height: 56px;
+    border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--card-2);
+    color: var(--txt); font-family: inherit; cursor: pointer; text-align: left;
+    transition: opacity .3s, border-color .25s;
+  }
+  .plan .ck {
+    width: 22px; height: 22px; border-radius: 7px; flex: none; border: 1.6px solid var(--line-2);
+    display: grid; place-items: center; transition: all .25s var(--ease);
+  }
+  .plan .ck svg { width: 12px; height: 12px; fill: none; stroke: #180703; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 20; stroke-dashoffset: 20; transition: stroke-dashoffset .3s var(--ease); }
+  .plan button.done .ck { background: var(--acc); border-color: var(--acc); }
+  .plan button.done .ck svg { stroke-dashoffset: 0; }
+  .plan .t { flex: 1; min-width: 0; }
+  .plan .t b { font-size: 13px; font-weight: 700; position: relative; display: inline-block; }
+  .plan .t b::after {
+    content: ""; position: absolute; left: 0; top: 53%; height: 1.4px; width: 0;
+    background: var(--dim-2); transition: width .32s var(--ease);
+  }
+  .plan button.done .t b { color: var(--dim); }
+  .plan button.done .t b::after { width: 100%; }
+  .plan .t small { display: block; font-size: 10.5px; color: var(--dim-2); margin-top: 3px; }
+  .plan .thumb { width: 40px; height: 40px; border-radius: 12px; flex: none; overflow: hidden; }
+  .plan .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .plan .lab {
+    font-size: 9.5px; font-weight: 700; letter-spacing: .06em; padding: 4px 9px; border-radius: 99px;
+    background: rgba(255,255,255,.07); color: var(--dim); flex: none;
+  }
+
+  /* ── 档案页 ───────────────────────────────────────── */
+  .fileHero {
+    position: relative; margin: 4px -18px 0; height: 268px; overflow: hidden;
+  }
+  .fileHero img { width: 100%; height: 100%; object-fit: cover; }
+  .fileHero .shade { position: absolute; inset: 0; background: linear-gradient(transparent 32%, var(--bg) 94%); }
+  .fileHero .nm { position: absolute; left: 18px; right: 18px; bottom: 6px; }
+  .fileHero .tag {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700;
+    letter-spacing: .1em; background: rgba(255,255,255,.92); color: #101112;
+    padding: 5px 11px; border-radius: 99px;
+  }
+  .fileHero h2 { font-size: 32px; font-weight: 800; letter-spacing: -.03em; margin-top: 10px; }
+  .fileHero p { font-size: 11.5px; color: var(--dim); margin-top: 5px; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-top: 14px; }
+  .fact {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm);
+    padding: 15px 16px; min-height: 84px; display: flex; flex-direction: column;
+  }
+  .fact .k { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: var(--dim-2); }
+  .fact .k svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+  .fact b { font-size: 22px; font-weight: 800; margin-top: auto; letter-spacing: -.03em; }
+  .fact b i { font-size: 11px; font-style: normal; font-weight: 500; color: var(--dim-2); margin-left: 3px; }
+  .vac { margin-top: 12px; }
+  .vac .v { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+  .vac .v:last-child { border-bottom: 0; }
+  .vac .st { width: 26px; height: 26px; border-radius: 9px; flex: none; display: grid; place-items: center; }
+  .vac .st svg { width: 12px; height: 12px; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .vac .st.ok { background: rgba(94,233,200,.14); } .vac .st.ok svg { stroke: var(--c1); }
+  .vac .st.due { background: rgba(255,90,69,.16); } .vac .st.due svg { stroke: var(--acc); }
+  .vac .st.next { background: rgba(255,255,255,.06); } .vac .st.next svg { stroke: var(--dim-2); }
+  .vac .t { flex: 1; min-width: 0; }
+  .vac h5 { font-size: 13px; font-weight: 700; }
+  .vac p { font-size: 10.5px; color: var(--dim-2); margin-top: 3px; }
+
+  /* ── 我的 ─────────────────────────────────────────── */
+  .fam { display: flex; gap: 10px; margin-top: 14px; }
+  .fam .m { flex: 1; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 16px 8px; text-align: center; }
+  .fam .av { width: 42px; height: 42px; border-radius: 50%; margin: 0 auto 10px; display: grid; place-items: center; font-size: 15px; font-weight: 800; color: #101112; }
+  .fam .m b { font-size: 12.5px; font-weight: 700; display: block; }
+  .fam .m small { font-size: 10px; color: var(--dim-2); }
+  .rows { margin-top: 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+  .rows .r { display: flex; align-items: center; gap: 13px; padding: 15px 17px; min-height: 56px; border-bottom: 1px solid var(--line); font-size: 13.5px; cursor: pointer; }
+  .rows .r:last-child { border-bottom: 0; }
+  .rows .r .e { width: 34px; height: 34px; border-radius: 11px; background: var(--card-2); display: grid; place-items: center; flex: none; color: var(--dim); }
+  .rows .r .e svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .rows .r span { flex: 1; font-weight: 500; }
+  .rows .r small { font-size: 11.5px; color: var(--dim-2); }
+  .rows .r .chev { width: 7px; height: 12px; stroke: var(--dim-2); stroke-width: 1.8; fill: none; }
+  .sw { width: 44px; height: 26px; border-radius: 99px; background: var(--card-2); border: 1px solid var(--line); position: relative; transition: all .3s; flex: none; }
+  .sw::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--dim); transition: transform .3s var(--ease), background .3s;
+  }
+  .sw.on { background: var(--acc); border-color: transparent; }
+  .sw.on::after { transform: translateX(18px); background: #180703; }
+
+  /* ── 悬浮胶囊 TabBar + 中间凸起 ───────────────────── */
+  .tabbar {
+    position: absolute; z-index: 50; left: 18px; right: 18px;
+    bottom: calc(env(safe-area-inset-bottom) + 16px);
+    height: 62px; border-radius: 99px;
+    background: rgba(23,26,30,.86); backdrop-filter: blur(22px) saturate(160%);
+    border: 1px solid var(--line-2);
+    display: flex; align-items: center; justify-content: space-around; padding: 0 10px;
+    box-shadow: 0 18px 40px -18px rgba(0,0,0,.9);
+  }
+  .tabbar button {
+    border: 0; background: none; cursor: pointer; width: 46px; height: 46px; border-radius: 50%;
+    display: grid; place-items: center; color: var(--dim-2); transition: all .26s var(--ease);
+  }
+  .tabbar button svg { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .tabbar button.on { background: var(--txt); color: #101112; }
+  .tabbar .fab {
+    width: 54px; height: 54px; border-radius: 50%; color: #180703;
+    background: linear-gradient(140deg, var(--acc-2), var(--acc));
+    box-shadow: 0 10px 24px -8px rgba(255,90,69,.7);
+  }
+  .tabbar .fab:active { transform: scale(.92); }
+  .tabbar .fab svg { stroke-width: 2.2; }
+  .home-ind {
+    position: absolute; z-index: 51; bottom: calc(env(safe-area-inset-bottom) + 5px);
+    left: 50%; transform: translateX(-50%); width: 118px; height: 4px;
+    border-radius: 99px; background: var(--txt); opacity: .16;
+  }
+
+  /* ── 白色底部 sheet ───────────────────────────────── */
+  .scrim {
+    position: absolute; inset: 0; z-index: 55; background: rgba(0,0,0,.6);
+    opacity: 0; pointer-events: none; transition: opacity .3s ease;
+  }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 60;
+    background: #fbfbfc; color: #101112; border-radius: 30px 30px 0 0;
+    padding: 12px 22px calc(env(safe-area-inset-bottom) + 20px);
+    transform: translateY(102%); transition: transform .46s var(--ease);
+  }
+  .sheet.on { transform: none; }
+  .sheet .grab { width: 42px; height: 4px; border-radius: 99px; background: rgba(16,17,18,.14); margin: 0 auto 18px; }
+  .sheet h3 { font-size: 19px; font-weight: 800; text-align: center; letter-spacing: -.02em; }
+  .sheet .opts { display: flex; flex-direction: column; gap: 9px; margin-top: 18px; }
+  .sheet .opt {
+    display: flex; align-items: center; gap: 13px; padding: 14px 15px; min-height: 60px;
+    border-radius: var(--r-sm); border: 1.5px solid rgba(16,17,18,.09); background: #fff;
+    font-family: inherit; cursor: pointer; text-align: left; color: inherit;
+    transition: all .2s var(--ease);
+  }
+  .sheet .opt.on { border-color: var(--acc); background: rgba(255,90,69,.06); }
+  .sheet .opt .ic3 {
+    width: 38px; height: 38px; border-radius: 12px; flex: none; display: grid; place-items: center;
+    background: rgba(16,17,18,.05); color: #101112;
+  }
+  .sheet .opt.on .ic3 { background: rgba(255,90,69,.14); color: var(--acc); }
+  .sheet .opt .ic3 svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .sheet .opt .t { flex: 1; min-width: 0; }
+  .sheet .opt b { font-size: 14px; font-weight: 700; display: block; }
+  .sheet .opt small { font-size: 11px; color: rgba(16,17,18,.5); }
+  .sheet .go {
+    width: 100%; margin-top: 18px; border: 0; border-radius: 99px; cursor: pointer;
+    background: linear-gradient(100deg, var(--acc), var(--acc-2));
+    color: #1a0703; font-family: inherit; font-size: 15px; font-weight: 800; padding: 16px;
+    min-height: 52px; box-shadow: 0 14px 28px -12px rgba(255,90,69,.6);
+  }
+  .sheet .go:active { transform: scale(.98); }
+
+  .toast {
+    position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 96px);
+    transform: translate(-50%, 12px); z-index: 65;
+    background: var(--txt); color: #101112; padding: 11px 20px; border-radius: 99px;
+    font-size: 12.5px; font-weight: 700; opacity: 0; pointer-events: none;
+    transition: all .3s var(--ease); white-space: nowrap;
+  }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="status">
+    <span id="clock">9:41</span>
+    <span class="ic">
+      <svg viewBox="0 0 18 12"><rect y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" width="3" height="12" rx="1" opacity=".35"/></svg>
+      <svg viewBox="0 0 16 12"><path d="M8 11l3-3.4a4.4 4.4 0 00-6 0zM8 5.6a7 7 0 014.8 1.9l1.6-1.8a9.4 9.4 0 00-12.8 0l1.6 1.8A7 7 0 018 5.6z"/></svg>
+      <svg viewBox="0 0 26 12"><rect x=".5" y=".5" width="21" height="11" rx="3" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2.5" width="15" height="7" rx="1.5"/><path d="M23 4.5v3a2 2 0 000-3z"/></svg>
+    </span>
+  </div>
+
+  <div class="stage">
+
+    <!-- ══ 今天 ══ -->
+    <div class="view on" data-tab="today" id="vToday">
+      <div class="topbar">
+        <div class="t">
+          <h1 id="hiName">团子的一天</h1>
+          <p id="hiSub">英国短毛猫 · 3 岁 2 个月</p>
+        </div>
+        <button class="rnd" aria-label="搜索"><svg viewBox="0 0 17 17"><circle cx="7.4" cy="7.4" r="5.2"/><path d="M11.4 11.4l3.4 3.4"/></svg></button>
+        <button class="rnd" aria-label="通知"><svg viewBox="0 0 17 17"><path d="M8.5 2.2a4.3 4.3 0 00-4.3 4.3c0 3.4-1.7 4.3-1.7 4.3h12s-1.7-.9-1.7-4.3A4.3 4.3 0 008.5 2.2zM7.2 13.4a1.6 1.6 0 002.6 0"/></svg><span class="dot"></span></button>
+      </div>
+
+      <div class="pets" id="pets"></div>
+
+      <div class="week" id="weekbar"></div>
+
+      <section class="ringcard">
+        <div class="ring">
+          <svg width="148" height="148" viewBox="0 0 148 148">
+            <circle class="tr" cx="74" cy="74" r="60"/>
+            <circle class="sg" id="sg0" cx="74" cy="74" r="60" stroke="var(--c1)" transform="rotate(0 74 74)"/>
+            <circle class="sg" id="sg1" cx="74" cy="74" r="60" stroke="var(--c2)" transform="rotate(122 74 74)"/>
+            <circle class="sg" id="sg2" cx="74" cy="74" r="60" stroke="var(--c3)" transform="rotate(244 74 74)"/>
+          </svg>
+          <div class="mid">
+            <span class="pill" id="ringPill">第 62 天</span>
+            <b id="ringNum">0</b>
+            <small>/ 3 项照护</small>
+          </div>
+        </div>
+        <div class="metrics" id="metrics"></div>
+      </section>
+
+      <div class="promo">
+        <span class="badge"><svg viewBox="0 0 12 12"><path d="M6 1.2S3 4.4 3 6.6a3 3 0 006 0C9 4.4 6 1.2 6 1.2z"/></svg></span>
+        <h3 id="promoTitle">今天饮水只有<br>90 ml</h3>
+        <p>康心宠物医院 · 步行 8 分钟</p>
+        <button id="bookBtn">
+          <span id="bookTxt">记一次饮水</span>
+          <svg viewBox="0 0 12 12"><path d="M2 6h8M6.6 2.6L10 6l-3.4 3.4"/></svg>
+        </button>
+        <span class="ph2"><img id="promoImg" data-ph="200" alt=""></span>
+      </div>
+
+      <section class="card">
+        <div class="hd">
+          <h3>活跃时长</h3>
+          <div class="seg" id="seg">
+            <button class="on" data-v="week">本周</button>
+            <button data-v="month">本月</button>
+          </div>
+        </div>
+        <div class="bars" id="bars"></div>
+        <div class="tip">
+          <span class="kv"><i style="background:var(--acc)"></i>活跃<b id="tipAct">68 分</b></span>
+          <span class="kv"><i style="background:var(--c1)"></i>睡眠<b id="tipSleep">14.2 时</b></span>
+          <span class="day" id="tipDay">周五</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="hd"><h3>今日计划</h3><small style="font-size:11.5px;color:var(--dim-2)" id="planCount">0 / 3</small></div>
+        <div class="plan" id="plan"></div>
+      </section>
+    </div>
+
+    <!-- ══ 档案 ══ -->
+    <div class="view" data-tab="file">
+      <div class="fileHero">
+        <img id="fileImg" data-ph="18" alt="">
+        <div class="shade"></div>
+        <div class="nm">
+          <span class="tag" id="fileTag">状态良好 · 85 分</span>
+          <h2 id="fileName">团子</h2>
+          <p id="fileMeta">英国短毛猫 · 母 · 已绝育 · 2023.05.18</p>
+        </div>
+      </div>
+      <div class="grid2" id="facts"></div>
+
+      <section class="card">
+        <div class="hd"><h3>疫苗与驱虫</h3><small style="font-size:11.5px;color:var(--dim-2)">2026</small></div>
+        <div class="vac">
+          <div class="v">
+            <span class="st ok"><svg viewBox="0 0 12 12"><path d="M2 6.2l2.6 2.6L10 3.4"/></svg></span>
+            <div class="t"><h5>猫三联 第 3 针</h5><p>2026.03.12 · 康心宠物医院</p></div>
+          </div>
+          <div class="v">
+            <span class="st ok"><svg viewBox="0 0 12 12"><path d="M2 6.2l2.6 2.6L10 3.4"/></svg></span>
+            <div class="t"><h5>体内驱虫</h5><p>2026.06.02 · 家庭自行给药</p></div>
+          </div>
+          <div class="v">
+            <span class="st due"><svg viewBox="0 0 12 12"><path d="M6 2.6v3.8M6 9.1v.2"/></svg></span>
+            <div class="t"><h5>年度疫苗 加强针</h5><p>建议 08.07 前 · 还有 12 天</p></div>
+          </div>
+          <div class="v">
+            <span class="st next"><svg viewBox="0 0 12 12"><path d="M6 3v3l2 1.4"/></svg></span>
+            <div class="t"><h5>体外驱虫</h5><p>下次 2026.09.01</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="hd"><h3>体重记录</h3><small style="font-size:11.5px;color:var(--dim-2)">近 6 次</small></div>
+        <div class="bars" id="wtBars" style="height:126px"></div>
+      </section>
+    </div>
+
+    <!-- ══ 我的 ══ -->
+    <div class="view" data-tab="me">
+      <div class="topbar">
+        <div class="t"><h1>家庭共享</h1><p>3 位成员一起照顾 3 只</p></div>
+        <button class="rnd" aria-label="邀请"><svg viewBox="0 0 17 17"><path d="M8.5 3v11M3 8.5h11"/></svg></button>
+      </div>
+      <div class="fam">
+        <div class="m"><div class="av" style="background:linear-gradient(140deg,var(--acc-2),var(--acc))">林</div><b>林之默</b><small>管理员</small></div>
+        <div class="m"><div class="av" style="background:linear-gradient(140deg,#8ff5dd,var(--c1))">周</div><b>周桐</b><small>可编辑</small></div>
+        <div class="m"><div class="av" style="background:linear-gradient(140deg,#c9b8ff,var(--c2))">妈</div><b>妈妈</b><small>仅查看</small></div>
+      </div>
+
+      <div class="rows">
+        <div class="r">
+          <span class="e"><svg viewBox="0 0 16 16"><path d="M8 2a4 4 0 00-4 4c0 3.2-1.6 4-1.6 4h11.2s-1.6-.8-1.6-4a4 4 0 00-4-4zM6.8 12.4a1.5 1.5 0 002.4 0"/></svg></span>
+          <span>喂食提醒</span><div class="sw on" data-sw></div>
+        </div>
+        <div class="r" id="reminderRow">
+          <span class="e"><svg viewBox="0 0 16 16"><rect x="2" y="3.4" width="12" height="10.6" rx="2"/><path d="M2 6.8h12M5.4 3.4V1.6M10.6 3.4V1.6"/></svg></span>
+          <span>疫苗提前提醒</span><small id="reminderVal">提前 14 天</small>
+          <svg class="chev" viewBox="0 0 7 12"><path d="M1 1l5 5-5 5"/></svg>
+        </div>
+        <div class="r">
+          <span class="e"><svg viewBox="0 0 16 16"><path d="M2.4 13V8.2L8 3l5.6 5.2V13a.9.9 0 01-.9.9H3.3a.9.9 0 01-.9-.9z"/><path d="M6.2 13.9V10h3.6v3.9"/></svg></span>
+          <span>常去医院</span><small>康心宠物</small>
+          <svg class="chev" viewBox="0 0 7 12"><path d="M1 1l5 5-5 5"/></svg>
+        </div>
+        <div class="r">
+          <span class="e"><svg viewBox="0 0 16 16"><path d="M5.6 2.8h4.8l2.8 2.8v7.6a.9.9 0 01-.9.9H3.7a.9.9 0 01-.9-.9V3.7z"/><path d="M10.4 2.8v2.8h2.8M5.6 9h4.8M5.6 11.4h3"/></svg></span>
+          <span>导出健康档案</span>
+          <svg class="chev" viewBox="0 0 7 12"><path d="M1 1l5 5-5 5"/></svg>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="on" data-go="today" aria-label="今天">
+      <svg viewBox="0 0 21 21"><path d="M3 8.6l7.5-5.6 7.5 5.6v8.6a.9.9 0 01-.9.9h-3.8v-5.6H8.2v5.6H3.9a.9.9 0 01-.9-.9z"/></svg>
+    </button>
+    <button data-go="file" aria-label="档案">
+      <svg viewBox="0 0 21 21"><path d="M5.8 2.6h6.6l3.8 3.8v12a.8.8 0 01-.8.8H5.8a.8.8 0 01-.8-.8V3.4a.8.8 0 01.8-.8z"/><path d="M12.4 2.6v3.8h3.8M7.8 11.4h5.6M7.8 14.4h3.8"/></svg>
+    </button>
+    <button class="fab" id="fab" aria-label="快速记录">
+      <svg viewBox="0 0 21 21"><path d="M10.5 4v13M4 10.5h13"/></svg>
+    </button>
+    <button data-go="me" aria-label="我的">
+      <svg viewBox="0 0 21 21"><circle cx="10.5" cy="7.6" r="3.4"/><path d="M4.4 18a6.1 6.1 0 0112.2 0"/></svg>
+    </button>
+    <button aria-label="更多">
+      <svg viewBox="0 0 21 21"><circle cx="5" cy="10.5" r="1.5"/><circle cx="10.5" cy="10.5" r="1.5"/><circle cx="16" cy="10.5" r="1.5"/></svg>
+    </button>
+  </nav>
+  <div class="home-ind"></div>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet">
+    <div class="grab"></div>
+    <h3>记一条什么？</h3>
+    <div class="opts" id="sheetOpts">
+      <button class="opt on" data-v="喂食">
+        <span class="ic3"><svg viewBox="0 0 18 18"><path d="M4 8.4h10l-.9 6.6a1.7 1.7 0 01-1.7 1.5H6.6a1.7 1.7 0 01-1.7-1.5zM6 8.4C6 5.6 7.3 3.4 9 3.4s3 2.2 3 5"/></svg></span>
+        <span class="t"><b>喂食</b><small>主食 / 零食 / 补剂</small></span>
+      </button>
+      <button class="opt" data-v="互动">
+        <span class="ic3"><svg viewBox="0 0 18 18"><circle cx="6.4" cy="5.6" r="2.1"/><circle cx="12.4" cy="5.2" r="1.9"/><circle cx="3.9" cy="10.6" r="1.9"/><circle cx="14.4" cy="10.2" r="1.9"/><path d="M9 9.6c2.5 0 4.4 2.2 4.4 4.4 0 1.9-1.6 2.8-2.9 2.3a4.8 4.8 0 00-3 0c-1.3.5-2.9-.4-2.9-2.3 0-2.2 1.9-4.4 4.4-4.4z"/></svg></span>
+        <span class="t"><b>互动 / 散步</b><small>时长与地点</small></span>
+      </button>
+      <button class="opt" data-v="异常">
+        <span class="ic3"><svg viewBox="0 0 18 18"><path d="M9 2.4l7 12.4H2z"/><path d="M9 7v3.4M9 12.6v.2"/></svg></span>
+        <span class="t"><b>异常记录</b><small>呕吐 / 软便 / 挠痒</small></span>
+      </button>
+    </div>
+    <button class="go" id="sheetGo">保 存 记 录</button>
+  </div>
+
+  <div class="toast" id="toast">已记录</div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+
+  /* ── 占位图 ─────────────────────────────────────────
+     这个语料库不带二进制资源（EXAMPLES.md 的理由：recipe 能旅行，JPEG 不能），
+     所以每张图都是代码生成的 SVG data-URI，色相由参数决定。
+     真实项目里把 PH(n) 换成真实图片 URL 就行 —— 周围的 <img> 标签、
+     object-fit / filter / border-radius 的 CSS 一行都不用动，
+     这正是把它做成占位「图片」而不是占位「色块」的原因。 */
+  const PH = h => 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+       <defs><linearGradient id="g" x1="0" y1="0" x2=".7" y2="1">
+         <stop offset="0" stop-color="hsl(${h} 44% 66%)"/>
+         <stop offset="1" stop-color="hsl(${h + 26} 40% 34%)"/>
+       </linearGradient></defs>
+       <rect width="120" height="120" fill="url(#g)"/>
+       <circle cx="60" cy="46" r="23" fill="hsl(${h} 52% 82%)" opacity=".5"/>
+       <path d="M6 120 L46 62 L74 94 L96 74 L120 120Z" fill="hsl(${h + 40} 32% 22%)" opacity=".45"/>
+     </svg>`);
+  document.querySelectorAll('[data-ph]').forEach(el => { el.src = PH(+el.dataset.ph); });
+
+  const PETS = [
+    {
+      id: 'tz', name: '团子', img: PH(18), hero: PH(200),
+      glow: '#5ee9c8', breed: '英国短毛猫', age: '3 岁 2 个月', score: 85, state: '状态良好',
+      meta: '英国短毛猫 · 母 · 已绝育 · 2023.05.18', streak: 62,
+      vac: ['今天饮水只有<br>90 ml', '比日常少 40% · 晚上加个湿粮', '记一次饮水'],
+      metrics: [['55', 'g', '主食 · 已喂 28 g', 'var(--c1)'], ['20', '分', '互动 · 目标 30 分', 'var(--c2)'], ['90', 'ml', '饮水 · 偏少', 'var(--c3)']],
+      act: [42, 58, 36, 64, 68, 30, 22],
+      wt: [4.1, 4.2, 4.35, 4.3, 4.4, 4.6],
+      facts: [['体重', '4.6', 'kg', 'w'], ['活跃', '68', '分', 'a'], ['饮水', '90', 'ml', 'd'], ['睡眠', '14.2', '时', 's']],
+      plan: [
+        ['早餐 · 冻干 28 g', '07:30 · 已过时间', '主食', PH(18)],
+        ['逗猫棒 20 分钟', '18:00 · 客厅', '互动', PH(200)],
+        ['湿粮 1 包 + 换水', '19:00 · 补水优先', '主食', PH(340)]
+      ]
+    },
+    {
+      id: 'mq', name: '麦崎', img: PH(38), hero: PH(150),
+      glow: '#ff5a45', breed: '比格犬', age: '5 岁 7 个月', score: 72, state: '需要留意',
+      meta: '比格犬 · 公 · 已绝育 · 2020.11.03', streak: 128,
+      vac: ['晚餐还没喂<br>已超时 1 小时', '日常 19:00 · 现在 20:10 了', '记一次喂食'],
+      metrics: [['320', 'g', '主食 · 已喂 180 g', 'var(--c1)'], ['68', '分', '散步 · 目标 90 分', 'var(--c2)'], ['1.1', 'L', '饮水 · 正常', 'var(--c3)']],
+      act: [86, 92, 74, 88, 96, 108, 64],
+      wt: [13.4, 13.2, 13.0, 12.9, 13.0, 12.4],
+      facts: [['体重', '12.4', 'kg', 'w'], ['活跃', '96', '分', 'a'], ['饮水', '1.1', 'L', 'd'], ['睡眠', '11.4', '时', 's']],
+      plan: [
+        ['晨间散步 3.1 km', '06:50 · 已完成', '运动', PH(150)],
+        ['成犬粮 180 g', '07:40 · 五分钟吃完', '主食', PH(38)],
+        ['检查右耳发红', '20:00 · 连续第 2 天', '异常', PH(60)]
+      ]
+    },
+    {
+      id: 'nn', name: '奶昔', img: PH(280), hero: PH(95),
+      glow: '#a78bfa', breed: '查理王小猎犬', age: '11 个月', score: 91, state: '生长良好',
+      meta: '查理王小猎犬 · 母 · 未绝育 · 2025.08.22', streak: 41,
+      vac: ['今天第 3 顿<br>还差一顿', '幼犬期一天 3 顿 · 已喂 2 顿', '记第 3 顿'],
+      metrics: [['210', 'g', '幼犬粮 · 分 3 顿', 'var(--c1)'], ['42', '分', '训练 · 目标 45 分', 'var(--c2)'], ['640', 'ml', '饮水 · 正常', 'var(--c3)']],
+      act: [38, 44, 52, 40, 42, 66, 58],
+      wt: [4.9, 5.4, 5.8, 6.1, 6.4, 6.8],
+      facts: [['体重', '6.8', 'kg', 'w'], ['活跃', '42', '分', 'a'], ['饮水', '640', 'ml', 'd'], ['睡眠', '15.6', '时', 's']],
+      plan: [
+        ['幼犬粮泡软 110 g', '07:15 · 已完成', '主食', PH(280)],
+        ['社会化训练', '11:20 · 见 4 个陌生人', '训练', PH(95)],
+        ['洗澡 + 吹干', '18:30 · 第一次', '护理', PH(340)]
+      ]
+    }
+  ];
+
+  const FACT_ICON = {
+    w: '<path d="M3 6.4h10l-.9 6.8a1.6 1.6 0 01-1.6 1.4H5.5a1.6 1.6 0 01-1.6-1.4z"/><path d="M5.6 6.4V4.8a2.4 2.4 0 014.8 0v1.6"/>',
+    a: '<path d="M2 8.6h2.6l1.8-4.4 2.4 8 1.8-4.6 1.2 2.4H14"/>',
+    d: '<path d="M8 2.4S3.4 7 3.4 9.8a4.6 4.6 0 009.2 0C12.6 7 8 2.4 8 2.4z"/>',
+    s: '<path d="M12.8 9.4A5.2 5.2 0 016.6 3.2a5.4 5.4 0 105.6 6.2z"/>'
+  };
+  const WK = ['一', '二', '三', '四', '五', '六', '日'];
+
+  let cur = 0, day = 4, seg = 'week';
+  const done = {};
+  PETS.forEach(p => done[p.id] = new Set());
+
+  /* ── 宠物头像行 ───────────────────────────────────── */
+  $('pets').innerHTML = PETS.map((p, i) => `
+    <button class="pet${i === 0 ? ' on' : ''}" data-i="${i}" style="--glow:${p.glow}">
+      <span class="ph"><img src="${p.img}" alt="${p.name}"></span>
+      <span>${p.name}</span>
+    </button>`).join('') +
+    `<button class="pet"><span class="add"><svg viewBox="0 0 17 17"><path d="M8.5 3v11M3 8.5h11"/></svg></span><span>添加</span></button>`;
+
+  $('pets').addEventListener('click', e => {
+    const b = e.target.closest('.pet[data-i]');
+    if (!b) return;
+    cur = +b.dataset.i;
+    [...$('pets').querySelectorAll('.pet')].forEach(x => x.classList.toggle('on', x === b));
+    render();
+  });
+
+  /* ── 周日期条 ─────────────────────────────────────── */
+  $('weekbar').innerHTML = WK.map((w, i) => `
+    <button data-d="${i}" class="${i === 4 ? 'today on' : ''}">
+      <small>${w}</small><i>${20 + i}</i>
+    </button>`).join('');
+  $('weekbar').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    day = +b.dataset.d;
+    [...$('weekbar').children].forEach(x => x.classList.toggle('on', x === b));
+    paintBars(); paintTip();
+  });
+
+  /* ── 柱状图 ───────────────────────────────────────── */
+  function paintBars() {
+    const p = PETS[cur];
+    const data = seg === 'week' ? p.act : p.act.map(v => Math.round(v * 1.28));
+    const mx = Math.max(...data);
+    $('bars').innerHTML = data.map((v, i) => `
+      <div class="col${i === day ? ' on' : ''}" data-d="${i}">
+        <span class="cap"><i style="height:${Math.round(v / mx * 100)}%"></i></span>
+        <small>${WK[i]}</small>
+      </div>`).join('') +
+      `<span class="tag" id="barTag">${data[day]} 分</span>`;
+    // 标签跟着选中柱走
+    requestAnimationFrame(() => {
+      const col = $('bars').querySelector('.col.on'), tag = $('barTag');
+      if (!col || !tag) return;
+      const fill = col.querySelector('i');
+      tag.style.left = (col.offsetLeft + col.offsetWidth / 2) + 'px';
+      tag.style.top = (fill.getBoundingClientRect().top - $('bars').getBoundingClientRect().top - 6) + 'px';
+    });
+
+    // 档案页体重柱
+    const w = p.wt, wmx = Math.max(...w), wmn = Math.min(...w) * .94;
+    $('wtBars').innerHTML = w.map((v, i) => `
+      <div class="col${i === w.length - 1 ? ' on' : ''}">
+        <span class="cap"><i style="height:${Math.round((v - wmn) / (wmx - wmn) * 88 + 12)}%"></i></span>
+        <small>${v}</small>
+      </div>`).join('');
+  }
+  $('bars').addEventListener('click', e => {
+    const c = e.target.closest('.col');
+    if (!c) return;
+    day = +c.dataset.d;
+    [...$('weekbar').children].forEach((x, i) => x.classList.toggle('on', i === day));
+    paintBars(); paintTip();
+  });
+  $('seg').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    seg = b.dataset.v;
+    [...$('seg').children].forEach(x => x.classList.toggle('on', x === b));
+    paintBars();
+  });
+  function paintTip() {
+    const p = PETS[cur];
+    const a = seg === 'week' ? p.act[day] : Math.round(p.act[day] * 1.28);
+    $('tipAct').textContent = a + ' 分';
+    $('tipSleep').textContent = (14.2 - day * .3).toFixed(1) + ' 时';
+    $('tipDay').textContent = '周' + WK[day];
+  }
+
+  /* ── 圆环三段 ─────────────────────────────────────── */
+  const C = 2 * Math.PI * 60, SEGLEN = C / 3 - 6;
+  function paintRing() {
+    const set = done[PETS[cur].id];
+    ['喂食', '互动', '饮水'].forEach((k, i) => {
+      $('sg' + i).style.strokeDasharray = (set.has(k) ? SEGLEN : 0) + ' 999';
+    });
+    $('ringNum').textContent = set.size;
+    $('planCount').textContent = `${set.size} / 3`;
+  }
+
+  /* ── 计划勾选 ─────────────────────────────────────── */
+  const KEYS = ['喂食', '互动', '饮水'];
+  function paintPlan() {
+    const p = PETS[cur], set = done[p.id];
+    $('plan').innerHTML = p.plan.map(([t, s, lab, img], i) => `
+      <button data-k="${KEYS[i]}" class="${set.has(KEYS[i]) ? 'done' : ''}">
+        <span class="ck"><svg viewBox="0 0 12 12"><path d="M2 6.2l2.6 2.6L10 3.4"/></svg></span>
+        <span class="t"><b>${t}</b><small>${s}</small></span>
+        <span class="lab">${lab}</span>
+        <span class="thumb"><img src="${img}" alt=""></span>
+      </button>`).join('');
+  }
+  $('plan').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const set = done[PETS[cur].id], k = b.dataset.k;
+    if (set.has(k)) { set.delete(k); b.classList.remove('done'); toast(`已取消「${k}」`); }
+    else { set.add(k); b.classList.add('done'); toast(`「${k}」已完成`); }
+    paintRing();
+  });
+
+  /* ── 渲染 ─────────────────────────────────────────── */
+  function render() {
+    const p = PETS[cur];
+    // 强调色跟着当前宠物换：按钮渐变、圆环高亮、底部光晕一起变
+    document.documentElement.style.setProperty('--acc', p.glow === '#5ee9c8' ? '#ff5a45' : p.glow === '#ff5a45' ? '#ff8a3c' : '#a78bfa');
+    document.documentElement.style.setProperty('--acc-2', p.glow === '#5ee9c8' ? '#ff9457' : p.glow === '#ff5a45' ? '#ffc247' : '#d4c7ff');
+
+    $('hiName').textContent = p.name + '的一天';
+    $('hiSub').textContent = `${p.breed} · ${p.age}`;
+    $('ringPill').textContent = `第 ${p.streak} 天`;
+    $('promoTitle').innerHTML = p.vac[0];
+    $('promoImg').src = p.hero;
+    document.querySelector('.promo p').textContent = p.vac[1];
+    $('bookTxt').textContent = p.vac[2];
+
+    $('metrics').innerHTML = p.metrics.map(([v, u, note, col]) => `
+      <div class="metric">
+        <span class="bar2" style="background:${col}"></span>
+        <span class="t"><b>${v}<i> ${u}</i></b><small>${note}</small></span>
+      </div>`).join('');
+
+    $('fileImg').src = p.img;
+    $('fileName').textContent = p.name;
+    $('fileTag').textContent = `${p.state} · ${p.score} 分`;
+    $('fileMeta').textContent = p.meta;
+    $('facts').innerHTML = p.facts.map(([k, v, u, ic]) => `
+      <div class="fact">
+        <span class="k"><svg viewBox="0 0 16 16">${FACT_ICON[ic]}</svg>${k}</span>
+        <b>${v}<i>${u}</i></b>
+      </div>`).join('');
+
+    paintRing(); paintPlan(); paintBars(); paintTip();
+  }
+
+  /* ── 底部 sheet ───────────────────────────────────── */
+  const sheet = $('sheet'), scrim = $('scrim');
+  $('fab').addEventListener('click', () => { sheet.classList.add('on'); scrim.classList.add('on'); });
+  scrim.addEventListener('click', () => { sheet.classList.remove('on'); scrim.classList.remove('on'); });
+  $('sheetOpts').addEventListener('click', e => {
+    const b = e.target.closest('.opt');
+    if (b) [...$('sheetOpts').children].forEach(x => x.classList.toggle('on', x === b));
+  });
+  $('sheetGo').addEventListener('click', () => {
+    const v = $('sheetOpts').querySelector('.opt.on').dataset.v;
+    sheet.classList.remove('on'); scrim.classList.remove('on');
+    toast(`已记录一条「${v}」`);
+  });
+  $('bookBtn').addEventListener('click', () => {
+    const p = PETS[cur];
+    const LOG = {
+      tz: ['已记录 60 ml', '今日累计 150 ml · 还差 100 ml 达标'],
+      mq: ['晚餐已喂', '成犬粮 180 g · 20:12 记录'],
+      nn: ['第 3 顿已喂', '幼犬粮泡软 110 g · 今日三顿齐了']
+    }[p.id];
+    $('promoTitle').innerHTML = LOG[0];
+    document.querySelector('.promo p').textContent = LOG[1];
+    $('bookTxt').textContent = '再记一次';
+    toast(LOG[0] + '，已同步给家人');
+  });
+  $('reminderRow').addEventListener('click', () => {
+    const opts = ['提前 7 天', '提前 14 天', '提前 30 天'];
+    const i = (opts.indexOf($('reminderVal').textContent) + 1) % 3;
+    $('reminderVal').textContent = opts[i]; toast('已改为 ' + opts[i]);
+  });
+
+  /* ── Tab / 开关 / Toast ───────────────────────────── */
+  const views = [...document.querySelectorAll('.view')];
+  const tabs = [...document.querySelectorAll('.tabbar button[data-go]')];
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x => x.classList.toggle('on', x === t));
+    views.forEach(v => {
+      const on = v.dataset.tab === t.dataset.go;
+      if (on) v.scrollTop = 0;
+      v.classList.toggle('on', on);
+    });
+    if (t.dataset.go === 'file') paintBars();
+  }));
+  document.querySelectorAll('[data-sw]').forEach(s => s.addEventListener('click', () => s.classList.toggle('on')));
+
+  let tt = null;
+  function toast(txt) {
+    const el = $('toast');
+    el.textContent = txt; el.classList.add('on');
+    clearTimeout(tt); tt = setTimeout(() => el.classList.remove('on'), 1700);
+  }
+
+  const clock = $('clock');
+  setInterval(() => {
+    const d = new Date();
+    clock.textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+  }, 1000);
+
+  render();
+})();
+</script>
+</body>
+</html>

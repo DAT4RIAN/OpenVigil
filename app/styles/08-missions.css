@@ -359,6 +359,12 @@
 .decision-column {
   display: grid;
   gap: 9px;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+.mission-context-column > .card,
+.decision-column > .card {
+  min-width: 0;
 }
 .mission-overview-hero {
   align-items: flex-start;
@@ -375,6 +381,7 @@
   border-radius: 5px;
   color: var(--warning);
   display: flex;
+  flex: 0 0 34px;
   height: 34px;
   justify-content: center;
   width: 34px;
@@ -383,6 +390,8 @@
   display: flex;
   flex: 1;
   flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .mission-overview-hero .mono {
   color: var(--warning);
@@ -427,7 +436,7 @@
   align-items: center;
   display: grid;
   gap: 4px;
-  grid-template-columns: 1fr 50px 1fr;
+  grid-template-columns: minmax(0, 1fr) 50px minmax(0, 1fr);
 }
 .graph-node {
   align-items: center;

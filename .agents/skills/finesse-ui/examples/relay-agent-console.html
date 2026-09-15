@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RELAY 订单异常处理台 · AI 工作台 — Web</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* finesse · register=product · sub=ai-console · A=oat-paper+brick/olive-two-tone
+   * B=Manrope-800/400 + PlexMono · C=three-column-console(rail|stream|aside)
+   * D=none(feedback-only motion) · E=工单流水台与回执
+   * SOUL=6 SPECTACLE=2 DENSITY=8
+   *
+   * 语料库参考页 —— ai-console.md 的桌面形态。要读的东西，按章节号：
+   *   §1    三时态同屏：左栏 = 队列(未来) + 历史(过去)，中栏 = 正在跑的这一条(现在)
+   *   §2    run stream 取代图表当主角：一步一行，折叠可读，展开是证据(入参/出参/耗时)
+   *   §3    九种运行态全部渲染 —— 尤其 partial(跳过 4 单) 和 stopped，
+   *         这两个是别人不做而用户最需要的
+   *   §4    停止键常驻：不悬停不藏菜单，按下当帧就改状态并说出死在第几步
+   *   §5    审批卡长在流里而不是弹窗：要做什么 / 影响什么 / 凭什么(可点) / 三个动作
+   *   §6    成本是回执行 + 有界预算条，不是设置页里的数字
+   *   §7    产物面板带「回到生成它的那一步」
+   *   §8    三栏壳 + product-palettes.md §4.A 双色壳(深色轨 + 浅色内容)
+   *   §10   颜色先分「它自己干完的」(橄榄) 和「在等你」(砖红)，砖红更响；
+   *         整页只有一处持续动画 = 当前步的心跳点
+   *
+   * 配色 = product-palettes.md Set 7「Brick & Olive」，--bg 按 craft floor 往页面色相
+   * 上调了几个点，不用纯白。零图片：头像是字母块，产物是真表格。 */
+  :root{
+    --page:#f3efe6; --bg:#fdfbf6; --panel-2:#f9f6ef;
+    --border:rgba(44,30,22,.08); --border-2:rgba(44,30,22,.15);
+    --ink-1:#1e1712; --ink-2:#4a3e35; --ink-3:#7f7263; --ink-4:#a2957f;
+    /* §10 的语义对：needs 比 auto 响 */
+    --needs:#9C4A38; --auto:#5C5A3A;
+    --needs-soft:rgba(156,74,56,.10); --auto-soft:rgba(92,90,58,.12);
+    --on-accent:#fffdf8;
+    --up:#3E7A52; --down:#C22E22; --warn:#B77A16;
+    --warn-soft:rgba(183,122,22,.13); --down-soft:rgba(194,46,34,.11);
+    --rail:#141210; --rail-2:#1f1b16; --rail-3:#2a251e;
+    --rail-ink:#a89c8e; --rail-ink-2:#6f665b; --rail-ink-on:#fdfbf6;
+    --rail-border:rgba(255,255,255,.07);
+    --shadow:0 1px 3px rgba(56,36,24,.05);
+    --shadow-lg:0 30px 70px -46px rgba(56,36,24,.5);
+    --r:14px; --r-sm:10px; --r-xs:7px;
+    --nav-h:60px;
+    --ease:cubic-bezier(.22,.9,.28,1);
+    --sans:"Manrope","Noto Sans SC",-apple-system,"PingFang SC",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow-x:clip}
+  body{
+    background:var(--page);color:var(--ink-1);font-family:var(--sans);
+    font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--needs);color:var(--on-accent)}
+  button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  :focus-visible{outline:2px solid var(--needs);outline-offset:2px;border-radius:4px}
+
+  .app{display:grid;grid-template-columns:276px minmax(0,1fr) 344px;height:100vh}
+
+  /* ── 左轨：队列(未来) + 历史(过去) ───────────────────────────
+     深色轨来自 product-palettes.md §4.A，色相跟着暖页面走，不是冷蓝黑 */
+  .rail{
+    background:var(--rail);color:var(--rail-ink);
+    display:flex;flex-direction:column;min-height:0;
+    border-right:1px solid var(--rail-border);
+  }
+  .brand{
+    display:flex;align-items:center;gap:10px;height:var(--nav-h);flex:none;
+    padding:0 18px;border-bottom:1px solid var(--rail-border);
+  }
+  .brand .mk{
+    width:28px;height:28px;border-radius:9px;flex:none;display:grid;place-items:center;
+    background:var(--needs);color:var(--on-accent);font-weight:800;font-size:13px;letter-spacing:-.03em;
+  }
+  .brand b{color:var(--rail-ink-on);font-size:15px;font-weight:800;letter-spacing:-.01em}
+  .brand span{font-size:11px;color:var(--rail-ink-2);margin-left:auto;font-family:var(--mono)}
+
+  .rail-scroll{flex:1;min-height:0;overflow-y:auto;padding:6px 10px 10px}
+  .rail-scroll::-webkit-scrollbar{width:6px}
+  .rail-scroll::-webkit-scrollbar-thumb{background:var(--rail-3);border-radius:99px}
+  .grp{
+    display:flex;align-items:center;gap:8px;
+    font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--rail-ink-2);padding:16px 8px 8px;font-weight:600;line-height:1.2;
+  }
+  .grp .c{
+    margin-left:auto;letter-spacing:0;font-family:var(--mono);font-size:11px;
+    background:var(--rail-2);padding:1px 6px;border-radius:99px;
+  }
+
+  .qrow{
+    position:relative;width:100%;text-align:left;display:block;
+    padding:10px 11px 11px 26px;border-radius:var(--r-sm);
+    transition:background .18s ease;
+  }
+  .qrow:hover{background:var(--rail-2)}
+  .qrow.on{background:var(--rail-2)}
+  /* 选中态用伪元素做左标，不用 border-left —— 侧边彩条边框是 anti-cheap 的老 tell */
+  .qrow.on::after{
+    content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;
+    border-radius:0 3px 3px 0;background:var(--needs);
+  }
+  .qrow .dot{
+    position:absolute;left:11px;top:16px;width:7px;height:7px;border-radius:50%;
+    background:var(--rail-ink-2);
+  }
+  .qrow .ttl{
+    display:flex;align-items:baseline;gap:7px;color:var(--rail-ink-on);
+    font-size:13px;font-weight:600;letter-spacing:-.01em;
+  }
+  .qrow.done .ttl{color:var(--rail-ink);font-weight:500}
+  .qrow .id{font-family:var(--mono);font-size:10.5px;color:var(--rail-ink-2);font-weight:400}
+  .qrow .meta{font-size:11.5px;color:var(--rail-ink-2);margin-top:3px;display:flex;gap:6px;align-items:center}
+  .qrow .meta .st{font-weight:600}
+
+  .rail-me{
+    flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px;
+    border-top:1px solid var(--rail-border);
+  }
+  .rail-me .av{
+    width:30px;height:30px;border-radius:9px;flex:none;display:grid;place-items:center;
+    background:var(--auto);color:var(--on-accent);font-size:11px;font-weight:700;
+  }
+  .rail-me .nm{font-size:12.5px;color:var(--rail-ink-on);font-weight:600}
+  .rail-me .rl{font-size:11px;color:var(--rail-ink-2)}
+
+  /* ── 中栏：run stream(现在) ─────────────────────────────── */
+  .stream-col{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg)}
+  .runhead{
+    flex:none;display:flex;align-items:center;gap:14px;padding:0 24px;height:var(--nav-h);
+    border-bottom:1px solid var(--border);background:var(--bg);
+  }
+  .runhead h1{font-size:16px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
+  .runhead .sub{font-size:11.5px;color:var(--ink-3);margin-top:2px;display:flex;gap:8px;align-items:center}
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;
+    font-size:11.5px;font-weight:600;line-height:1.3;
+  }
+  .chip .d{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .chip.needs{background:var(--needs-soft);color:var(--needs)}
+  .chip.auto{background:var(--auto-soft);color:var(--auto)}
+  .chip.warn{background:var(--warn-soft);color:var(--warn)}
+  .chip.down{background:var(--down-soft);color:var(--down)}
+  .chip.mute{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--border)}
+  .runhead .right{margin-left:auto;display:flex;align-items:center;gap:9px}
+
+  .stream{flex:1;min-height:0;overflow-y:auto;padding:20px 24px 8px;scroll-behavior:smooth}
+  .stream::-webkit-scrollbar{width:8px}
+  .stream::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:99px}
+  .runbar{
+    display:flex;align-items:center;gap:10px;padding-bottom:14px;
+    font-size:12px;color:var(--ink-3);
+  }
+  .runbar .ln{flex:1;height:1px;background:var(--border)}
+
+  /* 一步一行；图标列的竖线把整条流串成一个过程 */
+  .step{position:relative;padding:0 0 2px 40px}
+  .step::before{
+    content:"";position:absolute;left:12.5px;top:26px;bottom:-2px;width:1px;background:var(--border-2);
+  }
+  .step:last-child::before{display:none}
+  .step .ic{
+    position:absolute;left:0;top:4px;width:26px;height:26px;border-radius:50%;
+    display:grid;place-items:center;background:var(--panel-2);
+    border:1px solid var(--border-2);color:var(--ink-3);
+  }
+  .step .ic svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  .step.ok .ic{background:var(--auto-soft);border-color:transparent;color:var(--auto)}
+  .step.partial .ic{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
+  .step.failed .ic{background:var(--down-soft);border-color:transparent;color:var(--down)}
+  .step.live .ic{background:var(--needs);border-color:transparent;color:var(--on-accent)}
+  .step.wait .ic{background:var(--needs-soft);border-color:transparent;color:var(--needs)}
+  .step.queued .ic{opacity:.55}
+
+  /* 整页唯一一处持续动画：当前步的心跳。它回答「卡住了还是在跑」 */
+  .step.live .ic::after{
+    content:"";position:absolute;inset:-5px;border-radius:50%;
+    border:1.5px solid var(--needs);opacity:.5;animation:beat 1.6s var(--ease) infinite;
+  }
+  @keyframes beat{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:0;transform:scale(1.22)}}
+
+  .step .hd{
+    display:flex;align-items:baseline;gap:10px;padding:6px 8px 6px 0;border-radius:var(--r-xs);
+    cursor:pointer;transition:background .16s ease;
+  }
+  .step .hd:hover{background:var(--panel-2)}
+  .step.queued .hd{cursor:default}
+  .step.queued .hd:hover{background:none}
+  .step .lab{font-size:13.5px;font-weight:600;letter-spacing:-.01em;min-width:0;overflow-wrap:anywhere}
+  .step.queued .lab{color:var(--ink-4);font-weight:500}
+  .step .dur{
+    margin-left:auto;flex:none;font-family:var(--mono);font-size:11.5px;color:var(--ink-4);
+    font-variant-numeric:tabular-nums;
+  }
+  .step .cv{flex:none;width:13px;height:13px;color:var(--ink-4);transition:transform .22s var(--ease)}
+  .step.open .cv{transform:rotate(90deg)}
+  .step .res{
+    font-size:12.5px;color:var(--ink-3);padding:0 0 12px;margin-top:-2px;
+    display:flex;gap:7px;align-items:flex-start;overflow-wrap:anywhere;
+  }
+  .step .res b{color:var(--ink-2);font-weight:600}
+  .step.failed .res{color:var(--down)}
+
+  /* 展开 = 证据。逐字照抄，不排版成人话 */
+  .ev{
+    display:none;margin:2px 0 14px;border:1px solid var(--border);border-radius:var(--r-sm);
+    background:var(--panel-2);overflow:hidden;
+  }
+  .step.open .ev{display:block}
+  .ev .kv{display:grid;grid-template-columns:52px minmax(0,1fr);gap:0 14px;padding:11px 13px;border-bottom:1px solid var(--border)}
+  .ev .kv:last-child{border-bottom:none}
+  .ev .k{font-size:11px;color:var(--ink-4);letter-spacing:.04em;padding-top:2px}
+  .ev .v{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);white-space:pre-wrap;max-height:160px;overflow:auto;line-height:1.65}
+  .ev .v.plain{font-family:var(--sans);font-size:12.5px}
+  .ev .lnk{color:var(--needs);font-weight:600;font-size:12px;font-family:var(--sans)}
+  .ev .lnk:hover{text-decoration:underline}
+  .ev .foot{display:flex;gap:16px;padding:9px 13px;background:var(--bg);font-size:11px;color:var(--ink-4);font-family:var(--mono)}
+  .ev .retry{
+    margin-left:auto;color:var(--down);font-weight:600;font-family:var(--sans);font-size:11.5px;
+  }
+  .ev .retry:hover{text-decoration:underline}
+
+  /* ── 审批卡：长在流里，不是弹窗 ─────────────────────────── */
+  .appr{
+    border:1px solid var(--needs);border-radius:var(--r);background:var(--bg);
+    box-shadow:0 18px 40px -30px rgba(156,74,56,.55);margin:4px 0 16px;overflow:hidden;
+  }
+  .appr .top{
+    display:flex;align-items:center;gap:9px;padding:11px 15px;
+    background:var(--needs-soft);color:var(--needs);font-size:12px;font-weight:700;letter-spacing:.02em;
+  }
+  .appr .top svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+  .appr .body{padding:15px}
+  .appr .row{display:grid;grid-template-columns:56px minmax(0,1fr);gap:5px 14px;margin-bottom:12px}
+  .appr .k{font-size:11.5px;color:var(--ink-4);padding-top:3px}
+  .appr .what{font-size:15px;font-weight:700;letter-spacing:-.01em;line-height:1.4}
+  .appr .cost{font-size:13px;color:var(--ink-2);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .appr .cost .big{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--warn);letter-spacing:-.02em}
+  .appr .cost .irr{color:var(--down);font-weight:600;font-size:12px}
+  .appr .why{font-size:12.5px;color:var(--ink-3);line-height:1.55}
+  .appr .why .lnk{color:var(--needs);font-weight:600}
+  .appr .why .lnk:hover{text-decoration:underline}
+  .appr .acts{display:flex;gap:9px;padding-top:3px}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;height:38px;padding:0 16px;
+    border-radius:var(--r-sm);font-size:13px;font-weight:600;letter-spacing:-.01em;
+    transition:background .18s ease,color .18s ease,border-color .18s ease,opacity .18s ease;
+  }
+  .btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .btn.pri{background:var(--needs);color:var(--on-accent)}
+  .btn.pri:hover{background:#84392a}
+  .btn.ghost{background:var(--bg);color:var(--ink-2);border:1px solid var(--border-2)}
+  .btn.ghost:hover{background:var(--panel-2)}
+  .btn.danger{background:var(--bg);color:var(--down);border:1px solid var(--down-soft)}
+  .btn.danger:hover{background:var(--down-soft)}
+  .btn.sm{height:32px;padding:0 12px;font-size:12.5px}
+  .btn[disabled]{opacity:.42;cursor:not-allowed}
+  .btn.stop{background:var(--panel-2);color:var(--down);border:1px solid var(--border-2)}
+  .btn.stop:not([disabled]):hover{background:var(--down);color:var(--on-accent);border-color:transparent}
+
+  .note{
+    font-size:11.5px;color:var(--ink-4);padding:8px 15px;border-top:1px solid var(--border);
+    background:var(--panel-2);
+  }
+
+  /* 流式输出：块内打字，不推动页面 */
+  .say{
+    border:1px solid var(--border);border-radius:var(--r-sm);background:var(--panel-2);
+    padding:12px 14px;margin:2px 0 14px;font-size:13px;line-height:1.7;color:var(--ink-2);
+    min-height:76px;
+  }
+  .say .cur{
+    display:inline-block;width:7px;height:14px;background:var(--needs);
+    vertical-align:-2px;margin-left:2px;animation:blink 1s steps(2,start) infinite;
+  }
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+  .say .skip{float:right;font-size:11px;color:var(--ink-4);margin-left:12px}
+  .say .skip:hover{color:var(--needs)}
+
+  /* ── 底部：回执行 + 输入 + 常驻停止 ──────────────────────── */
+  .composer{flex:none;border-top:1px solid var(--border);background:var(--bg);padding:11px 24px 16px}
+  .receipt{
+    display:flex;align-items:center;gap:14px;font-family:var(--mono);font-size:11.5px;
+    color:var(--ink-4);padding-bottom:9px;font-variant-numeric:tabular-nums;
+  }
+  .receipt .sep{width:1px;height:10px;background:var(--border-2)}
+  .receipt .cost{color:var(--ink-2);font-weight:600}
+  .cbox{
+    display:flex;align-items:center;gap:10px;border:1px solid var(--border-2);border-radius:var(--r);
+    background:var(--panel-2);padding:8px 8px 8px 15px;transition:border-color .18s ease;
+  }
+  .cbox:focus-within{border-color:var(--needs)}
+  .cbox input{
+    flex:1;min-width:0;border:0;background:none;outline:none;font-family:var(--sans);
+    font-size:13.5px;color:var(--ink-1);height:30px;
+  }
+  .cbox input::placeholder{color:var(--ink-4)}
+
+  /* ── 右栏：产物 / 上下文 / 预算(过去与凭据) ────────────── */
+  .aside{
+    background:var(--page);border-left:1px solid var(--border);
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .aside-hd{
+    flex:none;height:var(--nav-h);display:flex;align-items:center;gap:8px;padding:0 18px;
+    border-bottom:1px solid var(--border);font-size:12.5px;font-weight:700;letter-spacing:-.01em;
+  }
+  .aside-scroll{flex:1;min-height:0;overflow-y:auto;padding:14px}
+  .aside-scroll::-webkit-scrollbar{width:8px}
+  .aside-scroll::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:99px}
+  .card{
+    background:var(--bg);border:1px solid var(--border);border-radius:var(--r);
+    box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden;
+  }
+  .card .ch{
+    display:flex;align-items:center;gap:8px;padding:12px 14px 10px;
+    font-size:12.5px;font-weight:700;letter-spacing:-.01em;
+  }
+  .card .ch .tag{
+    margin-left:auto;font-size:10.5px;font-weight:600;color:var(--ink-4);
+    font-family:var(--mono);letter-spacing:0;
+  }
+  .card .cb{padding:0 14px 14px}
+  .art table{width:100%;border-collapse:collapse;font-size:12px}
+  .art th{
+    text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4);
+    font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);line-height:1.4;
+  }
+  .art td{padding:8px;border-bottom:1px solid var(--border);color:var(--ink-2)}
+  .art tr:last-child td{border-bottom:none}
+  .art td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink-3)}
+  .art .more{font-size:11.5px;color:var(--ink-4);padding:9px 8px 0}
+  .artacts{display:flex;gap:7px;flex-wrap:wrap;padding:11px 14px;border-top:1px solid var(--border);background:var(--panel-2)}
+  .tinybtn{
+    display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:var(--ink-2);
+    background:var(--bg);border:1px solid var(--border-2);border-radius:99px;padding:5px 11px;
+    transition:background .16s ease;
+  }
+  .tinybtn:hover{background:var(--page)}
+  .tinybtn.back{color:var(--needs);border-color:var(--needs-soft)}
+  .tinybtn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+  .ctx{display:flex;flex-direction:column;gap:9px}
+  .ctx .l{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--ink-2)}
+  .ctx .l .b{
+    width:22px;height:22px;border-radius:var(--r-xs);flex:none;display:grid;place-items:center;
+    background:var(--panel-2);color:var(--ink-3);border:1px solid var(--border);
+  }
+  .ctx .l .b svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
+  .ctx .l .x{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-4)}
+
+  /* 预算：有界的条，不是一个孤零零的数字 */
+  .bud .top{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}
+  .bud .big{font-family:var(--mono);font-size:23px;font-weight:600;letter-spacing:-.02em}
+  .bud .of{font-family:var(--mono);font-size:12px;color:var(--ink-4)}
+  .bud .track{height:7px;border-radius:99px;background:var(--panel-2);border:1px solid var(--border);overflow:hidden}
+  .bud .fill{
+    display:block;height:100%;border-radius:99px;background:var(--auto);width:0;
+    transition:width 1.1s var(--ease);
+  }
+  .bud .cap{font-size:11.5px;color:var(--ink-4);margin-top:8px;line-height:1.5}
+  .bud .cap b{color:var(--ink-2);font-weight:600}
+
+  @media (max-width:1180px){
+    .app{grid-template-columns:250px minmax(0,1fr)}
+    .aside{display:none}
+  }
+  @media (max-width:860px){
+    .app{grid-template-columns:minmax(0,1fr)}
+    .rail{display:none}
+  }
+  /* 降级：心跳冻在中间态，打字改成整块出现。耗时数字还在，所以「在跑」依然读得出来 */
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms!important;transition-duration:.01ms!important;animation-iteration-count:1!important}
+    .step.live .ic::after{opacity:.35;animation:none}
+    .say .cur{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ══ 左轨：未来 + 过去 ══════════════════════════════ -->
+  <aside class="rail">
+    <div class="brand">
+      <span class="mk">R</span><b>RELAY</b><span>值守中</span>
+    </div>
+    <div class="rail-scroll">
+      <div class="grp">正在跑 <span class="c" id="cRun">2</span></div>
+      <div id="qLive"></div>
+      <div class="grp">排队 <span class="c" id="cQueue">1</span></div>
+      <div id="qWait"></div>
+      <div class="grp">今天跑完的 <span class="c" id="cDone">4</span></div>
+      <div id="qDone"></div>
+    </div>
+    <div class="rail-me">
+      <span class="av">ZY</span>
+      <div><div class="nm">周野</div><div class="rl">客服运营 · 值班</div></div>
+    </div>
+  </aside>
+
+  <!-- ══ 中栏：现在 ════════════════════════════════════ -->
+  <main class="stream-col">
+    <div class="runhead">
+      <div>
+        <h1 id="rTitle">超时未发货补救</h1>
+        <div class="sub"><span class="num" id="rId">#R-2418</span> · <span id="rModel">派单模型 v4</span> · <span id="rWhen">14:06 触发</span></div>
+      </div>
+      <div class="right">
+        <span class="chip" id="rChip"><span class="d"></span><span></span></span>
+        <button class="btn stop sm" id="btnStop">
+          <svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>停止
+        </button>
+      </div>
+    </div>
+
+    <div class="stream" id="stream"></div>
+
+    <div class="composer">
+      <div class="receipt" id="receipt"></div>
+      <div class="cbox">
+        <input placeholder="再派一件事… 例如「把今天所有超时工单归因后发给我」" aria-label="派活" />
+        <button class="btn stop sm" id="btnStop2" title="停止当前任务">
+          <svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>停止
+        </button>
+        <button class="btn pri sm">派活
+          <svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ══ 右栏：产物 / 上下文 / 预算 ═══════════════════ -->
+  <aside class="aside">
+    <div class="aside-hd">这条任务的凭据</div>
+    <div class="aside-scroll">
+
+      <div class="card art">
+        <div class="ch" id="artTitle">补发名单 <span class="tag" id="artTag">37 单</span></div>
+        <div class="cb">
+          <table>
+            <thead id="artHead"></thead>
+            <tbody id="artBody"></tbody>
+          </table>
+          <div class="more" id="artMore"></div>
+        </div>
+        <div class="artacts">
+          <button class="tinybtn"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5h10"/></svg>复制</button>
+          <button class="tinybtn"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>导出 CSV</button>
+          <button class="tinybtn back" id="btnBack"><svg viewBox="0 0 24 24"><path d="M9 6l-5 6 5 6M4 12h15"/></svg><span id="backLab">回到第 2 步</span></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ch">它能看到什么 <span class="tag">3 个数据源</span></div>
+        <div class="cb ctx">
+          <div class="l"><span class="b"><svg viewBox="0 0 24 24"><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/></svg></span>订单表 orders<span class="x">只读</span></div>
+          <div class="l"><span class="b"><svg viewBox="0 0 24 24"><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/></svg></span>工单表 tickets<span class="x">读写</span></div>
+          <div class="l"><span class="b"><svg viewBox="0 0 24 24"><path d="M3 12h4l3 7 4-14 3 7h4"/></svg></span>物流接口<span class="x">只读</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ch">它能动什么 <span class="tag">5 个工具</span></div>
+        <div class="cb ctx">
+          <div class="l"><span class="b"><svg viewBox="0 0 24 24"><path d="M4 6h16v12H4zM4 8l8 5 8-5"/></svg></span>发短信<span class="x">需你批准</span></div>
+          <div class="l"><span class="b"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-11"/></svg></span>改工单状态<span class="x">自动</span></div>
+          <div class="l"><span class="b"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>发优惠券<span class="x">需你批准</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ch">本月预算</div>
+        <div class="cb bud">
+          <div class="top"><span class="big" id="budNow">¥18.40</span><span class="of">/ ¥50.00</span></div>
+          <div class="track"><i class="fill" id="budFill"></i></div>
+          <div class="cap">到 <b>¥50.00</b> 后新任务只排队不执行，正在跑的会跑完。</div>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+</div>
+
+<script>
+  /* ── 动效闸门(SKILL §7)：两个探针读一次，之后按效果分支 ── */
+  const RM = matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  /* 图标按「步骤类型」区分形状，不是只换颜色 —— ai-console.md §2.A */
+  const ICON = {
+    read:  '<path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/>',
+    filter:'<path d="M4 5h16l-6 7v6l-4 2v-8z"/>',
+    net:   '<path d="M12 3a9 9 0 1 0 .1 0M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z"/>',
+    think: '<path d="M12 4a6 6 0 0 1 3.5 10.9V18h-7v-3.1A6 6 0 0 1 12 4zM9.5 21h5"/>',
+    wait:  '<path d="M12 8v5l3 2M12 3a9 9 0 1 0 .1 0"/>',
+    send:  '<path d="M4 5h16v14H4zM4 7l8 5 8-5"/>',
+    write: '<path d="M4 20h16M6 16l9.5-9.5a2 2 0 0 0-3-3L3 13v3h3z"/>',
+    ok:    '<path d="M5 12.5l4.5 4.5L19 7"/>',
+    fail:  '<path d="M6 6l12 12M18 6L6 18"/>',
+  };
+  const CV = '<svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
+
+  /* 九种运行态的文案与颜色槽 —— ai-console.md §3 */
+  const STATE = {
+    queued:   {t:'排队中',   c:'mute'},
+    thinking: {t:'思考中',   c:'needs'},
+    tool:     {t:'调工具',   c:'needs'},
+    streaming:{t:'输出中',   c:'needs'},
+    waiting:  {t:'在等你',   c:'needs'},
+    succeeded:{t:'已完成',   c:'auto'},
+    failed:   {t:'失败',     c:'down'},
+    stopped:  {t:'已停止',   c:'mute'},
+    partial:  {t:'部分完成', c:'warn'},
+  };
+
+  const LIST = [
+    {id:'#R-2418', t:'超时未发货补救',  st:'waiting',  meta:'第 5/9 步 · 在等你批准', live:true},
+    {id:'#R-2417', t:'物流异常归因',    st:'failed',   meta:'第 3/6 步 · 接口鉴权失败', live:true},
+    {id:'#R-2419', t:'退款风控复核',    st:'queued',   meta:'排在第 1 位 · 预计 14:12 开始'},
+    {id:'#R-2416', t:'差评工单分派',    st:'succeeded',meta:'11 单已分派 · 用时 1m03s'},
+    {id:'#R-2415', t:'库存对账',        st:'partial',  meta:'2,400/2,481 行 · 跳过 81 行'},
+    {id:'#R-2414', t:'退货地址纠错',    st:'stopped',  meta:'你在第 4/7 步停止'},
+    {id:'#R-2413', t:'夜间值守汇总',    st:'succeeded',meta:'已生成日报 · 用时 3m41s'},
+  ];
+
+  /* 三条真实运行数据。切换左轨即整栏重绘 —— 这是「三时态」能用的证明 */
+  const RUNS = {
+    '#R-2418': {
+      title:'超时未发货补救', model:'派单模型 v4', when:'14:06 触发', st:'waiting',
+      receipt:{step:'5/9 步', dur:'42.6s', tok:'18.2k token', cost:'¥0.41'},
+      art:{t:'补发名单', tag:'37 单', cols:['订单','客户','已超时'], num:[0,2], back:'回到第 2 步',
+        more:'另外 31 单结构相同', rows:[
+          ['#8842190','陈*墨','96h'],['#8843055','林*溪','88h'],['#8844710','苏*野','71h'],
+          ['#8845902','何*川','63h'],['#8846021','罗*砚','49h'],['#8846044','程*屿','49h']]},
+      steps:[
+        {ty:'read', st:'succeeded', lab:'读取订单表 orders_2026q2', res:'扫描 <b>2,481</b> 行，识别出 6 个状态字段', dur:'1.42s',
+         ev:{in:'{ "table": "orders", "range": "2026-04-01 ~ 06-30" }', out:'2481 rows · 6 cols\ncolumns: order_id, buyer, paid_at, shipped_at, status, sku', cost:'耗时 1.42s · 1.2k token'}},
+        {ty:'filter', st:'succeeded', lab:'筛出「已付款 > 48h 未发货」', res:'命中 <b>37 单</b>，最长一单已超时 96 小时', dur:'0.31s', anchor:true,
+         ev:{in:'paid_at < now() - 48h AND shipped_at IS NULL AND status = "paid"', out:'37 rows\n最早：#8842190 · 超时 96h\n最新：#8846021 · 超时 49h', cost:'耗时 0.31s · 0.4k token', link:'在右栏看完整名单'}},
+        {ty:'net', st:'partial', lab:'查物流在途状态', res:'33 单查到，<b>4 单接口超时被跳过</b>', dur:'2.06s',
+         ev:{in:'POST /logistics/batch · 37 ids', out:'200 OK · 33 resolved\n408 TIMEOUT · 4 ids: 8842190, 8843055, 8844710, 8845902', cost:'耗时 2.06s · 0.9k token', warn:'跳过的 4 单不会进入后续补发，需要单独处理'}},
+        {ty:'think', st:'succeeded', lab:'生成补发方案', res:'建议对 37 单发 <b>¥15 无门槛券</b> + 短信告知', dur:'6.80s',
+         ev:{in:'策略：超时 48–72h → ¥10；> 72h → ¥15；统一口径避免客户比价投诉', out:'方案 A（采纳）：全部 ¥15\n方案 B：分档，客服解释成本高', cost:'耗时 6.80s · 9.1k token'}},
+        {ty:'wait', st:'waiting', lab:'等你批准：发送补发短信', appr:true},
+        {ty:'send', st:'queued', lab:'发送短信并核销优惠券'},
+        {ty:'write', st:'queued', lab:'把处理结果写回工单'},
+        {ty:'write', st:'queued', lab:'生成当日超时复盘'},
+        {ty:'ok',   st:'queued', lab:'通知值班群'},
+      ]
+    },
+    '#R-2417': {
+      title:'物流异常归因', model:'归因模型 v2', when:'13:48 触发', st:'failed',
+      receipt:{step:'3/6 步', dur:'11.9s', tok:'6.4k token', cost:'¥0.14'},
+      art:{t:'异常码分组', tag:'12 类', cols:['异常码','承运商','单量'], num:[2], back:'回到第 2 步',
+        more:'另外 7 类各不足 10 单', rows:[
+          ['收件人不在','SF · JD','58'],['地址不详','YTO','51'],['中转延误','ZTO · JD','43'],
+          ['联系不上','SF','22'],['包裹破损','YTO','18']]},
+      steps:[
+        {ty:'read', st:'succeeded', lab:'拉取昨日异常运单', res:'共 <b>214</b> 条，覆盖 4 家承运商', dur:'0.90s',
+         ev:{in:'{ "date": "2026-08-03", "status": "exception" }', out:'214 rows · carriers: SF, JD, YTO, ZTO', cost:'耗时 0.90s · 0.8k token'}},
+        {ty:'filter', st:'succeeded', lab:'按承运商与异常码分组', res:'12 类异常码，前 3 类占 <b>71%</b>', dur:'0.44s', anchor:true,
+         ev:{in:'group by carrier, exception_code', out:'top1 收件人不在 · 58\ntop2 地址不详 · 51\ntop3 中转延误 · 43', cost:'耗时 0.44s · 0.6k token'}},
+        {ty:'net', st:'failed', lab:'调用承运商明细接口', res:'鉴权失败：token 已于 13:40 过期', dur:'10.6s', open:true,
+         ev:{in:'GET /carrier/sf/detail?wb=SF13927730', out:'401 UNAUTHORIZED\n{"code":"AUTH_EXPIRED","msg":"access_token expired at 13:40:02"}', cost:'耗时 10.6s（含 3 次重试）· 0.2k token', fail:true}},
+        {ty:'think', st:'queued', lab:'归因并给出整改建议'},
+        {ty:'write', st:'queued', lab:'写入归因报告'},
+        {ty:'send', st:'queued', lab:'推送给物流负责人'},
+      ]
+    },
+    '#R-2415': {
+      title:'库存对账', model:'对账模型 v3', when:'09:20 触发', st:'partial',
+      receipt:{step:'3/3 步', dur:'2m14s', tok:'31.7k token', cost:'¥0.68'},
+      art:{t:'差异清单', tag:'17 条', cols:['SKU','账面','实盘'], num:[0,1,2], back:'回到第 3 步',
+        more:'另外 12 条已建成待办 #T-9926 起', rows:[
+          ['SK-2201','120','118'],['SK-2318','64','70'],['SK-2440','31','29'],
+          ['SK-2517','8','0'],['SK-2610','245','241']]},
+      steps:[
+        {ty:'read', st:'succeeded', lab:'读取仓库快照', res:'<b>2,481</b> 个 SKU', dur:'2.10s',
+         ev:{in:'{ "warehouse": "HZ-01", "snapshot": "09:00" }', out:'2481 sku · 8 zones', cost:'耗时 2.10s · 2.2k token'}},
+        {ty:'net', st:'partial', lab:'与 ERP 逐条核对', res:'核对 <b>2,400</b> 条，<b>81 条超时未核对</b>', dur:'1m52s',
+         ev:{in:'batch=50 · concurrency=4', out:'2400 matched\n81 skipped (ERP 限流 429)\n差异 17 条', cost:'耗时 1m52s · 26.4k token', warn:'这 81 条既没核对也没报错，别当成对平了'}},
+        {ty:'write', st:'succeeded', lab:'生成差异清单', res:'17 条差异已写入待办', dur:'3.40s', anchor:true,
+         ev:{in:'{ "diff": 17 }', out:'已建待办 #T-9921 ~ #T-9937', cost:'耗时 3.40s · 3.1k token'}},
+      ]
+    },
+  };
+
+  let cur = '#R-2418';
+  const $ = s => document.querySelector(s);
+
+  /* ── 左轨 ─────────────────────────────────────────── */
+  function renderRail(){
+    const cell = r => {
+      const s = STATE[r.st];
+      const color = s.c === 'auto' ? 'var(--auto)' : s.c === 'down' ? 'var(--down)'
+                  : s.c === 'warn' ? 'var(--warn)' : s.c === 'needs' ? 'var(--needs)' : 'var(--rail-ink-2)';
+      const on = r.id === cur ? ' on' : '';
+      const done = ['succeeded','partial','stopped','failed'].includes(r.st) && !r.live ? ' done' : '';
+      return `<button class="qrow${on}${done}" data-run="${r.id}">
+        <span class="dot" style="background:${color}"></span>
+        <span class="ttl">${r.t}<span class="id">${r.id}</span></span>
+        <span class="meta"><span class="st" style="color:${color}">${s.t}</span>· ${r.meta}</span>
+      </button>`;
+    };
+    $('#qLive').innerHTML = LIST.filter(r => r.live).map(cell).join('');
+    $('#qWait').innerHTML = LIST.filter(r => r.st === 'queued').map(cell).join('');
+    $('#qDone').innerHTML = LIST.filter(r => !r.live && r.st !== 'queued').map(cell).join('');
+    document.querySelectorAll('[data-run]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.run;
+      if (!RUNS[id]) return;           // 没有明细的历史条目不切
+      cur = id; renderRail(); renderRun();
+    }));
+  }
+
+  /* ── 中栏 ─────────────────────────────────────────── */
+  function stepClass(st, isLive){
+    if (st === 'succeeded') return 'ok';
+    if (st === 'partial') return 'partial';
+    if (st === 'failed') return 'failed';
+    if (st === 'waiting') return 'wait';
+    if (st === 'queued') return 'queued';
+    return isLive ? 'live' : '';
+  }
+  function icFor(s){
+    if (s.st === 'succeeded') return ICON.ok;
+    if (s.st === 'failed') return ICON.fail;
+    return ICON[s.ty] || ICON.think;
+  }
+
+  function evBlock(s){
+    if (!s.ev) return '';
+    const rows = [
+      `<div class="kv"><span class="k">入参</span><span class="v">${s.ev.in}</span></div>`,
+      `<div class="kv"><span class="k">出参</span><span class="v">${s.ev.out}</span></div>`,
+    ];
+    if (s.ev.warn) rows.push(`<div class="kv"><span class="k">注意</span><span class="v plain" style="color:var(--warn)">${s.ev.warn}</span></div>`);
+    if (s.ev.link) rows.push(`<div class="kv"><span class="k">名单</span><span class="v plain"><button class="lnk" data-jump="art">${s.ev.link}</button></span></div>`);
+    const retry = s.ev.fail ? `<button class="retry" data-retry="1">从这一步重试</button><button class="retry" style="color:var(--ink-4)">复制报错</button>` : '';
+    return `<div class="ev"><div>${rows.join('')}</div><div class="foot"><span>${s.ev.cost}</span>${retry}</div></div>`;
+  }
+
+  function apprBlock(){
+    return `<div class="appr">
+      <div class="top">
+        <svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        这一步要你拍板，任务停在这里等
+      </div>
+      <div class="body">
+        <div class="row"><span class="k">要做什么</span><span class="what">给 37 位客户发送补发优惠券短信</span></div>
+        <div class="row"><span class="k">影响什么</span><span class="cost">
+          <span class="big">37 条</span>短信 · ¥0.06/条 · 合计 <b>¥2.22</b>
+          <span class="irr">发出后不可撤回</span>
+        </span></div>
+        <div class="row"><span class="k">凭什么</span><span class="why">
+          名单来自第 2 步筛出的「已付款超 48 小时未发货」，
+          第 3 步跳过的 4 单<b>不在其中</b>。<button class="lnk" data-jump="step2">看第 2 步的原始筛选条件</button>
+        </span></div>
+        <div class="acts">
+          <button class="btn pri" data-appr="ok">批准并继续</button>
+          <button class="btn ghost" data-appr="edit">改一下</button>
+          <button class="btn danger" data-appr="no">拒绝</button>
+        </div>
+      </div>
+      <div class="note">没人回应也不会自动发：15 分钟后任务自动转为「已停止」，等你回来。</div>
+    </div>`;
+  }
+
+  function renderRun(){
+    const r = RUNS[cur];
+    $('#rTitle').textContent = r.title;
+    $('#rId').textContent = cur;
+    $('#rModel').textContent = r.model;
+    $('#rWhen').textContent = r.when;
+    const s = STATE[r.st];
+    const chip = $('#rChip');
+    chip.className = 'chip ' + s.c;
+    chip.lastElementChild.textContent = s.t;
+    const stoppable = ['waiting','thinking','tool','streaming'].includes(r.st);
+    $('#btnStop').disabled = !stoppable;
+    $('#btnStop2').disabled = !stoppable;
+
+    const liveIdx = r.steps.findIndex(x => ['thinking','tool','streaming'].includes(x.st));
+    // 停了/失败了以后，剩下几步没跑要说出来 —— 悄悄把它们删掉就等于假装任务只有这么长
+    const left = r.steps.filter(x => x.st === 'queued').length;
+    const tail = ['stopped','failed'].includes(r.st) && left
+      ? `共 ${r.steps.length} 步 · 剩 ${left} 步未执行` : `共 ${r.steps.length} 步`;
+    $('#stream').innerHTML =
+      `<div class="runbar"><span>今天 ${r.when.replace(' 触发','')} 开始</span><i class="ln"></i><span>${tail}</span></div>` +
+      r.steps.map((st, i) => {
+        const cls = stepClass(st.st, i === liveIdx);
+        // 失败的步骤默认展开：要点开才看得见的失败，就是在藏失败
+        const open = st.open || st.st === 'failed' ? ' open' : '';
+        const res = st.res ? `<div class="res">↳ <span>${st.res}</span></div>` : '';
+        const dur = st.dur ? `<span class="dur">${st.dur}</span>` : '';
+        // 流式输出块长在「正在输出」那一步里，不是甩在流的最底下
+        const say = (st.st === 'streaming' && r.say) ? '<div class="say" id="say"></div>' : '';
+        return `<div class="step ${cls}${open}" data-i="${i}"${st.anchor ? ' id="step2"' : ''}>
+          <span class="ic"><svg viewBox="0 0 24 24">${icFor(st)}</svg></span>
+          <div class="hd"><span class="lab">${st.lab}</span>${dur}${st.ev ? CV : ''}</div>
+          ${res}${evBlock(st)}${say}${st.appr ? apprBlock() : ''}
+        </div>`;
+      }).join('');
+
+    renderArt(r.art);
+
+    const rc = r.receipt;
+    $('#receipt').innerHTML =
+      `<span>${rc.step}</span><i class="sep"></i><span>${rc.dur}</span><i class="sep"></i>` +
+      `<span>${rc.tok}</span><i class="sep"></i><span class="cost">${rc.cost}</span>` +
+      `<span style="margin-left:auto">${STATE[r.st].t}</span>`;
+
+    bind();
+  }
+
+  function bind(){
+    document.querySelectorAll('.step .hd').forEach(hd => hd.addEventListener('click', () => {
+      const step = hd.closest('.step');
+      if (!step.querySelector('.ev')) return;
+      step.classList.toggle('open');
+    }));
+    document.querySelectorAll('[data-appr]').forEach(b => b.addEventListener('click', () => approve(b.dataset.appr)));
+    document.querySelectorAll('[data-jump="step2"]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      const el = document.getElementById('step2');
+      if (!el) return;
+      el.classList.add('open');
+      el.scrollIntoView({behavior: RM ? 'auto' : 'smooth', block:'center'});
+    }));
+    document.querySelectorAll('[data-jump="art"]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      document.querySelector('.aside-scroll').scrollTo({top:0, behavior: RM ? 'auto' : 'smooth'});
+    }));
+    const rt = document.querySelector('[data-retry]');
+    if (rt) rt.addEventListener('click', e => { e.stopPropagation(); retryFrom(); });
+  }
+
+  /* ── 审批：批准后任务接着跑，流式输出落到块里，产物落到右栏 ── */
+  function approve(kind){
+    const r = RUNS['#R-2418'];
+    if (kind === 'no'){
+      r.steps[4] = {ty:'fail', st:'failed', lab:'你拒绝了发送短信', res:'任务在第 5 步终止，没有任何短信发出', dur:'—',
+        ev:{in:'operator: 周野 · 14:09', out:'REJECTED · 0 sent\n37 单保持未处理，可改方案后重跑', cost:'人工决定 · 0 token', fail:true}};
+      r.st = 'stopped';
+      setRow('#R-2418', 'stopped', '你在第 5/9 步拒绝');
+      renderRail(); renderRun();
+      return;
+    }
+    if (kind === 'edit'){
+      const card = document.querySelector('.appr .body');
+      card.insertAdjacentHTML('afterbegin',
+        `<div class="row"><span class="k">改哪里</span><span class="why" style="color:var(--ink-2)">
+          面额 <b>¥15</b> → 可改；话术模板可换；名单可勾掉个别单。改完会重新算一次影响。</span></div>`);
+      return;
+    }
+    r.steps[4] = {ty:'ok', st:'succeeded', lab:'你批准了发送短信', res:'周野 于 14:09 批准 · 已记入审计', dur:'—',
+      ev:{in:'operator: 周野 · 14:09:22', out:'APPROVED · scope=37 · amount=¥2.22', cost:'人工决定 · 0 token'}};
+    r.steps[5] = {ty:'send', st:'succeeded', lab:'发送短信并核销优惠券', res:'<b>37 条</b>已发出，0 条失败', dur:'4.10s',
+      ev:{in:'template: T-refund-15 · 37 numbers', out:'37 sent · 0 failed\ncoupon_batch: CP-20260804-15', cost:'耗时 4.10s · 0.3k token'}};
+    r.steps[6] = {ty:'write', st:'streaming', lab:'把处理结果写回工单'};
+    r.st = 'streaming';
+    r.say = true;
+    r.receipt = {step:'7/9 步', dur:'48.9s', tok:'19.4k token', cost:'¥0.44'};
+    setRow('#R-2418', 'streaming', '第 7/9 步 · 正在写回工单');
+    renderRail(); renderRun();
+    stream('已批准。37 张 ¥15 无门槛券已核销并随短信发出，正在把处理结果写回对应工单，' +
+           '第 3 步跳过的 4 单我单独挂了待办，不会混进这次的补发口径里。');
+  }
+
+  /* 流式：一帧一小段，可跳过，容器不推动页面(min-height 已预留) */
+  function stream(text){
+    const box = $('#say');
+    if (!box) return;
+    if (RM){ box.textContent = text; return; }   // 降级：整块出现
+    box.innerHTML = '<button class="skip" id="skip">跳过动画</button><span id="txt"></span><span class="cur"></span>';
+    const txt = $('#txt');
+    let i = 0, stop = false;
+    $('#skip').addEventListener('click', () => { stop = true; txt.textContent = text; box.querySelector('.cur').remove(); });
+    (function tick(){
+      if (stop) return;
+      txt.textContent = text.slice(0, i += 2);
+      if (i < text.length) requestAnimationFrame(tick);
+      else box.querySelector('.cur')?.remove();
+    })();
+  }
+
+  /* ── 停止：当帧就落地，并说出死在第几步 ── */
+  function stopRun(){
+    const r = RUNS[cur];
+    if (!['waiting','thinking','tool','streaming'].includes(r.st)) return;
+    const at = r.steps.findIndex(s => ['waiting','thinking','tool','streaming'].includes(s.st));
+    const n = at < 0 ? r.steps.length : at + 1;
+    if (at >= 0){
+      r.steps[at] = {ty:'fail', st:'stopped', lab:`你在第 ${n} 步停止了任务`,
+        res:`「${r.steps[at].lab}」没有执行，前 ${n - 1} 步的结果都还在`, dur:'—',
+        ev:{in:'operator: 周野', out:`STOPPED at step ${n}/${r.steps.length}\n可从这一步续跑，也可丢弃`, cost:'人工决定 · 0 token'}};
+    }
+    r.st = 'stopped'; r.say = false;
+    setRow(cur, 'stopped', `你在第 ${n}/${r.steps.length} 步停止`);
+    renderRail(); renderRun();
+  }
+
+  function retryFrom(){
+    const r = RUNS['#R-2417'];
+    r.steps[2] = {ty:'net', st:'succeeded', lab:'调用承运商明细接口', res:'换用新 token 后取回 <b>214</b> 条明细', dur:'3.30s',
+      ev:{in:'GET /carrier/sf/detail (token refreshed 14:11)', out:'200 OK · 214 details', cost:'耗时 3.30s · 0.9k token'}};
+    r.steps[3].st = 'thinking';
+    r.st = 'thinking';
+    r.receipt = {step:'4/6 步', dur:'15.2s', tok:'7.1k token', cost:'¥0.16'};
+    setRow('#R-2417', 'thinking', '第 4/6 步 · 正在归因');
+    renderRail(); renderRun();
+  }
+
+  function setRow(id, st, meta){
+    const row = LIST.find(x => x.id === id);
+    if (!row) return;
+    row.st = st; row.meta = meta;
+    row.live = ['thinking','tool','streaming','waiting'].includes(st);
+    $('#cRun').textContent = LIST.filter(x => x.live).length;
+    $('#cDone').textContent = LIST.filter(x => !x.live && x.st !== 'queued').length;
+  }
+
+  /* ── 右栏：产物随任务切换。凭据是这条任务的凭据，不是常驻装饰 ── */
+  function renderArt(a){
+    $('#artTitle').innerHTML = `${a.t} <span class="tag">${a.tag}</span>`;
+    $('#artHead').innerHTML = '<tr>' + a.cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
+    $('#artBody').innerHTML = a.rows.map(row =>
+      '<tr>' + row.map((v, i) => `<td class="${a.num.includes(i) ? 'n' : ''}">${v}</td>`).join('') + '</tr>').join('');
+    $('#artMore').textContent = a.more;
+    $('#backLab').textContent = a.back;
+  }
+
+  $('#btnStop').addEventListener('click', stopRun);
+  $('#btnStop2').addEventListener('click', stopRun);
+  $('#btnBack').addEventListener('click', () => {
+    const el = document.getElementById('step2');
+    if (!el) return;
+    el.classList.add('open');
+    el.scrollIntoView({behavior: RM ? 'auto' : 'smooth', block:'center'});
+  });
+
+  renderRail();
+  renderRun();
+  // 预算条：一次性长到位；reduced-motion 下直接落终态
+  requestAnimationFrame(() => { $('#budFill').style.width = '36%'; });
+</script>
+</body>
+</html>

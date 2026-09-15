@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FLUX — 流体动力学</title>
+<style>
+  /* finesse · register=brand · A=violet/cyan-on-deep-ink · B=sans+mono · C=full-page-engine+scrims · D=WebGL-FBO · E=water&fluid
+   * back-filled from EXAMPLES.md; dials not recorded for this build */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@1,300;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --ink: #EAE6F8; --muted: #7A72A8; --dim: #4A446A;
+    --accent: #8B7FD4; --cyan: #40D8E8; --violet: #6040C0;
+  }
+  html { scroll-behavior: smooth; }
+  body { background: #03020A; color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  #c { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; }
+  .grain { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: .038;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  .content { position: relative; z-index: 5; }
+
+  /* ── HEADER ── */
+  header { position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between; padding: 28px 52px;
+    background: linear-gradient(rgba(3,2,10,.7), transparent);
+    backdrop-filter: blur(0px); }
+  .brand { font-size: 14px; font-weight: 700; letter-spacing: .38em; color: var(--ink); }
+  nav { display: flex; gap: 36px; font-size: 11px; letter-spacing: .2em; color: var(--muted); }
+  nav span { cursor: default; transition: color .2s; }
+  nav span:hover { color: var(--ink); }
+  .cta { font-size: 11px; letter-spacing: .14em; color: var(--ink);
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.18);
+    border-radius: 999px; padding: 9px 20px; cursor: pointer; transition: .25s;
+    backdrop-filter: blur(8px); }
+  .cta:hover { background: var(--accent); border-color: var(--accent); }
+
+  /* ── HERO ── */
+  .hero { width: 100vw; height: 100vh; position: relative; display: flex;
+    align-items: center; justify-content: flex-start; }
+  .hero-body { padding: 0 52px; max-width: 680px; pointer-events: none; }
+  .kicker { display: flex; align-items: center; gap: 14px; font-size: 11px;
+    letter-spacing: .3em; color: var(--muted); margin-bottom: 32px; }
+  .kicker i { width: 30px; height: 1px; background: var(--accent); display: inline-block; }
+  h1 { font-size: clamp(64px, 10vw, 148px); font-weight: 800; line-height: .86;
+    letter-spacing: -.05em; }
+  h1 em { font-style: italic; font-weight: 300; font-family: 'Playfair Display', serif;
+    color: var(--cyan); display: block; letter-spacing: -.03em; }
+  .sub { margin-top: 28px; max-width: 400px; font-size: 14.5px; line-height: 1.78;
+    color: #6860A0; }
+
+  .hero-foot { position: absolute; bottom: 36px; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: flex-end; padding: 0 52px;
+    font-size: 10.5px; letter-spacing: .18em; color: var(--dim); }
+  .live-row { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 5px; height: 5px; background: var(--cyan); border-radius: 50%;
+    animation: blink 2s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.1} }
+  .scroll-ind { display: flex; flex-direction: column; align-items: center; gap: 6px;
+    font-size: 9.5px; letter-spacing: .2em; }
+  .scroll-ind span { width: 1px; height: 28px;
+    background: linear-gradient(var(--dim), transparent);
+    animation: vpulse 2.2s ease-in-out infinite; }
+  @keyframes vpulse { 0%,100%{opacity:.18} 50%{opacity:1} }
+
+  /* ── MARQUEE ── */
+  .marquee { border-top: 1px solid rgba(255,255,255,.06);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    background: rgba(3,2,10,.85); backdrop-filter: blur(12px);
+    overflow: hidden; padding: 14px 0; }
+  .track { display: inline-flex; gap: 56px; white-space: nowrap;
+    animation: ticker 28s linear infinite;
+    font-size: 11px; letter-spacing: .26em; color: var(--muted); }
+  .track b { color: var(--accent); font-weight: 500; margin-right: 56px; }
+  @keyframes ticker { to { transform: translateX(-50%); } }
+
+  /* ── SECTION ── */
+  .section { padding: 120px 52px; max-width: 1200px; margin: 0 auto; }
+  .sec-tag { font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    letter-spacing: .28em; color: var(--muted); margin-bottom: 56px; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.06); }
+  .card { background: rgba(3,2,10,.92); padding: 40px 36px; }
+  .card-num { font-family: 'JetBrains Mono', monospace; font-size: 36px; font-weight: 500;
+    color: var(--cyan); letter-spacing: -.02em; margin-bottom: 12px; }
+  .card-label { font-size: 11px; letter-spacing: .24em; color: var(--muted); margin-bottom: 16px; }
+  .card-desc { font-size: 13.5px; line-height: 1.72; color: #5A5480; }
+
+  /* ── PHYSICS BAND ── */
+  .band { background: rgba(255,255,255,.025); border-top: 1px solid rgba(255,255,255,.06);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    padding: 48px 52px; display: flex; gap: 0; }
+  .band-item { flex: 1; padding: 0 40px; border-right: 1px solid rgba(255,255,255,.06); }
+  .band-item:first-child { padding-left: 0; }
+  .band-item:last-child { border-right: none; }
+  .band-key { font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    letter-spacing: .22em; color: var(--muted); margin-bottom: 8px; }
+  .band-val { font-size: 13.5px; color: var(--ink); line-height: 1.6; }
+
+  /* ── FOOTER ── */
+  footer { border-top: 1px solid rgba(255,255,255,.06); padding: 36px 52px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; letter-spacing: .16em; color: var(--dim); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 860px) {
+    header { padding: 22px 24px; }
+    nav { gap: 22px; }
+    .hero-body { padding: 0 24px; max-width: 100%; }
+    .sub { max-width: 460px; }
+    .hero-foot { padding: 0 24px; bottom: 28px; }
+    .section { padding: 88px 24px; }
+    .sec-tag { margin-bottom: 36px; }
+    .cards { grid-template-columns: 1fr; }
+    .card { padding: 32px 26px; }
+    .band { flex-wrap: wrap; padding: 40px 24px; row-gap: 28px; }
+    .band-item, .band-item:first-child { flex: 0 0 50%; padding: 0 22px 0 0; }
+    .band-item:nth-child(2n) { border-right: none; }
+    footer { padding: 28px 24px; }
+  }
+  @media (max-width: 560px) {
+    header { flex-wrap: wrap; row-gap: 14px; padding: 16px 18px; }
+    .brand { order: 1; font-size: 13px; letter-spacing: .3em; }
+    .cta { order: 2; padding: 8px 14px; font-size: 10px; }
+    nav { order: 3; flex-basis: 100%; justify-content: space-between;
+      gap: 0; font-size: 10px; letter-spacing: .16em; }
+    .hero-body { padding: 0 18px; }
+    .kicker { margin-bottom: 22px; letter-spacing: .22em; gap: 10px; }
+    h1 { font-size: clamp(46px, 13.5vw, 68px); }
+    .sub { margin-top: 22px; font-size: 13.5px; }
+    .hero-foot { padding: 0 18px; bottom: 22px; flex-wrap: wrap; gap: 14px; }
+    .section { padding: 64px 18px; }
+    .card { padding: 28px 22px; }
+    .card-num { font-size: 30px; }
+    .band { padding: 32px 18px; row-gap: 24px; }
+    .band-item, .band-item:first-child { flex: 0 0 100%; padding: 0; border-right: none; }
+    footer { flex-direction: column; align-items: flex-start; gap: 10px; padding: 24px 18px; }
+  }
+
+  /* ── REDUCED MOTION ── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+    }
+    html { scroll-behavior: auto; }
+    /* Composed stills, not disabled features: each element rests on a designed value. */
+    .track { animation: none !important; }
+    .dot { animation: none !important; opacity: 1; }
+    .scroll-ind span { animation: none !important; opacity: .55; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="grain"></div>
+
+<div class="content">
+  <header>
+    <div class="brand">FLUX</div>
+    <nav>
+      <span>DYNAMICS</span>
+      <span>VISCOSITY</span>
+      <span>FIELD</span>
+    </nav>
+    <div class="cta">REQUEST ACCESS</div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-body">
+      <div class="kicker"><i></i>NAVIER–STOKES SIMULATION</div>
+      <h1>FLUID<br><em>DYNAMICS</em></h1>
+      <p class="sub">实时流体动力学模拟 — 每帧求解速度场与压力场方程，鼠标注入染料观察对流扩散现象</p>
+    </div>
+    <div class="hero-foot">
+      <div class="live-row"><div class="dot"></div><span class="mono">SIMULATION ACTIVE</span></div>
+      <div class="scroll-ind"><span></span>SCROLL</div>
+    </div>
+  </section>
+
+  <div class="marquee">
+    <div class="track">
+      <b>FLUX</b>NAVIER–STOKES<span style="color:var(--dim)">·</span>VELOCITY FIELD<span style="color:var(--dim)">·</span>PRESSURE SOLVE<span style="color:var(--dim)">·</span>DYE ADVECTION<span style="color:var(--dim)">·</span>DIVERGENCE FREE<span style="color:var(--dim)">·</span>VISCOUS DIFFUSION<span style="color:var(--dim)">·</span>JACOBI ITERATION<span style="color:var(--dim)">·</span>VORTICITY<span style="color:var(--dim)">·</span>REYNOLDS NUMBER<span style="color:var(--dim)">·</span>
+      <b>FLUX</b>NAVIER–STOKES<span style="color:var(--dim)">·</span>VELOCITY FIELD<span style="color:var(--dim)">·</span>PRESSURE SOLVE<span style="color:var(--dim)">·</span>DYE ADVECTION<span style="color:var(--dim)">·</span>DIVERGENCE FREE<span style="color:var(--dim)">·</span>VISCOUS DIFFUSION<span style="color:var(--dim)">·</span>JACOBI ITERATION<span style="color:var(--dim)">·</span>VORTICITY<span style="color:var(--dim)">·</span>REYNOLDS NUMBER<span style="color:var(--dim)">·</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sec-tag mono">// SIMULATION PARAMETERS</div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-num">256²</div>
+        <div class="card-label">SIMULATION GRID</div>
+        <div class="card-desc">速度场与压力场在 256×256 纹理上求解，通过双线性插值实现亚像素精度的对流运算</div>
+      </div>
+      <div class="card">
+        <div class="card-num">20×</div>
+        <div class="card-label">JACOBI ITERATIONS</div>
+        <div class="card-desc">每帧对压力泊松方程执行 20 次 Jacobi 迭代，保证速度场的散度趋近于零</div>
+      </div>
+      <div class="card">
+        <div class="card-num">6</div>
+        <div class="card-label">SHADER PASSES</div>
+        <div class="card-desc">Advect → Diffuse → Divergence → Pressure → Gradient Subtract → Render，六步 ping-pong 渲染管线</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="band">
+    <div class="band-item">
+      <div class="band-key">VISCOSITY</div>
+      <div class="band-val">μ = 0.0001<br>低粘度湍流态</div>
+    </div>
+    <div class="band-item">
+      <div class="band-key">DISSIPATION</div>
+      <div class="band-val">0.995 / frame<br>染料缓慢消散</div>
+    </div>
+    <div class="band-item">
+      <div class="band-key">SPLAT RADIUS</div>
+      <div class="band-val">r = 0.25<br>鼠标注入半径</div>
+    </div>
+    <div class="band-item">
+      <div class="band-key">DT</div>
+      <div class="band-val">Δt = 0.016s<br>60fps 时间步</div>
+    </div>
+  </div>
+
+  <footer>
+    <span class="mono">FLUX — NAVIER–STOKES FLUID SIMULATION</span>
+    <span>WebGL · GLSL</span>
+  </footer>
+</div>
+
+<script>
+// ── Motion / input preferences ──
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const FINE   = matchMedia('(hover: hover) and (pointer: fine)').matches;
+const DPR    = Math.min(2, window.devicePixelRatio || 1);
+
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+if (!gl) { document.body.innerHTML = '<p style="color:#EAE6F8;padding:40px">WebGL not supported</p>'; }
+
+// ── Extensions ──
+const ext = gl.getExtension('OES_texture_half_float') || gl.getExtension('EXT_color_buffer_float');
+const extLinear = gl.getExtension('OES_texture_half_float_linear') || gl.getExtension('EXT_texture_filter_anisotropic');
+const isWebGL2 = !!canvas.getContext('webgl2');
+
+let SIM_W = 256, SIM_H = 256;
+let width, height;
+
+// ── Shader sources ──
+const VS = `attribute vec2 aPos; varying vec2 vUv;
+void main(){ vUv = aPos*.5+.5; gl_Position = vec4(aPos,0,1); }`;
+
+const ADVECT_FS = `precision highp float;
+uniform sampler2D uVelocity, uSource;
+uniform vec2 uTexelSize;
+uniform float uDt, uDissipation;
+varying vec2 vUv;
+void main(){
+  vec2 vel = texture2D(uVelocity, vUv).xy;
+  vec2 pos = vUv - uDt * vel * uTexelSize;
+  gl_FragColor = uDissipation * texture2D(uSource, pos);
+}`;
+
+const DIVERGENCE_FS = `precision highp float;
+uniform sampler2D uVelocity;
+uniform vec2 uTexelSize;
+varying vec2 vUv;
+void main(){
+  float L = texture2D(uVelocity, vUv - vec2(uTexelSize.x,0)).x;
+  float R = texture2D(uVelocity, vUv + vec2(uTexelSize.x,0)).x;
+  float B = texture2D(uVelocity, vUv - vec2(0,uTexelSize.y)).y;
+  float T = texture2D(uVelocity, vUv + vec2(0,uTexelSize.y)).y;
+  gl_FragColor = vec4(.5*(R-L+T-B), 0, 0, 1);
+}`;
+
+const PRESSURE_FS = `precision highp float;
+uniform sampler2D uPressure, uDivergence;
+uniform vec2 uTexelSize;
+varying vec2 vUv;
+void main(){
+  float L = texture2D(uPressure, vUv - vec2(uTexelSize.x,0)).x;
+  float R = texture2D(uPressure, vUv + vec2(uTexelSize.x,0)).x;
+  float B = texture2D(uPressure, vUv - vec2(0,uTexelSize.y)).x;
+  float T = texture2D(uPressure, vUv + vec2(0,uTexelSize.y)).x;
+  float div = texture2D(uDivergence, vUv).x;
+  gl_FragColor = vec4((.25*(L+R+B+T) - div), 0, 0, 1);
+}`;
+
+const GRADIENT_FS = `precision highp float;
+uniform sampler2D uPressure, uVelocity;
+uniform vec2 uTexelSize;
+varying vec2 vUv;
+void main(){
+  float L = texture2D(uPressure, vUv - vec2(uTexelSize.x,0)).x;
+  float R = texture2D(uPressure, vUv + vec2(uTexelSize.x,0)).x;
+  float B = texture2D(uPressure, vUv - vec2(0,uTexelSize.y)).x;
+  float T = texture2D(uPressure, vUv + vec2(0,uTexelSize.y)).x;
+  vec2 vel = texture2D(uVelocity, vUv).xy;
+  vel -= .5*vec2(R-L, T-B);
+  gl_FragColor = vec4(vel, 0, 1);
+}`;
+
+const SPLAT_FS = `precision highp float;
+uniform sampler2D uTarget;
+uniform vec2 uPoint;
+uniform vec3 uColor;
+uniform float uRadius;
+varying vec2 vUv;
+void main(){
+  vec2 d = vUv - uPoint;
+  float splat = exp(-dot(d,d)/uRadius);
+  vec3 base = texture2D(uTarget, vUv).xyz;
+  gl_FragColor = vec4(base + splat*uColor, 1);
+}`;
+
+const DISPLAY_FS = `precision highp float;
+uniform sampler2D uDye;
+varying vec2 vUv;
+void main(){
+  vec3 c = texture2D(uDye, vUv).xyz;
+  // Tone mapping + boost
+  c = 1.0 - exp(-c * 2.2);
+  // Vignette
+  vec2 uv = vUv*2.-1.;
+  float v = 1.0 - smoothstep(.5, 1.4, length(uv));
+  gl_FragColor = vec4(c * v, 1);
+}`;
+
+// ── Compile ──
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  return s;
+}
+function program(vsSrc, fsSrc) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vsSrc));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsSrc));
+  gl.linkProgram(p);
+  const locs = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) {
+    const info = gl.getActiveUniform(p, i);
+    locs[info.name] = gl.getUniformLocation(p, info.name);
+  }
+  p.uniforms = locs;
+  return p;
+}
+
+const advectProg    = program(VS, ADVECT_FS);
+const divergeProg   = program(VS, DIVERGENCE_FS);
+const pressureProg  = program(VS, PRESSURE_FS);
+const gradientProg  = program(VS, GRADIENT_FS);
+const splatProg     = program(VS, SPLAT_FS);
+const displayProg   = program(VS, DISPLAY_FS);
+
+// ── Geometry ──
+const quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+
+// ── Textures / FBOs ──
+function createFBO(w, h) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  const type = isWebGL2 ? gl.HALF_FLOAT : (ext ? ext.HALF_FLOAT_OES : gl.UNSIGNED_BYTE);
+  const internalFmt = isWebGL2 ? gl.RGBA16F : gl.RGBA;
+  gl.texImage2D(gl.TEXTURE_2D, 0, internalFmt, w, h, 0, gl.RGBA, type, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fb, w, h };
+}
+
+function createDoubleFBO(w, h) {
+  return { read: createFBO(w, h), write: createFBO(w, h),
+    swap() { [this.read, this.write] = [this.write, this.read]; } };
+}
+
+let vel = createDoubleFBO(SIM_W, SIM_H);
+let dye = createDoubleFBO(SIM_W, SIM_H);
+let pressure = createDoubleFBO(SIM_W, SIM_H);
+let divergence = createFBO(SIM_W, SIM_H);
+
+// ── Draw helpers ──
+function useProgram(p) {
+  gl.useProgram(p);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  const loc = gl.getAttribLocation(p, 'aPos');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+}
+
+function bindTexture(unit, tex) {
+  gl.activeTexture(gl.TEXTURE0 + unit);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+}
+
+function drawToFBO(fbo) {
+  if (fbo) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.fb);
+    gl.viewport(0, 0, fbo.w, fbo.h);
+  } else {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvas.width, canvas.height); // device px, not CSS px
+  }
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+// ── Simulation steps ──
+const texelSize = [1/SIM_W, 1/SIM_H];
+
+function advect(velFBO, src, dst, dissipation) {
+  useProgram(advectProg);
+  bindTexture(0, velFBO.tex); gl.uniform1i(advectProg.uniforms.uVelocity, 0);
+  bindTexture(1, src.tex);    gl.uniform1i(advectProg.uniforms.uSource, 1);
+  gl.uniform2fv(advectProg.uniforms.uTexelSize, texelSize);
+  gl.uniform1f(advectProg.uniforms.uDt, 0.016);
+  gl.uniform1f(advectProg.uniforms.uDissipation, dissipation);
+  drawToFBO(dst);
+}
+
+function computeDivergence() {
+  useProgram(divergeProg);
+  bindTexture(0, vel.read.tex); gl.uniform1i(divergeProg.uniforms.uVelocity, 0);
+  gl.uniform2fv(divergeProg.uniforms.uTexelSize, texelSize);
+  drawToFBO(divergence);
+}
+
+function solvePressure() {
+  // Clear pressure
+  gl.bindFramebuffer(gl.FRAMEBUFFER, pressure.read.fb);
+  gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT);
+  for (let i = 0; i < 20; i++) {
+    useProgram(pressureProg);
+    bindTexture(0, pressure.read.tex); gl.uniform1i(pressureProg.uniforms.uPressure, 0);
+    bindTexture(1, divergence.tex);    gl.uniform1i(pressureProg.uniforms.uDivergence, 1);
+    gl.uniform2fv(pressureProg.uniforms.uTexelSize, texelSize);
+    drawToFBO(pressure.write);
+    pressure.swap();
+  }
+}
+
+function subtractGradient() {
+  useProgram(gradientProg);
+  bindTexture(0, pressure.read.tex); gl.uniform1i(gradientProg.uniforms.uPressure, 0);
+  bindTexture(1, vel.read.tex);      gl.uniform1i(gradientProg.uniforms.uVelocity, 1);
+  gl.uniform2fv(gradientProg.uniforms.uTexelSize, texelSize);
+  drawToFBO(vel.write);
+  vel.swap();
+}
+
+function splat(x, y, dx, dy, color) {
+  // Velocity splat
+  useProgram(splatProg);
+  bindTexture(0, vel.read.tex); gl.uniform1i(splatProg.uniforms.uTarget, 0);
+  gl.uniform2f(splatProg.uniforms.uPoint, x, y);
+  gl.uniform3f(splatProg.uniforms.uColor, dx, dy, 0);
+  gl.uniform1f(splatProg.uniforms.uRadius, 0.004);
+  drawToFBO(vel.write);
+  vel.swap();
+  // Dye splat
+  bindTexture(0, dye.read.tex); gl.uniform1i(splatProg.uniforms.uTarget, 0);
+  gl.uniform2f(splatProg.uniforms.uPoint, x, y);
+  gl.uniform3f(splatProg.uniforms.uColor, color[0], color[1], color[2]);
+  gl.uniform1f(splatProg.uniforms.uRadius, 0.003);
+  drawToFBO(dye.write);
+  dye.swap();
+}
+
+// ── Mouse ──
+let mouse = { x: 0.5, y: 0.5, dx: 0, dy: 0, down: false };
+let lastMouse = { x: 0.5, y: 0.5 };
+let hue = 0;
+
+function aimAt(clientX, clientY) {
+  const nx = clientX / width;          // width/height are CSS px
+  const ny = 1 - clientY / height;
+  mouse.dx = (nx - lastMouse.x) * 8;
+  mouse.dy = (ny - lastMouse.y) * 8;
+  mouse.x = nx; mouse.y = ny;
+  lastMouse.x = nx; lastMouse.y = ny;
+}
+
+// Dye injection is a hover affordance: only on fine pointers, only when motion is welcome.
+if (!REDUCE && FINE) {
+  window.addEventListener('mousemove', e => aimAt(e.clientX, e.clientY));
+}
+// Coarse pointers get the same injection on drag — but never block scrolling.
+if (!REDUCE && !FINE) {
+  window.addEventListener('touchmove', e => {
+    const t = e.touches[0];
+    if (t) aimAt(t.clientX, t.clientY);
+  }, { passive: true });
+}
+
+// ── Idle auto-splats ──
+let idleTimer = 0;
+const idleSplats = [
+  { x: 0.3, y: 0.5 }, { x: 0.7, y: 0.4 },
+  { x: 0.5, y: 0.7 }, { x: 0.2, y: 0.3 }, { x: 0.8, y: 0.6 }
+];
+let idleIdx = 0;
+
+function hslToRgb(h, s, l) {
+  h /= 360; s /= 100; l /= 100;
+  let r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else {
+    const q = l < 0.5 ? l*(1+s) : l+s-l*s;
+    const p = 2*l-q;
+    r = hue2rgb(p,q,h+1/3); g = hue2rgb(p,q,h); b = hue2rgb(p,q,h-1/3);
+  }
+  return [r, g, b];
+}
+function hue2rgb(p, q, t) {
+  if (t<0) t+=1; if (t>1) t-=1;
+  if (t<1/6) return p+(q-p)*6*t;
+  if (t<1/2) return q;
+  if (t<2/3) return p+(q-p)*(2/3-t)*6;
+  return p;
+}
+
+// ── Resize ──
+function resize() {
+  width = window.innerWidth;              // CSS px — drives layout + pointer math
+  height = window.innerHeight;
+  canvas.width = Math.max(1, Math.floor(width * DPR));   // device px — drives the buffer
+  canvas.height = Math.max(1, Math.floor(height * DPR));
+}
+resize();
+window.addEventListener('resize', () => {
+  resize();
+  // Resizing the canvas clears the drawing buffer. With no rAF running, the
+  // composed still would vanish — so re-present the same dye field.
+  if (REDUCE) render();
+});
+
+// ── Init splats ──
+function initSplats() {
+  for (let i = 0; i < 6; i++) {
+    const x = 0.2 + Math.random() * 0.6;
+    const y = 0.2 + Math.random() * 0.6;
+    const h = Math.random() * 360;
+    const col = hslToRgb(h, 80, 55);
+    splat(x, y, (Math.random()-0.5)*2, (Math.random()-0.5)*2,
+          [col[0]*3, col[1]*3, col[2]*3]);
+  }
+}
+
+// ── One simulation step / one present ──
+function step() {
+  advect(vel.read, vel.read, vel.write, 0.998); vel.swap();
+  advect(vel.read, dye.read, dye.write, 0.994); dye.swap();
+  computeDivergence();
+  solvePressure();
+  subtractGradient();
+}
+function render() {
+  useProgram(displayProg);
+  bindTexture(0, dye.read.tex); gl.uniform1i(displayProg.uniforms.uDye, 0);
+  drawToFBO(null);
+}
+
+// ── Composed still (prefers-reduced-motion) ──
+// Not a blank canvas, and not a frozen first frame either — a frozen first frame
+// is just the splats, six round blobs. We run the solver headlessly instead, and
+// present the frame where it has become an image: two counter-rotating vortices
+// (violet against cyan) whose dye has been stretched into filaments and folded
+// into each other along the seam between them. Fixed seeds + fixed step count,
+// so it is the same designed picture on every load. Composition is deliberate:
+// both vortices sit right of centre, leaving the headline column dark.
+// NOTE: uv y is GL-space — screen_y = 1 - uv_y. Violet sits low, cyan sits right
+// of the headline. Keep them ~0.33 apart: closer, and the counter-rotating pair
+// becomes a self-propelling dipole that swims off-frame and leaves you dust.
+const STILL_VORTICES = [
+  // x     y     r      spin  hue   — hue tracks the page palette: --violet, --cyan
+  { x: 0.54, y: 0.25, r: .085, spin:  1, hue: 268 },
+  { x: 0.72, y: 0.55, r: .095, spin: -1, hue: 190 }
+];
+const STILL_SPEED = 22;   // tangential velocity — enough to actually transport dye
+const STILL_RING  = 6;    // splats per vortex
+
+function emitVortex(v, dyeGain) {
+  for (let i = 0; i < STILL_RING; i++) {
+    const a = (i / STILL_RING) * Math.PI * 2;
+    const col = hslToRgb((v.hue + i * 5) % 360, 82, 58);
+    splat(
+      v.x + Math.cos(a) * v.r,                    // seed dye around the ring…
+      v.y + Math.sin(a) * v.r,
+      -Math.sin(a) * v.spin * STILL_SPEED,        // …with velocity tangent to it,
+       Math.cos(a) * v.spin * STILL_SPEED,        // which is what makes it spin
+      [col[0]*dyeGain, col[1]*dyeGain, col[2]*dyeGain]
+    );
+  }
+}
+
+function composeStill() {
+  STILL_VORTICES.forEach(v => emitVortex(v, 4));
+  for (let i = 0; i < 70; i++) step();            // rings shear into spirals
+  STILL_VORTICES.forEach(v => emitVortex(v, 2.2));// second, dimmer wave into a curling field
+  for (let i = 0; i < 110; i++) step();           // it winds up; the two plumes braid
+  render();                                       // present once. Nothing after this moves.
+}
+
+// ── Loop ──
+let raf = 0;
+let last = 0;
+function tick(ts) {
+  const dt = Math.min((ts - last) / 1000, 0.05);
+  last = ts;
+
+  // Mouse splat
+  if (Math.abs(mouse.dx) > 0.001 || Math.abs(mouse.dy) > 0.001) {
+    hue = (hue + 1.5) % 360;
+    const col = hslToRgb(hue, 85, 58);
+    splat(mouse.x, mouse.y, mouse.dx * 10, mouse.dy * 10,
+          [col[0] * 4, col[1] * 4, col[2] * 4]);
+    mouse.dx *= 0.7; mouse.dy *= 0.7;
+  }
+
+  // Idle auto-splat every 1.6s
+  idleTimer += dt;
+  if (idleTimer > 1.6) {
+    idleTimer = 0;
+    const s = idleSplats[idleIdx % idleSplats.length]; idleIdx++;
+    const h = (idleIdx * 67) % 360;
+    const col = hslToRgb(h, 80, 55);
+    splat(
+      s.x + (Math.random()-.5)*.2, s.y + (Math.random()-.5)*.2,
+      (Math.random()-.5)*1.5, (Math.random()-.5)*1.5,
+      [col[0]*2.5, col[1]*2.5, col[2]*2.5]
+    );
+  }
+
+  step();
+  render();
+
+  if (!REDUCE) raf = requestAnimationFrame(tick);
+}
+
+if (REDUCE) {
+  composeStill();               // one designed frame, then nothing moves
+} else {
+  initSplats();
+  raf = requestAnimationFrame(tick);
+}
+</script>
+</body>
+</html>

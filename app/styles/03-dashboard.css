@@ -4,31 +4,32 @@
 }
 
 .command-strip {
+  --incident-tone: var(--critical);
+  --incident-soft: var(--critical-soft);
   align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--critical);
-  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--incident-soft) 24%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--incident-tone) 22%, var(--border));
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   display: grid;
-  gap: 18px;
-  grid-template-columns: auto minmax(230px, 1fr) minmax(420px, 1.45fr) auto;
-  margin-bottom: 12px;
+  gap: 16px;
+  grid-template-columns: auto minmax(210px, 1fr) minmax(380px, 1.3fr) auto;
+  margin-bottom: 16px;
   min-height: 100px;
   overflow: hidden;
-  padding: 14px 16px;
+  padding: 18px;
 }
 
 .command-strip--stable {
-  border-left-color: var(--success);
-  background: color-mix(in srgb, var(--success-soft) 28%, var(--surface));
+  --incident-tone: var(--success);
+  --incident-soft: var(--success-soft);
 }
 
 .incident-index {
   align-items: center;
-  background: var(--critical);
+  background: var(--incident-tone);
   border-radius: 8px;
-  color: white;
+  color: var(--on-critical);
   display: flex;
   font-size: 12px;
   font-weight: 800;
@@ -39,6 +40,7 @@
 
 .incident-index[data-stable] {
   background: var(--success);
+  color: var(--on-success);
 }
 
 .incident-copy {
@@ -51,9 +53,7 @@
 .incident-signals dt {
   color: var(--foreground-subtle);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.055em;
-  text-transform: uppercase;
+  font-weight: 550;
 }
 
 .incident-title-link {
@@ -62,6 +62,7 @@
   font-weight: 680;
   line-height: 1.25;
   margin-top: 4px;
+  overflow-wrap: anywhere;
 }
 
 .incident-title-link:hover {
@@ -77,16 +78,24 @@
 }
 
 .incident-signals {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 0;
+  padding: 10px 0;
 }
 
 .incident-signals > div {
   border-left: 1px solid var(--border);
   min-width: 0;
-  padding-left: 12px;
+  padding: 0 10px;
+}
+
+.incident-signals > div:first-child {
+  border-left: 0;
 }
 
 .incident-signals dd {
@@ -104,7 +113,7 @@
   align-items: center;
   background: var(--primary);
   border-radius: var(--radius-sm);
-  color: white;
+  color: var(--on-primary);
   display: flex;
   font-size: 13px;
   font-weight: 700;
@@ -116,21 +125,25 @@
 }
 .incident-link:hover {
   background: var(--primary-strong);
-  color: white;
+  color: var(--on-primary);
+}
+
+.incident-link:active {
+  transform: translateY(1px);
 }
 
 .metrics-grid {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  margin-bottom: 10px;
+  margin-bottom: 16px;
 }
 
 .dashboard-main-grid,
 .dashboard-lower-grid {
   display: grid;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .dashboard-main-grid {
@@ -169,8 +182,9 @@
 
 .segmented {
   align-items: center;
-  background: var(--surface-strong);
-  border-radius: 5px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   display: flex;
   padding: 2px;
 }
@@ -182,26 +196,27 @@
   color: var(--foreground-subtle);
   cursor: pointer;
   font-size: var(--font-secondary);
-  height: 23px;
-  min-width: 31px;
+  height: 28px;
+  min-width: 32px;
   padding: 0 7px;
 }
 
 .segmented button.active {
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-  color: var(--foreground);
+  color: var(--primary);
   font-weight: 650;
 }
 
 .chart-stat-row {
   align-items: center;
-  border-bottom: 1px solid var(--border);
-  border-top: 1px solid var(--border);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   display: flex;
   gap: 25px;
   margin: 0 20px;
-  padding: 9px 0;
+  padding: 10px 12px;
 }
 
 .chart-stat-row > span:not(.chart-legend) {
@@ -638,7 +653,7 @@
   }
   .command-strip {
     align-items: start;
-    gap: 14px;
+    gap: 12px;
     grid-template-columns: 42px minmax(0, 1fr);
     padding: 14px;
   }
@@ -657,6 +672,22 @@
   .incident-signals {
     grid-column: 1 / -1;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    padding: 0;
+  }
+  .incident-signals > div {
+    border: 0;
+    padding: 10px 12px;
+  }
+  .incident-signals > div:nth-child(even) {
+    border-left: 1px solid var(--border);
+  }
+  .incident-signals > div:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+  .incident-signals dd {
+    margin-top: 3px;
+    overflow-wrap: anywhere;
   }
   .incident-link {
     grid-column: 1 / -1;
@@ -673,16 +704,31 @@
 
 @media (max-width: 460px) {
   .metrics-grid {
-    grid-template-columns: 1fr;
+    gap: 8px;
   }
-  .incident-signals {
-    grid-template-columns: 1fr;
+  .metrics-grid .metric-card {
+    min-height: 122px;
+    padding: 12px;
   }
-  .incident-signals > div {
-    border-left: 0;
-    border-top: 1px solid var(--border);
-    padding-left: 0;
-    padding-top: 8px;
+  .metrics-grid .metric-card__value {
+    font-size: 24px;
+  }
+  .metrics-grid .metric-card__icon {
+    flex-basis: 24px;
+    height: 24px;
+    border-radius: 6px;
+  }
+  .metrics-grid .metric-card__top {
+    letter-spacing: 0;
+  }
+  .chart-stat-row {
+    gap: 12px;
+    margin-inline: 14px;
+  }
+  .panel .card-header {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px 14px;
   }
   .fleet-donut-wrap {
     align-items: stretch;

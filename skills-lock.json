@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "finesse-ui": {
+      "source": "mouse-lin/finesse-skill",
+      "sourceType": "github",
+      "skillPath": "skills/finesse-ui/SKILL.md",
+      "computedHash": "2b00fdd39d6a5dac292a105c318873c82ac508195bc5f4ffe7f23c394b1e3d88"
+    }
+  }
+}

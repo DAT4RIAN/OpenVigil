@@ -208,7 +208,6 @@ export function ProductionDashboardPage() {
     return (
       <AppShell runtimeMode="production" activePath="/" pageHealth={pageHealth}>
         <PageHeader
-          eyebrow="实时运行态势"
           title="运营指挥中心"
           description="Production · PostgreSQL/TimescaleDB 权威运营快照"
           meta={
@@ -232,7 +231,6 @@ export function ProductionDashboardPage() {
     return (
       <AppShell runtimeMode="production" activePath="/" pageHealth={pageHealth}>
         <PageHeader
-          eyebrow="实时运行态势"
           title="运营指挥中心"
           description="Production · PostgreSQL/TimescaleDB 权威运营快照"
           meta={
@@ -279,7 +277,6 @@ export function ProductionDashboardPage() {
   return (
     <AppShell runtimeMode="production" activePath="/" pageHealth={pageHealth}>
       <PageHeader
-        eyebrow="实时运行态势"
         title="运营指挥中心"
         description={`${farmName} · ${assetCount} 台资产 · PostgreSQL/TimescaleDB 权威运营快照`}
         meta={
@@ -416,7 +413,6 @@ export function ProductionDashboardPage() {
 
         <Card className="panel panel--priority">
           <CardHeader
-            eyebrow="需要关注"
             title="优先处置队列"
             description="按严重性和触发时间排序"
             action={
@@ -473,7 +469,6 @@ export function ProductionDashboardPage() {
       <section className="dashboard-lower-grid">
         <Card className="panel panel--missions">
           <CardHeader
-            eyebrow="多 Agent 协作"
             title="活跃 Missions"
             description="来自持久化 Mission 台账"
             action={
@@ -508,11 +503,7 @@ export function ProductionDashboardPage() {
         </Card>
 
         <Card className="panel panel--activity">
-          <CardHeader
-            eyebrow="审计事件"
-            title="最近领域事件"
-            description="使用持久化 sequence 作为可重放游标"
-          />
+          <CardHeader title="最近领域事件" description="使用持久化 sequence 作为可重放游标" />
           <div className="activity-stream">
             {snapshot.activity.map((event) => (
               <div className="activity-event" key={event.sequence}>
@@ -535,11 +526,7 @@ export function ProductionDashboardPage() {
         </Card>
 
         <Card className="panel panel--window">
-          <CardHeader
-            eyebrow="海上作业窗口"
-            title="下一可用作业窗口"
-            description="生产运营快照的天气与资源边界"
-          />
+          <CardHeader title="下一可用作业窗口" description="生产运营快照的天气与资源边界" />
           <div className="view-empty-state">
             当前运营快照未提供作业窗口；请进入运行日历核对权威天气与资源结果。
           </div>

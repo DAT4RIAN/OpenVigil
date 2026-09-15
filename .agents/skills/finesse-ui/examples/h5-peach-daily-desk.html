@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#FFF7F3">
+<title>今天也好好的 PEACH DESK · 女生日常工作台 — H5 App 原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+/* finesse · register=product · A=奶油底+蜜桃/薰衣草/薄荷三色 · B=Fraunces-700衬线标题/Manrope-800数字 · C=bento-grid+底部sheet · D=三色同心圆环+水位卡+心情选择 · E=soft-daily · SOUL=8 SPECTACLE=5 DENSITY=7
+   与同批两页刻意拉开：
+   - h5-desk 是纯黑 + 荧光绿 + 竖向卡片流；这页是奶油浅色 + 三色柔和 + Bento 不规则网格
+   - h5-glow 是暖砂 + 单一赤陶橙 + 产品摄影；这页不用照片，视觉主体是三色同心圆环
+   标题用 Fraunces 衬线 —— 前两页都是无衬线，换字体族是拉开气质最省力的一招 */
+:root{
+  --cream:#FFF7F3;      /* 奶油底 */
+  --card:#FFFFFF;
+  --peach:#F2A08C;      /* 蜜桃：主色 / 环一 */
+  --peach-d:#E4816A;
+  --lilac:#B9A5E0;      /* 薰衣草：环二 */
+  --mint:#8FCDB8;       /* 薄荷：环三 */
+  --cocoa:#57433D;      /* 可可：正文 */
+  --cocoa-2:#8A716A;
+  --dim:#B7A29B;
+  --track:#F1E4DE;
+  --line:rgba(87,67,61,.07);
+  --sh:0 8px 24px -12px rgba(140,95,80,.34);
+  --ease:cubic-bezier(.22,.9,.28,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{
+  background:#EBD9D1;color:var(--cocoa);
+  font-family:"Noto Sans SC",-apple-system,"PingFang SC",sans-serif;
+  display:flex;align-items:center;justify-content:center;
+}
+.num{font-family:Manrope,"Noto Sans SC",sans-serif;font-variant-numeric:tabular-nums}
+.ser{font-family:Fraunces,"Noto Serif SC",serif}
+
+.phone{position:relative;overflow:hidden;width:100%;height:100%;background:var(--cream)}
+/* 顶部两团柔光，浅色页的层次全靠它 —— 纯平的奶油底会显得很塑料 */
+.phone::before{
+  content:"";position:absolute;left:-24%;top:-14%;width:78%;height:34%;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(242,160,140,.34),transparent);filter:blur(26px);z-index:0
+}
+.phone::after{
+  content:"";position:absolute;right:-20%;top:-8%;width:64%;height:28%;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(185,165,224,.34),transparent);filter:blur(26px);z-index:0
+}
+@media (min-width:560px){
+  body{background:radial-gradient(120% 90% at 50% 0%,#FBEDE6 0%,#DEC4BA 68%)}
+  .phone{width:400px;height:min(866px,94vh);border-radius:48px;box-shadow:0 50px 110px -34px rgba(120,80,68,.7),0 0 0 11px #FFF}
+}
+
+/* ── 状态栏 ─────────────────────────────────────── */
+.island{position:absolute;top:calc(env(safe-area-inset-top) + 8px);left:50%;transform:translateX(-50%);width:106px;height:30px;border-radius:999px;background:#2B211E;z-index:61}
+.status{
+  position:absolute;top:0;left:0;right:0;height:calc(env(safe-area-inset-top) + 46px);
+  padding:calc(env(safe-area-inset-top) + 12px) 30px 0;
+  display:flex;align-items:flex-start;justify-content:space-between;
+  font:700 14px/1 Manrope,sans-serif;z-index:60;pointer-events:none;color:var(--cocoa)
+}
+.status .r{display:flex;align-items:center;gap:5px}
+.status svg{display:block}
+
+.app{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;padding-top:calc(env(safe-area-inset-top) + 46px)}
+
+/* ── 顶栏：大标题 + 头像 ────────────────────────── */
+.head{padding:10px 22px 6px;display:flex;align-items:flex-start;justify-content:space-between;flex:none;position:relative;z-index:3}
+/* 标题区下缘的渐变遮罩：滚动内容从标题底下钻过去时要淡出，硬切会很脏 */
+.head::after{content:"";position:absolute;left:0;right:0;top:100%;height:16px;background:linear-gradient(var(--cream),rgba(255,247,243,0));pointer-events:none}
+.head .day{font:500 10.5px/1 Manrope,sans-serif;letter-spacing:.16em;color:var(--dim)}
+.head h1{font-size:27px;font-weight:700;line-height:1.24;margin-top:9px;letter-spacing:-.01em}
+.head h1 em{font-style:normal;color:var(--peach-d)}
+.av{
+  width:44px;height:44px;border-radius:16px;border:none;flex:none;position:relative;
+  background:linear-gradient(150deg,var(--peach),var(--lilac));
+  display:grid;place-items:center;font:800 16px/1 Manrope,sans-serif;color:#fff;
+  box-shadow:var(--sh);cursor:pointer;transition:transform .2s var(--ease)
+}
+.av:active{transform:scale(.92)}
+.av svg{display:block}
+.av .dot{position:absolute;top:-2px;right:-2px;width:11px;height:11px;border-radius:50%;background:var(--peach-d);border:2.5px solid var(--cream)}
+
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 22px calc(env(safe-area-inset-bottom) + 116px)}
+.scroll::-webkit-scrollbar{display:none}
+.view{display:none}
+.view.on{display:block}
+.view.on > *{animation:rise .58s var(--ease) both}
+.view.on > *:nth-child(2){animation-delay:.06s}
+.view.on > *:nth-child(3){animation-delay:.12s}
+.view.on > *:nth-child(4){animation-delay:.18s}
+.view.on > *:nth-child(5){animation-delay:.24s}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+
+.lbl{display:flex;align-items:baseline;justify-content:space-between;margin:22px 2px 12px}
+.lbl h3{font-size:15px;font-weight:700}
+.lbl span{font:500 10.5px/1 Manrope,sans-serif;color:var(--dim)}
+
+/* ══ Bento 网格（本页的布局主张） ══════════════════
+   四列基座，卡片按 span 拼成不规则块面；这是和另外两页「一列到底的卡片流」最大的分野 */
+.bento{display:grid;grid-template-columns:repeat(4,1fr);gap:11px}
+.bx{background:var(--card);border-radius:24px;padding:16px;box-shadow:var(--sh);position:relative;overflow:hidden}
+.bx.s4{grid-column:span 4}
+.bx.s2{grid-column:span 2}
+.bx .k{font-size:11px;font-weight:700;color:var(--cocoa-2);display:flex;align-items:center;gap:6px}
+.bx .v{font:800 26px/1 Manrope,sans-serif;letter-spacing:-.025em;margin-top:12px}
+.bx .v small{font-size:12px;font-weight:700;color:var(--dim);margin-left:2px}
+.bx .d{font-size:10px;color:var(--dim);margin-top:7px}
+
+/* 三色同心圆环 */
+.rings{display:flex;align-items:center;gap:18px}
+.rings svg{width:146px;height:146px;flex:none;transform:rotate(-90deg)}
+.rings circle{fill:none;stroke-linecap:round}
+.rings .bgc{stroke:var(--track)}
+.rings .fg{transition:stroke-dashoffset 1.1s var(--ease)}
+.rlist{flex:1;min-width:0;display:flex;flex-direction:column;gap:11px}
+.ritem{display:flex;align-items:center;gap:9px;cursor:pointer;transition:opacity .25s}
+.ritem i{width:9px;height:9px;border-radius:50%;flex:none}
+.ritem .n{font-size:11.5px;font-weight:700}
+.ritem .p{margin-left:auto;font:800 12px/1 Manrope,sans-serif;color:var(--cocoa-2)}
+.ritem.off{opacity:.34}
+.rtitle{font-size:11px;font-weight:700;color:var(--cocoa-2)}
+.rbig{font:800 32px/1 Manrope,sans-serif;letter-spacing:-.03em;margin:8px 0 3px}
+.rbig i{font-style:normal;font-size:15px;color:var(--dim)}
+
+/* 喝水卡：底部真的会涨的水位 */
+.water{padding-bottom:22px}
+.water .lv{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,rgba(143,205,184,.42),rgba(143,205,184,.62));transition:height .7s var(--ease)}
+.water .lv::before{
+  content:"";position:absolute;left:0;right:0;top:-5px;height:10px;
+  background:radial-gradient(closest-side,rgba(143,205,184,.7),transparent 72%);
+  background-size:22px 10px;background-repeat:repeat-x
+}
+.water > *{position:relative;z-index:2}
+.cups{display:flex;gap:4px;margin-top:11px}
+.cups i{flex:1;height:5px;border-radius:3px;background:var(--track);transition:background .3s var(--ease)}
+.cups i.f{background:var(--mint)}
+.plus{
+  position:absolute;right:13px;top:13px;width:30px;height:30px;border-radius:11px;border:none;
+  background:var(--mint);display:grid;place-items:center;cursor:pointer;z-index:3;
+  transition:transform .2s var(--ease)
+}
+.plus:active{transform:scale(.86)}
+
+/* 心情卡 */
+.moods{display:flex;justify-content:space-between;margin-top:13px}
+.mo{
+  width:36px;height:36px;border-radius:13px;border:none;background:var(--cream);cursor:pointer;
+  display:grid;place-items:center;transition:transform .22s var(--ease),background .25s
+}
+.mo:active{transform:scale(.88)}
+.mo.on{background:var(--lilac)}
+.mo.on svg{stroke:#fff}
+.mo svg{stroke:var(--dim);transition:stroke .25s}
+
+/* 体重趋势宽卡（这张是 Bento 里唯一的折线，靠曲线和其它方块卡拉开形状） */
+.trend{background:linear-gradient(120deg,#FBE7E0,#F3E5FB)}
+.trend .row{display:flex;align-items:flex-start;justify-content:space-between}
+.trend .pill{
+  display:inline-flex;align-items:center;gap:4px;margin-top:10px;
+  background:rgba(255,255,255,.66);border-radius:999px;padding:5px 9px;
+  font:800 9.5px/1 Manrope,sans-serif;color:#4E9C81
+}
+.trend .pill svg{display:block}
+.trend .goal{font-size:10px;color:var(--cocoa-2);text-align:right;line-height:1.6}
+.trend .chart{position:relative;height:76px;margin-top:14px}
+.trend .chart svg{display:block;width:100%;height:76px;overflow:visible}
+.trend .ln{
+  fill:none;stroke:var(--peach-d);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:draw 1.15s var(--ease) .18s forwards
+}
+@keyframes draw{to{stroke-dashoffset:0}}
+.trend .ar{fill:url(#tg);opacity:0;animation:fadein .8s var(--ease) .68s forwards}
+@keyframes fadein{to{opacity:1}}
+.trend .dot{fill:#fff;stroke:var(--peach-d);stroke-width:2;opacity:0;animation:fadein .5s var(--ease) .8s forwards}
+.trend .dot.now{fill:var(--peach-d);stroke:#fff;stroke-width:2.4}
+/* 记完体重让今天这个点弹一下：用 transform 而不是动 r，Safari 对 r 的 CSS 动画不稳 */
+.trend .dot.now.pulse{transform-box:fill-box;transform-origin:center;animation:pulse .66s var(--ease) 2}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.6)}}
+.trend .hit{fill:transparent;cursor:pointer}
+.trend .axis{display:flex;margin-top:9px}
+.trend .axis span{flex:1;text-align:center;font:700 8.5px/1 Manrope,sans-serif;color:var(--dim)}
+.trend .axis span.now{color:var(--cocoa)}
+
+/* ── 清单 ───────────────────────────────────────── */
+.task{
+  background:var(--card);border-radius:20px;padding:14px 15px;margin-bottom:9px;box-shadow:var(--sh);
+  display:flex;align-items:flex-start;gap:12px;cursor:pointer;position:relative;
+  transition:transform .24s var(--ease),opacity .3s
+}
+.task:active{transform:scale(.985)}
+.task .tick{
+  width:23px;height:23px;border-radius:50%;border:1.5px solid var(--track);flex:none;margin-top:1px;
+  display:grid;place-items:center;transition:background .28s var(--ease),border-color .28s
+}
+.task .tick svg{opacity:0;transform:scale(.5);transition:opacity .22s,transform .32s var(--ease)}
+.task .bd{flex:1;min-width:0;padding-right:44px}
+.task h4{font-size:13.5px;font-weight:700}
+.task p{font-size:10.5px;color:var(--dim);margin-top:5px;line-height:1.6}
+.task .tag{position:absolute;right:14px;top:15px;font:800 9.5px/1 Manrope,sans-serif;color:var(--peach-d);background:rgba(242,160,140,.15);padding:5px 7px;border-radius:6px}
+.task.done{opacity:.5}
+.task.done .tick{background:var(--peach);border-color:var(--peach)}
+.task.done .tick svg{opacity:1;transform:none}
+.task.done h4{text-decoration:line-through;text-decoration-thickness:1px}
+
+/* ── 今日份横滑 ─────────────────────────────────── */
+.rail{display:flex;gap:12px;overflow-x:auto;margin:0 -22px;padding:2px 22px 6px;scrollbar-width:none}
+.rail::-webkit-scrollbar{display:none}
+.rc{
+  flex:none;width:200px;min-height:146px;border-radius:22px;padding:16px;cursor:pointer;
+  display:flex;flex-direction:column;justify-content:space-between;box-shadow:var(--sh);
+  transition:transform .22s var(--ease)
+}
+.rc:active{transform:scale(.96)}
+.rc.p{background:linear-gradient(150deg,#FBDDD3,#F6C9BC)}
+.rc.l{background:linear-gradient(150deg,#EDE4FB,#DCCDF5)}
+.rc.m{background:linear-gradient(150deg,#DDF0E8,#C6E6D8)}
+.rc .k{font:800 9.5px/1 Manrope,sans-serif;letter-spacing:.12em;color:var(--cocoa-2);opacity:.7}
+.rc h4{font-size:16px;font-weight:700;line-height:1.36;margin-top:10px}
+.rc .m2{font:800 11.5px/1 Manrope,sans-serif;margin-top:12px;color:var(--cocoa-2)}
+.rc .m2 small{font:500 10px/1 "Noto Sans SC",sans-serif;opacity:.6;margin-left:4px}
+
+.btn{
+  width:100%;height:54px;border:none;border-radius:18px;background:var(--peach);color:#fff;
+  font:700 15px/1 "Noto Sans SC",sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;
+  box-shadow:0 14px 26px -12px rgba(228,129,106,.8);transition:transform .2s var(--ease)
+}
+.btn:active{transform:scale(.97)}
+.btn.ghost{background:var(--card);color:var(--cocoa);box-shadow:var(--sh)}
+
+/* ── TabBar ─────────────────────────────────────── */
+.tabbar{
+  position:absolute;left:22px;right:22px;bottom:calc(env(safe-area-inset-bottom) + 16px);height:64px;z-index:40;
+  background:rgba(255,255,255,.9);backdrop-filter:blur(18px);border-radius:999px;
+  display:flex;align-items:center;justify-content:space-around;padding:0 8px;
+  box-shadow:0 18px 34px -14px rgba(140,95,80,.5)
+}
+.tab{width:44px;height:44px;border:none;background:transparent;display:grid;place-items:center;cursor:pointer;border-radius:50%;transition:transform .2s var(--ease),background .3s}
+.tab svg{stroke:var(--dim);transition:stroke .3s}
+.tab.on{background:rgba(242,160,140,.16)}
+.tab.on svg{stroke:var(--peach-d)}
+.tab:active{transform:scale(.86)}
+.fab{
+  width:52px;height:52px;border:none;border-radius:50%;background:var(--peach);display:grid;place-items:center;cursor:pointer;
+  box-shadow:0 12px 22px -8px rgba(228,129,106,.9);transition:transform .22s var(--ease)
+}
+.fab:active{transform:scale(.9) rotate(90deg)}
+
+/* ── sheet ──────────────────────────────────────── */
+.mask{position:absolute;inset:0;background:rgba(70,48,42,.4);opacity:0;pointer-events:none;transition:opacity .38s var(--ease);z-index:70;backdrop-filter:blur(2px)}
+.mask.on{opacity:1;pointer-events:auto}
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;z-index:71;background:var(--cream);
+  border-radius:30px 30px 0 0;padding:10px 22px calc(env(safe-area-inset-bottom) + 24px);
+  transform:translateY(105%);transition:transform .5s var(--ease)
+}
+.sheet.on{transform:none}
+.sheet .grab{width:38px;height:4px;border-radius:3px;background:var(--track);margin:0 auto 18px}
+.sheet h3{font-size:19px;font-weight:700}
+.sheet .lead{font-size:11.5px;color:var(--dim);margin-top:7px}
+.quick{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:18px 0}
+.q{
+  background:var(--card);border-radius:19px;padding:15px;box-shadow:var(--sh);cursor:pointer;text-align:left;border:none;
+  transition:transform .2s var(--ease)
+}
+.q:active{transform:scale(.95)}
+.q .ic{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;margin-bottom:11px}
+.q b{display:block;font-size:13px;font-weight:700;color:var(--cocoa)}
+.q span{display:block;font-size:10px;color:var(--dim);margin-top:5px}
+
+.toast{
+  position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 100px);transform:translate(-50%,14px);
+  background:var(--cocoa);color:#fff;font-size:12.5px;font-weight:500;padding:12px 18px;border-radius:15px;z-index:90;
+  opacity:0;pointer-events:none;transition:opacity .28s,transform .38s var(--ease);white-space:nowrap
+}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+@media (prefers-reduced-motion:reduce){
+  .view.on > *{animation:none;opacity:1;transform:none}
+  .rings .fg,.water .lv{transition:none}
+  .trend .ln,.trend .ar,.trend .dot{animation:none;opacity:1;stroke-dashoffset:0}
+}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="island"></div>
+  <div class="status">
+    <span class="num" id="clock">9:41</span>
+    <span class="r">
+      <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect y="7.5" width="3" height="3.5" rx="1"/><rect x="4.5" y="5.5" width="3" height="5.5" rx="1"/><rect x="9" y="3" width="3" height="8" rx="1"/><rect x="13.5" width="3" height="11" rx="1"/></svg>
+      <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M8 9.6a1.3 1.3 0 100-2.6 1.3 1.3 0 000 2.6z"/><path d="M4.4 6.1a5.1 5.1 0 017.2 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M1.8 3.4a8.8 8.8 0 0112.4 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+      <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x=".6" y=".6" width="20" height="10.8" rx="3.2" stroke="currentColor" stroke-opacity=".4"/><rect x="2.2" y="2.2" width="13" height="7.6" rx="2" fill="currentColor"/><path d="M22.4 4.2v3.6a2 2 0 000-3.6z" fill="currentColor" fill-opacity=".4"/></svg>
+    </span>
+  </div>
+
+  <div class="app">
+    <div class="head">
+      <div>
+        <div class="day">7 月 30 日 · 周四 · 28°C</div>
+        <h1 class="ser">今天也<em>好好的</em>。</h1>
+      </div>
+      <button class="av" aria-label="我的">
+        <span class="dot"></span>
+        <svg width="27" height="27" viewBox="0 0 22 22" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"><g stroke-width="1.6"><path d="M6.9 7.8 5.4 2.9l4.3 2.1M15.1 7.8l1.5-4.9-4.3 2.1"/><circle cx="11" cy="12.4" r="5.2"/><path d="M9.9 14.2a1.5 1.5 0 0 0 2.2 0"/></g><path d="M8.9 11.7h.01M13.1 11.7h.01" stroke-width="2.5"/></svg>
+      </button>
+    </div>
+
+    <div class="scroll" id="scroll">
+
+      <!-- ══════ 今天 ══════ -->
+      <section class="view on" data-view="today">
+        <div class="bento">
+
+          <!-- 三色同心圆环 -->
+          <div class="bx s4">
+            <div class="rings">
+              <svg viewBox="0 0 160 160">
+                <circle class="bgc" cx="80" cy="80" r="66" stroke-width="13"/>
+                <circle class="bgc" cx="80" cy="80" r="49" stroke-width="13"/>
+                <circle class="bgc" cx="80" cy="80" r="32" stroke-width="13"/>
+                <circle class="fg" id="r1" cx="80" cy="80" r="66" stroke-width="13" stroke="#F2A08C"/>
+                <circle class="fg" id="r2" cx="80" cy="80" r="49" stroke-width="13" stroke="#B9A5E0"/>
+                <circle class="fg" id="r3" cx="80" cy="80" r="32" stroke-width="13" stroke="#8FCDB8"/>
+              </svg>
+              <div class="rlist">
+                <div class="rtitle">今天完成</div>
+                <div class="rbig num"><span id="pctN">0</span><i>%</i></div>
+                <div class="ritem" data-r="0"><i style="background:var(--peach)"></i><span class="n">护肤</span><span class="p" id="p1">0/6</span></div>
+                <div class="ritem" data-r="1"><i style="background:var(--lilac)"></i><span class="n">喝水</span><span class="p" id="p2">0/8</span></div>
+                <div class="ritem" data-r="2"><i style="background:var(--mint)"></i><span class="n">运动</span><span class="p" id="p3">0/30</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 喝水（水位真的会涨） -->
+          <div class="bx s2 water">
+            <button class="plus" id="cupBtn" aria-label="加一杯">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M8 2.8v10.4M2.8 8h10.4"/></svg>
+            </button>
+            <span class="lv" id="lv" style="height:0"></span>
+            <span class="k">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M7 1.6s-3.4 3.4-3.4 5.9a3.4 3.4 0 006.8 0C10.4 5 7 1.6 7 1.6z"/></svg>
+              喝水
+            </span>
+            <div>
+              <div class="v num"><span id="cupN">0</span><small>/ 8 杯</small></div>
+              <div class="cups" id="cups"></div>
+            </div>
+          </div>
+
+          <!-- 心情 -->
+          <div class="bx s2">
+            <span class="k">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="7" cy="7" r="5.4"/><path d="M4.8 8.2a3 3 0 004.4 0M5.2 5.4h.01M8.8 5.4h.01"/></svg>
+              今天心情
+            </span>
+            <div>
+              <div class="v" id="moodTxt" style="font-size:17px;font-weight:700;font-family:'Noto Sans SC',sans-serif">还没选</div>
+              <div class="moods" id="moods"></div>
+            </div>
+          </div>
+
+          <!-- 体重趋势 -->
+          <div class="bx s4 trend">
+            <div class="row">
+              <div>
+                <span class="k">
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 4.8h9.2l.9 7.6H1.5z"/><path d="M5 4.8a2 2 0 014 0"/></svg>
+                  体重记录
+                </span>
+                <div class="v num">52.4<small> kg</small></div>
+                <span class="pill">
+                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2v6M2.4 5.4L5 8l2.6-2.6"/></svg>
+                  近 7 天 −0.7 kg
+                </span>
+              </div>
+              <span class="goal">目标 <b class="num">51.0 kg</b><br>还差 <b class="num">1.4</b></span>
+            </div>
+            <div class="chart" id="trend"></div>
+            <div class="axis" id="trendAxis"></div>
+          </div>
+
+          <!-- 睡眠 / 步数 -->
+          <div class="bx s2">
+            <span class="k">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11.6 7.8A4.6 4.6 0 016 2.2a4.9 4.9 0 105.6 5.6z"/></svg>
+              昨晚睡了
+            </span>
+            <div><div class="v num">7<small>h</small> 20<small>m</small></div><div class="d">比前一晚多 40 分钟</div></div>
+          </div>
+          <div class="bx s2">
+            <span class="k">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 12.4l1.2-3.6 2.8-1.6 2.2 2M6.4 8L3.8 6.2 5.2 3.8"/><circle cx="9.2" cy="2.6" r="1.1"/></svg>
+              走了
+            </span>
+            <div><div class="v num">5,240<small> 步</small></div><div class="d">还差 2,760 步达标</div></div>
+          </div>
+        </div>
+
+        <div class="lbl"><h3>今天要做的事</h3><span id="taskSum">0 / 5</span></div>
+        <div id="tasks"></div>
+
+        <div class="lbl"><h3>今日份</h3><span>08:00 已更新</span></div>
+        <div class="rail">
+          <div class="rc p">
+            <span class="k">今日穿搭</span>
+            <div><h4>28°C 有风<br>薄针织 + 半裙</h4><div class="m2">傍晚会凉<small>带件外套</small></div></div>
+          </div>
+          <div class="rc l">
+            <span class="k">今日一篇</span>
+            <div><h4>为什么你<br>总是熬夜</h4><div class="m2">6 分钟<small>已配音频</small></div></div>
+          </div>
+          <div class="rc m">
+            <span class="k">今日拉伸</span>
+            <div><h4>久坐族<br>颈肩 3 分钟</h4><div class="m2">4 个动作<small>跟练视频</small></div></div>
+          </div>
+        </div>
+
+        <div style="height:20px"></div>
+        <button class="btn" id="recBtn">
+          <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M9 3.4v11.2M3.4 9h11.2"/></svg>
+          记一下今天
+        </button>
+      </section>
+
+      <!-- ══════ 记录 ══════ -->
+      <section class="view" data-view="log">
+        <div class="bento">
+          <div class="bx s4">
+            <span class="k">这一周</span>
+            <div class="v num">79<small>% 平均完成度</small></div>
+            <div class="d">比上周好一点点，继续保持</div>
+            <div style="display:flex;align-items:flex-end;gap:8px;height:96px;margin-top:16px" id="bars"></div>
+          </div>
+          <div class="bx s2"><span class="k">连续打卡</span><div class="v num">26<small> 天</small></div><div class="d">最长纪录 41 天</div></div>
+          <div class="bx s2"><span class="k">这个月</span><div class="v num">22<small>/30 天</small></div><div class="d">再打 4 天就满月</div></div>
+        </div>
+
+        <div class="lbl"><h3>各频道</h3><span>近 7 天</span></div>
+        <div class="task"><span class="tick" style="border:none;background:rgba(242,160,140,.16)"></span><div class="bd"><h4>护肤打卡</h4><p>早晚都没落下 · 最稳的一项</p></div><span class="tag">7 / 7</span></div>
+        <div class="task"><span class="tick" style="border:none;background:rgba(185,165,224,.2)"></span><div class="bd"><h4>喝水</h4><p>平均每天 6.2 杯 · 差一点点</p></div><span class="tag" style="color:#8B6FC6;background:rgba(185,165,224,.2)">5 / 7</span></div>
+        <div class="task"><span class="tick" style="border:none;background:rgba(143,205,184,.24)"></span><div class="bd"><h4>运动 30 分钟</h4><p>周三周四断了，周末补回来</p></div><span class="tag" style="color:#4E9C81;background:rgba(143,205,184,.24)">4 / 7</span></div>
+      </section>
+
+      <!-- ══════ 我的 ══════ -->
+      <section class="view" data-view="me">
+        <div class="bento">
+          <div class="bx s4" style="background:linear-gradient(140deg,#FBE0D7,#EDE0FA)">
+            <div style="display:flex;align-items:center;gap:13px">
+              <span class="av" style="box-shadow:none">
+                <svg width="27" height="27" viewBox="0 0 22 22" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"><g stroke-width="1.6"><path d="M6.9 7.8 5.4 2.9l4.3 2.1M15.1 7.8l1.5-4.9-4.3 2.1"/><circle cx="11" cy="12.4" r="5.2"/><path d="M9.9 14.2a1.5 1.5 0 0 0 2.2 0"/></g><path d="M8.9 11.7h.01M13.1 11.7h.01" stroke-width="2.5"/></svg>
+              </span>
+              <div><h4 style="font-size:16px;font-weight:700">小桃的工作台</h4><p style="font-size:11px;color:var(--cocoa-2);margin-top:5px">用了 142 天 · 累计打卡 386 次</p></div>
+            </div>
+          </div>
+        </div>
+        <div class="lbl"><h3>我的频道</h3><span>长按拖动排序</span></div>
+        <div class="bento" id="mods"></div>
+        <div style="height:20px"></div>
+        <button class="btn ghost" id="exportBtn">导出 7 月记录</button>
+      </section>
+
+    </div>
+
+    <nav class="tabbar">
+      <button class="tab on" data-tab="today" aria-label="今天">
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 9.2L11 3.2l7.6 6v8.4a1.4 1.4 0 01-1.4 1.4H4.8a1.4 1.4 0 01-1.4-1.4z"/><path d="M8.6 19V12h4.8v7"/></svg>
+      </button>
+      <button class="tab" data-tab="log" aria-label="记录">
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.4" y="4" width="15.2" height="14.6" rx="3.4"/><path d="M7.4 2.4v3.2M14.6 2.4v3.2M3.4 9h15.2"/></svg>
+      </button>
+      <button class="fab" id="fab" aria-label="记一下">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 4.6v14.8M4.6 12h14.8"/></svg>
+      </button>
+      <button class="tab" data-tab="feed" aria-label="发现">
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M13.8 8.2l-1.6 4.4-4.4 1.6 1.6-4.4z"/></svg>
+      </button>
+      <button class="tab" data-tab="me" aria-label="我的">
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="7.4" r="3.6"/><path d="M4.2 18.6a6.8 6.8 0 0113.6 0"/></svg>
+      </button>
+    </nav>
+  </div>
+
+  <div class="mask" id="mask"></div>
+  <div class="sheet" id="sheet">
+    <div class="grab"></div>
+    <h3>记一下今天</h3>
+    <p class="lead">选一项，两秒钟的事。</p>
+    <div class="quick">
+      <button class="q" data-q="喝水 +1 杯"><span class="ic" style="background:rgba(143,205,184,.22)"><svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="#8FCDB8" stroke-width="1.7" stroke-linecap="round"><path d="M9 2.2s-4.4 4.4-4.4 7.6a4.4 4.4 0 008.8 0C13.4 6.6 9 2.2 9 2.2z"/></svg></span><b>喝水 +1 杯</b><span>今天第 5 杯</span></button>
+      <button class="q" data-q="心情已记录"><span class="ic" style="background:rgba(185,165,224,.24)"><svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="#B9A5E0" stroke-width="1.7" stroke-linecap="round"><circle cx="9" cy="9" r="7"/><path d="M6.2 10.6a3.8 3.8 0 005.6 0"/></svg></span><b>记录心情</b><span>今天还没记</span></button>
+      <button class="q" data-q="体重已记录 · 52.4 kg"><span class="ic" style="background:rgba(242,160,140,.2)"><svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="#F2A08C" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 6.4h11.2l1 9.2H2.4z"/><path d="M6.6 6.4a2.4 2.4 0 014.8 0"/></svg></span><b>记录体重</b><span>今天 52.4kg</span></button>
+      <button class="q" data-q="开销已记一笔"><span class="ic" style="background:rgba(242,160,140,.2)"><svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="#F2A08C" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="4.6" width="13.2" height="9.6" rx="2.6"/><path d="M11.8 9.4h1.8"/></svg></span><b>记一笔</b><span>今天还没记</span></button>
+    </div>
+    <button class="btn ghost" id="closeBtn">先不记了</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
+
+  const tickClock = () => {
+    const d = new Date();
+    $('#clock').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
+  };
+  tickClock(); setInterval(tickClock, 10000);
+
+  const rollTo = (el, to) => {
+    const from = +(el.dataset.v || 0);
+    el.dataset.v = to;
+    const t0 = performance.now(), dur = 720;
+    const f = t => {
+      const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(from + (to - from) * e);
+      if (p < 1) requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f);
+  };
+
+  /* ── 三色同心圆环 ─────────────────────────────── */
+  const RINGS = [
+    {el:'#r1', r:66, cur:0, goal:6},    // 护肤，跟着清单走
+    {el:'#r2', r:49, cur:0, goal:8},    // 喝水
+    {el:'#r3', r:32, cur:18, goal:30},  // 运动（分钟）
+  ];
+  RINGS.forEach(g => {
+    const c = 2 * Math.PI * g.r;
+    const el = $(g.el);
+    el.style.strokeDasharray = c;
+    el.style.strokeDashoffset = c;
+    g.c = c;
+  });
+  function paintRings() {
+    RINGS.forEach((g, i) => {
+      const p = Math.min(1, g.cur / g.goal);
+      $(g.el).style.strokeDashoffset = g.c * (1 - p);
+      $('#p' + (i + 1)).textContent = g.cur + '/' + g.goal;
+    });
+    const avg = RINGS.reduce((s, g) => s + Math.min(1, g.cur / g.goal), 0) / RINGS.length;
+    rollTo($('#pctN'), Math.round(avg * 100));
+  }
+  $$('.ritem').forEach(it => it.addEventListener('click', () => {
+    const i = +it.dataset.r, off = it.classList.toggle('off');
+    $(RINGS[i].el).style.opacity = off ? .18 : 1;
+  }));
+
+  /* ── 喝水：水位 + 8 段刻度 ────────────────────── */
+  let cups = 0;
+  $('#cups').innerHTML = '<i></i>'.repeat(8);
+  function paintCups() {
+    $('#cupN').textContent = cups;
+    /* 水位最高只涨到 46% —— 涨满会把「4/8 杯」和刻度条一起淹掉，那是卡片里最该看清的两样东西 */
+    $('#lv').style.height = (cups / 8 * 46) + '%';
+    $$('#cups i').forEach((e, i) => e.classList.toggle('f', i < cups));
+    RINGS[1].cur = cups;
+    paintRings();
+  }
+  $('#cupBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    cups = cups >= 8 ? 0 : cups + 1;
+    paintCups();
+    toast(cups === 0 ? '已清零' : cups === 8 ? '八杯水达标 · 今天很棒' : '第 ' + cups + ' 杯，记下了');
+  });
+
+  /* ── 心情 ─────────────────────────────────────── */
+  const MOODS = [
+    ['很好','M4.8 10.2a3.6 3.6 0 006.4 0M5.4 6.2h.01M10.6 6.2h.01'],
+    ['还行','M5 10h6M5.4 6.2h.01M10.6 6.2h.01'],
+    ['一般','M5 10.6h6M5.4 6.4h.01M10.6 6.4h.01'],
+    ['累','M4.8 11a3.6 3.6 0 016.4 0M4.6 6h1.8M9.6 6h1.8'],
+    ['烦','M4.8 11a3.6 3.6 0 016.4 0M4.4 5.2l2 1.4M11.6 5.2l-2 1.4'],
+  ];
+  $('#moods').innerHTML = MOODS.map(([n, d], i) => `
+    <button class="mo" data-i="${i}" aria-label="${n}">
+      <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.4"/><path d="${d}"/></svg>
+    </button>`).join('');
+  $('#moods').addEventListener('click', e => {
+    const b = e.target.closest('.mo');
+    if (!b) return;
+    $$('.mo').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    $('#moodTxt').textContent = MOODS[+b.dataset.i][0];
+  });
+
+  /* ── 体重趋势折线 ─────────────────────────────── */
+  /* 近 7 天滚动窗口，最后一点就是今天；按容器实际像素画 viewBox，
+     这样圆点是正圆、描边不会被横向拉伸（用 preserveAspectRatio="none" 就会） */
+  const WT = [
+    ['7 月 24 日', 53.1], ['7 月 25 日', 52.9], ['7 月 26 日', 53.0], ['7 月 27 日', 52.8],
+    ['7 月 28 日', 52.7], ['7 月 29 日', 52.6], ['7 月 30 日', 52.4],
+  ];
+  const last = WT.length - 1;
+  function paintTrend() {
+    const box = $('#trend'), w = box.clientWidth || 320, h = 76, py = 9, px = 9;
+    const vs = WT.map(d => d[1]);
+    /* 上下各留 .25kg 余量：贴着卡片边缘的折线看着像被裁掉了 */
+    const lo = Math.min(...vs) - .25, hi = Math.max(...vs) + .25;
+    const pts = vs.map((v, i) => [
+      px + i / last * (w - px * 2),
+      py + (1 - (v - lo) / (hi - lo)) * (h - py * 2),
+    ]);
+    /* 每段用一条中点对称的三次贝塞尔：比 catmull-rom 省事，且不会过冲出格 */
+    let d = `M${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 0; i < last; i++) {
+      const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], cx = (x0 + x1) / 2;
+      d += ` C${cx} ${y0} ${cx} ${y1} ${x1} ${y1}`;
+    }
+    const area = `${d} L${pts[last][0]} ${h} L${pts[0][0]} ${h} Z`;
+    box.innerHTML = `
+      <svg viewBox="0 0 ${w} ${h}" aria-label="近 7 天体重趋势">
+        <defs>
+          <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#E4816A" stop-opacity=".32"/>
+            <stop offset="1" stop-color="#E4816A" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path class="ar" d="${area}"/>
+        <path class="ln" d="${d}"/>
+        ${pts.map(([x, y], i) => `<circle class="dot${i === last ? ' now' : ''}" cx="${x}" cy="${y}" r="${i === last ? 4.6 : 3.2}"/>`).join('')}
+        ${pts.map(([x, y], i) => `<circle class="hit" cx="${x}" cy="${y}" r="15" data-i="${i}"/>`).join('')}
+      </svg>`;
+    const ln = box.querySelector('.ln');
+    ln.style.setProperty('--len', ln.getTotalLength());
+  }
+  $('#trendAxis').innerHTML = WT.map(([dt], i) =>
+    `<span class="${i === last ? 'now' : ''}">${i === last ? '今天' : dt.replace(/^\d+ 月 | 日$/g, '')}</span>`
+  ).join('');
+  $('#trend').addEventListener('click', e => {
+    const c = e.target.closest('[data-i]');
+    if (!c) return;
+    const [dt, v] = WT[+c.dataset.i];
+    toast(dt + ' · ' + v.toFixed(1) + ' kg');
+  });
+  paintTrend();
+  let rz;
+  addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(paintTrend, 160); });
+
+  /* ── 今天要做的事 ─────────────────────────────── */
+  const TASKS = [
+    ['早晚护肤 6 步', '早上控油版已经配好，晚上记得先卸妆', '6 步'],
+    ['喝够 8 杯水',   '现在 4 杯，下午茶那会儿再补两杯', '8 杯'],
+    ['运动 30 分钟',  '今天是拉伸日，跟练视频 12 分钟起', '30 分'],
+    ['记一下今天的开销', '昨天花了 ¥86，今天还一笔没记', '未记'],
+    ['11 点前上床',   '昨天 00:24 才睡，今天早半小时试试', '23:00'],
+  ];
+  const done = new Set();
+  const CHECK = '<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 7.4l3 3L11.4 4"/></svg>';
+  $('#tasks').innerHTML = TASKS.map(([h, p, tag], i) => `
+    <article class="task" data-i="${i}">
+      <span class="tick">${CHECK}</span>
+      <div class="bd"><h4>${h}</h4><p>${p}</p></div>
+      <span class="tag">${tag}</span>
+    </article>`).join('');
+  function syncTasks() {
+    $('#taskSum').textContent = done.size + ' / ' + TASKS.length;
+    RINGS[0].cur = Math.round(done.size / TASKS.length * 6);   // 护肤环跟着清单走
+    paintRings();
+  }
+  $('#tasks').addEventListener('click', e => {
+    const c = e.target.closest('.task');
+    if (!c) return;
+    const i = c.dataset.i, on = !done.has(i);
+    on ? done.add(i) : done.delete(i);
+    c.classList.toggle('done', on);
+    syncTasks();
+    if (on) toast(done.size === TASKS.length ? '五件都做完了 · 今天很棒' : '还剩 ' + (TASKS.length - done.size) + ' 件');
+  });
+
+  /* ── 周柱图（记录页） ─────────────────────────── */
+  const WEEK = [['一',72],['二',88],['三',54],['四',96],['五',80],['六',100],['日',67]];
+  const max = Math.max(...WEEK.map(d => d[1]));
+  $('#bars').innerHTML = WEEK.map(([d, v], i) => `
+    <div style="flex:1;height:100%;display:flex;flex-direction:column;align-items:center;gap:7px">
+      <div style="flex:1;min-height:0;width:100%;display:flex;align-items:flex-end;justify-content:center">
+        <div style="width:100%;max-width:22px;height:${Math.round(v / max * 100)}%;border-radius:99px;background:${i === 6 ? 'linear-gradient(180deg,var(--peach),var(--lilac))' : 'var(--track)'}"></div>
+      </div>
+      <span style="font:500 9.5px/1 Manrope,sans-serif;color:var(--dim)">${d}</span>
+    </div>`).join('');
+
+  /* ── 频道网格（Bento 里的 2 列小卡） ───────────── */
+  const IC = {
+    skin :'M11 2.6s-5.4 5.2-5.4 9.2a5.4 5.4 0 0010.8 0c0-4-5.4-9.2-5.4-9.2z',
+    water:'M11 2.6s-5.4 5.2-5.4 9.2a5.4 5.4 0 0010.8 0c0-4-5.4-9.2-5.4-9.2z',
+    cycle:'M11 3.4a7.6 7.6 0 107.6 7.6M11 3.4v7.6l5.4 5.4',
+    mood :'M11 3.4a7.6 7.6 0 100 15.2 7.6 7.6 0 000-15.2zM8 12.4a4 4 0 006 0M8.4 8.6h.01M13.6 8.6h.01',
+    fit  :'M3 8.6v4.8M19 8.6v4.8M6 6.4v9.2M16 6.4v9.2M6 11h10',
+    sleep:'M18 12.4A7.2 7.2 0 019.6 4a7.6 7.6 0 108.4 8.4z',
+    money:'M11 3.4a7.6 7.6 0 100 15.2 7.6 7.6 0 000-15.2zM11 7v8M8.6 9.4h4.8M8.6 12.6h4.8',
+    fit2 :'M4.6 3.4h12.8v15.2H4.6zM7.8 7.4h6.4M7.8 11h6.4',
+    look :'M11 2.8l3.4 2.2 3.6 1.4-1.4 3.6.4 3.8-3.6 1.2L11 18.4l-2.4-3.4-3.6-1.2.4-3.8L4 6.4l3.6-1.4z',
+  };
+  const MODS = [['护肤','skin',1],['喝水','water',1],['生理期','cycle',0],['心情','mood',0],['运动','fit',1],['睡眠','sleep',0],['记账','money',0],['穿搭','look',0],['我的报告','fit2',0]];
+  $('#mods').innerHTML = MODS.map(([n, k, nd]) => `
+    <div class="bx" style="grid-column:span 2;display:flex;align-items:center;gap:11px;padding:14px;cursor:pointer">
+      ${nd ? '<span style="position:absolute;top:11px;right:12px;width:6px;height:6px;border-radius:50%;background:var(--peach-d)"></span>' : ''}
+      <span style="width:34px;height:34px;border-radius:12px;background:var(--cream);display:grid;place-items:center;flex:none">
+        <svg width="17" height="17" viewBox="0 0 22 22" fill="none" stroke="#8A716A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${IC[k]}"/></svg>
+      </span>
+      <span style="font-size:12.5px;font-weight:700">${n}</span>
+    </div>`).join('');
+  $('#mods').addEventListener('click', e => {
+    const m = e.target.closest('.bx');
+    if (m) toast(m.querySelector('span:last-child').textContent + ' · 敬请期待');
+  });
+
+  /* ── 视图切换 ─────────────────────────────────── */
+  $$('.tab').forEach(t => t.addEventListener('click', () => {
+    const v = t.dataset.tab;
+    if (v === 'feed') { toast('发现页 · 敬请期待'); return; }
+    $$('.tab').forEach(x => x.classList.remove('on'));
+    t.classList.add('on');
+    $$('.view').forEach(s => s.classList.toggle('on', s.dataset.view === v));
+    $('#scroll').scrollTop = 0;
+  }));
+
+  /* ── sheet ────────────────────────────────────── */
+  const open = () => { $('#sheet').classList.add('on'); $('#mask').classList.add('on'); };
+  const close = () => { $('#sheet').classList.remove('on'); $('#mask').classList.remove('on'); };
+  $('#fab').addEventListener('click', open);
+  $('#recBtn').addEventListener('click', open);
+  $('#mask').addEventListener('click', close);
+  $('#closeBtn').addEventListener('click', close);
+  $('.quick').addEventListener('click', e => {
+    const b = e.target.closest('.q');
+    if (!b) return;
+    close();
+    if (b.dataset.q.startsWith('喝水')) { cups = Math.min(8, cups + 1); paintCups(); }
+    /* 记完体重让折线上「今天」那个点弹一下，给个落点反馈 */
+    if (b.dataset.q.startsWith('体重')) {
+      const dn = $('#trend .dot.now');
+      if (dn) { dn.classList.remove('pulse'); void dn.getBoundingClientRect(); dn.classList.add('pulse'); }
+    }
+    toast(b.dataset.q);
+  });
+  let sy = 0;
+  const sheet = $('#sheet');
+  sheet.addEventListener('touchstart', e => sy = e.touches[0].clientY, {passive:true});
+  sheet.addEventListener('touchmove', e => {
+    const dy = e.touches[0].clientY - sy;
+    if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
+  }, {passive:true});
+  sheet.addEventListener('touchend', e => {
+    const dy = e.changedTouches[0].clientY - sy;
+    sheet.style.transform = '';
+    if (dy > 90) close();
+  });
+
+  $('#exportBtn').addEventListener('click', () => toast('7 月记录已导出'));
+  $('.av').addEventListener('click', () => {
+    $$('.tab').forEach(x => x.classList.toggle('on', x.dataset.tab === 'me'));
+    $$('.view').forEach(s => s.classList.toggle('on', s.dataset.view === 'me'));
+    $('#scroll').scrollTop = 0;
+  });
+
+  let tt;
+  function toast(msg) {
+    const el = $('#toast');
+    el.textContent = msg; el.classList.add('on');
+    clearTimeout(tt); tt = setTimeout(() => el.classList.remove('on'), 1800);
+  }
+
+  /* 起手：4 杯水 + 完成 2 件，一进来就有内容 */
+  cups = 4; paintCups();
+  done.add('0'); done.add('1');
+  $$('.task').forEach(c => c.classList.toggle('done', done.has(c.dataset.i)));
+  syncTasks();
+  $$('.mo')[1].classList.add('on');
+  $('#moodTxt').textContent = '还行';
+})();
+</script>
+</body>
+</html>

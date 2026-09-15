@@ -2,6 +2,20 @@
 
 # Long-running Execution Progress
 
+## 前端视觉优化：2026-09-15
+
+本节单独跟踪用户确认的前端美化任务；后文技术整改与外部发布门禁保留原有状态。
+
+- 状态：`DONE / LOCAL_UI_VALIDATED`。
+- 已实施：共享雾灰/青绿色 token、深色主题按钮对比度、导航选中态、指标图标与字号、首页事件卡、双列手机指标、表格搜索焦点与选中行样式。
+- 首轮验证：构建与类型检查通过；修改组件及新增测试 lint 通过；11 项定向浏览器测试通过，覆盖事件布局、深浅主题、手机首屏、导航抽屉、22 路由字号与缩放。
+- 视觉审视：已查看实际 1440px 浅色/深色、1280px 紧凑桌面、390px 手机、告警列表和 Mission 详情截图；审视后更新三个首页及一个 P1 事件卡截图基线，保持原有 1% 容差。
+- 关联修复：Mission 上下文卡片原先超出所属列并覆盖时间线；补充内部网格宽度约束。新增测试在修复前稳定失败，修复后在 1440/1280/1024/390px 通过。
+- 最终验证：构建、bundle budget、TypeScript、修改源码/测试的 ESLint 与 Prettier、`git diff --check` 通过；Node `184/184`，Playwright `32/32`，均无 skip。完整浏览器回归包含 22 路由/四档视口、权限与失败恢复、WCAG、键盘与减少动态效果。
+- 基线维护：CSS 摘要在视觉审视后更新，完整保留导入顺序与精确摘要断言；首次 Node 的旧摘要失败和首次 E2E 的旧 P1 截图差异均已解决。一次构建并发导致测试读取不到临时产物，已等待完整构建后串行重跑通过。
+- 验证边界：本次为本地 Demo 与隔离的生产界面测试场景，不构成真实生产后端或外部发布门禁通过声明。现有 >500kB 构建分块提示仍在，项目 bundle budget 通过。
+- 方案与证据：[frontend-polish-plan.md](docs/design/frontend-polish-plan.md)。
+
 ## 当前活动运行：2026-09-04 技术与 UI 审计整改
 
 本节是当前执行状态的唯一 Source of Truth。任务来自 2026-09-04 `AUDIT_REPORT.md` 与 2026-09-03 `UI_AUDIT_REPORT.md`；后文所有旧轮次的 `COMPLETED`、`PASS` 或 `2 / 2` 仅作为历史证据，不能覆盖本轮状态。
@@ -14,8 +28,8 @@
 - Active Issues：`AUDIT_REPORT.md` 16 项 + `UI_AUDIT_REPORT.md` 8 项
 - Execution Rules：`EXECUTION_GOAL.md` + `AGENTS.md`
 - Started：`2026-09-04 09:48 +08:00`
-- Last Updated：`2026-09-12 03:35 +08:00`
-- Post-completion CI maintenance：`LOCAL_FIX_VALIDATED / REMOTE_CI_PENDING`
+- Last Updated：`2026-09-14 03:20 +08:00`
+- Post-completion CI maintenance：`GITLINK_STAGED / BACKEND_REMOTE_PENDING / CARE_RUNNER_BLOCKED`
 
 ### Overall Status
 
@@ -98,6 +112,14 @@
 | H — Persistent State | PASS | 本节 Metadata、统计、Issue register、阶段、Gate 表与最终状态已同步为当前真实树 |
 
 ### Execution Log
+
+#### CI run #10 follow-up (2026-09-14 03:20 +08:00)
+
+- GitHub Actions run `34688773211` 证明 Windows baseline 修复有效：`browser-e2e`、`frontend`、`postgres-contract`、`real-cross-layer-e2e` 均成功；`backend` 仍在 `Verify pinned official CARE reference equivalence` 失败。
+- 提交 `14ea1c3` 的树只包含 6 个普通文件修改，没有包含前一轮已经暂存的 `tmp/external/EnergyFaultDetector-v0.6.2` gitlink，因此干净 checkout 不可能初始化该 submodule。已再次把精确 `160000 a338b6efb3a650536930c6e67247694071d2f63e` gitlink 加入 index；必须在下一次提交中显式包含它，不能只提交普通文件。
+- 当前 candidate tree `28babbfd...5164afa` 已确认包含该 `160000` gitlink；CARE verifier 重新通过并得到 evidence root `661f3844...7508a34a`，供应链测试 `4/4`、Prettier 及 staged/unstaged diff checks 均通过。
+- `care-postgres-contract` 没有执行测试；GitHub 注解明确记录它在等待 runner `24h0m0s` 后超过平台上限并被取消，job API 也没有 `runner_name`。这是缺少标签为 `self-hosted, linux, x64, windops-care-v6` 的在线 runner，而不是测试超时。根据既有 release policy，不能把该 job 改成 skip/success 来伪造 CARE 验收；需先配置 runner 及两个只读 artifact root，再重新触发新提交。
+- 本轮保留了用户对 `docs/agent-engineer-interview-project-introduction.md` 的未提交修改，没有覆盖或暂存该文件。远端 `backend` 与 CARE 状态仍为待验证。
 
 #### Post-completion CI reproducibility repair (2026-09-12 03:35 +08:00)
 

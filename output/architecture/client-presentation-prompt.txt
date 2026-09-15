@@ -1,0 +1,14 @@
+Tool: built-in image_gen (reference-image edit)
+Final artifact: 风电运维多智能体平台架构.png
+
+Edit the supplied architecture infographic into a polished CLIENT PRESENTATION version, keeping its three-panel structure, white background, navy Chinese headings, pastel color-coded cards, line icons, readable technical labels, and all correct architecture content.
+
+MANDATORY CHANGES:
+1. Top title must be EXACTLY "风电运维多智能体平台架构". Remove "OpenVigil" everywhere. No other brand/product name added.
+2. In panel1 remove the entire "Demo 隔离运行" card, its flask icon, "D1 + 确定性演示数据" text, and dashed branch/label "Demo 路由（隔离）". Remove every Demo/D1 mention from the whole image. Recenter and widen the "FastAPI 业务后端" card underneath the Sites Worker gateway; a clean central arrow connects gateway to FastAPI. Remove "生产路由" arrow label. Preserve the backend's fan-out to five capability cards.
+3. Remove the entire bottom footnote about current repository, Demo/production isolation, and external deployment acceptance. Do not replace it with another disclaimer or implementation-status note.
+4. Left panel bottom blue band should say "PostgreSQL 统一管理核心业务数据" instead of the production-state sentence.
+5. Correct the erroneous dashed auxiliary links in panel2: remove BOTH vertical dashed segments above and below card7 "现场回证". Do not connect CARE to card7 or connect card7 to card2. Use NO replacement CARE connector. Keep CARE strip standalone and relabel its heading "CARE 离线评估" with compact readable flow text "只读数据 → 质量契约 → 离线评估 → 受控回放 / 异常预测". Replace the legend box at bottom-right of panel2 with a small neutral note "离线评估支撑异常检测". No dashed legend necessary since all dashed paths have been removed.
+6. Ensure top title and all labels are crisp correct Chinese, with neat professional spacing and good readability.
+7. Do NOT include these terms anywhere: "OpenVigil", "Demo", "演示数据", "当前仓库", "未验收". Do not claim deployed, production-approved, or customer-specific operational results.
+Preserve the main 8-step solid-arrow snake workflow, LangGraph band, four technical columns, bottom reliability band. Keep the technical facts: modular FastAPI monolith, JWT gateway, human approval BEFORE work order creation, PostgreSQL authoritative, Neo4j rebuildable, CARE offline independent. Output only the revised diagram, landscape 3:2 with highest practical resolution.

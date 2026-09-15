@@ -1,0 +1,8 @@
+interface:
+  display_name: "finesse"
+  short_description: "Craft interfaces that never look cheap"
+  brand_color: "#C8FF4D"
+  default_prompt: "Use $finesse-ui to build a landing page with a real visual engine and zero AI-slop."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buildly — AI Growth Intelligence</title>
+<style>
+  /* finesse · register=product · shell=canonical-sidebar (dark)
+   * back-filled from EXAMPLES.md; dials not recorded for this build */
+:root{
+  --bg:#08080a; --panel:#141417; --panel-2:#1a1a1e; --line:rgba(255,255,255,.08);
+  --line-2:rgba(255,255,255,.05); --ink:#f4f4f5; --ink-2:#a1a1aa; --ink-3:#6b6b73;
+  --accent:#ff6a2b; --accent-2:#ff9152; --up:#34d399; --down:#f87171;
+  --r:16px; --r-sm:11px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--ink);overflow-x:hidden;
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(900px 500px at 88% -8%,rgba(255,106,43,.16),transparent 60%),
+   radial-gradient(700px 500px at -6% 108%,rgba(255,106,43,.09),transparent 60%)}
+body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.04;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.app{position:relative;z-index:1;display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+.side{border-right:1px solid var(--line);padding:22px 16px;display:flex;flex-direction:column;gap:8px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 18px}
+.brand .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center;box-shadow:0 6px 20px rgba(255,106,43,.4)}
+.brand .logo svg{width:16px;height:16px}
+.brand b{font-size:18px;letter-spacing:-.02em}
+.team{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:13px;color:var(--ink-2);margin-bottom:8px;cursor:pointer}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav a{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--r-sm);color:var(--ink-3);font-size:13.5px;font-weight:500;text-decoration:none;transition:.18s}
+.nav a svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7}
+.nav a .badge{margin-left:auto;font-size:11px;background:var(--panel-2);color:var(--ink-2);padding:1px 7px;border-radius:20px}
+.nav a:hover{color:var(--ink-2);background:var(--panel)}
+.nav a.on{color:#fff;background:linear-gradient(100deg,rgba(255,106,43,.22),rgba(255,106,43,.05));position:relative}
+.nav a.on::before{content:'';position:absolute;left:0;top:20%;height:60%;width:3px;border-radius:3px;background:var(--accent)}
+.side .spacer{flex:1}
+.pro{border:1px solid var(--line);border-radius:var(--r);padding:14px;background:linear-gradient(160deg,rgba(255,106,43,.12),transparent)}
+.pro b{font-size:13px}.pro p{font-size:11.5px;color:var(--ink-3);margin:4px 0 10px;line-height:1.4}
+.pro button{width:100%;padding:8px;border:0;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-weight:600;font-size:12.5px;cursor:pointer}
+.main{padding:20px 26px 40px;min-width:0}
+.topbar{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.search{flex:1;max-width:520px;display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;color:var(--ink-3);font-size:13px}
+.search svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8}
+.topbar .grow{flex:1}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);white-space:nowrap}
+.btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8}
+.btn.pri{background:linear-gradient(135deg,var(--accent),var(--accent-2));border-color:transparent;box-shadow:0 6px 18px rgba(255,106,43,.35)}
+.icon-btn{position:relative;width:40px;height:40px;border-radius:11px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;cursor:pointer}
+.icon-btn svg{width:17px;height:17px;stroke:var(--ink-2);fill:none;stroke-width:1.7}
+.icon-btn .dot{position:absolute;top:-3px;right:-3px;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;display:grid;place-items:center;border:2px solid var(--bg)}
+.avatar{width:40px;height:40px;border-radius:11px;object-fit:cover;border:1px solid var(--line)}
+.hello{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px}
+.hello h1{font-size:26px;letter-spacing:-.03em;font-weight:700}
+.hello .sub{color:var(--ink-3);font-size:13px;margin-top:3px}
+.hello .tools{display:flex;gap:9px}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:16px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.kpi .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.kpi .ico{width:34px;height:34px;border-radius:9px;background:var(--panel-2);display:grid;place-items:center}
+.kpi .ico svg{width:16px;height:16px;stroke:var(--ink-2);fill:none;stroke-width:1.7}
+.kpi .chg{font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:3px}
+.kpi .chg.up{color:var(--up)}.kpi .chg.down{color:var(--down)}
+.kpi .lab{font-size:12.5px;color:var(--ink-3);margin-bottom:5px}
+.kpi .val{font-size:25px;font-weight:700}
+.kpi .prev{font-size:11.5px;color:var(--ink-3);margin-top:4px}
+.grid-2{display:grid;grid-template-columns:1fr 340px;gap:14px;margin-bottom:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.card-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-h h3{font-size:15.5px;font-weight:650;letter-spacing:-.01em}
+.seg{display:inline-flex;background:var(--panel-2);border-radius:9px;padding:3px}
+.seg button{border:0;background:transparent;color:var(--ink-3);font-size:12px;font-weight:600;padding:5px 11px;border-radius:7px;cursor:pointer}
+.seg button.on{background:#fff;color:#111}
+.chartwrap{position:relative;height:280px}
+.chartwrap svg{width:100%;height:100%;overflow:visible}
+.legend{display:flex;gap:18px;justify-content:center;margin-top:10px;font-size:12px;color:var(--ink-2)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.side-col{display:flex;flex-direction:column;gap:14px}
+.donut-wrap{display:flex;align-items:center;gap:18px}
+.donut{position:relative;width:130px;height:130px;flex-shrink:0}
+.donut .mid{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.donut .mid b{font-size:20px;font-weight:700}.donut .mid span{font-size:10px;color:var(--ink-3);letter-spacing:.08em}
+.dleg{display:flex;flex-direction:column;gap:11px;font-size:13px}
+.dleg .row{display:flex;align-items:center;gap:9px;color:var(--ink-2)}
+.dleg .row i{width:9px;height:9px;border-radius:3px}.dleg .row b{color:var(--ink);margin-left:auto}
+.sim .slab{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:8px;color:var(--ink-2)}
+.sim .slab b{color:var(--accent-2)}
+.sld{-webkit-appearance:none;width:100%;height:5px;border-radius:5px;background:var(--panel-2);outline:none;margin-bottom:18px;cursor:pointer}
+.sld::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(255,106,43,.25);cursor:grab}
+.sld::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(255,106,43,.25)}
+.recs{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.rec{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:16px;position:relative;overflow:hidden}
+.rec .conf{position:absolute;top:14px;right:14px;font-size:11px;color:var(--ink-3);background:var(--panel);padding:2px 8px;border-radius:20px}
+.rec h4{font-size:14.5px;font-weight:640;max-width:80%;line-height:1.3;margin-bottom:16px}
+.rec .k{font-size:11px;color:var(--ink-3);margin-bottom:3px}
+.rec .impact{font-size:16px;font-weight:700;margin-bottom:12px}
+.rec .impact.up{color:var(--up)}.rec .impact.down{color:var(--down)}
+.rec .reason{font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.4}
+.rec button{width:100%;padding:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:9px;font-size:12.5px;font-weight:600;cursor:pointer}
+.rec button:hover{border-color:var(--accent);color:var(--accent-2)}
+.sparkles{color:var(--accent-2)}
+.tbl-h{display:flex;align-items:center;justify-content:space-between;margin:26px 0 14px}
+.tbl-h h3{font-size:16px;font-weight:650}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--ink-3);font-weight:500;font-size:11.5px;padding:10px 14px;border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.04em}
+th.r,td.r{text-align:right}
+td{padding:14px;border-bottom:1px solid var(--line-2)}
+tbody tr{transition:.15s}
+tbody tr:hover{background:var(--panel)}
+.pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px}
+.pill.active{background:rgba(52,211,153,.14);color:var(--up)}
+.pill.paused{background:rgba(161,161,170,.14);color:var(--ink-2)}
+.pill.review{background:rgba(255,106,43,.14);color:var(--accent-2)}
+.prod{display:flex;align-items:center;gap:11px}
+.prod .sq{width:30px;height:30px;border-radius:8px;background:var(--panel-2);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--accent-2)}
+.tlink{color:var(--ink-3);cursor:pointer;display:inline-flex;gap:5px;align-items:center}
+.tlink:hover{color:var(--ink)}
+.tlink svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.7}
+.footnote{margin-top:26px;font-size:11px;color:var(--ink-3);text-align:center}
+.reveal{opacity:0}
+@media (max-width:1200px){.kpis{grid-template-columns:repeat(3,1fr)}.grid-2{grid-template-columns:1fr}.recs{grid-template-columns:1fr}}
+@media (max-width:820px){.app{grid-template-columns:1fr}.side{display:none}.kpis{grid-template-columns:1fr 1fr}}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1!important}*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2l3.5 6.5L22 12l-6.5 3.5L12 22l-3.5-6.5L2 12l6.5-3.5z"/></svg></span><b>Buildly</b></div>
+    <div class="team"><span>Growth Team</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+    <nav class="nav">
+      <a class="on" href="#"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Dashboard</a>
+      <a href="#"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>Data Sources<span class="badge">12</span></a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>Reports</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0012 2z"/></svg>AI Insights</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v6h-6"/></svg>Simulator</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.4 3.9a2 2 0 00-3.4 0z"/></svg>Alerts<span class="badge">3</span></a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5M17 3v8M7 13v8"/><circle cx="17" cy="14" r="3"/><circle cx="7" cy="10" r="3"/></svg>Integrations</a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Team</a>
+      <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8 2 2 0 11-2.8 2.8 1.6 1.6 0 00-2.7 1.1 2 2 0 01-4 0 1.6 1.6 0 00-2.6-1.1 2 2 0 11-2.8-2.8A1.6 1.6 0 004 15a2 2 0 010-4 1.6 1.6 0 001.1-2.7 2 2 0 112.8-2.8A1.6 1.6 0 009 4.6 2 2 0 0113 4.6a1.6 1.6 0 002.6 1.1 2 2 0 112.8 2.8A1.6 1.6 0 0020 11a2 2 0 010 4z"/></svg>Settings</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="pro"><b>✨ Go Enterprise</b><p>Unlock unlimited AI simulations & predictive models.</p><button>Explore Enterprise</button></div>
+  </aside>
+  <main class="main">
+    <div class="topbar">
+      <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Search reports, metrics, datasets…</div>
+      <div class="grow"></div>
+      <button class="btn pri"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add Data</button>
+      <div class="icon-btn"><span class="dot">3</span><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></div>
+      <img class="avatar" alt="account" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' fill='%23ff6a2b'/%3E%3Ctext x='40' y='52' font-family='sans-serif' font-size='30' font-weight='700' fill='white' text-anchor='middle'%3ERK%3C/text%3E%3C/svg%3E">
+    </div>
+    <div class="hello">
+      <div><h1>Welcome back, Rakib 👋</h1><div class="sub">Here's what's driving growth across your funnel today.</div></div>
+      <div class="tools">
+        <button class="btn"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Last 30 Days</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Export</button>
+        <button class="btn"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>Share</button>
+      </div>
+    </div>
+    <section class="kpis">
+      <div class="kpi reveal"><div class="top"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span><span class="chg up">▲ 18%</span></div><div class="lab">Total Sessions</div><div class="val num" data-to="248320">0</div><div class="prev">Prev: 210,450</div></div>
+      <div class="kpi reveal"><div class="top"><span class="ico"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></span><span class="chg up">▲ 9%</span></div><div class="lab">Active Users</div><div class="val num" data-to="12840">0</div><div class="prev">Prev: 11,780</div></div>
+      <div class="kpi reveal"><div class="top"><span class="ico"><svg viewBox="0 0 24 24"><path d="M19 5L5 19M6.5 8a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17.5 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/></svg></span><span class="chg up">▲ 0.6%</span></div><div class="lab">Conversion Rate</div><div class="val num" data-to="3.8" data-dec="1" data-suffix="%">0%</div><div class="prev">Prev: 3.2%</div></div>
+      <div class="kpi reveal"><div class="top"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6"/></svg></span><span class="chg down">▼ 4%</span></div><div class="lab">Avg. Session Duration</div><div class="val num" data-to="4.2" data-dec="1" data-suffix="m">0m</div><div class="prev">Prev: 3.9m</div></div>
+      <div class="kpi reveal"><div class="top"><span class="ico"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0012 2z"/></svg></span><span class="chg up">▲ 3%</span></div><div class="lab">AI Confidence Score</div><div class="val num" data-to="87" data-suffix="%">0%</div><div class="prev">Prev: 84%</div></div>
+    </section>
+    <section class="grid-2">
+      <div class="card reveal">
+        <div class="card-h"><h3>Sessions vs Conversion Trends</h3><div class="seg"><button>24H</button><button>7D</button><button class="on">30D</button><button>90D</button></div></div>
+        <div class="chartwrap"><svg id="chart" viewBox="0 0 760 280" preserveAspectRatio="none"></svg></div>
+        <div class="legend"><span><i style="background:#e5e5e7"></i>Sessions</span><span><i style="background:var(--accent)"></i>Conversion Rate (%)</span></div>
+      </div>
+      <div class="side-col">
+        <div class="card reveal">
+          <div class="card-h"><h3>Traffic Sources</h3></div>
+          <div class="donut-wrap">
+            <div class="donut">
+              <svg viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="48" fill="none" stroke="var(--panel-2)" stroke-width="14"/>
+                <circle class="arc" cx="60" cy="60" r="48" fill="none" stroke="var(--accent)" stroke-width="14" stroke-linecap="round" data-frac=".38" data-offset="0"/>
+                <circle class="arc" cx="60" cy="60" r="48" fill="none" stroke="#e5e5e7" stroke-width="14" stroke-linecap="round" data-frac=".26" data-offset=".38"/>
+                <circle class="arc" cx="60" cy="60" r="48" fill="none" stroke="#6b6b73" stroke-width="14" stroke-linecap="round" data-frac=".18" data-offset=".64"/>
+              </svg>
+              <div class="mid"><b class="num">12.8k</b><span>TOTAL</span></div>
+            </div>
+            <div class="dleg">
+              <div class="row"><i style="background:var(--accent)"></i>Organic<b>38%</b></div>
+              <div class="row"><i style="background:#e5e5e7"></i>Paid<b>26%</b></div>
+              <div class="row"><i style="background:#6b6b73"></i>Direct<b>18%</b></div>
+              <div class="row"><i style="background:var(--panel-2)"></i>Referral<b>18%</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="card sim reveal">
+          <div class="card-h"><h3>Strategy Simulator</h3></div>
+          <div class="slab">Rollout Change (%)<b id="v1">+5%</b></div>
+          <input class="sld" type="range" min="-10" max="20" value="5" oninput="document.getElementById('v1').textContent=(this.value>0?'+':'')+this.value+'%'">
+          <div class="slab">Content Output (posts/mo)<b id="v2">24</b></div>
+          <input class="sld" type="range" min="0" max="50" step="1" value="24" oninput="document.getElementById('v2').textContent=this.value">
+          <div class="slab">Traffic Increase (%)<b id="v3">+12%</b></div>
+          <input class="sld" type="range" min="0" max="40" value="12" oninput="document.getElementById('v3').textContent='+'+this.value+'%'">
+        </div>
+      </div>
+    </section>
+    <div class="card reveal" style="padding:20px">
+      <div class="card-h"><h3><span class="sparkles">✦</span> AI Recommendations</h3></div>
+      <div class="recs">
+        <div class="rec"><span class="conf">91% conf.</span><h4>Feature Product A on the homepage</h4><div class="k">Projected Impact</div><div class="impact up num">+9,400 sessions</div><div class="k">Reason</div><div class="reason">High demand signal paired with strong retention in the last 14 days.</div><button>Apply Change</button></div>
+        <div class="rec"><span class="conf">84% conf.</span><h4>Reduce email frequency for Campaign X</h4><div class="k">Projected Impact</div><div class="impact down num">−3,200 unsubscribes</div><div class="k">Reason</div><div class="reason">Unsubscribe rate rose above threshold over the trailing 14-day window.</div><button>View Campaign</button></div>
+        <div class="rec"><span class="conf">88% conf.</span><h4>Focus on returning users segment</h4><div class="k">Projected Impact</div><div class="impact up num">+18% conversion</div><div class="k">Reason</div><div class="reason">Returning visitors show higher engagement and purchase intent.</div><button>Explore Segment</button></div>
+      </div>
+    </div>
+    <div class="tbl-h"><h3>Top Performing Products</h3><button class="btn"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Filter</button></div>
+    <div class="card reveal" style="padding:6px 8px">
+      <table>
+        <thead><tr><th>Product Name</th><th>Category</th><th class="r">Sessions</th><th class="r">Conv. Rate</th><th class="r">Traffic</th><th>Status</th><th class="r">Action</th></tr></thead>
+        <tbody>
+          <tr><td><div class="prod"><span class="sq">EC</span>Enterprise Cloud</div></td><td>SaaS</td><td class="r num">82,000</td><td class="r num">4.2%</td><td class="r num">32,000</td><td><span class="pill active">Active</span></td><td class="r"><span class="tlink"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View</span></td></tr>
+          <tr><td><div class="prod"><span class="sq">AP</span>Analytics Pro</div></td><td>Add-on</td><td class="r num">54,300</td><td class="r num">3.9%</td><td class="r num">24,180</td><td><span class="pill active">Active</span></td><td class="r"><span class="tlink"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View</span></td></tr>
+          <tr><td><div class="prod"><span class="sq">DK</span>Developer Kit</div></td><td>API</td><td class="r num">41,120</td><td class="r num">5.1%</td><td class="r num">18,640</td><td><span class="pill review">Review</span></td><td class="r"><span class="tlink"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View</span></td></tr>
+          <tr><td><div class="prod"><span class="sq">TM</span>Team Messaging</div></td><td>SaaS</td><td class="r num">29,870</td><td class="r num">2.8%</td><td class="r num">15,300</td><td><span class="pill paused">Paused</span></td><td class="r"><span class="tlink"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View</span></td></tr>
+          <tr><td><div class="prod"><span class="sq">SS</span>Secure Storage</div></td><td>Add-on</td><td class="r num">22,540</td><td class="r num">3.4%</td><td class="r num">12,090</td><td><span class="pill active">Active</span></td><td class="r"><span class="tlink"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>View</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="footnote">Demo dashboard · illustrative data · built with the finesse craft system</div>
+  </main>
+</div>
+<script src="lib/gsap.min.js"></script>
+<script src="lib/ScrollTrigger.min.js"></script>
+<script>
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+(function(){
+  const svg=document.getElementById('chart'); const W=760,H=280,pad=8;
+  const rev=[130,138,150,142,158,150,168,196,205,182,190,175,168,178,190],
+        con=[120,128,135,132,150,168,240,255,232,205,196,205,215,196,205];
+  const max=270,min=90;
+  const X=i=>pad+i*((W-pad*2)/(rev.length-1));
+  const Y=v=>H-pad-((v-min)/(max-min))*(H-pad*2-20);
+  const path=a=>a.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1)).join(' ');
+  let g='';for(let i=0;i<5;i++){const y=pad+i*((H-pad*2)/4);g+='<line x1="0" y1="'+y+'" x2="'+W+'" y2="'+y+'" stroke="rgba(255,255,255,.05)"/>';}
+  const area=path(con)+' L '+X(con.length-1)+' '+(H-pad)+' L '+X(0)+' '+(H-pad)+' Z';
+  svg.innerHTML='<defs><linearGradient id="ag" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#ff6a2b" stop-opacity=".28"/><stop offset="1" stop-color="#ff6a2b" stop-opacity="0"/></linearGradient></defs>'+g+
+    '<path id="area" d="'+area+'" fill="url(#ag)" opacity="0"/>'+
+    '<path id="lr" d="'+path(rev)+'" fill="none" stroke="#e5e5e7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'+
+    '<path id="lc" d="'+path(con)+'" fill="none" stroke="#ff6a2b" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>'+
+    '<circle id="peak" cx="'+X(7)+'" cy="'+Y(con[7])+'" r="5" fill="#ff6a2b" stroke="#08080a" stroke-width="2.5"/>';
+  const lr=svg.querySelector('#lr'),lc=svg.querySelector('#lc');
+  [lr,lc].forEach(p=>{const L=p.getTotalLength();p.style.strokeDasharray=L;p.style.strokeDashoffset=reduce?0:L;});
+  if(!reduce){gsap.to([lr,lc],{strokeDashoffset:0,duration:1.6,ease:'power2.out',stagger:.15});gsap.to('#area',{opacity:1,duration:1,delay:.9});gsap.fromTo('#peak',{scale:0,transformOrigin:'center'},{scale:1,duration:.4,delay:1.5,ease:'back.out(2)'});}
+  else{svg.querySelector('#area').style.opacity=1;}
+})();
+(function(){
+  const C=2*Math.PI*48;
+  document.querySelectorAll('.arc').forEach(a=>{
+    const frac=parseFloat(a.dataset.frac), off=parseFloat(a.dataset.offset||0);
+    a.setAttribute('transform','rotate('+(-90+off*360)+' 60 60)');
+    const len=frac*C-3;
+    if(reduce){a.style.strokeDasharray=len+' '+C;return;}
+    a.style.strokeDasharray='0 '+C;
+    gsap.to(a,{strokeDasharray:len+' '+C,duration:1.1,delay:.3,ease:'power2.out'});
+  });
+})();
+function rollNums(){
+  document.querySelectorAll('.val[data-to]').forEach(el=>{
+    const to=parseFloat(el.dataset.to),dec=+(el.dataset.dec||0),pre=el.dataset.prefix||'',suf=el.dataset.suffix||'';
+    const fmt=v=>pre+(dec?v.toFixed(dec):Math.round(v).toLocaleString())+suf;
+    if(reduce){el.textContent=fmt(to);return;}
+    const o={v:0};gsap.to(o,{v:to,duration:1.4,ease:'power2.out',onUpdate:()=>el.textContent=fmt(o.v)});
+  });
+}
+if(reduce){document.querySelectorAll('.reveal').forEach(e=>e.style.opacity=1);rollNums();}
+else{gsap.to('.reveal',{opacity:1,y:0,duration:.7,ease:'power3.out',stagger:.08,onStart:rollNums,startAt:{y:18}});}
+</script>
+</body>
+</html>

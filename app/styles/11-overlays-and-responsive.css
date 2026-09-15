@@ -288,6 +288,16 @@
 }
 
 @media (max-width: 620px) {
+  .page-header {
+    padding: 18px 0 16px;
+  }
+  .page-header__copy {
+    min-width: 0;
+    width: 100%;
+  }
+  .page-header__copy h1 {
+    font-size: 22px;
+  }
   .live-context > span:last-child {
     display: none;
   }
@@ -301,6 +311,7 @@
   }
   .page-header__actions {
     flex-wrap: wrap;
+    gap: 8px;
   }
   .notification-popover {
     max-width: calc(100vw - 28px);

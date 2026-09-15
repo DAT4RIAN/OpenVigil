@@ -1,0 +1,467 @@
+{"kind":"deck","id":"pr/w8b7qm","name":"Deck"}
+{"kind":"layout","layoutId":"9b678749-f9d0-468d-b0d7-d6cf28c2a8d9","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"e0edb9ca-67ab-4b3d-b46c-bc2c6bd03349","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/1i4q2k","slide":1,"title":"OpenVigil","textShapes":5}
+{"kind":"shape","id":"sh/7q90vqx0","slide":1,"bbox":[748,0,38,720]}
+{"kind":"textbox","id":"sh/6p0j2lwf","slide":1,"text":"OpenVigil","textPreview":"OpenVigil","textChars":9,"textLines":1,"bbox":[76,62,430,42]}
+{"kind":"shape","id":"sh/lo7itgfu","slide":1,"bbox":[76,126,86,5]}
+{"kind":"textbox","id":"sh/kny10be9","slide":1,"text":"风电智能运维\n多智能体平台","textPreview":"风电智能运维 | 多智能体平台","textChars":13,"textLines":2,"bbox":[76,176,610,150]}
+{"kind":"textbox","id":"sh/j2p0r6x4","slide":1,"text":"平台功能介绍 · 三峡交流版","textPreview":"平台功能介绍 · 三峡交流版","textChars":14,"textLines":1,"bbox":[80,360,560,46]}
+{"kind":"textbox","id":"sh/y1gjy1wj","slide":1,"text":"从异常感知、协同诊断到人工审批、工单执行与知识沉淀","textPreview":"从异常感知、协同诊断到人工审批、工单执行与知识沉淀","textChars":25,"textLines":1,"bbox":[80,434,560,70]}
+{"kind":"textbox","id":"sh/5kb250fe","slide":1,"text":"2026 年 9 月","textPreview":"2026 年 9 月","textChars":10,"textLines":1,"bbox":[80,625,260,28]}
+{"kind":"image","id":"im/1w7md0nq","slide":1,"name":"","alt":"海上风电场与帆船，来自用户提供参考材料","bbox":[770,0,510,720]}
+{"kind":"notes","id":"nt/1i4q2k","slide":1,"text":"开场建议：本材料聚焦平台功能、治理边界和联合验证方式，不把 Demo 或生产候选能力表述为真实风场上线。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/92-中汐建科-风电运维多智能体介绍-干际阳.pdf"}
+{"kind":"slide","id":"sl/kx5q0h","slide":2,"title":"导览","textShapes":18}
+{"kind":"shape","id":"sh/dcri5kzq","slide":2,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/q90jup0z","slide":2,"text":"导览","textPreview":"导览","textChars":2,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/ra903ahk","slide":2,"text":"交流内容","textPreview":"交流内容","textChars":4,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/47y1sfit","slide":2,"text":"用业务闭环串联平台功能与对接边界","textPreview":"用业务闭环串联平台功能与对接边界","textChars":16,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/p8ri1kze","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/25gjq503","slide":2,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/36p0zaho","slide":2,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/g3y1ovix","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"textbox","id":"sh/h47ix0zi","slide":2,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[92,200,70,48]}
+{"kind":"textbox","id":"sh/9kf2ds32","slide":2,"text":"平台定位","textPreview":"平台定位","textChars":4,"textLines":1,"bbox":[196,190,260,48]}
+{"kind":"textbox","id":"sh/8j6lk7mh","slide":2,"text":"解决什么问题，以及平台如何组织人、数据与 Agent","textPreview":"解决什么问题，以及平台如何组织人、数据与 Agent","textChars":26,"textLines":1,"bbox":[458,195,680,42]}
+{"kind":"shape","id":"sh/7ixkb2lw","slide":2,"bbox":[196,254,940,2]}
+{"kind":"textbox","id":"sh/mh43ix4b","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[92,312,70,48]}
+{"kind":"textbox","id":"sh/lgv29s36","slide":2,"text":"核心闭环","textPreview":"核心闭环","textChars":4,"textLines":1,"bbox":[196,302,260,48]}
+{"kind":"textbox","id":"sh/kfmlgnml","slide":2,"text":"异常感知、诊断、决策、审批、执行和验证","textPreview":"异常感知、诊断、决策、审批、执行和验证","textChars":19,"textLines":1,"bbox":[458,307,680,42]}
+{"kind":"shape","id":"sh/zedk7il0","slide":2,"bbox":[196,366,940,2]}
+{"kind":"textbox","id":"sh/yd4jed4f","slide":2,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[92,424,70,48]}
+{"kind":"textbox","id":"sh/xcv2583u","slide":2,"text":"功能工作区","textPreview":"功能工作区","textChars":5,"textLines":1,"bbox":[196,414,260,48]}
+{"kind":"textbox","id":"sh/cbm1cnm9","slide":2,"text":"运营、资产、AI、知识、模型、报告和治理","textPreview":"运营、资产、AI、知识、模型、报告和治理","textChars":20,"textLines":1,"bbox":[458,419,680,42]}
+{"kind":"shape","id":"sh/ov6lsnu5","slide":2,"bbox":[196,478,940,2]}
+{"kind":"textbox","id":"sh/pwz2lsbq","slide":2,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[92,536,70,48]}
+{"kind":"textbox","id":"sh/2to3qdcz","slide":2,"text":"技术与合作","textPreview":"技术与合作","textChars":5,"textLines":1,"bbox":[196,526,260,48]}
+{"kind":"textbox","id":"sh/3uxkjitk","slide":2,"text":"双运行架构、可靠性证据和联合验证建议","textPreview":"双运行架构、可靠性证据和联合验证建议","textChars":18,"textLines":1,"bbox":[458,531,680,42]}
+{"kind":"shape","id":"sh/gr6lo3u9","slide":2,"bbox":[196,590,940,2]}
+{"kind":"notes","id":"nt/kx5q0h","slide":2,"text":"本页说明交流结构。建议先讲业务问题，再进入界面和技术细节。"}
+{"kind":"slide","id":"sl/dh1xpr","slide":3,"title":"平台定位","textShapes":16}
+{"kind":"shape","id":"sh/fytcnqto","slide":3,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/gzmtgva9","slide":3,"text":"平台定位","textPreview":"平台定位","textChars":4,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/10vup0bu","slide":3,"text":"业务问题与平台目标","textPreview":"业务问题与平台目标","textChars":9,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/214bi5sz","slide":3,"text":"风电运维需要把分散信号转成可审计的执行闭环","textPreview":"风电运维需要把分散信号转成可审计的执行闭环","textChars":21,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/32dcrqtk","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/o3mtkva5","slide":3,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/p4vut0bq","slide":3,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/i50b61sv","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"textbox","id":"sh/j69sf6tg","slide":3,"text":"把“看见异常”推进到\n“可批准、可执行、\n可复盘”","textPreview":"把“看见异常”推进到 | “可批准、可执行、 | 可复盘”","textChars":25,"textLines":3,"bbox":[74,202,470,155]}
+{"kind":"textbox","id":"sh/7udkrexs","slide":3,"text":"OpenVigil 以 Mission 为业务主线，让多个专业 Agent 在明确工具与权限范围内协作。","textPreview":"OpenVigil 以 Mission 为业务主线，让多个专业 Agent 在明确工具与权限范围内协作。","textChars":52,"textLines":1,"bbox":[76,386,440,100]}
+{"kind":"shape","id":"sh/6tk3i9w7","slide":3,"bbox":[590,190,6,76]}
+{"kind":"textbox","id":"sh/twv2tofi","slide":3,"text":"数据割裂","textPreview":"数据割裂","textChars":4,"textLines":1,"bbox":[620,188,170,33]}
+{"kind":"textbox","id":"sh/8vmlkjex","slide":3,"text":"SCADA、告警、维护记录和知识文档缺少统一上下文","textPreview":"SCADA、告警、维护记录和知识文档缺少统一上下文","textChars":25,"textLines":1,"bbox":[790,190,390,68]}
+{"kind":"shape","id":"sh/j6tknexg","slide":3,"bbox":[590,296,6,76]}
+{"kind":"textbox","id":"sh/y5k3e9wv","slide":3,"text":"处置断点","textPreview":"处置断点","textChars":4,"textLines":1,"bbox":[620,294,170,33]}
+{"kind":"textbox","id":"sh/lsb2pofm","slide":3,"text":"异常能够被发现，但诊断、决策与执行之间容易失联","textPreview":"异常能够被发现，但诊断、决策与执行之间容易失联","textChars":23,"textLines":1,"bbox":[790,296,390,68]}
+{"kind":"shape","id":"sh/kr2lgje1","slide":3,"bbox":[590,402,6,76]}
+{"kind":"textbox","id":"sh/b2tkjuxk","slide":3,"text":"AI 难审计","textPreview":"AI 难审计","textChars":6,"textLines":1,"bbox":[620,400,170,33]}
+{"kind":"textbox","id":"sh/a10japwz","slide":3,"text":"模型建议若缺少工具记录、证据来源和人工门禁，难以用于高风险场景","textPreview":"模型建议若缺少工具记录、证据来源和人工门禁，难以用于高风险场景","textChars":31,"textLines":1,"bbox":[790,402,390,68]}
+{"kind":"shape","id":"sh/ex032p0r","slide":3,"bbox":[590,508,6,76]}
+{"kind":"textbox","id":"sh/zy94vuhc","slide":3,"text":"重试不安全","textPreview":"重试不安全","textChars":5,"textLines":1,"bbox":[620,506,170,33]}
+{"kind":"textbox","id":"sh/0zil4zix","slide":3,"text":"并发、网络中断和 worker 故障可能产生重复 Mission 或工单","textPreview":"并发、网络中断和 worker 故障可能产生重复 Mission 或工单","textChars":36,"textLines":1,"bbox":[790,508,390,68]}
+{"kind":"notes","id":"nt/dh1xpr","slide":3,"text":"强调平台目标是形成工程闭环，而不是展示一段对话。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/PRODUCT_REQUIREMENTS.md\n- C:/Users/jy/Documents/GitHub/OpenVigil/docs/agent-engineer-interview-project-introduction.md"}
+{"kind":"slide","id":"sl/j9ypuq","slide":4,"title":"平台定位","textShapes":24}
+{"kind":"shape","id":"sh/knuxkfud","slide":4,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/jmlgbats","slide":4,"text":"平台定位","textPreview":"平台定位","textChars":4,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/ylcfi5c7","slide":4,"text":"平台业务闭环","textPreview":"平台业务闭环","textChars":6,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/tsnyhkbu","slide":4,"text":"同一条证据链贯穿感知、判断、授权和现场反馈","textPreview":"同一条证据链贯穿感知、判断、授权和现场反馈","textChars":21,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/8rehozu9","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/7q5gfut4","slide":4,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/6pwzmpcj","slide":4,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/9w3y50bq","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"textbox","id":"sh/ovaxcvu5","slide":4,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[78,202,52,30]}
+{"kind":"textbox","id":"sh/2lcnep0f","slide":4,"text":"感知","textPreview":"感知","textChars":2,"textLines":1,"bbox":[78,238,150,50]}
+{"kind":"textbox","id":"sh/nml47u10","slide":4,"text":"SCADA\n工业告警","textPreview":"SCADA | 工业告警","textChars":10,"textLines":2,"bbox":[78,305,172,74]}
+{"kind":"shape","id":"sh/one5gzil","slide":4,"bbox":[244,265,54,18]}
+{"kind":"textbox","id":"sh/pon694j6","slide":4,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[316,202,52,30]}
+{"kind":"textbox","id":"sh/apwnip0b","slide":4,"text":"诊断","textPreview":"诊断","textChars":2,"textLines":1,"bbox":[316,238,150,50]}
+{"kind":"textbox","id":"sh/bq5obu1w","slide":4,"text":"专业 Agent\n结构化证据","textPreview":"专业 Agent | 结构化证据","textChars":14,"textLines":2,"bbox":[316,305,172,74]}
+{"kind":"shape","id":"sh/cre5kzih","slide":4,"bbox":[482,265,54,18]}
+{"kind":"textbox","id":"sh/xcn6d4j2","slide":4,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[554,202,52,30]}
+{"kind":"textbox","id":"sh/ydwnm90n","slide":4,"text":"决策","textPreview":"决策","textChars":2,"textLines":1,"bbox":[554,238,150,50]}
+{"kind":"textbox","id":"sh/zepofe18","slide":4,"text":"三方案比较\n多角色评审","textPreview":"三方案比较 | 多角色评审","textChars":11,"textLines":2,"bbox":[554,305,172,74]}
+{"kind":"shape","id":"sh/vip43exg","slide":4,"bbox":[720,265,54,18]}
+{"kind":"textbox","id":"sh/uhgna9gv","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[792,202,52,30]}
+{"kind":"textbox","id":"sh/hk7m5of6","slide":4,"text":"执行","textPreview":"执行","textChars":2,"textLines":1,"bbox":[792,238,150,50]}
+{"kind":"textbox","id":"sh/wjy5cjyl","slide":4,"text":"工单门禁\n资源与现场证据","textPreview":"工单门禁 | 资源与现场证据","textChars":12,"textLines":2,"bbox":[792,305,172,74]}
+{"kind":"shape","id":"sh/7ep4zex4","slide":4,"bbox":[958,265,54,18]}
+{"kind":"textbox","id":"sh/mtw369gj","slide":4,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1030,202,52,30]}
+{"kind":"textbox","id":"sh/9g7m14fa","slide":4,"text":"知识","textPreview":"知识","textChars":2,"textLines":1,"bbox":[1030,238,150,50]}
+{"kind":"textbox","id":"sh/8fyl8zyp","slide":4,"text":"结果验证\n案例沉淀","textPreview":"结果验证 | 案例沉淀","textChars":9,"textLines":2,"bbox":[1030,305,172,74]}
+{"kind":"shape","id":"sh/zq54vuh8","slide":4,"bbox":[548,420,280,96]}
+{"kind":"textbox","id":"sh/ypw32pgn","slide":4,"text":"人工审批","textPreview":"人工审批","textChars":4,"textLines":1,"bbox":[578,441,220,32]}
+{"kind":"textbox","id":"sh/ovu1wve5","slide":4,"text":"高风险写入由服务端状态机裁决","textPreview":"高风险写入由服务端状态机裁决","textChars":14,"textLines":1,"bbox":[568,477,240,24]}
+{"kind":"textbox","id":"sh/pw3250vq","slide":4,"text":"平台不让模型直接改变审批、工单或现场状态。","textPreview":"平台不让模型直接改变审批、工单或现场状态。","textChars":21,"textLines":1,"bbox":[74,575,1130,42]}
+{"kind":"notes","id":"nt/j9ypuq","slide":4,"text":"说明每个阶段都生成公开、可审计状态。人工审批位于决策与执行之间，属于硬门禁。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:/Users/jy/Documents/GitHub/OpenVigil/PRODUCT_REQUIREMENTS.md"}
+{"kind":"slide","id":"sl/c5zror","slide":5,"title":"核心功能","textShapes":14}
+{"kind":"shape","id":"sh/hgze9oz2","slide":5,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/ut8fy90b","slide":5,"text":"核心功能","textPreview":"核心功能","textChars":4,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/vuhw7ehw","slide":5,"text":"运营指挥中心","textPreview":"运营指挥中心","textChars":6,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/4jax43it","slide":5,"text":"一屏回答全场状态与 AI 正在处理的事件","textPreview":"一屏回答全场状态与 AI 正在处理的事件","textChars":20,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/5kjed8zy","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/ih8f2t0n","slide":5,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/3ihwbyh8","slide":5,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/snax83ip","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"textbox","id":"sh/doje18za","slide":5,"text":"64","textPreview":"64","textChars":2,"textLines":1,"bbox":[78,196,220,45]}
+{"kind":"textbox","id":"sh/t0zaxgru","slide":5,"text":"台机组 · Demo 快照","textPreview":"台机组 · Demo 快照","textChars":13,"textLines":1,"bbox":[78,241,220,42]}
+{"kind":"textbox","id":"sh/szqt4ba9","slide":5,"text":"384 MW","textPreview":"384 MW","textChars":6,"textLines":1,"bbox":[78,300,220,45]}
+{"kind":"textbox","id":"sh/rehsv69o","slide":5,"text":"示例装机容量","textPreview":"示例装机容量","textChars":6,"textLines":1,"bbox":[78,345,220,42]}
+{"kind":"textbox","id":"sh/6d8b21s3","slide":5,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[78,404,220,45]}
+{"kind":"textbox","id":"sh/14ju1grq","slide":5,"text":"活动 Mission","textPreview":"活动 Mission","textChars":10,"textLines":1,"bbox":[78,449,220,42]}
+{"kind":"textbox","id":"sh/g3at8ba5","slide":5,"text":"统一展示功率、健康、高优告警与 Agent 任务。","textPreview":"统一展示功率、健康、高优告警与 Agent 任务。","textChars":25,"textLines":1,"bbox":[78,520,220,96]}
+{"kind":"shape","id":"sh/f21szq9k","slide":5,"bbox":[325,170,884,502]}
+{"kind":"shape","id":"sh/h8fapwrm","slide":5,"bbox":[1030,188,130,30]}
+{"kind":"textbox","id":"sh/w76twra1","slide":5,"text":"演示数据","textPreview":"演示数据","textChars":4,"textLines":1,"bbox":[1038,191,114,24]}
+{"kind":"image","id":"im/xo7algfi","slide":5,"name":"","geometry":"roundRect","alt":"OpenVigil 运营指挥中心 Demo 页面","bbox":[332,177,870,488]}
+{"kind":"notes","id":"nt/c5zror","slide":5,"text":"演示说明：画面中的机组、功率、天气、告警和 Mission 为确定性 Demo 快照，不代表三峡真实资产。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/dashboard.png"}
+{"kind":"slide","id":"sl/0slg8u","slide":6,"title":"核心功能","textShapes":13}
+{"kind":"shape","id":"sh/filof2tk","slide":6,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/0jepo7a5","slide":6,"text":"核心功能","textPreview":"核心功能","textChars":4,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/1kn6hcbq","slide":6,"text":"多智能体组织方式","textPreview":"多智能体组织方式","textChars":8,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/2lw7qxsb","slide":6,"text":"22 个角色按决策、审核和执行三层协作","textPreview":"22 个角色按决策、审核和执行三层协作","textChars":19,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/nm5oj2tw","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/oneps7a1","slide":6,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/p8nqlcbm","slide":6,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/ips7edsr","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"shape","id":"sh/3q1o7itc","slide":6,"bbox":[65,175,804,476]}
+{"kind":"shape","id":"sh/a9wr2xcj","slide":6,"bbox":[906,195,286,94]}
+{"kind":"textbox","id":"sh/xwnqdcba","slide":6,"text":"决策层","textPreview":"决策层","textChars":3,"textLines":1,"bbox":[930,209,110,30]}
+{"kind":"textbox","id":"sh/wbe947up","slide":6,"text":"发现、分析与策略生成","textPreview":"发现、分析与策略生成","textChars":10,"textLines":1,"bbox":[930,245,230,28]}
+{"kind":"shape","id":"sh/n6l872d8","slide":6,"bbox":[906,320,286,94]}
+{"kind":"textbox","id":"sh/m5cryxcn","slide":6,"text":"审核层","textPreview":"审核层","textChars":3,"textLines":1,"bbox":[930,334,110,30]}
+{"kind":"textbox","id":"sh/983q9cby","slide":6,"text":"工程、安全、资源与运营复核","textPreview":"工程、安全、资源与运营复核","textChars":13,"textLines":1,"bbox":[930,370,230,28]}
+{"kind":"shape","id":"sh/87u907ud","slide":6,"bbox":[906,445,286,94]}
+{"kind":"textbox","id":"sh/z2l83idw","slide":6,"text":"执行层","textPreview":"执行层","textChars":3,"textLines":1,"bbox":[930,459,110,30]}
+{"kind":"textbox","id":"sh/y1s7udcb","slide":6,"text":"工单、现场任务与结果验证","textPreview":"工单、现场任务与结果验证","textChars":12,"textLines":1,"bbox":[930,495,230,28]}
+{"kind":"textbox","id":"sh/2dsr6dwj","slide":6,"text":"关键工具由状态图和角色显式路由，模型不拥有任意数据库或 Shell 权限。","textPreview":"关键工具由状态图和角色显式路由，模型不拥有任意数据库或 Shell 权限。","textChars":37,"textLines":1,"bbox":[908,574,285,76]}
+{"kind":"image","id":"im/4j6h4vih","slide":6,"name":"","geometry":"roundRect","alt":"OpenVigil Agent 控制中心 Demo 页面","bbox":[72,182,790,462]}
+{"kind":"notes","id":"nt/0slg8u","slide":6,"text":"三层组织对应发现与策略、专业复核、受控执行。角色与工具目录都可在平台中查看。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:/Users/jy/Documents/GitHub/OpenVigil/backend/src/windops_backend/agents/graph.py\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/agents.png"}
+{"kind":"slide","id":"sl/6x58s0","slide":7,"title":"核心闭环","textShapes":27}
+{"kind":"shape","id":"sh/yd03e5oj","slide":7,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/l0r29kna","slide":7,"text":"核心闭环","textPreview":"核心闭环","textChars":4,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/0zilgf6p","slide":7,"text":"七步故障处置流程","textPreview":"七步故障处置流程","textChars":8,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/7294ba50","slide":7,"text":"从异常到知识案例，每一步都有状态、证据和责任主体","textPreview":"从异常到知识案例，每一步都有状态、证据和责任主体","textChars":24,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/m103ipof","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/94bmdkn6","slide":7,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/832lkf6l","slide":7,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/v6t4fu5c","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"shape","id":"sh/u5k3mpor","slide":7,"bbox":[66,238,58,58]}
+{"kind":"textbox","id":"sh/0japk3yt","slide":7,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[66,247,58,38]}
+{"kind":"textbox","id":"sh/1kj6toze","slide":7,"text":"异常感知\n与告警","textPreview":"异常感知 | 与告警","textChars":8,"textLines":2,"bbox":[26,323,138,68]}
+{"kind":"shape","id":"sh/ehs7itg3","slide":7,"bbox":[138,258,72,16]}
+{"kind":"shape","id":"sh/fi1oryho","slide":7,"bbox":[237,238,58,58]}
+{"kind":"textbox","id":"sh/onupo3y5","slide":7,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[237,247,58,38]}
+{"kind":"textbox","id":"sh/p83qx8zq","slide":7,"text":"多维诊断\n与根因分析","textPreview":"多维诊断 | 与根因分析","textChars":10,"textLines":2,"bbox":[197,323,138,68]}
+{"kind":"shape","id":"sh/2ls7mtgz","slide":7,"bbox":[309,258,72,16]}
+{"kind":"shape","id":"sh/nm1ovyhk","slide":7,"bbox":[408,238,58,58]}
+{"kind":"textbox","id":"sh/cbupsny1","slide":7,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[408,247,58,38]}
+{"kind":"textbox","id":"sh/xc3q18zm","slide":7,"text":"方案比较\n与策略形成","textPreview":"方案比较 | 与策略形成","textChars":10,"textLines":2,"bbox":[368,323,138,68]}
+{"kind":"shape","id":"sh/lwzypo3u","slide":7,"bbox":[480,258,72,16]}
+{"kind":"shape","id":"sh/kv6xwjm9","slide":7,"bbox":[579,238,58,58]}
+{"kind":"textbox","id":"sh/zuxgnelo","slide":7,"text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[579,247,58,38]}
+{"kind":"textbox","id":"sh/ytofu943","slide":7,"text":"专业评审\n与人工审批","textPreview":"专业评审 | 与人工审批","textChars":10,"textLines":2,"bbox":[539,323,138,68]}
+{"kind":"shape","id":"sh/9kzyto3q","slide":7,"bbox":[651,258,72,16]}
+{"kind":"shape","id":"sh/8jqx0jm5","slide":7,"bbox":[750,238,58,58]}
+{"kind":"textbox","id":"sh/7ihgrelk","slide":7,"text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[750,247,58,38]}
+{"kind":"textbox","id":"sh/mh8fyt4z","slide":7,"text":"窗口确认\n与资源匹配","textPreview":"窗口确认 | 与资源匹配","textChars":10,"textLines":2,"bbox":[710,323,138,68]}
+{"kind":"shape","id":"sh/povyh4nm","slide":7,"bbox":[822,258,72,16]}
+{"kind":"shape","id":"sh/onmxozm1","slide":7,"bbox":[921,238,58,58]}
+{"kind":"textbox","id":"sh/etkvy5kz","slide":7,"text":"6","textPreview":"6","textChars":1,"textLines":1,"bbox":[921,247,58,38]}
+{"kind":"textbox","id":"sh/futcrql4","slide":7,"text":"工单执行\n与现场取证","textPreview":"工单执行 | 与现场取证","textChars":10,"textLines":2,"bbox":[881,323,138,68]}
+{"kind":"shape","id":"sh/0v2d0v2p","slide":7,"bbox":[993,258,72,16]}
+{"kind":"shape","id":"sh/1wbut0ja","slide":7,"bbox":[1092,238,58,58]}
+{"kind":"textbox","id":"sh/2x4v25kv","slide":7,"text":"7","textPreview":"7","textChars":1,"textLines":1,"bbox":[1092,247,58,38]}
+{"kind":"textbox","id":"sh/nydcva1g","slide":7,"text":"结果验证\n与知识沉淀","textPreview":"结果验证 | 与知识沉淀","textChars":10,"textLines":2,"bbox":[1052,323,138,68]}
+{"kind":"shape","id":"sh/ozmd4f21","slide":7,"bbox":[75,457,370,92]}
+{"kind":"textbox","id":"sh/p0vexkjm","slide":7,"text":"感知与诊断","textPreview":"感知与诊断","textChars":5,"textLines":1,"bbox":[96,473,130,30]}
+{"kind":"textbox","id":"sh/i10vqlkr","slide":7,"text":"时序、告警、历史案例和知识证据","textPreview":"时序、告警、历史案例和知识证据","textChars":15,"textLines":1,"bbox":[96,511,320,28]}
+{"kind":"shape","id":"sh/329cj6lc","slide":7,"bbox":[456,457,370,92]}
+{"kind":"textbox","id":"sh/jy1sn2d0","slide":7,"text":"审批与准备","textPreview":"审批与准备","textChars":5,"textLines":1,"bbox":[477,473,130,30]}
+{"kind":"textbox","id":"sh/yxsbuxcf","slide":7,"text":"方案审查、授权、天气窗与资源门禁","textPreview":"方案审查、授权、天气窗与资源门禁","textChars":16,"textLines":1,"bbox":[477,511,320,28]}
+{"kind":"shape","id":"sh/l0japcv6","slide":7,"bbox":[837,457,370,92]}
+{"kind":"textbox","id":"sh/kzatw7ul","slide":7,"text":"执行与复盘","textPreview":"执行与复盘","textChars":5,"textLines":1,"bbox":[858,473,130,30]}
+{"kind":"textbox","id":"sh/7mlsrmdw","slide":7,"text":"有序任务、制品哈希、测量与知识案例","textPreview":"有序任务、制品哈希、测量与知识案例","textChars":17,"textLines":1,"bbox":[858,511,320,28]}
+{"kind":"textbox","id":"sh/6lcbyhcb","slide":7,"text":"任何高风险状态转换失败时，平台保留原状态和审计记录。","textPreview":"任何高风险状态转换失败时，平台保留原状态和审计记录。","textChars":26,"textLines":1,"bbox":[74,606,1132,30]}
+{"kind":"notes","id":"nt/6x58s0","slide":7,"text":"可结合下一页开始进入各工作区。流程中的审批、工单启动、任务完成和闭环均由服务端校验。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:/Users/jy/Documents/GitHub/OpenVigil/PRODUCT_REQUIREMENTS.md"}
+{"kind":"slide","id":"sl/dmun0q","slide":8,"title":"功能工作区","textShapes":13}
+{"kind":"shape","id":"sh/ne58jqt4","slide":8,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/8fe9svup","slide":8,"text":"功能工作区","textPreview":"功能工作区","textChars":5,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/9gnql0ba","slide":8,"text":"SCADA 实时监测","textPreview":"SCADA 实时监测","textChars":10,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/a1wru5cv","slide":8,"text":"时序、阈值、异常事件与数据质量在同一视图关联","textPreview":"时序、阈值、异常事件与数据质量在同一视图关联","textChars":22,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/v258natg","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/w3e9wvu1","slide":8,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/x4nqp0b6","slide":8,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/q5s7i1cr","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"textbox","id":"sh/r618r6tw","slide":8,"text":"17","textPreview":"17","textChars":2,"textLines":1,"bbox":[78,190,220,45]}
+{"kind":"textbox","id":"sh/zyd0zqh8","slide":8,"text":"类实时预览测点","textPreview":"类实时预览测点","textChars":7,"textLines":1,"bbox":[78,235,220,42]}
+{"kind":"textbox","id":"sh/ex4j6l0n","slide":8,"text":"6","textPreview":"6","textChars":1,"textLines":1,"bbox":[78,294,220,45]}
+{"kind":"textbox","id":"sh/10vi10ze","slide":8,"text":"个时间窗口","textPreview":"个时间窗口","textChars":5,"textLines":1,"bbox":[78,339,220,42]}
+{"kind":"textbox","id":"sh/0zm18vit","slide":8,"text":"131,072","textPreview":"131,072","textChars":7,"textLines":1,"bbox":[78,398,220,45]}
+{"kind":"textbox","id":"sh/rat0vqhw","slide":8,"text":"条逻辑归档点","textPreview":"条逻辑归档点","textChars":6,"textLines":1,"bbox":[78,443,220,42]}
+{"kind":"textbox","id":"sh/q9kj2l0r","slide":8,"text":"查询支持资产、变量和数量限制；非法参数返回结构化错误。","textPreview":"查询支持资产、变量和数量限制；非法参数返回结构化错误。","textChars":27,"textLines":1,"bbox":[78,518,220,92]}
+{"kind":"shape","id":"sh/dwbixgz2","slide":8,"bbox":[323,171,886,501]}
+{"kind":"image","id":"im/z254fqd0","slide":8,"name":"","geometry":"roundRect","alt":"OpenVigil SCADA 实时监测 Demo 页面","bbox":[330,178,872,487]}
+{"kind":"notes","id":"nt/dmun0q","slide":8,"text":"截图以 WT-023 主轴承振动为例。Demo 时间序列为确定性快照；生产路径需要与现场 SCADA/CMS 数据契约联调。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/scada.png"}
+{"kind":"slide","id":"sl/udfswj","slide":9,"title":"功能工作区","textShapes":12}
+{"kind":"shape","id":"sh/fm94ja1c","slide":9,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/0ni5sf2h","slide":9,"text":"功能工作区","textPreview":"功能工作区","textChars":5,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/1ormlkj2","slide":9,"text":"告警中心","textPreview":"告警中心","textChars":4,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/2p0nupkn","slide":9,"text":"工业告警分级、关联分析与处置状态统一管理","textPreview":"工业告警分级、关联分析与处置状态统一管理","textChars":20,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/nq94nu18","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/ori5wf2t","slide":9,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/psrmpkje","slide":9,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/atknypkz","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"shape","id":"sh/but4ru14","slide":9,"bbox":[65,177,824,480]}
+{"kind":"textbox","id":"sh/ydgvehov","slide":9,"text":"19","textPreview":"19","textChars":2,"textLines":1,"bbox":[922,194,260,45]}
+{"kind":"textbox","id":"sh/lgrepwnm","slide":9,"text":"条 Live 告警记录","textPreview":"条 Live 告警记录","textChars":11,"textLines":1,"bbox":[922,239,260,42]}
+{"kind":"textbox","id":"sh/0fidgr61","slide":9,"text":"100","textPreview":"100","textChars":3,"textLines":1,"bbox":[922,294,260,45]}
+{"kind":"textbox","id":"sh/bapwj25k","slide":9,"text":"条归档告警","textPreview":"条归档告警","textChars":5,"textLines":1,"bbox":[922,339,260,42]}
+{"kind":"textbox","id":"sh/q9gvahoz","slide":9,"text":"按严重度、状态、风机和触发时间筛选\n告警详情关联 AI 诊断、证据与责任人\n确认与指派使用幂等键、revision 和追加审计","textPreview":"按严重度、状态、风机和触发时间筛选 | 告警详情关联 AI 诊断、证据与责任人 | 确认与指派使用幂等键、revision 和追加审计","textChars":63,"textLines":3,"bbox":[920,412,276,165]}
+{"kind":"shape","id":"sh/dc7elcna","slide":9,"bbox":[952,598,170,30]}
+{"kind":"textbox","id":"sh/cbydc765","slide":9,"text":"分级处置","textPreview":"分级处置","textChars":4,"textLines":1,"bbox":[960,601,154,24]}
+{"kind":"image","id":"im/kzato3ed","slide":9,"name":"","geometry":"roundRect","alt":"OpenVigil 告警中心 Demo 页面","bbox":[72,184,810,466]}
+{"kind":"notes","id":"nt/udfswj","slide":9,"text":"Demo 数据含 Live 与 Archive 两个范围。告警确认和指派写入 D1 审计；Production 由服务端身份和数据范围控制。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/alarms.png"}
+{"kind":"slide","id":"sl/fhivyn","slide":10,"title":"功能工作区","textShapes":12}
+{"kind":"shape","id":"sh/ofq1srep","slide":10,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/nehkjmx4","slide":10,"text":"功能工作区","textPreview":"功能工作区","textChars":5,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/2d8jqhwj","slide":10,"text":"Mission 与证据协同","textPreview":"Mission 与证据协同","textChars":13,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/1sz2hcfy","slide":10,"text":"把一次异常处置组织成可恢复、可追踪的业务对象","textPreview":"把一次异常处置组织成可恢复、可追踪的业务对象","textChars":22,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/0rq1o7et","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/fqhkf2x8","slide":10,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/ep8jmhwn","slide":10,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/dozidcf2","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"shape","id":"sh/sn61k7eh","slide":10,"bbox":[65,173,814,486]}
+{"kind":"textbox","id":"sh/nu18fy1k","slide":10,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[914,188,270,45]}
+{"kind":"textbox","id":"sh/8vu9o3i5","slide":10,"text":"Mission 总数","textPreview":"Mission 总数","textChars":10,"textLines":1,"bbox":[914,233,270,42]}
+{"kind":"textbox","id":"sh/9w3qh8jq","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[914,286,270,45]}
+{"kind":"textbox","id":"sh/y5srit03","slide":10,"text":"活动 Mission","textPreview":"活动 Mission","textChars":10,"textLines":1,"bbox":[914,331,270,42]}
+{"kind":"textbox","id":"sh/z618by18","slide":10,"text":"Mission 保存协作时间线、Agent 工具记录、证据、决策、审批与执行准备度。","textPreview":"Mission 保存协作时间线、Agent 工具记录、证据、决策、审批与执行准备度。","textChars":42,"textLines":1,"bbox":[914,392,274,128]}
+{"kind":"textbox","id":"sh/07a9k3it","slide":10,"text":"中断后可依据公开状态恢复，不依赖聊天上下文。","textPreview":"中断后可依据公开状态恢复，不依赖聊天上下文。","textChars":22,"textLines":1,"bbox":[914,550,274,68]}
+{"kind":"image","id":"im/lw3yxk3i","slide":10,"name":"","geometry":"roundRect","alt":"OpenVigil Mission 详情 Demo 页面","bbox":[72,180,800,472]}
+{"kind":"notes","id":"nt/fhivyn","slide":10,"text":"Mission 是平台核心业务对象。建议演示时间线、证据筛选和当前决策，而不是只展示 Agent 对话。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/mission.png"}
+{"kind":"slide","id":"sl/37f0ew","slide":11,"title":"功能工作区","textShapes":11}
+{"kind":"shape","id":"sh/edczqdgb","slide":11,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/1g3il8zm","slide":11,"text":"功能工作区","textPreview":"功能工作区","textChars":5,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/gfuhsnyh","slide":11,"text":"决策中心与人工审批","textPreview":"决策中心与人工审批","textChars":9,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/ra10fyhk","slide":11,"text":"三方案比较用于暴露风险权衡，人工结果决定能否进入执行","textPreview":"三方案比较用于暴露风险权衡，人工结果决定能否进入执行","textChars":26,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/69szmtgz","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/tc3ih8zq","slide":11,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/sbuho3y5","slide":11,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/b650r2h4","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"shape","id":"sh/q5wjyxgj","slide":11,"bbox":[65,177,849,484]}
+{"kind":"textbox","id":"sh/1wja1ozm","slide":11,"text":"WT-023 Demo","textPreview":"WT-023 Demo","textChars":11,"textLines":1,"bbox":[947,190,220,28]}
+{"kind":"textbox","id":"sh/et8bq9gv","slide":11,"text":"方案 B","textPreview":"方案 B","textChars":4,"textLines":1,"bbox":[947,226,220,48]}
+{"kind":"textbox","id":"sh/fu1szehg","slide":11,"text":"降载运行，并在 72 小时内检查","textPreview":"降载运行，并在 72 小时内检查","textChars":16,"textLines":1,"bbox":[947,277,236,64]}
+{"kind":"shape","id":"sh/s7qtojy5","slide":11,"bbox":[943,367,230,30]}
+{"kind":"textbox","id":"sh/t8zax4za","slide":11,"text":"AI 推荐不等于批准","textPreview":"AI 推荐不等于批准","textChars":10,"textLines":1,"bbox":[951,370,214,24]}
+{"kind":"textbox","id":"sh/658bm9gz","slide":11,"text":"批准：允许创建或推进工单\n拒绝：回到待决策状态\n退修：回到诊断阶段\n升级：保持审核并锁定执行","textPreview":"批准：允许创建或推进工单 | 拒绝：回到待决策状态 | 退修：回到诊断阶段 | 升级：保持审核并锁定执行","textChars":46,"textLines":4,"bbox":[944,422,238,180]}
+{"kind":"image","id":"im/bahw32p8","slide":11,"name":"","geometry":"roundRect","alt":"OpenVigil 决策中心 Demo 页面","bbox":[72,184,835,470]}
+{"kind":"notes","id":"nt/37f0ew","slide":11,"text":"四类人工结果均由服务端状态机校验。审批身份来自认证主体，客户端填写的姓名不能改写审计身份。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/decisions.png"}
+{"kind":"slide","id":"sl/mumdmq","slide":12,"title":"功能工作区","textShapes":10}
+{"kind":"shape","id":"sh/hov294nq","slide":12,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/ul4jy94f","slide":12,"text":"功能工作区","textPreview":"功能工作区","textChars":5,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/vmdk7e5k","slide":12,"text":"工单执行与资源门禁","textPreview":"工单执行与资源门禁","textChars":9,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/4bml4jmh","slide":12,"text":"审批、天气、班组、船舶、备件和现场证据共同决定可执行性","textPreview":"审批、天气、班组、船舶、备件和现场证据共同决定可执行性","textChars":27,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/5cv2don2","slide":12,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/ip4j294b","slide":12,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/jadkbe5w","slide":12,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/kf21szmx","slide":12,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"textbox","id":"sh/lgb21kni","slide":12,"text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[78,194,230,45]}
+{"kind":"textbox","id":"sh/lcnet4fa","slide":12,"text":"项顺序任务门禁","textPreview":"项顺序任务门禁","textChars":7,"textLines":1,"bbox":[78,239,230,42]}
+{"kind":"textbox","id":"sh/0red0jy5","slide":12,"text":"只有已批准并已排程的工单可以开始\n每项任务提交制品 URI、SHA-256 与结构化测量\n全部任务和最终测量满足阈值后才能闭环\n资源预留在数据库事务中原子完成","textPreview":"只有已批准并已排程的工单可以开始 | 每项任务提交制品 URI、SHA-256 与结构化测量 | 全部任务和最终测量满足阈值后才能闭环 | 资源预留在数据库事务中原子完成","textChars":79,"textLines":4,"bbox":[78,300,235,250]}
+{"kind":"shape","id":"sh/zq5wrexk","slide":12,"bbox":[102,583,176,30]}
+{"kind":"textbox","id":"sh/ypwvy9gz","slide":12,"text":"执行动作受控","textPreview":"执行动作受控","textChars":6,"textLines":1,"bbox":[110,586,160,24]}
+{"kind":"shape","id":"sh/9g7exofm","slide":12,"bbox":[335,173,874,490]}
+{"kind":"image","id":"im/7yt0rilw","slide":12,"name":"","geometry":"roundRect","alt":"OpenVigil 工单中心 Demo 页面","bbox":[342,180,860,476]}
+{"kind":"notes","id":"nt/mumdmq","slide":12,"text":"Worker Demo 使用确定性 fixture URI 展示证据结构；生产路径只接受批准的 MinIO 对象并校验存在性与哈希。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/work-orders.png"}
+{"kind":"slide","id":"sl/cwkgnc","slide":13,"title":"功能工作区","textShapes":11}
+{"kind":"shape","id":"sh/vqds7qd8","slide":13,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/grmtgvet","slide":13,"text":"功能工作区","textPreview":"功能工作区","textChars":5,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/hsfa90ve","slide":13,"text":"设备健康与预测性维护","textPreview":"设备健康与预测性维护","textChars":10,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/itobilwz","slide":13,"text":"以健康矩阵和趋势排序支持运维优先级判断","textPreview":"以健康矩阵和趋势排序支持运维优先级判断","textChars":19,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/3uxsbqdk","slide":13,"text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/4v6tkvep","slide":13,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/5gfad0va","slide":13,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/yxkr61wf","slide":13,"text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"shape","id":"sh/jytsz6d0","slide":13,"bbox":[65,177,834,480]}
+{"kind":"textbox","id":"sh/mpgvi5k7","slide":13,"text":"64 台机组","textPreview":"64 台机组","textChars":6,"textLines":1,"bbox":[926,188,250,40]}
+{"kind":"textbox","id":"sh/9srutkjy","slide":13,"text":"健康矩阵关联异常分、活动告警、子系统状态和历史趋势。","textPreview":"健康矩阵关联异常分、活动告警、子系统状态和历史趋势。","textChars":26,"textLines":1,"bbox":[926,242,252,92]}
+{"kind":"textbox","id":"sh/8rydkf2d","slide":13,"text":"应用方式","textPreview":"应用方式","textChars":4,"textLines":1,"bbox":[926,378,250,30]}
+{"kind":"textbox","id":"sh/zmpcnqlw","slide":13,"text":"按风险与健康下降趋势排序\n查看单机 12 个子系统上下文\n联动 Mission、维护计划与资源准备度","textPreview":"按风险与健康下降趋势排序 | 查看单机 12 个子系统上下文 | 联动 Mission、维护计划与资源准备度","textChars":50,"textLines":3,"bbox":[926,423,252,142]}
+{"kind":"shape","id":"sh/ylgve5kb","slide":13,"bbox":[926,582,250,54]}
+{"kind":"textbox","id":"sh/lo7up03m","slide":13,"text":"健康分用于辅助判断，不替代现场诊断","textPreview":"健康分用于辅助判断，不替代现场诊断","textChars":17,"textLines":1,"bbox":[940,593,222,34]}
+{"kind":"image","id":"im/4f69k3ux","slide":13,"name":"","geometry":"roundRect","alt":"OpenVigil 设备健康 Demo 页面","bbox":[72,184,820,466]}
+{"kind":"notes","id":"nt/cwkgnc","slide":13,"text":"说明健康分、异常分和提前量都需要标注模型或规则版本。未经过联合验证的 RUL 或失效概率不能作为真实设备结论。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:/Users/jy/Documents/GitHub/OpenVigil/EXECUTION_PROGRESS.md\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/health.png"}
+{"kind":"slide","id":"sl/tgw9ic","slide":14,"title":"功能工作区","textShapes":13}
+{"kind":"shape","id":"sh/p07a5sjy","slide":14,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/2xgbudk7","slide":14,"text":"功能工作区","textPreview":"功能工作区","textChars":5,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/3yps3i1s","slide":14,"text":"知识库与相似案例","textPreview":"知识库与相似案例","textChars":8,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/gvyts32h","slide":14,"text":"回答必须附来源，诊断结论与文档段落、历史案例相互印证","textPreview":"回答必须附来源，诊断结论与文档段落、历史案例相互印证","textChars":26,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/hw7a18jm","slide":14,"text":"14","textPreview":"14","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/u9wbqtkb","slide":14,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/fapszy1w","slide":14,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/s7e9o325","slide":14,"text":"14","textPreview":"14","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"shape","id":"sh/t8nax8jq","slide":14,"bbox":[65,177,826,480]}
+{"kind":"textbox","id":"sh/gvm9cryd","slide":14,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[922,188,260,45]}
+{"kind":"textbox","id":"sh/fud83mxs","slide":14,"text":"份 Demo 文档","textPreview":"份 Demo 文档","textChars":9,"textLines":1,"bbox":[922,233,260,42]}
+{"kind":"textbox","id":"sh/et4rahg7","slide":14,"text":"20","textPreview":"20","textChars":2,"textLines":1,"bbox":[922,286,260,45]}
+{"kind":"textbox","id":"sh/tsvq1cfm","slide":14,"text":"个历史闭环案例","textPreview":"个历史闭环案例","textChars":7,"textLines":1,"bbox":[922,331,260,42]}
+{"kind":"textbox","id":"sh/srmp87y1","slide":14,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[922,384,260,45]}
+{"kind":"textbox","id":"sh/r6t8z2xg","slide":14,"text":"条 WT-023 证据","textPreview":"条 WT-023 证据","textChars":11,"textLines":1,"bbox":[922,429,260,42]}
+{"kind":"textbox","id":"sh/65k76xgb","slide":14,"text":"Demo 使用确定性 passage 检索；Production 设计支持 pgvector 检索和 Neo4j 只读图谱投影。","textPreview":"Demo 使用确定性 passage 检索；Production 设计支持 pgvector 检索和 Neo4j 只读图谱投影。","textChars":64,"textLines":1,"bbox":[922,494,260,118]}
+{"kind":"image","id":"im/udwvmpwv","slide":14,"name":"","geometry":"roundRect","alt":"OpenVigil 知识库 Demo 页面","bbox":[72,184,812,466]}
+{"kind":"notes","id":"nt/tgw9ic","slide":14,"text":"强调知识回答的引用字段：文档、页码、章节、摘录和评分。Neo4j 故障不应改变 PostgreSQL 权威事实。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/knowledge.png"}
+{"kind":"slide","id":"sl/9ua501","slide":15,"title":"功能工作区","textShapes":15}
+{"kind":"shape","id":"sh/by9w3yd0","slide":15,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/cjixc3ul","slide":15,"text":"功能工作区","textPreview":"功能工作区","textChars":5,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/xkre58v6","slide":15,"text":"数据治理与 CARE 基准","textPreview":"数据治理与 CARE 基准","textChars":13,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/yl0fetcb","slide":15,"text":"用真实数据合同、质量规则和离线评估约束模型发布","textPreview":"用真实数据合同、质量规则和离线评估约束模型发布","textChars":23,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/zmtw7ydw","slide":15,"text":"15","textPreview":"15","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/kn2xg3uh","slide":15,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/loby98v2","slide":15,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/mpkfidcn","slide":15,"text":"15","textPreview":"15","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"textbox","id":"sh/7qtgbid8","slide":15,"text":"5,242,948","textPreview":"5,242,948","textChars":9,"textLines":1,"bbox":[78,188,260,45]}
+{"kind":"textbox","id":"sh/bql0repg","slide":15,"text":"CARE 源时间点","textPreview":"CARE 源时间点","textChars":9,"textLines":1,"bbox":[78,233,260,42]}
+{"kind":"textbox","id":"sh/apczy98v","slide":15,"text":"95","textPreview":"95","textChars":2,"textLines":1,"bbox":[78,292,260,45]}
+{"kind":"textbox","id":"sh/xsnito7m","slide":15,"text":"事件 · 45 异常 / 50 正常","textPreview":"事件 · 45 异常 / 50 正常","textChars":18,"textLines":1,"bbox":[78,337,260,42]}
+{"kind":"textbox","id":"sh/wreh0jq1","slide":15,"text":"36","textPreview":"36","textChars":2,"textLines":1,"bbox":[78,396,260,45]}
+{"kind":"textbox","id":"sh/n2l0nep4","slide":15,"text":"场内留一资产 fold","textPreview":"场内留一资产 fold","textChars":11,"textLines":1,"bbox":[78,441,260,42]}
+{"kind":"textbox","id":"sh/m1czu98j","slide":15,"text":"281,249","textPreview":"281,249","textChars":7,"textLines":1,"bbox":[78,500,260,45]}
+{"kind":"textbox","id":"sh/9o3ip47a","slide":15,"text":"预测点","textPreview":"预测点","textChars":3,"textLines":1,"bbox":[78,545,260,42]}
+{"kind":"shape","id":"sh/o3uhwjqp","slide":15,"bbox":[353,177,856,478]}
+{"kind":"shape","id":"sh/6xwj6t83","slide":15,"bbox":[360,608,842,40]}
+{"kind":"textbox","id":"sh/2t03yxsb","slide":15,"text":"本地候选结果：12 个候选通过门禁，24 个未通过；失败结果完整保留。","textPreview":"本地候选结果：12 个候选通过门禁，24 个未通过；失败结果完整保留。","textChars":35,"textLines":1,"bbox":[378,616,806,25]}
+{"kind":"image","id":"im/0bq9wbmx","slide":15,"name":"","geometry":"roundRect","alt":"OpenVigil 数据中心 Demo 页面","bbox":[360,184,842,464]}
+{"kind":"notes","id":"nt/9ua501","slide":15,"text":"CARE 数据不进入 Git。预测先冻结，最终 evaluator 才能读取 truth；当前仅完成场内验证，不声称跨场泛化。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:/Users/jy/Documents/GitHub/OpenVigil/docs/care-v6-integration-development-plan.md\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/data.png"}
+{"kind":"slide","id":"sl/8grmy0","slide":16,"title":"功能工作区","textShapes":10}
+{"kind":"shape","id":"sh/p8red0bm","slide":16,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/25gf2lsv","slide":16,"text":"功能工作区","textPreview":"功能工作区","textChars":5,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/n69wbqtg","slide":16,"text":"模型管理与发布门禁","textPreview":"模型管理与发布门禁","textChars":9,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/03yx0va5","slide":16,"text":"模型登记、版本、输入输出、指标和运行边界集中呈现","textPreview":"模型登记、版本、输入输出、指标和运行边界集中呈现","textChars":24,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/147e9gbq","slide":16,"text":"16","textPreview":"16","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/e1gfylsz","slide":16,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/f2pw7qtk","slide":16,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/kz2xcfa9","slide":16,"text":"16","textPreview":"16","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"shape","id":"sh/l0bylkru","slide":16,"bbox":[65,177,804,480]}
+{"kind":"textbox","id":"sh/47ax8byl","slide":16,"text":"能力注册表","textPreview":"能力注册表","textChars":5,"textLines":1,"bbox":[902,190,280,36]}
+{"kind":"textbox","id":"sh/j6hwz6xg","slide":16,"text":"登记模型或规则的版本、输入、输出和限制\n离线评估未通过时不允许激活\n失败候选和不可评分结果不从汇总中删除\nProduction 校验 release、commit 与镜像摘要","textPreview":"登记模型或规则的版本、输入、输出和限制 | 离线评估未通过时不允许激活 | 失败候选和不可评分结果不从汇总中删除 | Production 校验 release、commit 与镜像摘要","textChars":87,"textLines":4,"bbox":[902,244,286,224]}
+{"kind":"shape","id":"sh/i58f61gv","slide":16,"bbox":[902,494,282,130]}
+{"kind":"textbox","id":"sh/h4zexwfa","slide":16,"text":"当前 Demo 状态","textPreview":"当前 Demo 状态","textChars":10,"textLines":1,"bbox":[922,511,240,28]}
+{"kind":"textbox","id":"sh/w3qx4ryp","slide":16,"text":"真实推理 0\n向量嵌入 0\n模型制品 0","textPreview":"真实推理 0 | 向量嵌入 0 | 模型制品 0","textChars":20,"textLines":3,"bbox":[922,548,240,62]}
+{"kind":"image","id":"im/2x0rqxcj","slide":16,"name":"","geometry":"roundRect","alt":"OpenVigil 模型管理 Demo 页面","bbox":[72,184,790,466]}
+{"kind":"notes","id":"nt/8grmy0","slide":16,"text":"截图真实显示当前 Demo 未连接生产模型服务。Production 代码具备 LiteLLM 适配，但仍需批准环境中的模型供应商与制品联合验收。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/models.png"}
+{"kind":"slide","id":"sl/1w1p2i","slide":17,"title":"功能工作区","textShapes":13}
+{"kind":"shape","id":"sh/y5kni5kr","slide":17,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/lsb6dk3i","slide":17,"text":"功能工作区","textPreview":"功能工作区","textChars":5,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/k725kf2x","slide":17,"text":"报告中心与支持工作区","textPreview":"报告中心与支持工作区","textChars":10,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/b2947qlg","slide":17,"text":"把处置结果形成可追踪快照，并延伸到计划、资源和系统治理","textPreview":"把处置结果形成可追踪快照，并延伸到计划、资源和系统治理","textChars":27,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/a10nelkv","slide":17,"text":"17","textPreview":"17","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/x4rm9036","slide":17,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/c3i5gv21","slide":17,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/ny943ql4","slide":17,"text":"17","textPreview":"17","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"textbox","id":"sh/2xgnalkj","slide":17,"text":"报告中心","textPreview":"报告中心","textChars":4,"textLines":1,"bbox":[78,190,250,34]}
+{"kind":"textbox","id":"sh/wvqlofyx","slide":17,"text":"6","textPreview":"6","textChars":1,"textLines":1,"bbox":[78,238,250,45]}
+{"kind":"textbox","id":"sh/xwz2xkzi","slide":17,"text":"类受控报告模板","textPreview":"类受控报告模板","textChars":7,"textLines":1,"bbox":[78,283,250,42]}
+{"kind":"textbox","id":"sh/ato3m50r","slide":17,"text":"PDF / DOCX","textPreview":"PDF / DOCX","textChars":10,"textLines":1,"bbox":[78,342,250,45]}
+{"kind":"textbox","id":"sh/vuxkvahc","slide":17,"text":"有效文件导出","textPreview":"有效文件导出","textChars":6,"textLines":1,"bbox":[78,387,250,42]}
+{"kind":"textbox","id":"sh/8r6lkvi1","slide":17,"text":"报告绑定数据窗口与摘要，导出失败不会生成空文件或伪成功记录。","textPreview":"报告绑定数据窗口与摘要，导出失败不会生成空文件或伪成功记录。","textChars":30,"textLines":1,"bbox":[78,450,248,105]}
+{"kind":"shape","id":"sh/9sf2t0zm","slide":17,"bbox":[351,177,858,450]}
+{"kind":"shape","id":"sh/nqxkrahg","slide":17,"bbox":[358,636,844,30]}
+{"kind":"textbox","id":"sh/snalwzy5","slide":17,"text":"其他支持工作区：维护计划 · 资源中心 · 数字孪生（2D 态势） · 系统设置","textPreview":"其他支持工作区：维护计划 · 资源中心 · 数字孪生（2D 态势） · 系统设置","textChars":40,"textLines":1,"bbox":[378,641,804,20]}
+{"kind":"image","id":"im/xgj6t4j6","slide":17,"name":"","geometry":"roundRect","alt":"OpenVigil 报告中心 Demo 页面","bbox":[358,184,844,436]}
+{"kind":"notes","id":"nt/1w1p2i","slide":17,"text":"平台共有 22 个生产工作区。数字孪生当前是 2D 运行态示意，不声称物理仿真。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:\\Users\\jy\\Documents\\GitHub\\OpenVigil\\tmp\\pptx\\openvigil-three-gorges\\screenshots/reports.png"}
+{"kind":"slide","id":"sl/s4maqe","slide":18,"title":"技术底座","textShapes":21}
+{"kind":"shape","id":"sh/v2hcjy5g","slide":18,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/g3qtc361","slide":18,"text":"技术底座","textPreview":"技术底座","textChars":4,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/h4zul8nm","slide":18,"text":"双运行架构与对接边界","textPreview":"双运行架构与对接边界","textChars":10,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/6xob6toz","slide":18,"text":"Demo 用于稳定演示，Production 连接独立权威后端并禁止 fixture 回退","textPreview":"Demo 用于稳定演示，Production 连接独立权威后端并禁止 fixture 回退","textChars":45,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/7yxcfe5k","slide":18,"text":"18","textPreview":"18","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/8z6t8j65","slide":18,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/t0fuhonq","slide":18,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/qt8vid43","slide":18,"text":"18","textPreview":"18","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"textbox","id":"sh/ru1cbi5o","slide":18,"text":"统一前端领域契约","textPreview":"统一前端领域契约","textChars":8,"textLines":1,"bbox":[487,174,306,34]}
+{"kind":"shape","id":"sh/7adg7et4","slide":18,"bbox":[616,208,48,30]}
+{"kind":"shape","id":"sh/m94fy9sj","slide":18,"bbox":[72,248,500,334]}
+{"kind":"shape","id":"sh/9cvy9obu","slide":18,"bbox":[98,270,110,30]}
+{"kind":"textbox","id":"sh/8bmh0jap","slide":18,"text":"Demo","textPreview":"Demo","textChars":4,"textLines":1,"bbox":[106,273,94,24]}
+{"kind":"textbox","id":"sh/vedgbet0","slide":18,"text":"Worker / D1 产品演示","textPreview":"Worker / D1 产品演示","textChars":16,"textLines":1,"bbox":[98,316,410,40]}
+{"kind":"shape","id":"sh/ud4z29sf","slide":18,"bbox":[98,382,140,58]}
+{"kind":"textbox","id":"sh/hgfydob6","slide":18,"text":"React / vinext","textPreview":"React / vinext","textChars":14,"textLines":1,"bbox":[108,389,120,44]}
+{"kind":"shape","id":"sh/wfmh4jal","slide":18,"bbox":[250,402,48,16]}
+{"kind":"shape","id":"sh/j2xgfytc","slide":18,"bbox":[310,374,120,74]}
+{"kind":"textbox","id":"sh/i1oz6tsr","slide":18,"text":"Worker API\nD1","textPreview":"Worker API | D1","textChars":13,"textLines":2,"bbox":[320,381,100,60]}
+{"kind":"shape","id":"sh/ex8jyxcz","slide":18,"bbox":[442,402,48,16]}
+{"kind":"shape","id":"sh/fyhk72dk","slide":18,"bbox":[428,374,118,74]}
+{"kind":"textbox","id":"sh/gza107up","slide":18,"text":"确定性数据\n17 工具","textPreview":"确定性数据 | 17 工具","textChars":11,"textLines":2,"bbox":[438,381,98,60]}
+{"kind":"textbox","id":"sh/10j29sva","slide":18,"text":"适合界面演示、流程说明与回归测试\n不代表真实生产 Agent 或现场控制","textPreview":"适合界面演示、流程说明与回归测试 | 不代表真实生产 Agent 或现场控制","textChars":36,"textLines":2,"bbox":[98,480,410,70]}
+{"kind":"shape","id":"sh/698judcn","slide":18,"bbox":[608,248,600,334]}
+{"kind":"shape","id":"sh/rah03id8","slide":18,"bbox":[636,270,220,30]}
+{"kind":"textbox","id":"sh/svq1wnut","slide":18,"text":"Production Candidate","textPreview":"Production Candidate","textChars":20,"textLines":1,"bbox":[644,273,204,24]}
+{"kind":"textbox","id":"sh/twzi5sve","slide":18,"text":"Sites 身份网关 + FastAPI 权威后端","textPreview":"Sites 身份网关 + FastAPI 权威后端","textChars":25,"textLines":1,"bbox":[636,316,530,40]}
+{"kind":"shape","id":"sh/q5sj6hc7","slide":18,"bbox":[636,374,112,74]}
+{"kind":"textbox","id":"sh/b61kfmdc","slide":18,"text":"Sites\nWorker","textPreview":"Sites | Worker","textChars":12,"textLines":2,"bbox":[646,381,92,60]}
+{"kind":"shape","id":"sh/l0nm5gfu","slide":18,"bbox":[760,402,38,16]}
+{"kind":"shape","id":"sh/0zelwbe9","slide":18,"bbox":[810,382,116,58]}
+{"kind":"textbox","id":"sh/zyl436xo","slide":18,"text":"FastAPI","textPreview":"FastAPI","textChars":7,"textLines":1,"bbox":[820,389,96,44]}
+{"kind":"shape","id":"sh/yxc3u1w3","slide":18,"bbox":[938,402,38,16]}
+{"kind":"shape","id":"sh/dw3m1wfi","slide":18,"bbox":[988,374,142,74]}
+{"kind":"textbox","id":"sh/cvulsbex","slide":18,"text":"PostgreSQL\nTimescaleDB","textPreview":"PostgreSQL | TimescaleDB","textChars":22,"textLines":2,"bbox":[998,381,122,60]}
+{"kind":"shape","id":"sh/bul4z6xs","slide":18,"bbox":[636,468,494,52]}
+{"kind":"textbox","id":"sh/qtc3q1w7","slide":18,"text":"Outbox · Redis/Dramatiq · LangGraph","textPreview":"Outbox · Redis/Dramatiq · LangGraph","textChars":35,"textLines":1,"bbox":[646,475,474,38]}
+{"kind":"textbox","id":"sh/xs7md0f2","slide":18,"text":"MinIO、pgvector、Neo4j、模型供应商与 EAM 均需批准环境联调","textPreview":"MinIO、pgvector、Neo4j、模型供应商与 EAM 均需批准环境联调","textChars":40,"textLines":1,"bbox":[636,540,530,28]}
+{"kind":"shape","id":"sh/wry54veh","slide":18,"bbox":[430,606,420,48]}
+{"kind":"textbox","id":"sh/4vmd4vex","slide":18,"text":"两套运行时隔离，任何不匹配均失败关闭","textPreview":"两套运行时隔离，任何不匹配均失败关闭","textChars":18,"textLines":1,"bbox":[449,616,382,28]}
+{"kind":"notes","id":"nt/s4maqe","slide":18,"text":"Cloudflare Sites 只托管 Worker 网关，不托管 Python 服务。Production 需要独立 FastAPI/worker 部署和真实依赖。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/README.md\n- C:/Users/jy/Documents/GitHub/OpenVigil/ARCHITECTURE.md"}
+{"kind":"slide","id":"sl/ev3ao5","slide":19,"title":"可靠性","textShapes":21}
+{"kind":"shape","id":"sh/betkv2t8","slide":19,"bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/wz21o7ut","slide":19,"text":"可靠性","textPreview":"可靠性","textChars":3,"textLines":1,"bbox":[72,30,260,24]}
+{"kind":"textbox","id":"sh/x0b2xcby","slide":19,"text":"当前证据与生产边界","textPreview":"当前证据与生产边界","textChars":9,"textLines":1,"bbox":[72,58,900,58]}
+{"kind":"textbox","id":"sh/m90jixcb","slide":19,"text":"已验证工程基线与待联合验收事项分开呈现","textPreview":"已验证工程基线与待联合验收事项分开呈现","textChars":19,"textLines":1,"bbox":[74,113,1000,34]}
+{"kind":"textbox","id":"sh/na9kr2tw","slide":19,"text":"19","textPreview":"19","textChars":2,"textLines":1,"bbox":[1180,36,48,30]}
+{"kind":"shape","id":"sh/obi1k7uh","slide":19,"bbox":[72,151,1136,2]}
+{"kind":"textbox","id":"sh/9cr2tsb2","slide":19,"text":"OpenVigil · 三峡交流材料","textPreview":"OpenVigil · 三峡交流材料","textChars":18,"textLines":1,"bbox":[72,686,300,18]}
+{"kind":"textbox","id":"sh/6543uhcv","slide":19,"text":"19","textPreview":"19","textChars":2,"textLines":1,"bbox":[1165,682,42,20]}
+{"kind":"textbox","id":"sh/76dk3mtg","slide":19,"text":"当前树的本地与隔离环境证据","textPreview":"当前树的本地与隔离环境证据","textChars":13,"textLines":1,"bbox":[76,186,510,36]}
+{"kind":"textbox","id":"sh/jep0be94","slide":19,"text":"425","textPreview":"425","textChars":3,"textLines":1,"bbox":[76,250,140,48]}
+{"kind":"textbox","id":"sh/idgji9sz","slide":19,"text":"后端全量测试","textPreview":"后端全量测试","textChars":6,"textLines":1,"bbox":[76,302,148,44]}
+{"kind":"textbox","id":"sh/5g7id4ra","slide":19,"text":"184","textPreview":"184","textChars":3,"textLines":1,"bbox":[246,250,140,48]}
+{"kind":"textbox","id":"sh/kfy1kjap","slide":19,"text":"前端 Node 测试","textPreview":"前端 Node 测试","textChars":10,"textLines":1,"bbox":[246,302,148,44]}
+{"kind":"textbox","id":"sh/72pkfe9g","slide":19,"text":"29","textPreview":"29","textChars":2,"textLines":1,"bbox":[416,250,140,48]}
+{"kind":"textbox","id":"sh/61gj69sv","slide":19,"text":"Playwright 浏览器验收","textPreview":"Playwright 浏览器验收","textChars":16,"textLines":1,"bbox":[416,302,148,44]}
+{"kind":"textbox","id":"sh/t4r2horm","slide":19,"text":"23","textPreview":"23","textChars":2,"textLines":1,"bbox":[76,380,140,48]}
+{"kind":"textbox","id":"sh/s3i18ja1","slide":19,"text":"真实 PostgreSQL 合同","textPreview":"真实 PostgreSQL 合同","textChars":16,"textLines":1,"bbox":[76,432,148,44]}
+{"kind":"textbox","id":"sh/f69kjy9c","slide":19,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[246,380,140,48]}
+{"kind":"textbox","id":"sh/u50jat87","slide":19,"text":"真实跨层 E2E","textPreview":"真实跨层 E2E","textChars":8,"textLines":1,"bbox":[246,432,148,44]}
+{"kind":"textbox","id":"sh/ad4vyhgb","slide":19,"text":"验证记录截至 2026-09-12 / 14，后续提交与远程 CI 需要重新确认。","textPreview":"验证记录截至 2026-09-12 / 14，后续提交与远程 CI 需要重新确认。","textChars":41,"textLines":1,"bbox":[76,542,490,56]}
+{"kind":"shape","id":"sh/bedcrmxw","slide":19,"bbox":[624,184,584,430]}
+{"kind":"textbox","id":"sh/cf6d0ryh","slide":19,"text":"仍需联合验收","textPreview":"仍需联合验收","textChars":6,"textLines":1,"bbox":[660,214,450,38]}
+{"kind":"textbox","id":"sh/xgfutwf2","slide":19,"text":"真实身份目录、租户与资产范围\n现场 SCADA、CMS、气象与 EAM 数据契约\n模型供应商、生产权重与向量服务\n注册表摘要、SBOM、签名与集群准入\n负载、故障、备份恢复、告警路由和现场验收","textPreview":"真实身份目录、租户与资产范围 | 现场 SCADA、CMS、气象与 EAM 数据契约 | 模型供应商、生产权重与向量服务 | 注册表摘要、SBOM、签名与集群准入 | 负载、故障、备份恢复、告警路由和现场验收","textChars":96,"textLines":5,"bbox":[660,282,490,250]}
+{"kind":"shape","id":"sh/294vuhgf","slide":19,"bbox":[680,550,470,30]}
+{"kind":"textbox","id":"sh/3adcnmx0","slide":19,"text":"当前状态：PRODUCTION CANDIDATE / NOT ACCEPTED","textPreview":"当前状态：PRODUCTION CANDIDATE / NOT ACCEPTED","textChars":40,"textLines":1,"bbox":[688,553,454,24]}
+{"kind":"notes","id":"nt/ev3ao5","slide":19,"text":"本页用于主动说明证据边界。远端 backend 和 CARE runner 仍有待复验事项，不能表述为 RELEASE ACCEPTED 或 PRODUCTION LIVE。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/EXECUTION_PROGRESS.md\n- C:/Users/jy/Documents/GitHub/OpenVigil/PRODUCT_REQUIREMENTS.md"}
+{"kind":"slide","id":"sl/rz5sgc","slide":20,"title":"面向三峡的联合验证建议","textShapes":17}
+{"kind":"shape","id":"sh/jidkzi9s","slide":20,"bbox":[860,0,28,720]}
+{"kind":"textbox","id":"sh/ihkj6d8n","slide":20,"text":"面向三峡的联合验证建议","textPreview":"面向三峡的联合验证建议","textChars":11,"textLines":1,"bbox":[72,58,730,62]}
+{"kind":"textbox","id":"sh/hgb2x8r2","slide":20,"text":"从一个高价值故障场景开始，\n用真实数据、真实接口和共同验收标准推进","textPreview":"从一个高价值故障场景开始， | 用真实数据、真实接口和共同验收标准推进","textChars":33,"textLines":2,"bbox":[74,132,700,60]}
+{"kind":"textbox","id":"sh/wf2143qh","slide":20,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[74,228,58,30]}
+{"kind":"textbox","id":"sh/vetkvi9w","slide":20,"text":"场景定义","textPreview":"场景定义","textChars":4,"textLines":1,"bbox":[146,224,170,36]}
+{"kind":"textbox","id":"sh/utkj2d8b","slide":20,"text":"选定资产、部件与处置目标","textPreview":"选定资产、部件与处置目标","textChars":12,"textLines":1,"bbox":[330,228,460,34]}
+{"kind":"shape","id":"sh/9sb2t8rq","slide":20,"bbox":[146,277,642,1]}
+{"kind":"textbox","id":"sh/8r2103q5","slide":20,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[74,324,58,30]}
+{"kind":"textbox","id":"sh/ypwjqtwv","slide":20,"text":"数据对接","textPreview":"数据对接","textChars":4,"textLines":1,"bbox":[146,320,170,36]}
+{"kind":"textbox","id":"sh/zq50zydg","slide":20,"text":"确认 SCADA/CMS/EAM 字段、质量与权限","textPreview":"确认 SCADA/CMS/EAM 字段、质量与权限","textChars":25,"textLines":1,"bbox":[330,324,460,34]}
+{"kind":"shape","id":"sh/0be1s3e1","slide":20,"bbox":[146,373,642,1]}
+{"kind":"textbox","id":"sh/lcni18vm","slide":20,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[74,420,58,30]}
+{"kind":"textbox","id":"sh/qlczmtwz","slide":20,"text":"沙箱联调","textPreview":"沙箱联调","textChars":4,"textLines":1,"bbox":[146,416,170,36]}
+{"kind":"textbox","id":"sh/bml0vedk","slide":20,"text":"跑通诊断、决策、审批与工单闭环","textPreview":"跑通诊断、决策、审批与工单闭环","textChars":15,"textLines":1,"bbox":[330,420,460,34]}
+{"kind":"shape","id":"sh/cnu1oje5","slide":20,"bbox":[146,469,642,1]}
+{"kind":"textbox","id":"sh/donixovq","slide":20,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[74,516,58,30]}
+{"kind":"textbox","id":"sh/2hczi9w3","slide":20,"text":"联合验收","textPreview":"联合验收","textChars":4,"textLines":1,"bbox":[146,512,170,36]}
+{"kind":"textbox","id":"sh/3il0red8","slide":20,"text":"验证安全、性能、恢复和业务可用性","textPreview":"验证安全、性能、恢复和业务可用性","textChars":16,"textLines":1,"bbox":[330,516,460,34]}
+{"kind":"shape","id":"sh/rmhgjat0","slide":20,"bbox":[146,565,642,1]}
+{"kind":"textbox","id":"sh/6l8fq5cf","slide":20,"text":"建议讨论的首要问题","textPreview":"建议讨论的首要问题","textChars":9,"textLines":1,"bbox":[74,622,240,26]}
+{"kind":"textbox","id":"sh/tozylkb6","slide":20,"text":"首个闭环场景是什么？数据与接口由谁负责？什么证据算验收通过？","textPreview":"首个闭环场景是什么？数据与接口由谁负责？什么证据算验收通过？","textChars":30,"textLines":1,"bbox":[320,620,470,36]}
+{"kind":"textbox","id":"sh/snqxsful","slide":20,"text":"OpenVigil","textPreview":"OpenVigil","textChars":9,"textLines":1,"bbox":[914,642,300,34]}
+{"kind":"image","id":"im/xgvexgnm","slide":20,"name":"","alt":"海上风电场，来自用户提供参考材料","bbox":[882,0,398,720]}
+{"kind":"notes","id":"nt/rz5sgc","slide":20,"text":"收尾建议：把交流落到一个可审计的纵向切片。首轮优先只读接入和辅助决策，不在联合验收前连接真实设备控制。\n\n资料来源：\n- C:/Users/jy/Documents/GitHub/OpenVigil/92-中汐建科-风电运维多智能体介绍-干际阳.pdf\n- C:/Users/jy/Documents/GitHub/OpenVigil/PRODUCT_REQUIREMENTS.md"}

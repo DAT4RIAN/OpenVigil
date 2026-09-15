@@ -3,6 +3,7 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .toolbar,
@@ -19,6 +20,7 @@
 .toolbar {
   gap: 12px;
   border-bottom: 1px solid var(--border);
+  padding-block: 10px;
 }
 
 .toolbarPrimary,
@@ -72,6 +74,13 @@
 
 .searchField {
   width: 100%;
+  background: var(--surface-subtle);
+}
+
+.searchField:focus-within {
+  border-color: var(--primary);
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .clearSearch {
@@ -152,7 +161,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   background: var(--surface);
-  box-shadow: 0 14px 40px rgb(4 18 32 / 20%);
+  box-shadow: var(--shadow-md);
 }
 
 .columnsPopover label {
@@ -184,10 +193,11 @@
   height: 44px;
   padding: 0 12px;
   border-bottom: 1px solid var(--border);
+  background: var(--surface-subtle);
   color: var(--foreground-muted);
   font-size: var(--font-body);
-  font-weight: 700;
-  letter-spacing: 0.045em;
+  font-weight: 600;
+  letter-spacing: 0;
   text-align: left;
   text-transform: uppercase;
   white-space: nowrap;
@@ -209,11 +219,18 @@
   cursor: pointer;
 }
 
-.table tbody tr:hover,
-.table tbody tr:focus-visible,
-.activeRow {
+.table tbody tr:hover {
   background: var(--surface-subtle);
-  outline: none;
+}
+
+.table tbody tr:focus-visible {
+  background: var(--primary-soft);
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.table tbody tr.activeRow {
+  background: var(--primary-soft);
 }
 
 .table tbody tr:last-child td {
@@ -246,6 +263,8 @@
 
 .pagination {
   border-top: 1px solid var(--border);
+  background: var(--surface-subtle);
+  border-radius: 0 0 12px 12px;
 }
 
 .pagination > div {

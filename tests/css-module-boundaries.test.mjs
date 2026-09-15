@@ -20,7 +20,7 @@ const styleFiles = [
   "13-access-recovery.css",
 ];
 
-test("the global stylesheet is an ordered import entry with an unchanged rule stream", async () => {
+test("the global stylesheet preserves import order and the reviewed rule stream", async () => {
   const entry = await readFile(new URL("app/globals.css", root), "utf8");
   const imports = [...entry.matchAll(/@import "\.\/styles\/([^"]+)";/g)].map((match) => match[1]);
   assert.deepEqual(imports, styleFiles);
@@ -30,8 +30,10 @@ test("the global stylesheet is an ordered import entry with an unchanged rule st
     styleFiles.map((file) => readFile(new URL(`app/styles/${file}`, root), "utf8")),
   );
   const ruleStream = modules.join("").replaceAll(/\s+/g, "");
+  // Visual baseline intentionally revised by the 2026-09-15 polish.
+  // See docs/design/frontend-polish-plan.md for screenshot and behavior checks.
   assert.equal(
     createHash("sha256").update(ruleStream).digest("hex"),
-    "6953a922bcab45fba6c56bd52bf2d76fe1d72ab5198c68c3f855d24e951db964",
+    "fcdff4b5e098fe4627f71a776dda9dfe1a603b15eeab51251ddb52e25f2673c7",
   );
 });

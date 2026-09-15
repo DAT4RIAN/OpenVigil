@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#EDE7E0">
+<title>食记 FERN TABLE · 一日三餐工作台 — H5 App 原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+/* finesse · register=product · A=暖砂骨白+单一赭红 · B=Manrope-800数字/NotoSansSC正文 · C=phone-app-4tabs+扫描sheet · D=11段圆弧仪表+餐食卡+营养三列 · E=food-photography · SOUL=6 SPECTACLE=4 DENSITY=7
+   ⚠️ 第三版。这一页返工了两轮：
+     v1 雾纸底 + 零卡片印刷网格 → 用户「太难看了」
+     v2 满屏晨雾实景 + 白色底抽屉（照 h5-tuscany）→ 用户「还是太难看」
+     v3（本版）用户指定：「h5-glow 这个是不错的，但是内容需要调整，换一个内容」
+   所以这版直接继承 97·h5-glow 那套已被认可的语言 —— 暖砂底 + 骨白卡 + 单一强调色 +
+   11 段圆弧仪表 + 「左产品图 + 右大数字 + 三列指标」的卡片骨架 + 黑色药丸 TabBar + 扫描 sheet。
+   **换掉的是题材和强调色**：护肤步骤 → 一日三餐；赤陶橙 #F0885A → 赭红 #C0563C（同族但更沉，
+   两页并排不会看成同一页）。glow 那套骨架本来就是照餐食卡设计的，这次算是物归原主。 */
+:root{
+  --sand:#EDE7E0;        /* 页底暖砂 */
+  --sand-2:#E4DCD2;      /* 次级面 */
+  --card:#FAF7F3;        /* 卡片骨白 */
+  --ink:#1C1917;
+  --ink-2:#544D45;
+  --dim:#9C938A;
+  --track:#DFD7CC;
+  --clay:#C0563C;        /* 唯一强调色：CTA / 已完成 / 仪表 */
+  --clay-2:#D0795C;      /* 圆弧奇偶段的第二档，只用于仪表 */
+  --line:rgba(28,25,23,.07);
+  --ease:cubic-bezier(.22,.9,.28,1);
+  --sh:0 6px 22px -10px rgba(60,48,38,.3);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{
+  background:#D8CFC4;color:var(--ink);
+  font-family:"Noto Sans SC",-apple-system,"PingFang SC",sans-serif;
+  display:flex;align-items:center;justify-content:center;
+}
+.num{font-family:Manrope,"Noto Sans SC",sans-serif;font-variant-numeric:tabular-nums}
+
+.phone{position:relative;overflow:hidden;width:100%;height:100%;background:var(--sand)}
+@media (min-width:560px){
+  body{background:radial-gradient(120% 90% at 50% 0%,#E7DED3 0%,#C9BFB2 70%)}
+  .phone{width:400px;height:min(866px,94vh);border-radius:48px;box-shadow:0 50px 110px -34px rgba(58,44,32,.72),0 0 0 11px #17140F,0 0 0 12px rgba(255,255,255,.1)}
+}
+
+/* ── 状态栏 ─────────────────────────────────────── */
+.status{
+  position:absolute;top:0;left:0;right:0;height:calc(env(safe-area-inset-top) + 46px);
+  padding:calc(env(safe-area-inset-top) + 12px) 30px 0;
+  display:flex;align-items:flex-start;justify-content:space-between;
+  font:600 14px/1 Manrope,sans-serif;letter-spacing:.2px;z-index:60;pointer-events:none;color:var(--ink)
+}
+.status .r{display:flex;align-items:center;gap:5px}
+.status svg{display:block}
+.island{position:absolute;top:calc(env(safe-area-inset-top) + 8px);left:50%;transform:translateX(-50%);width:106px;height:30px;border-radius:999px;background:#17140F;z-index:61}
+
+.app{position:absolute;inset:0;display:flex;flex-direction:column;padding-top:calc(env(safe-area-inset-top) + 46px)}
+
+/* ── 顶栏 ───────────────────────────────────────────
+   照 glow 的做法：**居中小标题 + 两侧圆按钮**。
+   第一版这里放的是左对齐 23px 大标题 + 头像，视觉重量压过了下面的圆弧仪表，
+   两个「主角」贴在一起，用户的原话是「上面的符号都被码表挡住了」——
+   不是真的被盖住，是顶栏太重把仪表顶到了脸上。顶栏轻下来，仪表才立得住 */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:6px 20px 14px;flex:none}
+.tb-btn{
+  width:42px;height:42px;border-radius:14px;background:var(--card);border:none;
+  display:grid;place-items:center;box-shadow:var(--sh);position:relative;cursor:pointer;
+  transition:transform .2s var(--ease)
+}
+.tb-btn:active{transform:scale(.92)}
+.tb-btn .dot{position:absolute;top:9px;right:9px;width:7px;height:7px;border-radius:50%;background:var(--clay);border:2px solid var(--card)}
+.tb-title{font-size:14px;font-weight:500;letter-spacing:.02em;text-align:center}
+.tb-title small{display:block;font-size:10px;color:var(--dim);font-weight:400;margin-top:3px;letter-spacing:.08em}
+.av{
+  width:42px;height:42px;border-radius:50%;flex:none;overflow:hidden;position:relative;cursor:pointer;
+  box-shadow:var(--sh);border:none;padding:0;background:var(--card);transition:transform .2s var(--ease)
+}
+.av img{width:100%;height:100%;object-fit:cover;display:block}
+.av:active{transform:scale(.92)}
+
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 20px calc(env(safe-area-inset-bottom) + 112px)}
+.scroll::-webkit-scrollbar{display:none}
+.view{display:none}
+.view.on{display:block}
+
+/* ══ 11 段圆弧仪表（glow 的头号构件，这里换成热量） ══
+   每段 23×37、圆角 9，绕 transform-origin:50% 128px 旋转，跨度 202°（−101°→101°）。
+   两个坑（沿用 glow 的记录）：① 段必须插在中间读数之前，同为 absolute 时后来的在上，
+   appendChild 会让圆弧盖住数字；② 奇偶两档色，单一色排开会读成一条实心弧、丢掉「一段是一餐」的语义 */
+.gaugeCard{background:transparent;padding:4px 0 2px}
+.gauge{position:relative;width:250px;height:142px;margin:0 auto}
+.seg{
+  position:absolute;left:50%;top:0;width:23px;height:37px;border-radius:9px;background:var(--track);
+  transform:translateX(-50%) rotate(var(--a));transform-origin:50% 128px;
+  transition:background .45s var(--ease)
+}
+.seg.on{background:var(--clay)}
+.seg.on:nth-child(odd){background:var(--clay-2)}
+.gauge-mid{position:absolute;left:0;right:0;bottom:2px;text-align:center}
+.gauge-mid .bolt{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--dim);letter-spacing:.04em}
+.gauge-mid .big{font:800 34px/1.05 Manrope,sans-serif;margin:6px 0 3px;letter-spacing:-.02em}
+.gauge-mid .big i{font-style:normal;font-size:17px;font-weight:700;color:var(--ink-2)}
+.gauge-mid .sub{font-size:11.5px;color:var(--clay);font-weight:500}
+
+/* 三大营养素：三列 + 细进度条
+   ⚠️ margin-top 必须留够 40px：.gauge 容器只有 142px 高，但两侧的段绕
+   transform-origin:50% 128px 旋到 ±101° 后，包围盒底边落在 y≈164 —— **溢出容器 22px**。
+   absolute + rotate 不会把容器撑高，只留 14px 的话这三张白卡会被段压住（用户报过一次） */
+.macros{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:40px}
+.macro{background:var(--card);border-radius:18px;padding:13px;box-shadow:var(--sh)}
+.macro dt{font-size:10px;color:var(--dim);letter-spacing:.04em}
+.macro dd{font:800 18px/1 Manrope,sans-serif;margin-top:8px;letter-spacing:-.02em}
+.macro dd small{font-size:10px;color:var(--dim);font-weight:700;margin-left:2px}
+.macro .t{height:4px;border-radius:99px;background:var(--track);margin-top:10px;overflow:hidden}
+.macro .t i{display:block;height:100%;border-radius:99px;background:var(--ink);transition:width .8s var(--ease)}
+.macro .t i.a{background:var(--clay)}
+
+/* ── 时段 chips ─────────────────────────────────── */
+.chips{display:flex;gap:8px;overflow-x:auto;margin:20px -20px 14px;padding:2px 20px 2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:none;height:36px;padding:0 16px;border:none;border-radius:999px;background:var(--card);
+  font:500 12.5px/1 "Noto Sans SC",sans-serif;color:var(--ink-2);cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px;box-shadow:var(--sh);
+  transition:background .28s var(--ease),color .28s,transform .2s var(--ease)
+}
+.chip b{font:800 11px/1 Manrope,sans-serif;color:var(--dim);transition:color .28s}
+.chip.on{background:var(--ink);color:#F6F2ED}
+.chip.on b{color:var(--clay)}
+.chip:active{transform:scale(.94)}
+
+/* 说明条 */
+.note{
+  background:var(--sand-2);border-radius:16px;padding:12px 14px;font-size:11px;color:var(--ink-2);
+  line-height:1.7;margin-bottom:12px
+}
+.note b{color:var(--ink);font-weight:700}
+
+/* ── 餐食卡：左图 + 右大数字 + 三列指标 ───────────── */
+.meal{
+  background:var(--card);border-radius:22px;padding:13px;margin-bottom:10px;box-shadow:var(--sh);
+  display:flex;gap:13px;position:relative;overflow:hidden;cursor:pointer;
+  transition:transform .3s var(--ease),opacity .3s
+}
+.meal:active{transform:scale(.985)}
+.meal .thumb{width:62px;height:62px;border-radius:16px;object-fit:cover;flex:none;background:var(--sand-2)}
+.meal .body{flex:1;min-width:0}
+.meal .l1{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.meal .name{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meal .kcal{font:800 15px/1 Manrope,sans-serif;flex:none}
+.meal .l2{display:flex;align-items:baseline;justify-content:space-between;margin-top:4px}
+.meal .time{font-size:10.5px;color:var(--dim)}
+.meal .tagline{font-size:10.5px;color:var(--clay);font-weight:500}
+.meal .metrics{display:flex;gap:16px;margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}
+.meal .metrics div{min-width:0}
+.meal .metrics dt{font-size:9.5px;color:var(--dim);margin-bottom:3px}
+.meal .metrics dd{font-size:11.5px;font-weight:500;white-space:nowrap}
+.meal .tick{
+  position:absolute;right:13px;bottom:13px;width:26px;height:26px;border-radius:50%;
+  border:1.5px solid var(--track);background:transparent;cursor:pointer;display:grid;place-items:center;
+  transition:background .3s var(--ease),border-color .3s,transform .25s var(--ease)
+}
+.meal .tick svg{opacity:0;transform:scale(.5);transition:opacity .25s,transform .35s var(--ease)}
+.meal .tick:active{transform:scale(.85)}
+.meal.done{opacity:.62}
+.meal.done .thumb{filter:grayscale(.45)}
+.meal.done .tick{background:var(--clay);border-color:var(--clay)}
+.meal.done .tick svg{opacity:1;transform:none}
+.meal.done .name{text-decoration:line-through;text-decoration-color:var(--dim);text-decoration-thickness:1px}
+
+.addbar{
+  width:100%;height:46px;border:none;border-radius:16px;background:var(--sand-2);color:var(--ink);
+  display:flex;align-items:center;justify-content:center;gap:8px;margin:2px 0 4px;cursor:pointer;
+  font:500 12.5px/1 "Noto Sans SC",sans-serif;transition:background .25s,transform .2s var(--ease)
+}
+.addbar:active{transform:scale(.985)}
+
+/* streak 深色条 */
+.streak{
+  background:var(--ink);color:#F6F2ED;border-radius:22px;padding:16px 18px;margin:18px 0 4px;
+  display:flex;align-items:center;justify-content:space-between
+}
+.streak .n{font:800 26px/1 Manrope,sans-serif;color:var(--clay-2)}
+.streak p{font-size:10.5px;color:rgba(246,242,237,.5);margin-top:5px;letter-spacing:.02em}
+.streak .week{display:flex;gap:5px}
+.streak .week i{width:9px;height:26px;border-radius:5px;background:rgba(246,242,237,.16);display:block}
+.streak .week i.f{background:var(--clay)}
+
+.lbl{display:flex;align-items:baseline;justify-content:space-between;margin:24px 2px 12px}
+.lbl h3{font-size:15px;font-weight:700}
+.lbl span{font:500 10.5px/1 Manrope,sans-serif;color:var(--dim)}
+
+/* 记录页：柱图 */
+.bars{display:flex;align-items:flex-end;gap:8px;height:132px;margin-top:4px}
+.bcol{flex:1;height:100%;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer}
+.trk{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;justify-content:flex-end;border-radius:99px;overflow:hidden;background:var(--track)}
+.trk i{display:block;width:100%;transition:height .8s var(--ease)}
+.trk i.p{background:var(--clay)}
+.trk i.c{background:var(--clay-2)}
+.trk i.f{background:var(--ink-2)}
+.bcol span{font:500 9.5px/1 Manrope,sans-serif;color:var(--dim)}
+.blg{display:flex;gap:14px;margin-top:12px;font-size:10px;color:var(--ink-2)}
+.blg em{font-style:normal;display:inline-flex;align-items:center;gap:5px}
+.blg em b{width:8px;height:8px;border-radius:2px;display:block}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.st{background:var(--card);border-radius:20px;padding:15px;box-shadow:var(--sh)}
+.st .k{font-size:10.5px;color:var(--dim)}
+.st .v{font:800 24px/1 Manrope,sans-serif;letter-spacing:-.025em;margin-top:10px}
+.st .v small{font-size:11px;color:var(--dim);margin-left:2px}
+.st .d{font-size:10px;color:var(--ink-2);margin-top:7px}
+
+/* 常吃的：横滑 */
+.rail{display:flex;gap:11px;overflow-x:auto;margin:0 -20px;padding:2px 20px 6px;scrollbar-width:none}
+.rail::-webkit-scrollbar{display:none}
+.rc{flex:none;width:132px;cursor:pointer;transition:transform .22s var(--ease)}
+.rc:active{transform:scale(.96)}
+.rc img{width:132px;height:100px;border-radius:18px;object-fit:cover;display:block;box-shadow:var(--sh)}
+.rc b{display:block;font-size:12px;font-weight:700;margin-top:9px}
+.rc span{display:block;font-size:10px;color:var(--dim);margin-top:4px}
+
+/* 频道网格 */
+.mods{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.mod{
+  background:var(--card);border-radius:18px;padding:14px;display:flex;align-items:center;gap:11px;cursor:pointer;
+  box-shadow:var(--sh);position:relative;transition:transform .2s var(--ease)
+}
+.mod:active{transform:scale(.96)}
+.mod .ic{width:34px;height:34px;border-radius:12px;background:var(--sand);display:grid;place-items:center;flex:none}
+.mod b{font-size:12.5px;font-weight:700}
+.mod .nd{position:absolute;top:11px;right:12px;width:6px;height:6px;border-radius:50%;background:var(--clay)}
+
+.btn{
+  width:100%;height:52px;border:none;border-radius:17px;background:var(--clay);color:#fff;
+  font:700 14.5px/1 "Noto Sans SC",sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;
+  box-shadow:0 14px 26px -14px rgba(160,66,42,.9);transition:transform .2s var(--ease)
+}
+.btn:active{transform:scale(.97)}
+.btn.ghost{background:var(--card);color:var(--ink);box-shadow:var(--sh)}
+
+/* ── 黑色药丸 TabBar（中间赭红凸起 = 拍照） ───────── */
+.tabbar{
+  position:absolute;left:20px;right:20px;bottom:calc(env(safe-area-inset-bottom) + 16px);height:64px;
+  background:#17140F;border-radius:24px;z-index:40;
+  display:flex;align-items:center;justify-content:space-around;padding:0 10px;
+  box-shadow:0 16px 34px -14px rgba(35,25,16,.7)
+}
+.tab{width:44px;height:44px;border:none;background:transparent;display:grid;place-items:center;cursor:pointer;border-radius:14px;transition:transform .2s var(--ease)}
+.tab svg{stroke:rgba(246,242,237,.42);transition:stroke .3s}
+.tab.on svg{stroke:#F6F2ED}
+.tab:active{transform:scale(.86)}
+.cam{
+  width:52px;height:52px;border:none;border-radius:18px;background:var(--clay);display:grid;place-items:center;cursor:pointer;
+  box-shadow:0 10px 20px -8px rgba(192,86,60,.9);transition:transform .22s var(--ease)
+}
+.cam:active{transform:scale(.9)}
+
+/* ── 扫描 sheet ─────────────────────────────────── */
+.mask{position:absolute;inset:0;background:rgba(28,25,23,.5);opacity:0;pointer-events:none;transition:opacity .36s var(--ease);z-index:70}
+.mask.on{opacity:1;pointer-events:auto}
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;z-index:71;background:var(--sand);
+  border-radius:28px 28px 0 0;padding:10px 20px calc(env(safe-area-inset-bottom) + 22px);
+  transform:translateY(105%);transition:transform .48s var(--ease)
+}
+.sheet.on{transform:none}
+.sheet .grab{width:38px;height:4px;border-radius:3px;background:var(--track);margin:0 auto 16px}
+.sheet h3{font-size:18px;font-weight:700}
+.sheet .lead{font-size:11px;color:var(--dim);margin-top:7px}
+.scanbox{
+  position:relative;height:186px;border-radius:22px;overflow:hidden;margin:16px 0 14px;background:var(--sand-2)
+}
+.scanbox img{width:100%;height:100%;object-fit:cover;display:block;filter:brightness(.94)}
+.scanbox .corner{position:absolute;width:22px;height:22px;border:2.5px solid var(--clay)}
+.scanbox .c1{left:14px;top:14px;border-right:0;border-bottom:0;border-radius:8px 0 0 0}
+.scanbox .c2{right:14px;top:14px;border-left:0;border-bottom:0;border-radius:0 8px 0 0}
+.scanbox .c3{left:14px;bottom:14px;border-right:0;border-top:0;border-radius:0 0 0 8px}
+.scanbox .c4{right:14px;bottom:14px;border-left:0;border-top:0;border-radius:0 0 8px 0}
+.scanbox .line{
+  position:absolute;left:14px;right:14px;height:2px;background:linear-gradient(90deg,transparent,var(--clay),transparent);
+  box-shadow:0 0 12px rgba(192,86,60,.8);animation:scan 2.1s var(--ease) infinite alternate
+}
+@keyframes scan{from{top:16px}to{top:166px}}
+.reads{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.read{background:var(--card);border-radius:16px;padding:13px;box-shadow:var(--sh);text-align:center}
+.read dt{font-size:9.5px;color:var(--dim)}
+.read dd{font:800 19px/1 Manrope,sans-serif;margin-top:8px;letter-spacing:-.02em}
+.read dd small{font-size:10px;color:var(--dim);font-weight:700}
+
+.toast{
+  position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 98px);transform:translate(-50%,14px);
+  background:var(--ink);color:#F6F2ED;font-size:12.5px;font-weight:500;padding:12px 18px;border-radius:14px;z-index:90;
+  opacity:0;pointer-events:none;transition:opacity .26s,transform .36s var(--ease);white-space:nowrap
+}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+@media (prefers-reduced-motion:reduce){
+  .scanbox .line{animation:none;top:92px}
+  .seg,.macro .t i,.trk i{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="island"></div>
+  <div class="status">
+    <span class="num" id="clock">9:41</span>
+    <span class="r">
+      <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect y="7.5" width="3" height="3.5" rx="1"/><rect x="4.5" y="5.5" width="3" height="5.5" rx="1"/><rect x="9" y="3" width="3" height="8" rx="1"/><rect x="13.5" width="3" height="11" rx="1"/></svg>
+      <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M8 9.6a1.3 1.3 0 100-2.6 1.3 1.3 0 000 2.6z"/><path d="M4.4 6.1a5.1 5.1 0 017.2 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M1.8 3.4a8.8 8.8 0 0112.4 0" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+      <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x=".6" y=".6" width="20" height="10.8" rx="3.2" stroke="currentColor" stroke-opacity=".4"/><rect x="2.2" y="2.2" width="13" height="7.6" rx="2" fill="currentColor"/><path d="M22.4 4.2v3.6a2 2 0 000-3.6z" fill="currentColor" fill-opacity=".4"/></svg>
+    </span>
+  </div>
+
+  <div class="app">
+    <div class="topbar">
+      <button class="tb-btn" data-toast="7 月已记 84 餐" aria-label="日历">
+        <svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="#1C1917" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="3.2" width="14" height="12.8" rx="3"/><path d="M6 1.4v3.2M12 1.4v3.2M2 7.4h14"/></svg>
+      </button>
+      <div class="tb-title" id="pageTitle">今日食记<small id="hTag">7 月 30 日 · 周四</small></div>
+      <button class="tb-btn" data-toast="晚餐还没记 · 19:00 提醒" aria-label="提醒"><span class="dot"></span>
+        <svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="#1C1917" stroke-width="1.5" stroke-linecap="round"><path d="M4 7.6a5 5 0 1110 0c0 3.4 1.3 4.6 1.3 4.6H2.7S4 11 4 7.6z"/><path d="M7.4 15a1.8 1.8 0 003.2 0"/></svg>
+      </button>
+    </div>
+
+    <div class="scroll" id="scroll">
+
+      <!-- ══════ 今天 ══════ -->
+      <section class="view on" data-view="today">
+
+        <div class="gaugeCard">
+          <div class="gauge" id="gauge">
+            <div class="gauge-mid">
+              <span class="bolt">
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7.6 1.4L3 7.8h3.6L6.4 12.6 11 6.2H7.4z"/></svg>
+                今日摄入
+              </span>
+              <div class="big num"><span id="kcalN">0</span><i> / 1800 kcal</i></div>
+              <div class="sub" id="kcalSub">还可以吃 1800 kcal</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="macros">
+          <div class="macro"><dt>蛋白质</dt><dd class="num"><span id="mP">0</span><small>/95g</small></dd><div class="t"><i class="a" id="bP" style="width:0"></i></div></div>
+          <div class="macro"><dt>碳水</dt><dd class="num"><span id="mC">0</span><small>/210g</small></dd><div class="t"><i id="bC" style="width:0"></i></div></div>
+          <div class="macro"><dt>脂肪</dt><dd class="num"><span id="mF">0</span><small>/58g</small></dd><div class="t"><i id="bF" style="width:0"></i></div></div>
+        </div>
+
+        <div class="chips" id="chips"></div>
+        <div class="note" id="note"></div>
+        <div id="meals"></div>
+
+        <button class="addbar" id="addBar">
+          <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M9 3.6v10.8M3.6 9h10.8"/></svg>
+          加一餐
+        </button>
+
+        <div class="streak">
+          <div>
+            <div class="n num">23</div>
+            <p>连续记录天数 · 最长 41 天</p>
+          </div>
+          <div class="week" id="week"></div>
+        </div>
+
+        <div style="height:18px"></div>
+        <button class="btn" id="camBtn">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.4h3.2l1.3-2h5l1.3 2H17v9.2H3z"/><circle cx="10" cy="11" r="2.8"/></svg>
+          拍照记一餐
+        </button>
+      </section>
+
+      <!-- ══════ 记录 ══════ -->
+      <section class="view" data-view="log">
+        <div class="lbl" style="margin-top:8px"><h3>这一周</h3><span>每天的三餐结构</span></div>
+        <div class="st" style="padding:18px">
+          <div class="k">日均摄入</div>
+          <div class="v num">1740<small> kcal</small></div>
+          <div class="d">目标 1800 · 比上周少 90</div>
+          <div class="bars" id="bars"></div>
+          <div class="blg">
+            <em><b style="background:var(--clay)"></b>早</em>
+            <em><b style="background:var(--clay-2)"></b>午</em>
+            <em><b style="background:var(--ink-2)"></b>晚</em>
+          </div>
+        </div>
+
+        <div class="lbl"><h3>营养结构</h3><span>近 7 天平均</span></div>
+        <div class="grid2">
+          <div class="st"><div class="k">蛋白质占比</div><div class="v num">21<small>%</small></div><div class="d">建议 20–25%，达标</div></div>
+          <div class="st"><div class="k">外食次数</div><div class="v num">9<small>次</small></div><div class="d">比上周多 3 次</div></div>
+          <div class="st"><div class="k">最常缺的</div><div class="v" style="font-size:17px">膳食纤维</div><div class="d">7 天里 5 天不达标</div></div>
+          <div class="st"><div class="k">饮水</div><div class="v num">1.6<small>L</small></div><div class="d">目标 2L</div></div>
+        </div>
+
+        <div class="lbl"><h3>常吃的</h3><span>点一下再记一次</span></div>
+        <div class="rail" id="rail"></div>
+      </section>
+
+      <!-- ══════ 我的 ══════ -->
+      <section class="view" data-view="me">
+        <div class="st" style="display:flex;align-items:center;gap:13px;padding:16px;margin-top:8px">
+          <span class="av" style="box-shadow:none;width:52px;height:52px"><img data-ph="28" alt="头像"></span>
+          <div>
+            <h4 style="font-size:16px;font-weight:700">我的食记</h4>
+            <p style="font-size:11px;color:var(--ink-2);margin-top:5px">记录 168 天 · 共 402 餐</p>
+          </div>
+        </div>
+        <div class="lbl"><h3>我的频道</h3><span>长按拖动排序</span></div>
+        <div class="mods" id="mods"></div>
+        <div style="height:18px"></div>
+        <button class="btn ghost" id="exportBtn">导出 7 月饮食记录</button>
+      </section>
+
+    </div>
+
+    <nav class="tabbar">
+      <button class="tab on" data-tab="today" aria-label="今天">
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 4.4v6a2.6 2.6 0 005.2 0v-6M7.2 4.4v13.2M13.6 4.4c-1.2 1.8-1.2 4.6 0 6.4v6.8"/></svg>
+      </button>
+      <button class="tab" data-tab="log" aria-label="记录">
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17.4l4.4-5 3.4 3 3-4.2 3.2 3.8"/><path d="M4 3.6v14.8h14.8"/></svg>
+      </button>
+      <button class="cam" id="cam" aria-label="拍照">
+        <svg width="21" height="21" viewBox="0 0 22 22" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 7h3.4l1.4-2.2h5.6L15.2 7h3.4v10H3.4z"/><circle cx="11" cy="12" r="3.1"/></svg>
+      </button>
+      <button class="tab" data-tab="find" aria-label="发现">
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M13.8 8.2l-1.6 4.4-4.4 1.6 1.6-4.4z"/></svg>
+      </button>
+      <button class="tab" data-tab="me" aria-label="我的">
+        <svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="7.4" r="3.6"/><path d="M4.2 18.6a6.8 6.8 0 0113.6 0"/></svg>
+      </button>
+    </nav>
+  </div>
+
+  <div class="mask" id="mask"></div>
+  <div class="sheet" id="sheet">
+    <div class="grab"></div>
+    <h3>拍照识别</h3>
+    <p class="lead">对准餐盘，识别热量与三大营养素。</p>
+    <div class="scanbox">
+      <img data-ph="8" alt="正在识别的餐盘">
+      <span class="corner c1"></span><span class="corner c2"></span>
+      <span class="corner c3"></span><span class="corner c4"></span>
+      <span class="line"></span>
+    </div>
+    <div class="reads">
+      <div class="read"><dt>热量</dt><dd class="num"><span id="rK">—</span><small> kcal</small></dd></div>
+      <div class="read"><dt>蛋白质</dt><dd class="num"><span id="rP">—</span><small>g</small></dd></div>
+      <div class="read"><dt>脂肪</dt><dd class="num"><span id="rF">—</span><small>g</small></dd></div>
+    </div>
+    <button class="btn" id="saveBtn">记到晚餐</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
+  const RM = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const pad = n => String(n).padStart(2, '0');
+
+  /* 语料库占位图：原页用的是 ./_assets/ 里的实拍餐食照，收进语料库时换成
+     代码生成的 SVG。<img> 标签和它们的 object-fit / border-radius / filter 一个字没动 ——
+     真实项目里把 PH(n) 换回真实 URL 就是全部迁移工作。菜谱能带走，4MB 的 JPEG 带不走。 */
+  const PH = h => 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+       <defs><linearGradient id="g" x1="0" y1="0" x2=".7" y2="1">
+         <stop offset="0" stop-color="hsl(${h} 44% 66%)"/>
+         <stop offset="1" stop-color="hsl(${h + 26} 40% 34%)"/>
+       </linearGradient></defs>
+       <rect width="120" height="120" fill="url(#g)"/>
+       <circle cx="60" cy="52" r="28" fill="hsl(${h} 52% 82%)" opacity=".42"/>
+       <circle cx="60" cy="52" r="17" fill="hsl(${h + 40} 34% 26%)" opacity=".3"/>
+     </svg>`);
+  document.querySelectorAll('[data-ph]').forEach(el => { el.src = PH(+el.dataset.ph); });
+
+  let tt;
+  function toast(msg) {
+    const el = $('#toast');
+    el.textContent = msg; el.classList.add('on');
+    clearTimeout(tt); tt = setTimeout(() => el.classList.remove('on'), 1800);
+  }
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-toast]');
+    if (t) toast(t.dataset.toast);
+  });
+  function tickClock() {
+    const d = new Date();
+    $('#clock').textContent = d.getHours() + ':' + pad(d.getMinutes());
+  }
+  tickClock(); setInterval(tickClock, 20000);
+
+  function rollTo(el, to) {
+    const from = +(el.dataset.v || 0);
+    el.dataset.v = to;
+    if (RM) { el.textContent = to; return; }
+    const t0 = performance.now(), dur = 680;
+    const f = t => {
+      const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(from + (to - from) * e);
+      if (p < 1) requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f);
+  }
+
+  /* ══ 11 段圆弧仪表 ══════════════════════════════
+     段必须 insertBefore 到中间读数之前 —— 同为 absolute 时后来的在上，
+     appendChild 会让圆弧盖住数字（glow 踩过一次，这里照抄结论） */
+  const SEGN = 11;
+  const gauge = $('#gauge'), mid = $('.gauge-mid');
+  for (let i = 0; i < SEGN; i++) {
+    const s = document.createElement('span');
+    s.className = 'seg';
+    s.style.setProperty('--a', (-101 + i * (202 / (SEGN - 1))) + 'deg');
+    gauge.insertBefore(s, mid);
+  }
+
+  /* ══ 数据：四个时段，各自一份餐 ══════════════════ */
+  const SLOTS = [
+    {k:'breakfast', n:'早餐', t:'08:20', note:'早餐把<b>蛋白质</b>吃够，上午不容易饿 —— 你最近三天的早餐都只有碳水。'},
+    {k:'lunch',     n:'午餐', t:'12:30', note:'午餐是今天热量的大头。<b>先吃蛋白和蔬菜</b>，主食放最后，血糖曲线会平很多。'},
+    {k:'dinner',    n:'晚餐', t:'19:00', note:'晚餐离睡觉最好留 <b>3 小时</b>。今天你 23:00 睡，20:00 前吃完最舒服。'},
+    {k:'snack',     n:'加餐', t:'16:00', note:'下午的加餐控制在 <b>200 kcal</b> 以内，一把坚果或一份酸奶就够。'},
+  ];
+  const MEALS = {
+    breakfast: [
+      ['牛油果水波蛋吐司', PH(78), 420, '08:20', '蛋白质 22g', '碳水 38g', '脂肪 21g', '蛋白质够，很稳', 0],
+      ['希腊酸奶莓果杯',   PH(330), 210, '08:25', '蛋白质 12g', '碳水 26g', '脂肪 6g',  '再补一份蛋白',   1],
+    ],
+    lunch: [
+      ['三文鱼谷物碗',    PH(20), 610, '12:30', '蛋白质 38g', '碳水 52g', '脂肪 26g', '今天蛋白的主力', 1],
+      ['时蔬沙拉',        PH(96), 180, '12:40', '蛋白质 6g',  '碳水 18g', '脂肪 9g',  '纤维 8g，达标',  1],
+    ],
+    dinner: [
+      ['香煎牛柳配藜麦',  PH(12), 540, '19:00', '蛋白质 41g', '碳水 34g', '脂肪 24g', '偏晚，量已减',   0],
+      ['烤三文鱼沙拉',    PH(8), 380, '19:10', '蛋白质 30g', '碳水 12g', '脂肪 22g', '备选，二选一',   0],
+    ],
+    snack: [
+      ['华夫早午餐拼盘',  PH(40), 320, '16:00', '蛋白质 9g',  '碳水 44g', '脂肪 12g', '下午茶刚好',     0],
+      ['法式吐司',        PH(28), 460, '16:10', '蛋白质 9g',  '碳水 58g', '脂肪 20g', '偏甜，隔天再吃', 0],
+    ],
+  };
+  let slot = 'breakfast';
+  /* 起手：打头那张留未勾选（勾上就灰度 + 删除线，做封面第一张卡太吃亏），
+     其余早餐/午餐已记录，晚餐加餐留给用户勾 —— 一进来全空会显得这页没数据 */
+  const done = new Set();
+  Object.entries(MEALS).forEach(([k, list]) => list.forEach((m, i) => { if (m[8]) done.add(k + i); }));
+
+  $('#chips').innerHTML = SLOTS.map(s => `
+    <button class="chip${s.k === slot ? ' on' : ''}" data-k="${s.k}">${s.n}<b>${s.t}</b></button>`).join('');
+
+  const CHECK = '<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 7.4l3 3L11.4 4"/></svg>';
+  function paintMeals() {
+    $('#note').innerHTML = SLOTS.find(s => s.k === slot).note;
+    $('#meals').innerHTML = MEALS[slot].map(([nm, img, kcal, tm, p, c, f, tag], i) => `
+      <article class="meal${done.has(slot + i) ? ' done' : ''}" data-i="${i}">
+        <img class="thumb" src="${img}" alt="${nm}">
+        <div class="body">
+          <div class="l1"><span class="name">${nm}</span><span class="kcal num">${kcal}</span></div>
+          <div class="l2"><span class="time">${tm}</span><span class="tagline">${tag}</span></div>
+          <div class="metrics">
+            <div><dt>蛋白</dt><dd>${p.replace('蛋白质 ', '')}</dd></div>
+            <div><dt>碳水</dt><dd>${c.replace('碳水 ', '')}</dd></div>
+            <div><dt>脂肪</dt><dd>${f.replace('脂肪 ', '')}</dd></div>
+          </div>
+        </div>
+        <span class="tick">${CHECK}</span>
+      </article>`).join('');
+  }
+  $('#chips').addEventListener('click', e => {
+    const b = e.target.closest('.chip');
+    if (!b) return;
+    $$('.chip').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    slot = b.dataset.k;
+    paintMeals();
+    if (!RM) $$('.meal').forEach((c, i) => c.animate(
+      [{opacity:0, transform:'translateY(12px)'}, {opacity:1, transform:'none'}],
+      {duration:420, delay:i * 46, easing:'cubic-bezier(.22,.9,.28,1)', fill:'both'}));
+  });
+  $('#meals').addEventListener('click', e => {
+    const m = e.target.closest('.meal');
+    if (!m) return;
+    const key = slot + m.dataset.i, on = !done.has(key);
+    on ? done.add(key) : done.delete(key);
+    m.classList.toggle('done', on);
+    sync();
+    toast(on ? '已记录 · ' + MEALS[slot][+m.dataset.i][0] : '已撤销');
+  });
+
+  /* ══ 汇总：仪表 + 三大营养素跟着勾选走 ═══════════ */
+  const GOAL = 1800, GP = 95, GC = 210, GF = 58;
+  function sync() {
+    let k = 0, p = 0, c = 0, f = 0;
+    Object.entries(MEALS).forEach(([sk, list]) => list.forEach((m, i) => {
+      if (!done.has(sk + i)) return;
+      k += m[2];
+      p += parseInt(m[4].replace(/\D/g, ''), 10);
+      c += parseInt(m[5].replace(/\D/g, ''), 10);
+      f += parseInt(m[6].replace(/\D/g, ''), 10);
+    }));
+    rollTo($('#kcalN'), k);
+    const left = GOAL - k;
+    $('#kcalSub').textContent = left >= 0 ? `还可以吃 ${left} kcal` : `超出 ${-left} kcal`;
+    $('#kcalSub').style.color = left >= 0 ? 'var(--clay)' : '#B23A2A';
+    $('#hTag').textContent = '7 月 30 日 · ' + (k === 0 ? '还没开始记' : left < 0 ? '今天吃得有点多' : k > GOAL * .7 ? '今天吃得刚刚好' : '今天吃得还不错');
+    const lit = Math.round(Math.min(1, k / GOAL) * SEGN);
+    $$('.seg').forEach((s, i) => s.classList.toggle('on', i < lit));
+    rollTo($('#mP'), p); rollTo($('#mC'), c); rollTo($('#mF'), f);
+    $('#bP').style.width = Math.min(100, p / GP * 100) + '%';
+    $('#bC').style.width = Math.min(100, c / GC * 100) + '%';
+    $('#bF').style.width = Math.min(100, f / GF * 100) + '%';
+  }
+
+  /* streak 一周格 */
+  $('#week').innerHTML = [1,1,1,1,1,0,0].map(v => `<i class="${v ? 'f' : ''}"></i>`).join('');
+
+  /* ══ 记录页：堆叠柱图（早/午/晚三段） ═══════════ */
+  const WEEK = [['一',380,620,610],['二',420,540,560],['三',300,700,520],['四',420,790,540],['五',450,610,690],['六',520,880,720],['日',380,560,480]];
+  const wmax = Math.max(...WEEK.map(w => w[1] + w[2] + w[3]));
+  $('#bars').innerHTML = WEEK.map(([d, b, l, dn]) => {
+    const tot = b + l + dn, h = tot / wmax * 100;
+    return `<div class="bcol" data-toast="周${d} · 共 ${tot} kcal">
+      <div class="trk" style="flex:0 0 auto;height:${h}%;margin-top:auto">
+        <i class="f" style="height:${dn / tot * 100}%"></i>
+        <i class="c" style="height:${l / tot * 100}%"></i>
+        <i class="p" style="height:${b / tot * 100}%"></i>
+      </div><span>${d}</span></div>`;
+  }).join('');
+
+  /* 常吃的 */
+  const OFTEN = [
+    ['牛油果吐司',   PH(78), '本周 3 次 · 420 kcal'],
+    ['三文鱼碗',     PH(20), '本周 2 次 · 610 kcal'],
+    ['时蔬沙拉',     PH(96), '本周 4 次 · 180 kcal'],
+    ['酸奶莓果杯',   PH(330), '本周 2 次 · 210 kcal'],
+  ];
+  $('#rail').innerHTML = OFTEN.map(([n, img, s]) => `
+    <div class="rc" data-toast="${n} · 已再记一次"><img src="${img}" alt="${n}"><b>${n}</b><span>${s}</span></div>`).join('');
+
+  /* ══ 频道网格 ══════════════════════════════════ */
+  const IC = {
+    plan :'M4 5.4h14M4 11h14M4 16.6h9',
+    scale:'M3.4 6.4h15.2l-1.4 11.2H4.8zM7.6 6.4a3.4 3.4 0 016.8 0',
+    water:'M11 2.6s-5.4 5.2-5.4 9.2a5.4 5.4 0 0010.8 0c0-4-5.4-9.2-5.4-9.2z',
+    book :'M11 6.4C9 4.6 6.2 4.4 4 5v11c2.2-.6 5-.4 7 1.4 2-1.8 4.8-2 7-1.4V5c-2.2-.6-5-.4-7 1.4zM11 6.4v11',
+    cart :'M3 4.6h2.4l2 9.4h8.6l2-6.8H6.2M8.6 18a1.1 1.1 0 100-2.2 1.1 1.1 0 000 2.2zM15.4 18a1.1 1.1 0 100-2.2 1.1 1.1 0 000 2.2z',
+    fire :'M11 2.6c1.4 3 4.4 4.4 4.4 8a4.4 4.4 0 01-8.8 0c0-1.4.6-2.4 1.4-3.4.4 1 1 1.6 1.8 1.8-.6-2.2-.4-4.4 1.2-6.4z',
+  };
+  const MODS = [['本周餐单','plan',1],['体重记录','scale',0],['饮水','water',1],['食材百科','book',0],['采购清单','cart',1],['热量库','fire',0]];
+  $('#mods').innerHTML = MODS.map(([n, k, nd]) => `
+    <div class="mod" data-toast="${n} · 敬请期待">
+      ${nd ? '<span class="nd"></span>' : ''}
+      <span class="ic"><svg width="17" height="17" viewBox="0 0 22 22" fill="none" stroke="#544D45" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${IC[k]}"/></svg></span>
+      <b>${n}</b>
+    </div>`).join('');
+
+  /* ══ 扫描 sheet ════════════════════════════════ */
+  const open = () => {
+    $('#sheet').classList.add('on'); $('#mask').classList.add('on');
+    ['#rK','#rP','#rF'].forEach(s => $(s).textContent = '—');
+    /* 1.5s 后三项读数滚出，模拟识别耗时 —— 立刻出结果反而不像在「识别」 */
+    setTimeout(() => { rollTo($('#rK'), 380); rollTo($('#rP'), 30); rollTo($('#rF'), 22); }, 1500);
+  };
+  const close = () => { $('#sheet').classList.remove('on'); $('#mask').classList.remove('on'); };
+  $('#cam').addEventListener('click', open);
+  $('#camBtn').addEventListener('click', open);
+  $('#mask').addEventListener('click', close);
+  $('#saveBtn').addEventListener('click', () => {
+    close();
+    done.add('dinner1');
+    if (slot === 'dinner') paintMeals();
+    sync();
+    toast('已记到晚餐 · 烤三文鱼沙拉');
+  });
+  $('#addBar').addEventListener('click', () => toast('手动添加 · 敬请期待'));
+  let sy = 0;
+  const sheet = $('#sheet');
+  sheet.addEventListener('touchstart', e => sy = e.touches[0].clientY, {passive:true});
+  sheet.addEventListener('touchmove', e => {
+    const dy = e.touches[0].clientY - sy;
+    if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
+  }, {passive:true});
+  sheet.addEventListener('touchend', e => {
+    const dy = e.changedTouches[0].clientY - sy;
+    sheet.style.transform = '';
+    if (dy > 90) close();
+  });
+
+  $('#exportBtn').addEventListener('click', () => toast('7 月饮食记录已导出'));
+
+  /* ══ 切页 ══════════════════════════════════════ */
+  const TITLES = { today: '今日食记', log: '本周记录', me: '我的食记' };
+  $$('.tab').forEach(t => t.addEventListener('click', () => {
+    const v = t.dataset.tab;
+    if (v === 'find') { toast('发现页 · 敬请期待'); return; }
+    $$('.tab').forEach(x => x.classList.remove('on'));
+    t.classList.add('on');
+    $$('.view').forEach(s => s.classList.toggle('on', s.dataset.view === v));
+    /* 顶栏标题跟着页面走 —— 顶栏只有一行小字，不换的话三个页看起来是同一页 */
+    $('#pageTitle').firstChild.textContent = TITLES[v];
+    $('#scroll').scrollTop = 0;
+  }));
+  paintMeals();
+  sync();
+})();
+</script>
+</body>
+</html>

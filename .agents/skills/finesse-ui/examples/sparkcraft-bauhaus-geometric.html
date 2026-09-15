@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SPARKCRAFT — Bauhaus 几何创意工作室</title>
+<style>
+  /* finesse · register=brand · A=warm-paper+five-primaries · B=geometric-display+humanist-sans · C=geometric-collage · D=CSS-only-geometry · E=building-blocks
+   * back-filled from EXAMPLES.md; dials not recorded for this build */
+@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap');
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#F5EAD9;--surface:#FFFDF9;--ink:#241A2E;--ink2:#332746;
+  --orange:#F0932B;--amber:#F5C043;--coral:#E8623C;--teal:#17847B;--purple:#4C4570;
+  --muted:#786E82;--line:rgba(36,26,46,.12);
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:'Manrope',sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.disp{font-family:'Unbounded',sans-serif}
+a{color:inherit}
+img{display:block;max-width:100%}
+section{position:relative}
+.wrap{max-width:1280px;margin:0 auto;padding:0 clamp(20px,5vw,64px)}
+.eyebrow{font-family:'Unbounded',sans-serif;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--coral);display:inline-flex;align-items:center;gap:8px;margin-bottom:20px}
+.eyebrow::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--coral)}
+.btn{font-family:'Unbounded',sans-serif;font-size:13px;font-weight:600;letter-spacing:.01em;padding:16px 30px;border-radius:100px;text-decoration:none;display:inline-flex;align-items:center;gap:10px;transition:transform .35s cubic-bezier(.16,1,.3,1),box-shadow .35s cubic-bezier(.16,1,.3,1),background .3s}
+.btn-primary{background:var(--ink);color:var(--bg)}
+.btn-primary:hover{transform:translateY(-3px);box-shadow:0 16px 30px -12px rgba(36,26,46,.45)}
+.btn-ghost{border:1.5px solid var(--line);color:var(--ink)}
+.btn-ghost:hover{background:var(--surface);transform:translateY(-3px)}
+.btn svg{width:14px;height:14px;transition:transform .3s}
+.btn:hover svg{transform:translate(3px,-3px)}
+
+/* ---------- NAV ---------- */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(245,234,217,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.nav-inner{max-width:1280px;margin:0 auto;padding:18px clamp(20px,5vw,64px);display:flex;align-items:center;justify-content:space-between}
+.logo{display:flex;align-items:center;gap:10px;font-family:'Unbounded',sans-serif;font-weight:700;font-size:18px;letter-spacing:-.01em}
+.logo-mark{width:26px;height:26px;position:relative;flex-shrink:0}
+.logo-mark::before,.logo-mark::after{content:'';position:absolute;inset:0;border-radius:6px}
+.logo-mark::before{background:var(--coral);transform:rotate(45deg) scale(.72)}
+.logo-mark::after{background:var(--teal);transform:rotate(45deg) scale(.72) translate(18%,18%);opacity:.85}
+.nav-links{display:flex;gap:36px;list-style:none}
+.nav-links a{font-size:14px;font-weight:600;text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .2s}
+.nav-links a:hover,.nav-links a.on{opacity:1;color:var(--coral)}
+.nav-cta{display:none}
+@media(min-width:860px){.nav-cta{display:inline-flex}}
+@media(max-width:860px){.nav-links{display:none}}
+
+/* ---------- HERO ---------- */
+.hero{padding:170px clamp(20px,5vw,64px) 100px;display:grid;grid-template-columns:1.05fr 1fr;gap:60px;align-items:center;max-width:1280px;margin:0 auto}
+.hero h1{font-family:'Unbounded',sans-serif;font-size:clamp(40px,6vw,74px);font-weight:700;line-height:1.05;letter-spacing:-.02em}
+.hero h1 span{color:var(--coral);position:relative}
+.hero p{font-size:16px;line-height:1.8;color:var(--muted);max-width:440px;margin:26px 0 38px}
+.hero-cta{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.hero-note{display:flex;align-items:center;gap:10px;margin-top:30px;font-size:12px;color:var(--muted);flex-basis:100%}
+.hero-note svg{width:46px;height:26px;flex-shrink:0;overflow:visible}
+
+.geo{position:relative;aspect-ratio:1/0.94;width:100%;max-width:560px;justify-self:center}
+.shape{position:absolute;transform-origin:center}
+.tri{clip-path:polygon(50% 0,100% 100%,0 100%)}
+.tri-1{top:4%;left:0%;width:24%;aspect-ratio:1;background:var(--orange)}
+.tri-2{top:4%;left:26%;width:24%;aspect-ratio:1;background:var(--amber)}
+.tri-3{top:28%;left:0%;width:24%;aspect-ratio:1;background:var(--amber)}
+.tri-4{top:28%;left:26%;width:24%;aspect-ratio:1;background:var(--orange)}
+.dotgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16%}
+.dotgrid span{border-radius:50%;background:var(--ink2);aspect-ratio:1;width:100%}
+.dotgrid-a{top:2%;left:56%;width:28%}
+.dotgrid-b{bottom:6%;right:33%;width:15%}
+.half-purple{right:0;top:2%;width:36%;height:94%;background:var(--purple);border-radius:999px 0 0 999px}
+.disc-teal{bottom:2%;left:44%;width:26%;aspect-ratio:1;border-radius:50%;background:var(--teal);z-index:1}
+.disc-orange{bottom:0%;left:22%;width:20%;aspect-ratio:1;border-radius:50%;background:var(--coral);z-index:2}
+.ring{bottom:-2%;left:-1%;width:20%;aspect-ratio:1;border-radius:50%;border:11px solid var(--ink2);background:transparent;z-index:2}
+
+/* ---------- STATS ---------- */
+.stats{border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);max-width:1280px;margin:0 auto}
+.stat{padding:44px clamp(16px,3vw,32px);text-align:center;border-left:1px solid var(--line)}
+.stat:first-child{border-left:none}
+.stat b{font-family:'Unbounded',sans-serif;font-size:clamp(28px,3.6vw,44px);font-weight:700;display:block}
+.stat span{font-size:12px;color:var(--muted);letter-spacing:.03em;margin-top:6px;display:block}
+@media(max-width:700px){.stats-grid{grid-template-columns:repeat(2,1fr)}.stat:nth-child(3){border-left:none}}
+
+/* ---------- SPLIT / CRAFT ---------- */
+.split{padding:150px clamp(20px,5vw,64px);display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;max-width:1280px;margin:0 auto}
+.split h2{font-family:'Unbounded',sans-serif;font-size:clamp(30px,3.6vw,48px);font-weight:700;line-height:1.18;letter-spacing:-.01em;margin-bottom:22px}
+.split p{color:var(--muted);line-height:1.85;font-size:15px;max-width:440px;margin-bottom:34px}
+
+.diamond{position:relative;width:100%;max-width:420px;aspect-ratio:1;justify-self:center}
+.diamond-core{position:absolute;inset:14%;border-radius:28px;overflow:hidden;transform:rotate(0deg)}
+.quad{position:absolute;inset:0}
+.quad-top{background:var(--teal);clip-path:polygon(50% 50%,0 0,100% 0)}
+.quad-right{background:var(--amber);clip-path:polygon(50% 50%,100% 0,100% 100%)}
+.quad-bottom{background:var(--purple);clip-path:polygon(50% 50%,100% 100%,0 100%)}
+.quad-left{background:var(--orange);clip-path:polygon(50% 50%,0 100%,0 0)}
+.diamond-diamond{position:absolute;top:38%;left:38%;width:24%;aspect-ratio:1;background:var(--coral);transform:rotate(45deg);border-radius:6px;z-index:3}
+.d-tri{position:absolute;width:16%;aspect-ratio:1;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.d-tri-a{top:4%;left:6%;background:var(--coral);transform:rotate(-18deg)}
+.d-tri-b{bottom:8%;right:4%;background:var(--teal);transform:rotate(160deg)}
+.d-dot{position:absolute;border-radius:50%}
+.d-dot-a{width:9%;aspect-ratio:1;top:8%;right:14%;background:var(--purple)}
+.d-dot-b{width:6%;aspect-ratio:1;bottom:18%;left:2%;background:var(--ink2)}
+.d-square{position:absolute;width:11%;aspect-ratio:1;bottom:2%;right:22%;background:var(--ink2);border-radius:4px;transform:rotate(20deg)}
+
+/* ---------- SERVICES ---------- */
+.services{padding:60px clamp(20px,5vw,64px) 150px;max-width:1280px;margin:0 auto}
+.services-head{text-align:center;max-width:640px;margin:0 auto 64px}
+.services-head h2{font-family:'Unbounded',sans-serif;font-size:clamp(32px,4vw,52px);font-weight:700;letter-spacing:-.01em;margin-bottom:18px}
+.services-head p{color:var(--muted);font-size:15px;line-height:1.8}
+.svc-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:24px}
+.svc-card{background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:34px 28px;transition:transform .4s cubic-bezier(.16,1,.3,1),box-shadow .4s cubic-bezier(.16,1,.3,1)}
+.svc-card:hover{transform:translateY(-8px);box-shadow:0 24px 44px -20px rgba(36,26,46,.25)}
+/* asymmetric 2×2: wide cards run the shape beside the copy, narrow cards stack */
+.svc-card:nth-child(1),.svc-card:nth-child(4){grid-column:span 7}
+.svc-card:nth-child(2),.svc-card:nth-child(3){grid-column:span 5}
+.svc-card.wide{display:grid;grid-template-columns:80px 1fr;gap:28px;align-items:center;padding:36px 32px}
+/* icons are the page's own Bauhaus primitives — triangle / ring / dot matrix / half-capsule */
+.svc-icon{width:52px;height:52px;margin-bottom:24px;position:relative;flex-shrink:0}
+.svc-icon.i-tri{background:var(--coral);clip-path:polygon(50% 0,100% 100%,0 100%)}
+.svc-icon.i-ring{border:11px solid var(--teal);border-radius:50%;background:transparent}
+.svc-icon.i-dots{display:grid;grid-template-columns:repeat(3,1fr);gap:22%}
+.svc-icon.i-dots span{width:100%;aspect-ratio:1;border-radius:50%;background:var(--ink2)}
+.svc-icon.i-half{background:var(--purple);border-radius:999px 0 0 999px}
+.svc-card.wide .svc-icon{width:80px;height:80px;margin-bottom:0}
+.svc-card.wide .svc-icon.i-ring{border-width:16px}
+.svc-card h3{font-family:'Unbounded',sans-serif;font-size:19px;font-weight:600;margin-bottom:12px}
+.svc-card.wide h3{font-size:22px}
+.svc-card p{font-size:13.5px;line-height:1.8;color:var(--muted);margin-bottom:20px}
+.svc-more{font-size:13px;font-weight:700;text-decoration:none;color:var(--ink);display:inline-flex;align-items:center;gap:6px}
+.svc-more svg{width:12px;height:12px}
+@media(max-width:980px){.svc-card:nth-child(n){grid-column:span 6}}
+@media(max-width:560px){
+  .svc-card:nth-child(n){grid-column:span 12}
+  .svc-card.wide{grid-template-columns:1fr}
+  .svc-card.wide .svc-icon{margin-bottom:22px}
+}
+
+/* ---------- OFFERS BENTO ---------- */
+.offers{padding:120px clamp(20px,5vw,64px);background:var(--ink);color:var(--bg)}
+.offers-inner{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:1.1fr 1fr;gap:70px;align-items:center}
+.offers .eyebrow{color:var(--amber)}
+.offers .eyebrow::before{background:var(--amber)}
+.offers h2{font-family:'Unbounded',sans-serif;font-size:clamp(30px,3.6vw,46px);font-weight:700;line-height:1.2;letter-spacing:-.01em;margin-bottom:20px}
+.offers p{color:rgba(245,234,217,.6);line-height:1.85;font-size:15px;margin-bottom:34px;max-width:420px}
+.offers .btn-primary{background:var(--amber);color:var(--ink)}
+.bento{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.bento-card{background:rgba(245,234,217,.06);border:1px solid rgba(245,234,217,.14);border-radius:20px;padding:26px;transition:transform .3s cubic-bezier(.16,1,.3,1),background .3s}
+.bento-card:hover{transform:translateY(-6px);background:rgba(245,234,217,.1)}
+.bento-tag{width:34px;height:34px;border-radius:10px;margin-bottom:16px}
+.bento-card h4{font-family:'Unbounded',sans-serif;font-size:15px;font-weight:600;margin-bottom:8px}
+.bento-card p{font-size:12px;color:rgba(245,234,217,.5);line-height:1.7;margin:0}
+.bento-view{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:10px;background:var(--amber);color:var(--ink)}
+.bento-view a{font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+@media(max-width:900px){.offers-inner{grid-template-columns:1fr}}
+
+/* ---------- TESTIMONIALS ---------- */
+.testi{padding:150px clamp(20px,5vw,64px) 110px;max-width:1280px;margin:0 auto}
+.testi-head{display:flex;align-items:flex-end;justify-content:space-between;gap:40px;margin-bottom:56px;flex-wrap:wrap}
+.testi-head h2{font-family:'Unbounded',sans-serif;font-size:clamp(30px,3.6vw,46px);font-weight:700;letter-spacing:-.01em;max-width:520px;line-height:1.2}
+.testi-head p{color:var(--muted);font-size:14px;max-width:340px;line-height:1.8}
+.testi-track{display:flex;gap:22px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px;scrollbar-width:none}
+.testi-track::-webkit-scrollbar{display:none}
+.testi-card{scroll-snap-align:start;flex:0 0 clamp(260px,30vw,340px);background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:30px}
+.testi-card q{font-size:14px;line-height:1.85;color:var(--ink);display:block;margin-bottom:26px;quotes:none}
+.testi-card q::before,.testi-card q::after{content:''}
+.testi-person{display:flex;align-items:center;gap:12px}
+.testi-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Unbounded',sans-serif;font-weight:700;font-size:13px;color:#FFFDF9}
+.testi-person b{display:block;font-size:13px}
+.testi-person span{font-size:11px;color:var(--muted)}
+.testi-dots{display:flex;gap:8px;justify-content:center;margin-top:32px}
+.testi-dots span{width:7px;height:7px;border-radius:50%;background:var(--line);cursor:pointer;transition:background .2s,transform .2s}
+.testi-dots span.on{background:var(--coral);transform:scale(1.3)}
+
+/* ---------- CTA BAND ---------- */
+.cta-band{position:relative;overflow:hidden;background:var(--surface);border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:110px clamp(20px,5vw,64px)}
+.cta-band .wrap{position:relative;z-index:2;max-width:900px}
+.cta-band h2{font-family:'Unbounded',sans-serif;font-size:clamp(28px,4.2vw,48px);font-weight:700;line-height:1.22;letter-spacing:-.01em;margin-bottom:26px}
+.cta-band p{color:var(--muted);font-size:15px;line-height:1.85;max-width:560px;margin-bottom:34px}
+.deco-circle{position:absolute;border-radius:50%}
+.deco-1{width:340px;height:340px;background:var(--purple);top:-160px;right:-100px;opacity:.9}
+.deco-2{width:220px;height:220px;border:16px solid var(--coral);top:120px;right:60px}
+
+/* ---------- CTA FINAL ---------- */
+.cta-final{position:relative;overflow:hidden;padding:130px clamp(20px,5vw,64px);text-align:center}
+.cta-final .wrap{position:relative;z-index:2;max-width:640px}
+.cta-final h2{font-family:'Unbounded',sans-serif;font-size:clamp(30px,4.4vw,52px);font-weight:700;line-height:1.16;letter-spacing:-.01em;margin-bottom:22px}
+.cta-final p{color:var(--muted);font-size:15px;line-height:1.85;margin-bottom:34px}
+.cta-final .btn{margin:0 auto}
+.ring-deco{position:absolute;border-radius:50%;border:26px solid var(--coral);opacity:.85}
+.ring-deco.r1{width:220px;height:220px;left:-90px;top:-40px}
+.ring-deco.r2{width:220px;height:220px;left:-90px;bottom:-120px;border-color:var(--ink2);opacity:.15}
+.dot-deco{position:absolute;width:16px;height:16px;border-radius:50%;background:var(--amber)}
+
+/* ---------- FOOTER ---------- */
+footer{background:var(--ink);color:rgba(245,234,217,.55);padding:80px clamp(20px,5vw,64px) 36px}
+.foot-top{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:50px;padding-bottom:56px;border-bottom:1px solid rgba(245,234,217,.12)}
+.foot-brand .logo{color:var(--bg);margin-bottom:16px}
+.foot-brand p{font-size:13px;line-height:1.8;max-width:280px}
+.foot-col h5{font-family:'Unbounded',sans-serif;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--bg);margin-bottom:18px}
+.foot-col a{display:block;font-size:13.5px;text-decoration:none;color:inherit;margin-bottom:12px;transition:color .2s}
+.foot-col a:hover{color:var(--amber)}
+.foot-bottom{max-width:1280px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding-top:28px;font-size:12.5px;flex-wrap:wrap;gap:16px}
+.socials{display:flex;gap:12px}
+.socials a{width:34px;height:34px;border-radius:50%;border:1px solid rgba(245,234,217,.18);display:flex;align-items:center;justify-content:center;text-decoration:none}
+.socials svg{width:14px;height:14px;fill:currentColor}
+@media(max-width:900px){.foot-top{grid-template-columns:1fr 1fr}}
+
+@media(max-width:900px){
+  .hero{grid-template-columns:1fr;padding-top:130px}
+  .split{grid-template-columns:1fr}
+  .split .diamond{order:-1}
+}
+
+/* ---------- REDUCED MOTION ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+    scroll-behavior:auto !important;
+  }
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="logo"><span class="logo-mark"></span>SPARKCRAFT</div>
+    <ul class="nav-links">
+      <li><a href="#" class="on">Home</a></li>
+      <li><a href="#services">Services</a></li>
+      <li><a href="#work">Work</a></li>
+      <li><a href="#testimonials">Testimonials</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ul>
+    <a href="#contact" class="btn btn-primary nav-cta">Get Quote <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-copy">
+    <div class="eyebrow">We're the best creative studio</div>
+    <h1>Where Creativity Meets <span>Strategy</span></h1>
+    <p>We help ambitious brands turn bold ideas into products people love. Identity systems, interfaces, and campaigns built to last.</p>
+    <div class="hero-cta">
+      <a href="#contact" class="btn btn-primary">Get Started <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      <a href="#work" class="btn btn-ghost">See Our Work</a>
+      <div class="hero-note">
+        <svg viewBox="0 0 90 60"><path d="M2 4 C 30 55, 60 55, 86 8" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-dasharray="5 6" stroke-linecap="round" id="hero-arrow"/><path d="M78 4 86 8 80 16" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Scroll to explore our process
+      </div>
+    </div>
+  </div>
+  <div class="geo" id="hero-geo">
+    <div class="shape tri tri-1"></div>
+    <div class="shape tri tri-2"></div>
+    <div class="shape tri tri-3"></div>
+    <div class="shape tri tri-4"></div>
+    <div class="shape dotgrid dotgrid-a"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <div class="shape dotgrid dotgrid-b"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <div class="shape half-purple"></div>
+    <div class="shape disc-teal"></div>
+    <div class="shape disc-orange"></div>
+    <div class="shape ring"></div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats">
+  <div class="stats-grid">
+    <div class="stat"><b data-count="18">0</b><span>Years of Experience</span></div>
+    <div class="stat"><b data-count="250">0</b><span>Projects Completed</span></div>
+    <div class="stat"><b data-count="450">0</b><span>Happy Clients</span></div>
+    <div class="stat"><b data-count="28">0</b><span>Awards Won</span></div>
+  </div>
+</section>
+
+<!-- SPLIT / CRAFT -->
+<section class="split" id="work">
+  <div>
+    <h2>We Craft Experiences That Help Brands Reach Their People</h2>
+    <p>Every engagement starts with research, not templates. We pair strategy with hands-on craft: typography, motion, systems. The work performs as well as it looks.</p>
+    <a href="#services" class="btn btn-primary">Learn More <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+  </div>
+  <div class="diamond" id="split-geo">
+    <div class="diamond-core">
+      <div class="quad quad-top"></div>
+      <div class="quad quad-right"></div>
+      <div class="quad quad-bottom"></div>
+      <div class="quad quad-left"></div>
+    </div>
+    <div class="diamond-diamond"></div>
+    <div class="d-tri d-tri-a"></div>
+    <div class="d-tri d-tri-b"></div>
+    <div class="d-dot d-dot-a"></div>
+    <div class="d-dot d-dot-b"></div>
+    <div class="d-square"></div>
+  </div>
+</section>
+
+<!-- SERVICES -->
+<section class="services" id="services">
+  <div class="services-head">
+    <h2>Creative Solutions For Your Business</h2>
+    <p>Four disciplines, one connected process, from first sketch to shipped product.</p>
+  </div>
+  <div class="svc-grid">
+    <div class="svc-card wide">
+      <div class="svc-icon i-tri"></div>
+      <div class="svc-body">
+        <h3>Design</h3>
+        <p>End-to-end product design across web, mobile, and emerging surfaces, grounded in real user research.</p>
+        <a href="#" class="svc-more">Read More <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      </div>
+    </div>
+    <div class="svc-card">
+      <div class="svc-icon i-ring"></div>
+      <h3>Branding</h3>
+      <p>Identity systems built on a clear narrative: voice, visuals, and guidelines that scale across every touchpoint.</p>
+      <a href="#" class="svc-more">Read More <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+    </div>
+    <div class="svc-card">
+      <div class="svc-icon i-dots"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <h3>UI / UX</h3>
+      <p>Interfaces engineered for clarity and delight, tested with real users before a single line of code ships.</p>
+      <a href="#" class="svc-more">Read More <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+    </div>
+    <div class="svc-card wide">
+      <div class="svc-icon i-half"></div>
+      <div class="svc-body">
+        <h3>Logo</h3>
+        <p>Marks that hold up at 16px and at 16 feet. Distinctive, durable, unmistakably yours.</p>
+        <a href="#" class="svc-more">Read More <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- OFFERS -->
+<section class="offers">
+  <div class="offers-inner">
+    <div class="bento">
+      <div class="bento-card"><div class="bento-tag" style="background:var(--teal)"></div><h4>Custom CMS</h4><p>Editable content systems your team actually enjoys using.</p></div>
+      <div class="bento-card"><div class="bento-tag" style="background:var(--coral)"></div><h4>Payment Processing</h4><p>Secure checkout flows wired into the providers you already trust.</p></div>
+      <div class="bento-card"><div class="bento-tag" style="background:var(--amber)"></div><h4>App Store Submission</h4><p>We handle the review process end to end, launch day included.</p></div>
+      <div class="bento-card bento-view"><span style="font-size:26px">→</span><a href="#">View All Capabilities</a></div>
+    </div>
+    <div>
+      <div class="eyebrow">Our customized offers</div>
+      <h2>Everything You Need, Tailored to Your Business</h2>
+      <p>No two engagements look the same. We scope around what your team actually needs, with nothing bundled in that you won't use.</p>
+      <a href="#contact" class="btn btn-primary">Explore All Services <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="testi" id="testimonials">
+  <div class="testi-head">
+    <h2>The Work, In Their Words</h2>
+    <p>A few words from the founders and product leads we've partnered with.</p>
+  </div>
+  <div class="testi-track" id="testi-track">
+    <div class="testi-card">
+      <q>"SparkCraft rebuilt our entire identity in six weeks, and it finally feels like us. Every touchpoint is consistent now."</q>
+      <div class="testi-person"><div class="testi-avatar" style="background:var(--coral)">DS</div><div><b>Darrell Steward</b><span>Founder, Northline</span></div></div>
+    </div>
+    <div class="testi-card">
+      <q>"The UI/UX rework cut our onboarding drop-off by a third. They actually tested with our users instead of guessing."</q>
+      <div class="testi-person"><div class="testi-avatar" style="background:var(--teal)">AB</div><div><b>Annette Black</b><span>Head of Product, Fira</span></div></div>
+    </div>
+    <div class="testi-card">
+      <q>"Sharp, fast, and refreshingly low-ego. They pushed back on our first brief and the result was better for it."</q>
+      <div class="testi-person"><div class="testi-avatar" style="background:var(--purple)">ZL</div><div><b>Zenifer Lop</b><span>CMO, Verdant</span></div></div>
+    </div>
+    <div class="testi-card">
+      <q>"Our new logo system scaled across twelve markets without a single exception request. That never happens."</q>
+      <div class="testi-person"><div class="testi-avatar" style="background:var(--orange)">AS</div><div><b>Adeven Smith</b><span>Brand Lead, Coral & Co.</span></div></div>
+    </div>
+  </div>
+  <div class="testi-dots" id="testi-dots"></div>
+</section>
+
+<!-- CTA: cost of bad design -->
+<section class="cta-band">
+  <div class="deco-circle deco-1"></div>
+  <div class="deco-circle deco-2"></div>
+  <div class="wrap">
+    <h2>If You Think Good Design Is Expensive, You Should Look At The Costs Of Bad Design.</h2>
+    <p>Confusing checkouts, forgettable brands, interfaces nobody trusts. The cost shows up in churn, not in the invoice. We build it right the first time.</p>
+    <a href="#contact" class="btn btn-primary">Talk To Us <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+  </div>
+</section>
+
+<!-- CTA FINAL -->
+<section class="cta-final" id="contact">
+  <div class="ring-deco r1"></div>
+  <div class="ring-deco r2"></div>
+  <div class="dot-deco" style="top:60px;right:120px"></div>
+  <div class="dot-deco" style="bottom:80px;right:200px;background:var(--teal)"></div>
+  <div class="wrap">
+    <h2>Let's Build &amp; Scale Your Business Together</h2>
+    <p>Tell us where it hurts: onboarding, conversion, brand trust. We'll tell you honestly whether design is the fix.</p>
+    <a href="#" class="btn btn-primary">Let's Connect <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+  </div>
+</section>
+
+<footer>
+  <div class="foot-top">
+    <div class="foot-brand">
+      <div class="logo"><span class="logo-mark"></span>SPARKCRAFT</div>
+      <p>A creative studio for teams who'd rather ship the right thing slowly considered than the wrong thing fast.</p>
+    </div>
+    <div class="foot-col"><h5>Studio</h5><a href="#">About Us</a><a href="#">Careers</a><a href="#">Journal</a></div>
+    <div class="foot-col"><h5>Work</h5><a href="#">Case Studies</a><a href="#">Process</a><a href="#">Capabilities</a></div>
+    <div class="foot-col"><h5>Contact</h5><a href="#">Book a Call</a><a href="#">Newsletter</a><a href="#">hello@example.com</a></div>
+  </div>
+  <div class="foot-bottom">
+    <span>© 2026 Sparkcraft Studio. All rights reserved.</span>
+    <div class="socials">
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M22 4.01c-.8.36-1.66.6-2.5.7.9-.54 1.6-1.4 1.93-2.42-.85.5-1.79.87-2.79 1.07A4.4 4.4 0 0 0 15.3 2c-2.42 0-4.38 2-4.38 4.44 0 .35.04.68.11 1A12.4 12.4 0 0 1 1.9 2.9a4.5 4.5 0 0 0 1.36 5.93 4.3 4.3 0 0 1-1.98-.55v.06c0 2.14 1.5 3.93 3.5 4.33-.65.18-1.34.2-2 .08.56 1.76 2.19 3.04 4.12 3.08A8.8 8.8 0 0 1 0 19.5a12.4 12.4 0 0 0 6.75 2c8.1 0 12.53-6.83 12.53-12.75l-.01-.58c.86-.63 1.6-1.42 2.19-2.32-.79.36-1.63.6-2.51.7Z"/></svg></a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2ZM8.34 18.34H5.67V9.7h2.67v8.64ZM7 8.55a1.55 1.55 0 1 1 0-3.1 1.55 1.55 0 0 1 0 3.1Zm11.34 9.79h-2.67v-4.2c0-1-.02-2.3-1.4-2.3-1.4 0-1.62 1.1-1.62 2.23v4.27H10V9.7h2.56v1.18h.04c.36-.68 1.24-1.4 2.55-1.4 2.72 0 3.22 1.8 3.22 4.13v4.73Z"/></svg></a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm3.6 5.5c.5 0 .9.4.9.9v.6c0 5-3.8 8-7.1 8-1.4 0-2.7-.4-3.8-1.1.2 0 .4 0 .6-.02a5 5 0 0 0 3.1-1.1 2.5 2.5 0 0 1-2.3-1.7c.4.05.7.05 1 -.03A2.5 2.5 0 0 1 5.9 10.7v-.03c.3.2.7.3 1.1.3A2.5 2.5 0 0 1 6 8.9c0-.5.1-.9.4-1.3A7.1 7.1 0 0 0 11.6 10a2.5 2.5 0 0 1 4.3-2.3c.6-.1 1.2-.4 1.7-.8-.2.6-.6 1.1-1.1 1.4.5-.06 1-.2 1.4-.4-.3.5-.7.9-1.2 1.2Z"/></svg></a>
+    </div>
+  </div>
+</footer>
+
+<script src="./lib/gsap.min.js"></script>
+<script src="./lib/ScrollTrigger.min.js"></script>
+<script>
+gsap.registerPlugin(ScrollTrigger);
+
+/* Motion budget. REDUCE => every element lands in its final, visible state and
+   nothing loops. FINE => pointer-driven flourishes only on a real mouse. */
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const FINE   = matchMedia('(hover:hover) and (pointer:fine)').matches;
+
+/* ---- hero shapes: staggered entrance + idle float ---- */
+const heroShapes = gsap.utils.toArray('#hero-geo .shape');
+if (REDUCE) {
+  gsap.set(heroShapes, {opacity:1, scale:1, x:0, y:0, clearProps:'all'});
+} else {
+  gsap.set(heroShapes, {opacity:0, scale:.4, y:30});
+  gsap.to(heroShapes, {
+    opacity:1, scale:1, y:0, duration:1, ease:'back.out(1.6)',
+    stagger:{each:.06, from:'random'}, delay:.2
+  });
+  /* idle float — never created under reduced motion */
+  heroShapes.forEach((el,i)=>{
+    gsap.to(el, {
+      y: '+=' + (8 + (i%3)*4),
+      duration: 2.4 + (i%4)*.4,
+      ease:'sine.inOut', repeat:-1, yoyo:true, delay: i*.15
+    });
+  });
+}
+
+/* draw-in dashed arrow */
+const arrow = document.getElementById('hero-arrow');
+if (arrow) {
+  const len = arrow.getTotalLength ? arrow.getTotalLength() : 140;
+  if (REDUCE) gsap.set(arrow, {strokeDashoffset:0});
+  else gsap.fromTo(arrow, {strokeDashoffset:len}, {strokeDashoffset:0, duration:1.6, ease:'power2.out', delay:.8});
+}
+
+/* mouse parallax on hero shapes — fine pointers only, and never under reduced motion */
+const geo = document.getElementById('hero-geo');
+if (geo && FINE && !REDUCE) {
+  geo.addEventListener('mousemove', (e)=>{
+    const r = geo.getBoundingClientRect();
+    const px = (e.clientX - r.left)/r.width - .5;
+    heroShapes.forEach((el,i)=>{
+      const depth = 10 + (i%4)*6;
+      gsap.to(el, {x: px*depth, duration:.6, ease:'power2.out', overwrite:'auto'});
+    });
+  });
+  geo.addEventListener('mouseleave', ()=> gsap.to(heroShapes, {x:0, duration:.8, ease:'power2.out'}));
+}
+
+/* stat counters */
+document.querySelectorAll('.stat b').forEach(el=>{
+  const target = +el.dataset.count;
+  if (REDUCE) { el.textContent = target + '+'; return; }
+  ScrollTrigger.create({
+    trigger: el, start:'top 85%', once:true,
+    onEnter: ()=>{
+      const obj = {v:0};
+      gsap.to(obj, {v:target, duration:1.6, ease:'power2.out', onUpdate:()=>{ el.textContent = Math.round(obj.v) + '+'; }});
+    }
+  });
+});
+
+/* split diamond reveal */
+const DIAMOND = '#split-geo .diamond-core, #split-geo .diamond-diamond, #split-geo .d-tri, #split-geo .d-dot, #split-geo .d-square';
+if (REDUCE) {
+  gsap.set(DIAMOND, {opacity:1, scale:1, clearProps:'all'});
+} else {
+  gsap.set(DIAMOND, {opacity:0, scale:.5});
+  ScrollTrigger.create({
+    trigger:'#split-geo', start:'top 75%', once:true,
+    onEnter: ()=> gsap.to(DIAMOND, {opacity:1, scale:1, duration:.9, ease:'back.out(1.7)', stagger:.08})
+  });
+  gsap.to('#split-geo', {
+    rotate: 6, scrollTrigger:{trigger:'#split-geo', start:'top bottom', end:'bottom top', scrub:1}
+  });
+}
+
+/* service cards reveal — gsap.from() is simply never called under REDUCE,
+   so the cards stay at their natural (visible) state */
+if (!REDUCE) {
+  gsap.utils.toArray('.svc-card').forEach((card,i)=>{
+    gsap.from(card, {
+      opacity:0, y:40, duration:.8, ease:'power3.out', delay:i*.05,
+      scrollTrigger:{trigger:card, start:'top 88%'}
+    });
+  });
+
+  /* bento reveal */
+  gsap.utils.toArray('.bento-card').forEach((card,i)=>{
+    gsap.from(card, {
+      opacity:0, y:30, duration:.7, ease:'power3.out', delay:i*.06,
+      scrollTrigger:{trigger:'.bento', start:'top 82%'}
+    });
+  });
+
+  /* CTA deco parallax */
+  gsap.to('.deco-1', {y:60, scrollTrigger:{trigger:'.cta-band', start:'top bottom', end:'bottom top', scrub:1}});
+  gsap.to('.deco-2', {y:-40, scrollTrigger:{trigger:'.cta-band', start:'top bottom', end:'bottom top', scrub:1}});
+  gsap.to('.ring-deco.r1', {y:-50, scrollTrigger:{trigger:'.cta-final', start:'top bottom', end:'bottom top', scrub:1}});
+  gsap.to('.ring-deco.r2', {y:50, scrollTrigger:{trigger:'.cta-final', start:'top bottom', end:'bottom top', scrub:1}});
+}
+
+/* testimonial dots + autoplay */
+const track = document.getElementById('testi-track');
+const dotsWrap = document.getElementById('testi-dots');
+const cards = gsap.utils.toArray('.testi-card');
+cards.forEach((_,i)=>{
+  const d = document.createElement('span');
+  if (i===0) d.classList.add('on');
+  d.addEventListener('click', ()=> scrollToCard(i));
+  dotsWrap.appendChild(d);
+});
+let activeIdx = 0;
+function scrollToCard(i){
+  activeIdx = i;
+  const card = cards[i];
+  track.scrollTo({left: card.offsetLeft, behavior: REDUCE ? 'auto' : 'smooth'});
+  [...dotsWrap.children].forEach((d,j)=> d.classList.toggle('on', j===i));
+}
+/* autoplay carousel — not started under reduced motion; the track stays
+   manually scrollable/snappable and the dots still work */
+if (!REDUCE) {
+  const autoplay = setInterval(()=>{
+    scrollToCard((activeIdx+1) % cards.length);
+  }, 4200);
+  track.addEventListener('pointerdown', ()=> clearInterval(autoplay));
+}
+
+/* nav active link swap */
+document.querySelectorAll('.nav-links a[href^="#"]').forEach(link=>{
+  link.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-links a').forEach(a=>a.classList.remove('on'));
+    link.classList.add('on');
+  });
+});
+</script>
+</body>
+</html>

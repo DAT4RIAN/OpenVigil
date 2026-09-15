@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MORPH — 字形变形</title>
+<style>
+  /* finesse · register=brand · A=near-mono-opacity-ladder · B=one-variable-font-all-roles · C=type-specimen · D=CSS-only-variable-font · E=letterform
+   * back-filled from EXAMPLES.md; dials not recorded for this build */
+  @import url('https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght,wdth@8..144,100..900,50..150&family=JetBrains+Mono:wght@400;500&display=swap');
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --ink: #F0EEF8; --muted: #8878A8; --dim: #504868; --accent: #E060A0; --accent2: #60A0E0;
+    --bg: #040408; --surface: rgba(255,255,255,0.03); --border: rgba(255,255,255,0.08);
+  }
+  html { scroll-behavior:smooth; }
+  body { background:var(--bg); color:var(--ink);
+    font-family:'Roboto Flex','Inter',system-ui,sans-serif;
+    font-variation-settings:'wght' 400, 'wdth' 100;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .grain { position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.033;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+  /* ── HEADER ── */
+  header { position:fixed; top:0; left:0; right:0; z-index:100;
+    display:flex; align-items:center; justify-content:space-between; padding:26px 52px;
+    background:rgba(4,4,8,0.82); backdrop-filter:blur(16px);
+    border-bottom:1px solid var(--border); }
+  .brand { font-variation-settings:'wght' 800,'wdth' 100; font-size:13px; letter-spacing:.34em; color:var(--ink); }
+  nav { display:flex; gap:36px; font-size:11px; letter-spacing:.2em; color:var(--muted);
+    font-variation-settings:'wght' 400,'wdth' 100; }
+  .cta { font-size:11px; letter-spacing:.14em; background:rgba(224,96,160,.1);
+    border:1px solid rgba(224,96,160,.3); border-radius:999px; padding:9px 20px;
+    cursor:pointer; transition:.25s; font-variation-settings:'wght' 500,'wdth' 100; }
+  .cta:hover { background:var(--accent); border-color:var(--accent); }
+
+  /* ── HERO ── */
+  .hero { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:100px 52px 60px; position:relative; }
+  .kicker { font-size:11px; letter-spacing:.3em; color:var(--muted); margin-bottom:28px;
+    font-variation-settings:'wght' 400,'wdth' 100; display:flex; align-items:center; gap:14px; }
+  .kicker i { width:28px; height:1px; background:var(--accent); display:inline-block; }
+
+  .hero-word { font-size:clamp(80px,15vw,220px); line-height:.9; letter-spacing:-.04em;
+    color:var(--ink); text-align:center; cursor:default; user-select:none;
+    transition:font-variation-settings 0.05s linear; }
+
+  .axis-readout { margin-top:28px; display:flex; gap:40px; font-family:'JetBrains Mono',monospace;
+    font-size:12px; color:var(--muted); }
+  .axis-val { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .axis-val .label { font-size:9px; letter-spacing:.22em; color:var(--dim); }
+  .axis-val .val { color:var(--accent); }
+
+  .hero-hint { margin-top:40px; font-size:13px; color:var(--dim); letter-spacing:.12em; text-align:center;
+    font-variation-settings:'wght' 300,'wdth' 100; }
+
+  /* ── SECTIONS ── */
+  .section { padding:100px 52px; max-width:1200px; margin:0 auto; }
+  .section-sm { max-width:800px; margin:0 auto; padding:80px 52px; }
+  .sec-tag { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.28em;
+    color:var(--muted); margin-bottom:52px; }
+  hr-line { display:block; height:1px; background:var(--border); margin:0; }
+
+  /* ── AXIS PLAYGROUND ── */
+  .playground { background:var(--surface); border:1px solid var(--border); padding:52px; }
+  .specimen { font-size:clamp(56px,8vw,120px); line-height:1; letter-spacing:-.03em;
+    color:var(--ink); margin-bottom:40px; min-height:1.1em; text-align:center; }
+  .sliders { display:grid; grid-template-columns:1fr 1fr 1fr; gap:32px; }
+  .slider-group { display:flex; flex-direction:column; gap:10px; }
+  .slider-group label { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.22em; color:var(--muted); }
+  .slider-group .val-disp { font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--accent); margin-bottom:6px; }
+  input[type=range] { width:100%; -webkit-appearance:none; height:2px;
+    background:var(--border); border-radius:999px; outline:none; cursor:pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px;
+    border-radius:50%; background:var(--accent); border:2px solid var(--bg); cursor:pointer; }
+  input[type=range]::-moz-range-thumb { width:14px; height:14px;
+    border-radius:50%; background:var(--accent); border:2px solid var(--bg); cursor:pointer; }
+
+  /* ── TYPE SPECIMEN GRID ── */
+  .specimen-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+    background:var(--border); border:1px solid var(--border); }
+  .spec-cell { background:var(--bg); padding:28px 24px; display:flex; flex-direction:column;
+    align-items:center; gap:12px; }
+  .spec-word { font-size:clamp(28px,3.5vw,52px); line-height:1; letter-spacing:-.02em; color:var(--ink); }
+  .spec-axes { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.18em; color:var(--dim); }
+
+  /* ── CONTRAST SPLIT ── */
+  .split { display:grid; grid-template-columns:1fr 1px 1fr; }
+  .split-panel { padding:60px 52px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
+  .split-divider { background:var(--border); }
+  .split-word { font-size:clamp(52px,7vw,104px); line-height:1; letter-spacing:-.03em; color:var(--ink); text-align:center; }
+  .split-label { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.22em; color:var(--muted); }
+
+  /* ── KINETIC TEXT ── */
+  .kinetic-para { font-size:clamp(20px,2.8vw,36px); line-height:1.6; letter-spacing:-.02em;
+    color:var(--ink); max-width:900px; margin:0 auto; text-align:center; }
+  .kinetic-para .w { display:inline-block; animation:weightWave 4s ease-in-out infinite; }
+  @keyframes weightWave {
+    0%,100% { font-variation-settings:'wght' 300,'wdth' 100; opacity:.7; }
+    50%      { font-variation-settings:'wght' 800,'wdth' 100; opacity:1; }
+  }
+
+  /* ── FOOTER ── */
+  footer { border-top:1px solid var(--border); padding:32px 52px;
+    display:flex; justify-content:space-between; font-size:11px; letter-spacing:.16em; color:var(--dim); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 860px) {
+    header { padding:20px 24px; }
+    nav { gap:22px; }
+    .hero { padding:96px 24px 56px; }
+    .section { padding:80px 24px; }
+    .section-sm { padding:72px 24px; }
+    .sec-tag { margin-bottom:36px; }
+    .playground { padding:32px 24px; }
+    .specimen { margin-bottom:32px; }
+    .sliders { grid-template-columns:1fr; gap:26px; }
+    .specimen-grid { grid-template-columns:repeat(2,1fr); }
+    .split-panel { padding:48px 24px; }
+    footer { padding:28px 24px; }
+  }
+  @media (max-width: 560px) {
+    header { flex-wrap:wrap; row-gap:14px; padding:16px 18px; }
+    .brand { order:1; }
+    .cta { order:2; padding:8px 14px; font-size:10px; }
+    nav { order:3; flex-basis:100%; justify-content:space-between; gap:0;
+      font-size:10px; letter-spacing:.16em; }
+    .hero { padding:104px 18px 48px; }
+    .kicker { margin-bottom:22px; letter-spacing:.22em; gap:10px; text-align:center; }
+    .hero-word { font-size:clamp(60px,18vw,110px); }
+    .axis-readout { margin-top:24px; gap:22px; flex-wrap:wrap; justify-content:center; }
+    .hero-hint { margin-top:28px; font-size:12px; letter-spacing:.08em; }
+    .section { padding:64px 18px; }
+    .section-sm { padding:56px 18px; }
+    .playground { padding:24px 18px; }
+    .specimen-grid { grid-template-columns:1fr; }
+    .spec-cell { padding:24px 18px; }
+    .split { grid-template-columns:1fr; }
+    .split-divider { height:1px; }
+    .split-panel { padding:40px 18px; }
+    footer { flex-direction:column; gap:10px; padding:24px 18px; }
+  }
+  /* Section 3 opts out of the page gutter; keep its inner gutter in step. */
+  @media (max-width: 860px) { .split-gutter { padding:0 24px 32px !important; } }
+  @media (max-width: 560px) { .split-gutter { padding:0 18px 28px !important; } }
+
+  /* ── REDUCED MOTION ── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration:.001ms !important;
+      animation-iteration-count:1 !important;
+      transition-duration:.001ms !important;
+    }
+    html { scroll-behavior:auto; }
+    /* The weight wave stops being a wave in time and becomes one in space —
+       JS stamps each word's resting wght/opacity. See composeStill(). */
+    .kinetic-para .w { animation:none !important; }
+    .hero-word { transition:none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<header>
+  <div class="brand">MORPH</div>
+  <nav><span>AXES</span><span>WEIGHT</span><span>WIDTH</span></nav>
+  <div class="cta">EXPLORE AXES</div>
+</header>
+
+<!-- ── HERO: Mouse-reactive variable font ── -->
+<section class="hero">
+  <div class="kicker"><i></i>VARIABLE FONT · LIVE AXIS CONTROL</div>
+  <div class="hero-word" id="heroWord">FORM</div>
+  <div class="axis-readout">
+    <div class="axis-val">
+      <span class="label">WEIGHT</span>
+      <span class="val mono" id="readWgt">400</span>
+    </div>
+    <div class="axis-val">
+      <span class="label">WIDTH</span>
+      <span class="val mono" id="readWdth">100</span>
+    </div>
+    <div class="axis-val">
+      <span class="label">OPTICAL SIZE</span>
+      <span class="val mono" id="readOpsz">14</span>
+    </div>
+  </div>
+  <p class="hero-hint">移动鼠标 — X轴控制字重，Y轴控制字宽</p>
+</section>
+
+<div style="height:1px;background:var(--border)"></div>
+
+<!-- ── SECTION 1: Axis Playground ── -->
+<div class="section">
+  <div class="sec-tag">// AXIS PLAYGROUND</div>
+  <div class="playground">
+    <div class="specimen" id="specimen">SIGNAL</div>
+    <div class="sliders">
+      <div class="slider-group">
+        <label>WEIGHT (wght)</label>
+        <div class="val-disp mono" id="wgtVal">400</div>
+        <input type="range" id="sliderWgt" min="100" max="900" value="400" step="1">
+      </div>
+      <div class="slider-group">
+        <label>WIDTH (wdth)</label>
+        <div class="val-disp mono" id="wdthVal">100</div>
+        <input type="range" id="sliderWdth" min="50" max="150" value="100" step="1">
+      </div>
+      <div class="slider-group">
+        <label>OPTICAL SIZE (opsz)</label>
+        <div class="val-disp mono" id="opszVal">14</div>
+        <input type="range" id="sliderOpsz" min="8" max="144" value="14" step="1">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="height:1px;background:var(--border)"></div>
+
+<!-- ── SECTION 2: Specimen Grid ── -->
+<div class="section">
+  <div class="sec-tag">// TYPE SPECIMEN MATRIX — MONO × wght × wdth</div>
+  <div class="specimen-grid" id="specimenGrid"></div>
+</div>
+
+<div style="height:1px;background:var(--border)"></div>
+
+<!-- ── SECTION 3: Contrast Split ── -->
+<div class="section" style="padding-left:0;padding-right:0;max-width:100%">
+  <div class="split-gutter" style="padding:0 52px 40px"><div class="sec-tag">// WEIGHT CONTRAST</div></div>
+  <div class="split">
+    <div class="split-panel">
+      <div class="split-word" style="font-variation-settings:'wght' 100,'wdth' 100">THIN</div>
+      <div class="split-label">wght: 100 · ULTRALIGHT</div>
+    </div>
+    <div class="split-divider"></div>
+    <div class="split-panel">
+      <div class="split-word" style="font-variation-settings:'wght' 900,'wdth' 150">BLACK</div>
+      <div class="split-label">wght: 900 · BLACK CONDENSED</div>
+    </div>
+  </div>
+</div>
+
+<div style="height:1px;background:var(--border)"></div>
+
+<!-- ── SECTION 4: Kinetic Text ── -->
+<div class="section-sm">
+  <div class="sec-tag" style="text-align:center">// KINETIC TYPOGRAPHY</div>
+  <div class="kinetic-para" id="kineticPara"></div>
+</div>
+
+<footer>
+  <span class="mono">MORPH — VARIABLE FONT AXIS EXPLORER</span>
+  <span>CSS Font-Variation-Settings · Roboto Flex</span>
+</footer>
+
+<script>
+// ── Motion / input preferences ──
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const FINE   = matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+// ── Hero: mouse-reactive ──
+const heroWord = document.getElementById('heroWord');
+const readWgt = document.getElementById('readWgt');
+const readWdth = document.getElementById('readWdth');
+const readOpsz = document.getElementById('readOpsz');
+
+function setHeroAxes(wgt, wdth, opsz) {
+  heroWord.style.fontVariationSettings = `'wght' ${wgt},'wdth' ${wdth},'opsz' ${opsz}`;
+  readWgt.textContent = wgt;
+  readWdth.textContent = wdth;
+  readOpsz.textContent = opsz;
+}
+
+// Axis-dragging is a hover affordance — only wire it up on a fine pointer,
+// and only when the reader hasn't asked for stillness.
+if (!REDUCE && FINE) {
+  window.addEventListener('mousemove', e => {
+    const nx = e.clientX / window.innerWidth;
+    const ny = e.clientY / window.innerHeight;
+    setHeroAxes(
+      Math.round(100 + nx * 800),
+      Math.round(50 + (1 - ny) * 100),
+      Math.round(8 + ny * 136)
+    );
+  });
+} else {
+  // Composed still: the word rests where a designer would have set it, not at
+  // the 400/100/14 default. wght 680 gives FORM real presence; wdth 112 opens
+  // the counters so it fills the measure; opsz 96 is the display-size cut of
+  // Roboto Flex — tighter joins, finer terminals — which is what a 220px word
+  // actually wants. The readouts stay truthful to what's on screen.
+  setHeroAxes(680, 112, 96);
+}
+
+// ── Slider playground ──
+const specimen = document.getElementById('specimen');
+const sliderWgt = document.getElementById('sliderWgt');
+const sliderWdth = document.getElementById('sliderWdth');
+const sliderOpsz = document.getElementById('sliderOpsz');
+const wgtVal = document.getElementById('wgtVal');
+const wdthVal = document.getElementById('wdthVal');
+const opszVal = document.getElementById('opszVal');
+
+function updateSpecimen() {
+  const w = sliderWgt.value, d = sliderWdth.value, o = sliderOpsz.value;
+  specimen.style.fontVariationSettings = `'wght' ${w},'wdth' ${d},'opsz' ${o}`;
+  wgtVal.textContent = w; wdthVal.textContent = d; opszVal.textContent = o;
+}
+sliderWgt.addEventListener('input', updateSpecimen);
+sliderWdth.addEventListener('input', updateSpecimen);
+sliderOpsz.addEventListener('input', updateSpecimen);
+
+// ── Specimen grid ──
+const grid = document.getElementById('specimenGrid');
+const weights = [100, 400, 900];
+const widths = [50, 100, 150];
+const word = 'MONO';
+weights.forEach(wg => {
+  widths.forEach(wd => {
+    const cell = document.createElement('div');
+    cell.className = 'spec-cell';
+    cell.innerHTML = `
+      <div class="spec-word" style="font-variation-settings:'wght' ${wg},'wdth' ${wd}">${word}</div>
+      <div class="spec-axes">wght ${wg} · wdth ${wd}</div>`;
+    grid.appendChild(cell);
+  });
+});
+
+// ── Kinetic text ──
+const kineticPara = document.getElementById('kineticPara');
+const text = 'Type is not just form. It carries weight, rhythm, breath. A word at 100 weight whispers; at 900 it commands. Between them lies an infinite gradient of expression, now navigable in real time.';
+const words = text.split(' ');
+
+if (REDUCE) {
+  // The animation is a weight wave travelling through the sentence, one word
+  // out of phase with the next (0.18s stagger over a 4s cycle). Freezing it in
+  // TIME would flatten every word to one weight — the idea would be gone. So we
+  // freeze it in SPACE instead: sample the same wave at t=0 and stamp each word
+  // with the weight it would have been wearing. The sentence keeps its swell —
+  // light, blooming to 800, ebbing back — as a static weight gradient you can
+  // read all at once. Same curve, same phase offsets, no pixels moving.
+  kineticPara.innerHTML = words.map((w, i) => {
+    const phase = ((i * 0.18) % 4) / 4;                 // where this word sits in the cycle
+    const t = (1 - Math.cos(phase * Math.PI * 2)) / 2;  // 0→1→0, matching the ease-in-out swell
+    const wght = Math.round(300 + t * 500);             // the keyframes' own 300…800 range
+    const opacity = (0.7 + t * 0.3).toFixed(2);         // and its own .7…1
+    return `<span class="w" style="font-variation-settings:'wght' ${wght},'wdth' 100;opacity:${opacity}">${w}&nbsp;</span>`;
+  }).join('');
+} else {
+  kineticPara.innerHTML = words.map((w, i) =>
+    `<span class="w" style="animation-delay:${(i*0.18)%4}s">${w}&nbsp;</span>`
+  ).join('');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CALIBRE — 机械机芯制表</title>
+<style>
+  /* finesse · register=brand · A=near-black+champagne-metal · B=serif-display+mono-metadata · C=spec-dense-diagram · D=CSS-only-SVG · E=machined-metal
+   * back-filled from EXAMPLES.md; dials not recorded for this build */
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg:#0A0E16; --bg2:#0D1220; --panel:#10162400;
+    --ink:#E8ECF4; --silver:#C8D0DE; --steel:#8893A8; --dim:#48536A;
+    --gold:#C9A86A; --gold-dim:#8C7848;
+    --blue:#5B82D6; --blue-dim:#2E3F66;
+    --line:rgba(200,208,222,.10);
+    --line2:rgba(200,208,222,.18);
+  }
+  html { scroll-behavior:smooth; }
+  body {
+    background:var(--bg); color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden;
+    line-height:1.6;
+  }
+  .serif { font-family:'Cormorant Garamond',Georgia,serif; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+
+  /* substrate: grain + vignette */
+  .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  .vignette { position:fixed; inset:0; z-index:1; pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 38%, transparent 40%, rgba(4,6,11,.55) 100%); }
+  .content { position:relative; z-index:5; }
+
+  /* ── NAV ── */
+  header { position:fixed; top:0; left:0; right:0; z-index:40;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:22px 46px; transition:background .4s, backdrop-filter .4s, padding .4s;
+    border-bottom:1px solid transparent; }
+  header.scrolled { background:rgba(10,14,22,.72); backdrop-filter:blur(14px) saturate(1.2);
+    border-bottom:1px solid var(--line); padding:14px 46px; }
+  .brand { font-size:15px; font-weight:600; letter-spacing:.42em; }
+  .brand b { color:var(--gold); font-weight:600; }
+  nav { display:flex; gap:38px; font-size:11px; letter-spacing:.2em; color:var(--steel);
+    text-transform:uppercase; }
+  nav a { color:inherit; text-decoration:none; transition:color .25s; }
+  nav a:hover { color:var(--ink); }
+  .cta-nav { font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+    border:1px solid var(--line2); border-radius:2px; padding:10px 20px; cursor:pointer;
+    color:var(--silver); background:transparent; transition:.3s; }
+  .cta-nav:hover { background:var(--gold); color:#0A0E16; border-color:var(--gold); }
+  @media (max-width:820px){ nav{display:none} header{padding:18px 22px} }
+
+  /* ── HERO ── */
+  .hero { min-height:100dvh; display:grid; grid-template-columns:1fr; place-items:center;
+    position:relative; padding:120px 24px 60px; text-align:center; }
+  .movement-wrap { position:relative; width:min(560px,86vw); aspect-ratio:1; margin:0 auto; }
+  #movement { width:100%; height:100%; display:block; overflow:visible; }
+  .glow { position:absolute; inset:8%; border-radius:50%; z-index:-1;
+    background:radial-gradient(circle, rgba(91,130,214,.16), transparent 62%);
+    filter:blur(20px); }
+
+  .hero-copy { margin-top:46px; max-width:760px; }
+  .eyebrow { font-size:11px; letter-spacing:.42em; text-transform:uppercase; color:var(--gold);
+    margin-bottom:26px; display:inline-flex; gap:14px; align-items:center; }
+  .eyebrow i { width:26px; height:1px; background:var(--gold-dim); display:inline-block; }
+  h1 { font-size:clamp(46px,8.4vw,118px); font-weight:500; line-height:.9;
+    letter-spacing:-.02em; }
+  h1 .line { display:block; overflow:hidden; }
+  h1 .char { display:inline-block; will-change:transform; }
+  h1 em { font-style:italic; color:var(--gold); }
+  .hero-sub { margin:30px auto 0; max-width:480px; font-size:15px; line-height:1.8;
+    color:var(--steel); }
+  .hero-meta { margin-top:40px; display:inline-flex; gap:30px; flex-wrap:wrap;
+    justify-content:center; font-size:11px; letter-spacing:.16em; color:var(--dim);
+    text-transform:uppercase; }
+  .hero-meta span { color:var(--silver); }
+
+  .scroll-hint { position:absolute; bottom:26px; left:50%; transform:translateX(-50%);
+    font-size:10px; letter-spacing:.3em; color:var(--dim); text-transform:uppercase;
+    display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .scroll-hint .bar { width:1px; height:34px; background:linear-gradient(var(--gold),transparent); }
+
+  /* ── SPECS ── */
+  section { padding:130px 46px; position:relative; }
+  @media (max-width:820px){ section{padding:90px 22px} }
+  .sec-head { max-width:680px; margin:0 auto 70px; text-align:center; }
+  .sec-kicker { font-size:11px; letter-spacing:.36em; text-transform:uppercase;
+    color:var(--gold); margin-bottom:20px; }
+  .sec-title { font-size:clamp(30px,4.6vw,58px); font-weight:500; letter-spacing:-.01em;
+    line-height:1.04; }
+  .sec-title em { font-style:italic; color:var(--gold); }
+  .sec-desc { margin-top:22px; color:var(--steel); font-size:15px; line-height:1.8; }
+
+  .spec-grid { max-width:1080px; margin:0 auto; display:grid;
+    grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line);
+    border:1px solid var(--line); }
+  @media (max-width:820px){ .spec-grid{grid-template-columns:repeat(2,1fr)} }
+  .spec-cell { background:var(--bg); padding:38px 30px; position:relative; will-change:transform,opacity; }
+  .spec-num { font-size:clamp(34px,4vw,52px); font-weight:400; letter-spacing:-.02em;
+    color:var(--ink); line-height:1; }
+  .spec-num .unit { font-size:15px; color:var(--gold); margin-left:6px; letter-spacing:0; }
+  .spec-label { margin-top:16px; font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--steel); }
+  .spec-foot { margin-top:8px; font-size:12px; color:var(--dim); }
+
+  /* ── DECONSTRUCT (motion path) ── */
+  .decon { display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center;
+    max-width:1140px; margin:0 auto; }
+  @media (max-width:900px){ .decon{grid-template-columns:1fr; gap:40px} }
+  .decon-svg { width:100%; aspect-ratio:1/1; max-width:520px; margin:0 auto; }
+  #schematic { width:100%; height:100%; overflow:visible; }
+  .decon-list { display:flex; flex-direction:column; gap:0; }
+  .decon-item { padding:26px 0; border-top:1px solid var(--line);
+    display:grid; grid-template-columns:auto 1fr; gap:22px; align-items:start;
+    will-change:transform,opacity; }
+  .decon-item:last-child { border-bottom:1px solid var(--line); }
+  .decon-idx { font-size:12px; color:var(--gold); letter-spacing:.1em; padding-top:4px; }
+  .decon-item h3 { font-size:19px; font-weight:500; margin-bottom:7px; }
+  .decon-item p { font-size:14px; color:var(--steel); line-height:1.7; }
+
+  /* ── CERT (morph) ── */
+  .cert { text-align:center; max-width:680px; margin:0 auto; }
+  .cert-badge { width:170px; height:170px; margin:0 auto 40px; }
+  #cert-svg { width:100%; height:100%; overflow:visible; }
+  .cert-stat { margin-top:46px; display:flex; gap:50px; justify-content:center; flex-wrap:wrap; }
+  .cert-stat div { text-align:center; }
+  .cert-stat .v { font-size:34px; font-weight:400; letter-spacing:-.02em; }
+  .cert-stat .v small { color:var(--gold); font-size:15px; }
+  .cert-stat .l { font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--steel); margin-top:8px; }
+
+  /* ── COLLECTION ── */
+  .coll-grid { max-width:1180px; margin:0 auto; display:grid;
+    grid-template-columns:repeat(3,1fr); gap:24px; }
+  @media (max-width:900px){ .coll-grid{grid-template-columns:1fr; max-width:420px} }
+  .watch-card { background:linear-gradient(180deg,var(--bg2),var(--bg));
+    border:1px solid var(--line); border-radius:4px; padding:40px 32px 32px;
+    position:relative; overflow:hidden; transition:border-color .4s, transform .4s;
+    will-change:transform,opacity; }
+  .watch-card:hover { border-color:var(--gold-dim); transform:translateY(-6px); }
+  .watch-face { width:130px; height:130px; margin:0 auto 32px; position:relative; }
+  .watch-face svg { width:100%; height:100%; overflow:visible; }
+  .watch-card h3 { font-size:22px; font-weight:500; letter-spacing:.02em; }
+  .watch-card .ref { font-size:11px; letter-spacing:.2em; color:var(--dim); margin-top:6px;
+    text-transform:uppercase; }
+  .watch-card p { font-size:13.5px; color:var(--steel); margin-top:18px; line-height:1.7; }
+  .watch-card .price { margin-top:24px; font-size:14px; color:var(--gold); letter-spacing:.04em; }
+  .watch-card .price::before { content:''; display:block; width:30px; height:1px;
+    background:var(--gold-dim); margin-bottom:18px; }
+
+  /* ── FINALE ── */
+  .finale { text-align:center; padding:160px 24px; position:relative; }
+  .finale h2 { font-size:clamp(44px,9vw,150px); font-weight:500; line-height:.92;
+    letter-spacing:-.02em; }
+  .finale h2 .char { display:inline-block; will-change:transform,opacity; }
+  .finale h2 em { font-style:italic; color:var(--gold); }
+  .finale .btn { margin-top:50px; display:inline-block; font-size:12px; letter-spacing:.2em;
+    text-transform:uppercase; color:#0A0E16; background:var(--gold);
+    padding:18px 44px; border-radius:2px; cursor:pointer; transition:.3s; border:1px solid var(--gold); }
+  .finale .btn:hover { background:transparent; color:var(--gold); }
+
+  /* ── FOOTER ── */
+  footer { border-top:1px solid var(--line); padding:60px 46px 50px;
+    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:30px; }
+  @media (max-width:820px){ footer{padding:50px 22px; flex-direction:column; align-items:flex-start} }
+  .foot-brand { font-size:13px; letter-spacing:.4em; }
+  .foot-brand b { color:var(--gold); }
+  .foot-meta { font-size:11px; color:var(--dim); letter-spacing:.12em; line-height:2;
+    text-transform:uppercase; text-align:right; }
+  @media (max-width:820px){ .foot-meta{text-align:left} }
+
+  /* SVG shared */
+  .draw { fill:none; }
+  [data-rot] { transform-box:fill-box; transform-origin:center; }
+
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    .scroll-hint{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<header id="hdr">
+  <div class="brand">CAL<b>I</b>BRE</div>
+  <nav>
+    <a href="#movement">机芯</a>
+    <a href="#precision">精度</a>
+    <a href="#collection">系列</a>
+    <a href="#certified">认证</a>
+  </nav>
+  <button class="cta-nav">预约鉴赏</button>
+</header>
+
+<div class="content">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="movement-wrap">
+      <div class="glow"></div>
+      <svg id="movement" viewBox="0 0 400 400" aria-label="机械机芯">
+        <!-- outer dial ring -->
+        <circle class="draw" id="dial-ring" cx="200" cy="200" r="186"
+          stroke="rgba(200,208,222,.28)" stroke-width="1"/>
+        <circle class="draw" id="dial-ring2" cx="200" cy="200" r="168"
+          stroke="rgba(201,168,106,.35)" stroke-width="1"/>
+        <!-- ticks (generated) -->
+        <g id="ticks" stroke="rgba(200,208,222,.55)" stroke-width="1.4"></g>
+        <!-- hour numerals (generated) -->
+        <g id="numerals" fill="var(--silver)" font-family="'Cormorant Garamond',serif"
+           font-size="17" text-anchor="middle"></g>
+
+        <!-- gear train -->
+        <g id="gear-large" data-rot>
+          <circle cx="200" cy="252" r="46" fill="none" stroke="rgba(91,130,214,.45)"
+            stroke-width="9" stroke-dasharray="5.2 7.1" stroke-linecap="butt"/>
+          <circle cx="200" cy="252" r="30" fill="none" stroke="rgba(200,208,222,.16)" stroke-width="1"/>
+          <line x1="200" y1="222" x2="200" y2="282" stroke="rgba(200,208,222,.22)" stroke-width="1.5"/>
+          <line x1="170" y1="252" x2="230" y2="252" stroke="rgba(200,208,222,.22)" stroke-width="1.5"/>
+          <circle cx="200" cy="252" r="6" fill="#10162A" stroke="rgba(201,168,106,.6)" stroke-width="1.4"/>
+        </g>
+        <g id="gear-mid" data-rot>
+          <circle cx="138" cy="218" r="30" fill="none" stroke="rgba(201,168,106,.5)"
+            stroke-width="7" stroke-dasharray="4.4 6" stroke-linecap="butt"/>
+          <circle cx="138" cy="218" r="5" fill="#10162A" stroke="rgba(201,168,106,.55)" stroke-width="1.2"/>
+          <line x1="138" y1="190" x2="138" y2="246" stroke="rgba(200,208,222,.18)" stroke-width="1.2"/>
+        </g>
+        <g id="gear-small" data-rot>
+          <circle cx="264" cy="186" r="22" fill="none" stroke="rgba(200,208,222,.4)"
+            stroke-width="6" stroke-dasharray="3.6 5" stroke-linecap="butt"/>
+          <circle cx="264" cy="186" r="4" fill="#10162A" stroke="rgba(200,208,222,.4)" stroke-width="1"/>
+        </g>
+
+        <!-- balance wheel (oscillates) -->
+        <g id="balance" data-rot>
+          <circle cx="200" cy="138" r="40" fill="none" stroke="rgba(91,130,214,.55)" stroke-width="3"/>
+          <circle cx="200" cy="138" r="40" fill="none" stroke="rgba(91,130,214,.18)" stroke-width="9"/>
+          <line x1="160" y1="138" x2="240" y2="138" stroke="rgba(200,208,222,.5)" stroke-width="2"/>
+          <line x1="200" y1="98" x2="200" y2="178" stroke="rgba(200,208,222,.5)" stroke-width="2"/>
+          <line x1="172" y1="110" x2="228" y2="166" stroke="rgba(200,208,222,.28)" stroke-width="1.4"/>
+          <line x1="228" y1="110" x2="172" y2="166" stroke="rgba(200,208,222,.28)" stroke-width="1.4"/>
+          <!-- hairspring (generated spiral) -->
+          <path class="draw" id="hairspring" stroke="var(--gold)" stroke-width="1.3"/>
+          <circle cx="200" cy="138" r="5" fill="#10162A" stroke="var(--gold)" stroke-width="1.4"/>
+        </g>
+
+        <!-- center cap + hands -->
+        <g id="hands">
+          <line class="draw" id="hand-h" x1="200" y1="200" x2="200" y2="128"
+            stroke="var(--silver)" stroke-width="4" stroke-linecap="round" data-rot/>
+          <line class="draw" id="hand-m" x1="200" y1="200" x2="200" y2="96"
+            stroke="var(--ink)" stroke-width="2.6" stroke-linecap="round" data-rot/>
+          <line class="draw" id="hand-s" x1="200" y1="216" x2="200" y2="84"
+            stroke="var(--gold)" stroke-width="1.4" stroke-linecap="round" data-rot/>
+          <circle cx="200" cy="200" r="7" fill="#0D1220" stroke="var(--gold)" stroke-width="1.6"/>
+          <circle cx="200" cy="200" r="2.4" fill="var(--gold)"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="hero-copy">
+      <span class="eyebrow"><i></i>瑞士制造 · 自制机芯<i></i></span>
+      <h1 id="hero-title" class="serif">
+        <span class="line" data-line>时间的</span>
+        <span class="line" data-line><em>机械</em>诗篇</span>
+      </h1>
+      <p class="hero-sub">每一枚 CALIBRE 都由 247 个零件手工组装。摆轮每小时振荡 28,800 次，以毫厘之间的精密，丈量永恒。</p>
+      <div class="hero-meta">
+        <div>机芯 <span>CAL. 9-S</span></div>
+        <div>振频 <span>28,800 vph</span></div>
+        <div>动力储存 <span>72 小时</span></div>
+      </div>
+    </div>
+
+    <div class="scroll-hint"><span>探索机芯</span><span class="bar"></span></div>
+  </section>
+
+  <!-- PRECISION / SPECS -->
+  <section id="precision">
+    <div class="sec-head">
+      <div class="sec-kicker">CALIBRE 9-S 机芯</div>
+      <h2 class="sec-title serif">以<em>数字</em>定义精密</h2>
+      <p class="sec-desc">天文台级机芯的每一项指标，都是对机械极限的回应。</p>
+    </div>
+    <div class="spec-grid" id="spec-grid">
+      <div class="spec-cell">
+        <div class="spec-num" data-count="28800" data-format="comma">0<span class="unit">vph</span></div>
+        <div class="spec-label">摆轮振频</div>
+        <div class="spec-foot">每小时半振荡次数</div>
+      </div>
+      <div class="spec-cell">
+        <div class="spec-num" data-count="247">0<span class="unit">件</span></div>
+        <div class="spec-label">机芯零件</div>
+        <div class="spec-foot">含 31 颗红宝石轴承</div>
+      </div>
+      <div class="spec-cell">
+        <div class="spec-num" data-count="72">0<span class="unit">h</span></div>
+        <div class="spec-label">动力储存</div>
+        <div class="spec-foot">双发条盒串联</div>
+      </div>
+      <div class="spec-cell">
+        <div class="spec-num" data-count="-2" data-suffix="/+4">0<span class="unit">s</span></div>
+        <div class="spec-label">日差范围</div>
+        <div class="spec-foot">COSC 天文台认证</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DECONSTRUCT -->
+  <section>
+    <div class="decon">
+      <div class="decon-svg">
+        <svg id="schematic" viewBox="0 0 400 400" aria-label="机芯解构">
+          <circle cx="200" cy="200" r="150" fill="none" stroke="var(--line2)" stroke-width="1"/>
+          <!-- motion path (hidden track) -->
+          <path id="flow-path" class="draw" stroke="rgba(91,130,214,.30)" stroke-width="1"
+            stroke-dasharray="3 5"
+            d="M200,60 C300,90 340,200 300,290 C260,360 140,360 100,290 C60,200 100,90 200,60"/>
+          <!-- decorative inner schematic lines (drawable) -->
+          <circle class="draw schem" cx="200" cy="200" r="110" stroke="rgba(201,168,106,.4)" stroke-width="1"/>
+          <circle class="draw schem" cx="200" cy="200" r="70" stroke="rgba(200,208,222,.3)" stroke-width="1"/>
+          <line class="draw schem" x1="200" y1="50" x2="200" y2="350" stroke="rgba(200,208,222,.18)" stroke-width="1"/>
+          <line class="draw schem" x1="50" y1="200" x2="350" y2="200" stroke="rgba(200,208,222,.18)" stroke-width="1"/>
+          <!-- traveling jewel along path -->
+          <g id="flow-dot">
+            <circle r="5" fill="var(--blue)"/>
+            <circle r="11" fill="none" stroke="rgba(91,130,214,.5)" stroke-width="1"/>
+          </g>
+          <circle cx="200" cy="200" r="9" fill="#0D1220" stroke="var(--gold)" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div class="decon-list">
+        <div class="sec-kicker" style="margin-bottom:34px">解剖 · 247 个零件</div>
+        <div class="decon-item">
+          <div class="decon-idx mono">01</div>
+          <div><h3>擒纵系统</h3><p>瑞士杠杆式擒纵，以精确的能量脉冲驱动摆轮，是机芯跳动的心脏。</p></div>
+        </div>
+        <div class="decon-item">
+          <div class="decon-idx mono">02</div>
+          <div><h3>双发条盒</h3><p>两组发条串联缠绕，提供 72 小时不间断动力，扭矩输出更为线性平稳。</p></div>
+        </div>
+        <div class="decon-item">
+          <div class="decon-idx mono">03</div>
+          <div><h3>游丝与摆轮</h3><p>自制硅游丝抗磁防震，配 Glucydur 摆轮，确保振荡周期恒定如一。</p></div>
+        </div>
+        <div class="decon-item">
+          <div class="decon-idx mono">04</div>
+          <div><h3>红宝石轴承</h3><p>31 颗合成红宝石承托齿轮枢轴，将摩擦与磨损降至机械极限。</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COLLECTION -->
+  <section id="collection">
+    <div class="sec-head">
+      <h2 class="sec-title serif">同一颗<em>心脏</em>，三种性格</h2>
+    </div>
+    <div class="coll-grid" id="coll-grid">
+      <!-- cards injected style via JS face -->
+    </div>
+  </section>
+
+  <!-- CERTIFIED (morph) -->
+  <section id="certified">
+    <div class="cert">
+      <div class="cert-badge">
+        <svg id="cert-svg" viewBox="0 0 200 200" aria-label="天文台认证">
+          <polygon id="cert-shape" fill="none" stroke="var(--gold)" stroke-width="1.4"
+            points="100,18 142,42 142,90 100,114 58,90 58,42"/>
+          <polygon id="cert-target" style="display:none"
+            points="100,30 152,58 168,118 130,166 70,166 32,118"/>
+          <circle class="draw" id="cert-ring" cx="100" cy="100" r="62"
+            stroke="rgba(201,168,106,.4)" stroke-width="1"/>
+          <text x="100" y="96" text-anchor="middle" fill="var(--gold)"
+            font-family="'JetBrains Mono',monospace" font-size="13" letter-spacing="2">COSC</text>
+          <text x="100" y="116" text-anchor="middle" fill="var(--steel)"
+            font-family="'Inter',sans-serif" font-size="8" letter-spacing="3">CERTIFIED</text>
+        </svg>
+      </div>
+      <h2 class="sec-title serif" style="font-size:clamp(28px,4vw,46px)">每一枚都经过 <em>15 天</em> 五方位校验</h2>
+      <p class="sec-desc">在五个空间方位、三种温度下连续运行 15 昼夜，日差需稳定在 −2 / +4 秒之间，方可镌刻 CALIBRE 之名。</p>
+      <div class="cert-stat">
+        <div><div class="v" data-count="15">0<small>天</small></div><div class="l">校验周期</div></div>
+        <div><div class="v" data-count="5">0<small>位</small></div><div class="l">测试方位</div></div>
+        <div><div class="v" data-count="3">0<small>种</small></div><div class="l">温度环境</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINALE -->
+  <section class="finale">
+    <h2 class="serif" id="finale-title">恒久<em>不息</em></h2>
+    <div class="btn">预约私人鉴赏</div>
+  </section>
+
+  <footer>
+    <div>
+      <div class="foot-brand serif">CAL<b>I</b>BRE</div>
+      <div style="font-size:12px;color:var(--dim);margin-top:14px;letter-spacing:.04em">瑞士制表 · 始于 1887</div>
+    </div>
+    <div class="foot-meta">
+      LA CHAUX-DE-FONDS · SWITZERLAND<br>
+      MANUFACTURE MOVEMENT · COSC CERTIFIED<br>
+      © 2026 CALIBRE MANUFACTURE
+    </div>
+  </footer>
+</div>
+
+<script type="module">
+import { animate, createTimeline, stagger, svg, text, onScroll, utils } from './lib/anime.esm.min.js';
+
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SVGNS = 'http://www.w3.org/2000/svg';
+const cx = 200, cy = 200;
+
+/* ---------- 1. programmatic SVG: dial ticks + numerals + hairspring ---------- */
+const ticks = document.getElementById('ticks');
+for (let i = 0; i < 60; i++) {
+  const a = (i * 6 - 90) * Math.PI / 180;
+  const isHour = i % 5 === 0;
+  const r1 = 168, r2 = isHour ? 150 : 160;
+  const ln = document.createElementNS(SVGNS, 'line');
+  ln.setAttribute('x1', cx + r1 * Math.cos(a));
+  ln.setAttribute('y1', cy + r1 * Math.sin(a));
+  ln.setAttribute('x2', cx + r2 * Math.cos(a));
+  ln.setAttribute('y2', cy + r2 * Math.sin(a));
+  ln.setAttribute('stroke-width', isHour ? 2.2 : 1);
+  ln.setAttribute('opacity', isHour ? 0.8 : 0.4);
+  ln.classList.add('tick');
+  ticks.appendChild(ln);
+}
+const numerals = document.getElementById('numerals');
+const romans = ['XII','I','II','III','IIII','V','VI','VII','VIII','IX','X','XI'];
+romans.forEach((rn, i) => {
+  const a = (i * 30 - 90) * Math.PI / 180;
+  const r = 132;
+  const t = document.createElementNS(SVGNS, 'text');
+  t.setAttribute('x', cx + r * Math.cos(a));
+  t.setAttribute('y', cy + r * Math.sin(a) + 6);
+  t.textContent = rn;
+  t.classList.add('num');
+  t.setAttribute('opacity', 0);
+  numerals.appendChild(t);
+});
+// hairspring: archimedean spiral centered on balance (200,138)
+(() => {
+  const bx = 200, by = 138;
+  let d = `M ${bx} ${by}`;
+  const turns = 4.2, steps = 160, b = 5.4;
+  for (let i = 1; i <= steps; i++) {
+    const th = (i / steps) * turns * Math.PI * 2;
+    const r = (b * th) / (Math.PI * 2);
+    d += ` L ${(bx + r * Math.cos(th)).toFixed(2)} ${(by + r * Math.sin(th)).toFixed(2)}`;
+  }
+  document.getElementById('hairspring').setAttribute('d', d);
+})();
+
+/* ---------- collection cards (each a mini watch face) ---------- */
+const watches = [
+  { n:'CALIBRE Noir', ref:'REF. 9-S / 001', accent:'#5B82D6', desc:'午夜蓝大明火珐琅表盘，钛金属表壳，纯粹的现代主义。', price:'CHF 38,500' },
+  { n:'CALIBRE Or', ref:'REF. 9-S / 002', accent:'#C9A86A', desc:'18K 玫瑰金表壳，手工雕花机芯，致敬古典制表传统。', price:'CHF 62,000' },
+  { n:'CALIBRE Acier', ref:'REF. 9-S / 003', accent:'#C8D0DE', desc:'精钢运动款，陶瓷表圈，72 小时动力的日常伴侣。', price:'CHF 29,800' },
+];
+const collGrid = document.getElementById('coll-grid');
+watches.forEach((w, i) => {
+  const card = document.createElement('div');
+  card.className = 'watch-card';
+  card.innerHTML = `
+    <div class="watch-face">
+      <svg viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(200,208,222,.18)" stroke-width="1"/>
+        <circle cx="60" cy="60" r="46" fill="none" stroke="${w.accent}33" stroke-width="1"/>
+        ${Array.from({length:12}).map((_,k)=>{
+          const a=(k*30-90)*Math.PI/180;
+          return `<line x1="${60+50*Math.cos(a)}" y1="${60+50*Math.sin(a)}" x2="${60+44*Math.cos(a)}" y2="${60+44*Math.sin(a)}" stroke="rgba(200,208,222,.5)" stroke-width="1.4"/>`;
+        }).join('')}
+        <line class="wh-h" x1="60" y1="60" x2="60" y2="38" stroke="var(--silver)" stroke-width="3" stroke-linecap="round" style="transform-box:fill-box;transform-origin:center"/>
+        <line class="wh-m" x1="60" y1="60" x2="60" y2="26" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" style="transform-box:fill-box;transform-origin:center"/>
+        <line class="wh-s" x1="60" y1="68" x2="60" y2="24" stroke="${w.accent}" stroke-width="1" stroke-linecap="round" style="transform-box:fill-box;transform-origin:center"/>
+        <circle cx="60" cy="60" r="4" fill="#0D1220" stroke="${w.accent}" stroke-width="1.2"/>
+      </svg>
+    </div>
+    <h3 class="serif">${w.n}</h3>
+    <div class="ref mono">${w.ref}</div>
+    <p>${w.desc}</p>
+    <div class="price mono">${w.price}</div>`;
+  collGrid.appendChild(card);
+});
+
+/* ================= REDUCED MOTION: render static, skip loops ================= */
+if (reduced) {
+  utils.set(['.tick','.num','#dial-ring','#dial-ring2','.spec-cell','.decon-item',
+             '.watch-card','#cert-ring','.schem'], { opacity: 1 });
+  svg.createDrawable('.draw').forEach(p => utils.set(p, { draw: '0 1' }));
+  document.querySelectorAll('.char').forEach(c => c.style.opacity = 1);
+  // set hands to a fixed pleasing time (10:09)
+  utils.set('#hand-h', { rotate: -59 });
+  utils.set('#hand-m', { rotate: 54 });
+  utils.set('#hand-s', { rotate: 120 });
+} else {
+
+/* ---------- 2. text.split — hero title chars ---------- */
+const heroLines = text.split('#hero-title .line', { chars: true, words: false });
+utils.set(heroLines.chars, { opacity: 0 });
+
+/* ---------- 3. createTimeline — hero entrance choreography ---------- */
+const dialDraw = svg.createDrawable(['#dial-ring', '#dial-ring2']);
+const handsDraw = svg.createDrawable(['#hand-h', '#hand-m', '#hand-s']);
+const springDraw = svg.createDrawable('#hairspring');
+utils.set([...dialDraw, ...handsDraw, ...springDraw], { draw: '0 0' });
+utils.set('.tick', { opacity: 0 });
+
+const intro = createTimeline({ defaults: { ease: 'outExpo' } });
+intro
+  .add(dialDraw, { draw: '0 1', duration: 1400, ease: 'inOutQuad' }, 0)
+  .add('.tick', { opacity: t => +t.getAttribute('opacity') || 0.4, duration: 600,
+                  delay: stagger(12, { from: 'center' }) }, 300)
+  .add('.num', { opacity: 1, scale: [0.6, 1], duration: 700,
+                 delay: stagger(45) }, 700)
+  .add(springDraw, { draw: '0 1', duration: 1100, ease: 'inOutSine' }, 500)
+  .add('#balance', { opacity: [0, 1], scale: [0.85, 1], duration: 900 }, 600)
+  .add(['#gear-large','#gear-mid','#gear-small'],
+       { opacity: [0, 1], scale: [0.7, 1], duration: 800, delay: stagger(120) }, 800)
+  .add(handsDraw, { draw: '0 1', duration: 700, delay: stagger(120) }, 1100)
+  .add(heroLines.chars, { y: ['110%', '0%'], opacity: [0, 1], duration: 900,
+                          delay: stagger(28), ease: 'out(3)' }, 1100)
+  .add('.hero-sub', { opacity: [0, 1], y: [20, 0], duration: 800 }, 1700)
+  .add('.hero-meta', { opacity: [0, 1], y: [16, 0], duration: 800 }, 1900);
+
+/* ---------- 4. continuous loops — gear train + balance + hands ---------- */
+// gear train: meshed gears, opposite directions, speed by ratio
+animate('#gear-large', { rotate: 360, duration: 14000, ease: 'linear', loop: true });
+animate('#gear-mid',   { rotate: -360, duration: 8200, ease: 'linear', loop: true });
+animate('#gear-small', { rotate: 360, duration: 5400, ease: 'linear', loop: true });
+// balance wheel oscillation (the heartbeat)
+animate('#balance', { rotate: [-26, 26], duration: 380, ease: 'inOutSine',
+                      loop: true, alternate: true });
+// hairspring breathing in sync with balance
+animate('#hairspring', { scale: [1, 0.92], duration: 380, ease: 'inOutSine',
+                         loop: true, alternate: true });
+// running hands (sped up so motion is visible)
+animate('#hand-s', { rotate: 360, duration: 6000, ease: 'linear', loop: true });
+animate('#hand-m', { rotate: 360, duration: 72000, ease: 'linear', loop: true });
+animate('#hand-h', { rotate: 360, duration: 720000, ease: 'linear', loop: true });
+// mini watch faces in collection
+animate('.wh-s', { rotate: 360, duration: 5000, ease: 'linear', loop: true });
+animate('.wh-m', { rotate: 360, duration: 60000, ease: 'linear', loop: true });
+
+/* ---------- 5. createMotionPath — jewel traveling the flow path ---------- */
+const motion = svg.createMotionPath('#flow-path');
+animate('#flow-dot', {
+  translateX: motion.translateX,
+  translateY: motion.translateY,
+  rotate: motion.rotate,
+  duration: 9000, ease: 'linear', loop: true,
+});
+
+/* ---------- 6. stagger(grid) — spec cells reveal on scroll ---------- */
+utils.set('.spec-cell', { opacity: 0 });
+animate('.spec-cell', {
+  opacity: [0, 1], y: [28, 0], duration: 800, ease: 'outExpo',
+  delay: stagger(90, { grid: [4, 1], from: 'first' }),
+  autoplay: onScroll({ target: '#spec-grid', enter: 'bottom-=80 top', once: true }),
+});
+
+/* ---------- 7. count-up numbers on scroll ---------- */
+document.querySelectorAll('[data-count]').forEach(el => {
+  const target = +el.getAttribute('data-count');
+  const comma = el.getAttribute('data-format') === 'comma';
+  const suffix = el.getAttribute('data-suffix') || '';
+  const unitEl = el.querySelector('.unit, small');
+  const unitHTML = unitEl ? unitEl.outerHTML : '';
+  const obj = { v: 0 };
+  animate(obj, {
+    v: target, duration: 1800, ease: 'out(3)',
+    modifier: utils.round(0),
+    onUpdate: () => {
+      let n = obj.v;
+      let str = comma ? n.toLocaleString('en-US') : String(n);
+      if (suffix && n === target) str = str + suffix;
+      el.innerHTML = str + unitHTML;
+    },
+    autoplay: onScroll({ target: el, enter: 'bottom-=40 top', once: true }),
+  });
+});
+
+/* ---------- 8. onScroll reveals — schematic + decon list + cards + finale ---------- */
+const schemDraw = svg.createDrawable('.schem');
+utils.set(schemDraw, { draw: '0 0' });
+animate(schemDraw, {
+  draw: '0 1', duration: 1600, ease: 'inOutQuad', delay: stagger(180),
+  autoplay: onScroll({ target: '#schematic', enter: 'bottom-=100 top', once: true }),
+});
+
+utils.set('.decon-item', { opacity: 0 });
+animate('.decon-item', {
+  opacity: [0, 1], x: [-30, 0], duration: 800, ease: 'outExpo', delay: stagger(110),
+  autoplay: onScroll({ target: '.decon-list', enter: 'bottom-=80 top', once: true }),
+});
+
+utils.set('.watch-card', { opacity: 0 });
+animate('.watch-card', {
+  opacity: [0, 1], y: [40, 0], scale: [0.96, 1], duration: 900, ease: 'outExpo',
+  delay: stagger(130),
+  autoplay: onScroll({ target: '#coll-grid', enter: 'bottom-=60 top', once: true }),
+});
+
+/* ---------- 9. svg.morphTo — certification badge shape morph ---------- */
+const certRing = svg.createDrawable('#cert-ring');
+utils.set(certRing, { draw: '0 0' });
+animate(certRing, {
+  draw: '0 1', duration: 1400, ease: 'inOutSine',
+  autoplay: onScroll({ target: '#cert-svg', enter: 'bottom-=80 top', once: true }),
+});
+animate('#cert-shape', {
+  points: svg.morphTo('#cert-target'),
+  rotate: [0, 30],
+  duration: 1600, ease: 'inOutQuad',
+  loop: true, alternate: true,
+  autoplay: onScroll({ target: '#cert-svg', enter: 'bottom-=80 top', once: true }),
+});
+
+/* ---------- finale title chars ---------- */
+const finaleSplit = text.split('#finale-title', { chars: true, words: false });
+utils.set(finaleSplit.chars, { opacity: 0 });
+animate(finaleSplit.chars, {
+  opacity: [0, 1], y: [60, 0], rotateX: [-40, 0], duration: 1000, ease: 'outExpo',
+  delay: stagger(70),
+  autoplay: onScroll({ target: '#finale-title', enter: 'bottom-=60 top', once: true }),
+});
+
+} /* end !reduced */
+
+/* ---------- nav scrolled state (always) ---------- */
+const hdr = document.getElementById('hdr');
+const onScrollNav = () => hdr.classList.toggle('scrolled', window.scrollY > 40);
+onScrollNav();
+addEventListener('scroll', onScrollNav, { passive: true });
+</script>
+</body>
+</html>

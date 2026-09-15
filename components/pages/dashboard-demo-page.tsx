@@ -248,7 +248,6 @@ export function DemoDashboardPage() {
   return (
     <AppShell runtimeMode="demo" activePath="/">
       <PageHeader
-        eyebrow="实时运行态势"
         title="运营指挥中心"
         description="华东海上风电场 · 64 台机组的实时状态、风险事件与 AI 运维进程"
         meta={
@@ -401,7 +400,6 @@ export function DemoDashboardPage() {
 
         <Card className="panel panel--priority">
           <CardHeader
-            eyebrow="需要关注"
             title="优先处置队列"
             description="按风险与持续时间排序"
             action={
@@ -440,7 +438,6 @@ export function DemoDashboardPage() {
       <section className="dashboard-lower-grid">
         <Card className="panel panel--missions">
           <CardHeader
-            eyebrow="多 Agent 协作"
             title="活跃 Missions"
             description="诊断、审核与执行进度"
             action={
@@ -480,7 +477,6 @@ export function DemoDashboardPage() {
 
         <Card className="panel panel--activity">
           <CardHeader
-            eyebrow="Agent 实时活动"
             title="WT-023 协作时间线"
             description="仅显示结构化执行摘要，不展示隐藏推理"
             action={
@@ -522,11 +518,7 @@ export function DemoDashboardPage() {
         </Card>
 
         <Card className="panel panel--window">
-          <CardHeader
-            eyebrow="海上作业窗口"
-            title="下一可用作业窗口"
-            description="气象与船舶作业条件"
-          />
+          <CardHeader title="下一可用作业窗口" description="气象与船舶作业条件" />
           {weatherWindows.slice(0, 2).map((window) => (
             <div className="weather-window" key={window.id}>
               <span className="weather-window__date">

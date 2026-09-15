@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>烘豆日记 · 挂耳咖啡商品详情 — 移动端电商 H5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;900&family=Noto+Sans+SC:wght@300;400;500;700&family=Bodoni+Moda:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* finesse · register=h5 · morph=D-commerce-stack · wraps=commerce
+   * A=white+coffee-brown/vermilion · B=NotoSerif-600/Bodoni · C=PDP-vertical-stack
+   * D=transition-choreography · E=roastery-craft · SOUL=6 SPECTACLE=3 DENSITY=8
+   *
+   * 语料库参考页 —— h5-mobile.md §4 形态 D，wraps commerce-ui.md 的 PDP 规则。
+   * 要读的东西，按 h5-mobile.md 的章节号：
+   *   §4.D  竖向顺序是近乎固定的：图集 → 价格标题 → 倒计时 → SKU 行 → 配送 →
+   *         参数表 → 评价 → 图文详情 → 吸底购买栏。偏离这个顺序要付转化率的代价
+   *   §1.B  同样是 body 锁死 / #app 滚动；这里 #app 直接 position:absolute; inset:0
+   *   §2.A  吸底购买栏的 padding-bottom = env(safe-area-inset-bottom) + 11px
+   *   §5.A  SKU 面板是 sheet 的标准实现：scrim + translateY(102%) + max-height:82%
+   *         —— 规格选择必须进 sheet，不能内联进页面，价格和库存要在一个地方更新
+   *   §4.D  加购小球抛物线（两段 bezier）+ 角标 scale(1)→1.5→1 弹跳：
+   *         这是本形态里唯一「装饰性」动效仍然值得做的地方，它回答了「刚才那下成功了吗」
+   *   §2.D  图集用 scroll-snap-type:x mandatory + 页码，轨道出血到屏幕边缘
+   *   §7    reduced-motion 下 .fly 是 display:none —— 装饰层要「移除」而不是「冻结」
+   *
+   * 反 dark-pattern（commerce-ui.md 不变）：倒计时是真的，库存是真的，没有预勾选加购。
+   * 图片是代码生成的 SVG 占位符（见 <script> 顶部的 PH），不是真实资源。 */
+  :root {
+    --bg: #fff;
+    --soft: #f7f5f2;
+    --ink: #1c1a18;
+    --dim: rgba(28,26,24,.55);
+    --dim-2: rgba(28,26,24,.32);
+    --line: rgba(28,26,24,.09);
+    --red: #c8402f;
+    --bean: #7a4a25;
+    --ease: cubic-bezier(.22,.9,.28,1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow-x: clip; }
+  body {
+    background: #cfcac4; color: var(--ink); overflow: hidden;
+    font-family: "Noto Sans SC", -apple-system, "PingFang SC", sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .phone { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+  @media (min-width: 560px) {
+    body { background: radial-gradient(120% 90% at 50% 0%, #efece7 0%, #b5aea6 62%); }
+    .phone {
+      width: 406px; height: min(880px, 94vh);
+      border-radius: 46px; border: 1px solid rgba(0,0,0,.1);
+      box-shadow: 0 46px 110px -34px rgba(0,0,0,.5), 0 0 0 10px #2b2724;
+    }
+  }
+  #app { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  #app::-webkit-scrollbar { width: 0; }
+
+  /* ── 悬浮导航 ─────────────────────────────────────── */
+  .nav {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 40;
+    padding: calc(env(safe-area-inset-top) + 10px) 16px 10px;
+    display: flex; align-items: center; gap: 12px;
+    transition: background .3s ease, backdrop-filter .3s ease, border-color .3s;
+    border-bottom: 1px solid transparent;
+  }
+  .nav.solid { background: rgba(255,255,255,.94); backdrop-filter: blur(14px); border-bottom-color: var(--line); }
+  .nav .rnd {
+    width: 32px; height: 32px; border-radius: 50%; border: 0; cursor: pointer;
+    background: rgba(0,0,0,.34); backdrop-filter: blur(6px); display: grid; place-items: center;
+    transition: background .3s ease;
+  }
+  .nav.solid .rnd { background: var(--soft); }
+  .nav .rnd svg { width: 13px; height: 13px; stroke: #fff; fill: none; stroke-width: 2; transition: stroke .3s; }
+  .nav.solid .rnd svg { stroke: var(--ink); }
+  .nav .title {
+    flex: 1; font-size: 15px; font-weight: 600; opacity: 0; transition: opacity .3s ease;
+  }
+  .nav.solid .title { opacity: 1; }
+
+  /* ── 图集 ─────────────────────────────────────────── */
+  .gallery { position: relative; }
+  .strip {
+    display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+    aspect-ratio: 1/1;
+  }
+  .strip::-webkit-scrollbar { display: none; }
+  .strip img { flex: none; width: 100%; height: 100%; object-fit: cover; scroll-snap-align: start; }
+  .pager {
+    position: absolute; right: 14px; bottom: 14px; z-index: 5;
+    background: rgba(0,0,0,.45); backdrop-filter: blur(6px); color: #fff;
+    padding: 4px 11px; border-radius: 999px; font-size: 11px;
+    font-variant-numeric: tabular-nums; letter-spacing: .06em;
+  }
+
+  /* ── 价格块 ───────────────────────────────────────── */
+  .pricebar {
+    background: linear-gradient(100deg, #2f2723, #4a3a2e);
+    color: #fff; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .pricebar .p { display: flex; align-items: baseline; gap: 9px; }
+  .pricebar .p b { font-family: "Bodoni Moda", serif; font-size: 34px; font-weight: 600; line-height: 1; }
+  .pricebar .p b i { font-size: 17px; font-style: normal; margin-right: 2px; }
+  .pricebar .p s { font-size: 12.5px; opacity: .5; }
+  .pricebar .cd { text-align: right; }
+  .pricebar .cd small { font-size: 10.5px; opacity: .66; letter-spacing: .06em; }
+  .pricebar .cd .t {
+    display: flex; gap: 3px; margin-top: 5px; font-variant-numeric: tabular-nums;
+    align-items: center; justify-content: flex-end;
+  }
+  .pricebar .cd .t span {
+    background: rgba(255,255,255,.16); border-radius: 4px; padding: 3px 5px; font-size: 12px; font-weight: 600;
+  }
+
+  /* ── 标题区 ───────────────────────────────────────── */
+  .head { padding: 18px 18px 16px; }
+  .head h1 { font-family: "Noto Serif SC", serif; font-size: 21px; font-weight: 600; line-height: 1.45; }
+  .head .sub { font-size: 12.5px; color: var(--dim); margin-top: 8px; line-height: 1.8; }
+  .head .badges { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+  .head .badges span {
+    font-size: 10.5px; padding: 4px 9px; border-radius: 5px;
+    background: rgba(200,64,47,.07); color: var(--red); border: 1px solid rgba(200,64,47,.18);
+  }
+  .head .stat { display: flex; gap: 18px; margin-top: 14px; font-size: 11.5px; color: var(--dim-2); }
+
+  .band {
+    display: flex; gap: 16px; padding: 12px 18px; background: var(--soft);
+    font-size: 11px; color: var(--dim); overflow-x: auto; scrollbar-width: none;
+  }
+  .band::-webkit-scrollbar { display: none; }
+  .band span { flex: none; display: flex; align-items: center; gap: 5px; }
+  .band i { color: var(--bean); font-style: normal; }
+
+  /* ── 行 ───────────────────────────────────────────── */
+  .row {
+    display: flex; align-items: center; gap: 12px; padding: 16px 18px;
+    border-top: 8px solid var(--soft); cursor: pointer;
+  }
+  .row .k { font-size: 12.5px; color: var(--dim-2); flex: none; width: 42px; }
+  .row .v { flex: 1; font-size: 13.5px; }
+  .row .v small { color: var(--dim); font-size: 12px; }
+  .row svg { width: 7px; height: 12px; stroke: var(--dim-2); stroke-width: 1.8; fill: none; }
+
+  /* ── 详情 ─────────────────────────────────────────── */
+  .detail { border-top: 8px solid var(--soft); padding: 22px 0 0; }
+  .detail .cap {
+    text-align: center; font-family: "Noto Serif SC", serif; font-size: 15px;
+    letter-spacing: .3em; color: var(--dim-2); margin-bottom: 20px;
+  }
+  .detail figure { margin-bottom: 4px; }
+  .detail figure img { width: 100%; display: block; }
+  .detail figure figcaption { padding: 14px 18px 22px; font-size: 12.5px; color: var(--dim); line-height: 2; }
+  .detail figure figcaption b { display: block; color: var(--ink); font-size: 14px; font-weight: 600; margin-bottom: 7px; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; }
+  table td { padding: 12px 18px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+  table td:first-child { color: var(--dim-2); width: 5.6em; }
+
+  /* ── 评价 ─────────────────────────────────────────── */
+  .rev { border-top: 8px solid var(--soft); padding: 18px; }
+  .rev .top { display: flex; align-items: baseline; justify-content: space-between; }
+  .rev .top h3 { font-size: 15px; font-weight: 600; }
+  .rev .top b { font-family: "Bodoni Moda", serif; font-size: 22px; color: var(--red); }
+  .rev .tags { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 14px; }
+  .rev .tags span {
+    font-size: 11.5px; padding: 6px 12px; border-radius: 99px; background: var(--soft); color: var(--dim);
+  }
+  .rev .one { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .rev .who { display: flex; align-items: center; gap: 10px; }
+  .rev .av {
+    width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(140deg, #d9b48a, var(--bean));
+    display: grid; place-items: center; color: #fff; font-size: 12px;
+  }
+  .rev .who .nm { font-size: 12.5px; }
+  .rev .who .st { margin-left: auto; font-size: 11px; color: var(--red); letter-spacing: .1em; }
+  .rev p { font-size: 13px; line-height: 1.95; color: var(--dim); margin-top: 10px; }
+  .rev .sku { font-size: 11px; color: var(--dim-2); margin-top: 8px; }
+
+  .tail { padding: 40px 18px calc(env(safe-area-inset-bottom) + 100px); text-align: center; }
+  .tail p { font-size: 11px; color: var(--dim-2); line-height: 2; letter-spacing: .1em; }
+
+  /* ── 吸底栏 ───────────────────────────────────────── */
+  .buybar {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 45;
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px calc(env(safe-area-inset-bottom) + 11px);
+    background: rgba(255,255,255,.96); backdrop-filter: blur(16px);
+    border-top: 1px solid var(--line);
+  }
+  .buybar .ic {
+    position: relative; width: 42px; border: 0; background: none; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    font-family: inherit; font-size: 9.5px; color: var(--dim);
+  }
+  .buybar .ic svg { width: 19px; height: 19px; stroke: var(--ink); fill: none; stroke-width: 1.5; }
+  .buybar .ic.fav.on svg { fill: var(--red); stroke: var(--red); }
+  .buybar .badge {
+    position: absolute; top: -4px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 99px; background: var(--red); color: #fff; font-size: 10px;
+    display: grid; place-items: center; transform: scale(0); transition: transform .3s var(--ease);
+  }
+  .buybar .badge.on { transform: scale(1); }
+  .buybar .badge.pop { animation: pop .42s var(--ease); }
+  @keyframes pop { 0% { transform: scale(1);} 40% { transform: scale(1.5);} 100% { transform: scale(1);} }
+  .buybar .btns { flex: 1; display: flex; border-radius: 999px; overflow: hidden; }
+  .buybar .btns button {
+    flex: 1; border: 0; padding: 14px 0; cursor: pointer; font-family: inherit;
+    font-size: 14px; font-weight: 500; letter-spacing: .04em; color: #fff;
+    transition: filter .2s;
+  }
+  .buybar .btns button:active { filter: brightness(.9); }
+  .buybar .cart { background: linear-gradient(100deg, #c9863f, #b06c2c); }
+  .buybar .now { background: linear-gradient(100deg, #d24b34, #a8301f); }
+
+  /* 飞入购物车的小球 */
+  .fly {
+    position: absolute; z-index: 60; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--bean); pointer-events: none; opacity: 0;
+  }
+
+  /* ── SKU 面板 ─────────────────────────────────────── */
+  .scrim {
+    position: absolute; inset: 0; z-index: 50; background: rgba(0,0,0,.4);
+    opacity: 0; pointer-events: none; transition: opacity .3s ease;
+  }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .sku {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 55; background: var(--bg);
+    border-radius: 20px 20px 0 0; padding: 0 18px calc(env(safe-area-inset-bottom) + 16px);
+    transform: translateY(102%); transition: transform .42s var(--ease);
+    max-height: 82%; overflow-y: auto;
+  }
+  .sku.on { transform: none; }
+  .sku::-webkit-scrollbar { width: 0; }
+  .sku .hd { display: flex; gap: 14px; padding: 18px 0 16px; position: relative; }
+  .sku .hd img { width: 88px; height: 88px; border-radius: 12px; object-fit: cover; margin-top: -26px; border: 3px solid #fff; }
+  .sku .hd .p b { font-family: "Bodoni Moda", serif; font-size: 27px; color: var(--red); }
+  .sku .hd .p b i { font-size: 15px; font-style: normal; }
+  .sku .hd .p .st { font-size: 11.5px; color: var(--dim-2); margin-top: 6px; }
+  .sku .hd .x {
+    position: absolute; right: 0; top: 14px; border: 0; background: none;
+    font-size: 18px; color: var(--dim-2); cursor: pointer;
+  }
+  .sku .grp { padding: 16px 0; border-top: 1px solid var(--line); }
+  .sku .grp .lab { font-size: 12px; color: var(--dim); margin-bottom: 11px; }
+  .sku .grp .opts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sku .opt {
+    padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--soft);
+    font-family: inherit; font-size: 13px; color: var(--ink); cursor: pointer;
+    transition: all .2s var(--ease);
+  }
+  .sku .opt.on { border-color: var(--red); color: var(--red); background: rgba(200,64,47,.06); font-weight: 500; }
+  .sku .qty { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-top: 1px solid var(--line); }
+  .sku .qty .lab { font-size: 12.5px; }
+  .sku .step { display: flex; align-items: center; gap: 2px; }
+  .sku .step button {
+    width: 32px; height: 32px; border: 1px solid var(--line); background: var(--soft);
+    font-size: 17px; cursor: pointer; font-family: inherit; color: var(--ink);
+  }
+  .sku .step button:first-child { border-radius: 8px 0 0 8px; }
+  .sku .step button:last-child { border-radius: 0 8px 8px 0; }
+  .sku .step input {
+    width: 46px; height: 32px; border: 1px solid var(--line); border-left: 0; border-right: 0;
+    text-align: center; font-family: inherit; font-size: 14px; background: var(--bg); color: var(--ink);
+  }
+  .sku .ok {
+    width: 100%; margin-top: 12px; padding: 15px; border: 0; border-radius: 999px;
+    background: linear-gradient(100deg, #d24b34, #a8301f); color: #fff;
+    font-family: inherit; font-size: 15px; font-weight: 500; letter-spacing: .1em; cursor: pointer;
+  }
+  .sku .ok:active { filter: brightness(.92); }
+
+  .toast {
+    position: absolute; left: 50%; top: 42%; transform: translate(-50%, 10px); z-index: 70;
+    background: rgba(28,26,24,.9); color: #fff; padding: 12px 22px; border-radius: 12px;
+    font-size: 13px; opacity: 0; pointer-events: none; transition: all .3s var(--ease);
+  }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .cta, .buybar { transform: none; }
+  .fly { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div id="app">
+    <div class="gallery">
+      <div class="strip" id="strip">
+        <img data-ph="25" alt="手冲">
+        <img data-ph="40" alt="生豆">
+        <img data-ph="15" alt="熟豆">
+        <img data-ph="200" alt="器具">
+        <img data-ph="180" alt="冰萃">
+      </div>
+      <span class="pager" id="pager">1 / 5</span>
+    </div>
+
+    <div class="pricebar">
+      <div class="p"><b id="price"><i>¥</i>89</b><s id="was">¥128</s></div>
+      <div class="cd">
+        <small>限时秒杀 · 距结束</small>
+        <div class="t"><span id="hh">05</span>:<span id="mm">42</span>:<span id="ss">18</span></div>
+      </div>
+    </div>
+
+    <div class="head">
+      <h1>耶加雪菲 科契尔 水洗 G1<br>挂耳咖啡 · 单一产区</h1>
+      <p class="sub">柑橘 / 茉莉 / 红茶尾韵 · 每袋 10g · 烘焙后 72 小时内发出</p>
+      <div class="badges"><span>新鲜烘焙</span><span>顺丰包邮</span><span>7 天无理由</span></div>
+      <div class="stat"><span>月售 4826</span><span>累计评价 1.2 万</span><span>回购率 68%</span></div>
+    </div>
+
+    <div class="band">
+      <span><i>◷</i>今日 15:00 前下单当日发</span>
+      <span><i>❄</i>全程冷链</span>
+      <span><i>✓</i>SCA 82+ 杯测</span>
+    </div>
+
+    <div class="row" id="skuRow">
+      <span class="k">已选</span>
+      <span class="v" id="skuTxt">中度烘焙 · 单盒 10 片 · <small>数量 1</small></span>
+      <svg viewBox="0 0 7 12"><path d="M1 1l5 5-5 5"/></svg>
+    </div>
+    <div class="row">
+      <span class="k">送至</span>
+      <span class="v">上海市 徐汇区 <small>· 预计明天 18:00 前送达</small></span>
+      <svg viewBox="0 0 7 12"><path d="M1 1l5 5-5 5"/></svg>
+    </div>
+
+    <div class="detail">
+      <p class="cap">产 品 详 情</p>
+      <figure>
+        <img data-ph="40" alt="">
+        <figcaption><b>海拔 1950–2100 米的科契尔</b>
+          埃塞俄比亚西达摩产区的核心地块，日夜温差把糖分牢牢锁在果肉里。我们只收当季前 3% 的批次，水洗处理，日晒床上翻晒 12 天。</figcaption>
+      </figure>
+      <figure>
+        <img data-ph="15" alt="">
+        <figcaption><b>浅中烘 · Agtron 68</b>
+          在一爆密集后 40 秒下豆，保留花香的同时把青涩感压掉。每一炉只烘 12 公斤，烘焙曲线随当天湿度微调。</figcaption>
+      </figure>
+      <figure>
+        <img data-ph="200" alt="">
+        <figcaption><b>研磨度 · 中细，像细砂糖</b>
+          挂耳内已按 10g 定量填装。建议 92°C 水温，30g 闷蒸 30 秒，再分两次注水至 150g，总时长 2 分 15 秒。</figcaption>
+      </figure>
+      <table>
+        <tr><td>产地</td><td>埃塞俄比亚 · 西达摩 · 科契尔</td></tr>
+        <tr><td>处理法</td><td>水洗</td></tr>
+        <tr><td>品种</td><td>原生种 Heirloom</td></tr>
+        <tr><td>烘焙度</td><td>浅中烘（可选中深烘）</td></tr>
+        <tr><td>净含量</td><td>10g × 10 片</td></tr>
+        <tr><td>保质期</td><td>烘焙日起 12 个月</td></tr>
+      </table>
+    </div>
+
+    <div class="rev">
+      <div class="top"><h3>用户评价（12,408）</h3><b>4.9</b></div>
+      <div class="tags">
+        <span>香气很足 3521</span><span>酸质干净 2884</span><span>包装好看 1926</span><span>发货快 1503</span>
+      </div>
+      <div class="one">
+        <div class="who"><div class="av">周</div><span class="nm">周***桐</span><span class="st">★★★★★</span></div>
+        <p>冲了三天，柑橘的酸很明亮但不尖，放凉之后红茶感特别明显。挂耳的滤袋比之前买的挺括，不会塌进杯子里。</p>
+        <p class="sku">中度烘焙 · 单盒 10 片</p>
+      </div>
+      <div class="one">
+        <div class="who"><div class="av">L</div><span class="nm">Lin***9</span><span class="st">★★★★★</span></div>
+        <p>办公室常备。92 度水按说明冲的，闷蒸时候鼓得很高，说明确实新鲜。就是一盒 10 片不太够喝，下次直接上三盒装。</p>
+        <p class="sku">中深烘焙 · 三盒装</p>
+      </div>
+    </div>
+
+    <div class="tail"><p>烘豆日记 ROASTING NOTES<br>本页所有信息为演示内容</p></div>
+  </div>
+
+  <div class="nav" id="nav">
+    <button class="rnd"><svg viewBox="0 0 14 14"><path d="M9 1L3 7l6 6"/></svg></button>
+    <span class="title">耶加雪菲 科契尔 挂耳</span>
+    <button class="rnd"><svg viewBox="0 0 14 14"><path d="M7 1v9M4 4l3-3 3 3M2 9v4h10V9"/></svg></button>
+  </div>
+
+  <div class="buybar">
+    <button class="ic"><svg viewBox="0 0 20 20"><path d="M10 2a8 8 0 00-7 11.8L2 18l4.4-1A8 8 0 1010 2z"/></svg>客服</button>
+    <button class="ic fav" id="fav"><svg viewBox="0 0 20 20"><path d="M10 17S3 12.6 3 7.9A3.9 3.9 0 0110 5.6a3.9 3.9 0 017 2.3C17 12.6 10 17 10 17z"/></svg>收藏</button>
+    <button class="ic" id="cartIc">
+      <svg viewBox="0 0 20 20"><path d="M3 3h2l2 10h9l2-7H6"/><circle cx="8.5" cy="16.5" r="1.2"/><circle cx="15" cy="16.5" r="1.2"/></svg>购物车
+      <span class="badge" id="badge">0</span>
+    </button>
+    <div class="btns">
+      <button class="cart" data-sku="cart">加入购物车</button>
+      <button class="now" data-sku="now">立即购买</button>
+    </div>
+  </div>
+
+  <div class="fly" id="fly"></div>
+  <div class="scrim" id="scrim"></div>
+
+  <div class="sku" id="sku">
+    <div class="hd">
+      <img data-ph="25" alt="">
+      <div class="p">
+        <b id="skuPrice"><i>¥</i>89</b>
+        <p class="st" id="skuStock">库存 2,318 件 · 已选「中度烘焙 / 单盒 10 片」</p>
+      </div>
+      <button class="x" id="skuX">✕</button>
+    </div>
+    <div class="grp">
+      <p class="lab">烘焙度</p>
+      <div class="opts" id="gRoast">
+        <button class="opt on" data-v="中度烘焙">中度烘焙</button>
+        <button class="opt" data-v="中深烘焙">中深烘焙</button>
+        <button class="opt" data-v="浅烘">浅烘（限量）</button>
+      </div>
+    </div>
+    <div class="grp">
+      <p class="lab">规格</p>
+      <div class="opts" id="gPack">
+        <button class="opt on" data-v="单盒 10 片" data-p="89">单盒 10 片</button>
+        <button class="opt" data-v="三盒装 30 片" data-p="239">三盒装 30 片</button>
+        <button class="opt" data-v="节日礼盒 + 手冲壶" data-p="358">节日礼盒 + 手冲壶</button>
+      </div>
+    </div>
+    <div class="qty">
+      <span class="lab">数量</span>
+      <div class="step">
+        <button id="minus">−</button><input id="qty" value="1" readonly><button id="plus">+</button>
+      </div>
+    </div>
+    <button class="ok" id="skuOk">确 定</button>
+  </div>
+
+  <div class="toast" id="toast">已加入购物车</div>
+</div>
+
+<script>
+(() => {
+  /* ── 占位图 ─────────────────────────────────────────
+     这个语料库不带二进制资源（EXAMPLES.md 的理由：recipe 能旅行，JPEG 不能），
+     所以每张图都是代码生成的 SVG data-URI，色相由 data-ph 决定。
+     真实项目里把 PH(n) 换成真实商品图 URL 即可 —— <img> 标签和
+     scroll-snap / object-fit 的 CSS 一行都不用改。 */
+  const PH = h => 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+       <defs><linearGradient id="g" x1="0" y1="0" x2=".7" y2="1">
+         <stop offset="0" stop-color="hsl(${h} 40% 70%)"/>
+         <stop offset="1" stop-color="hsl(${h + 22} 44% 32%)"/>
+       </linearGradient></defs>
+       <rect width="120" height="120" fill="url(#g)"/>
+       <circle cx="60" cy="54" r="26" fill="hsl(${h} 48% 84%)" opacity=".42"/>
+       <path d="M0 120 L40 68 L70 98 L94 76 L120 120Z" fill="hsl(${h + 34} 34% 20%)" opacity=".4"/>
+     </svg>`);
+  document.querySelectorAll('[data-ph]').forEach(el => { el.src = PH(+el.dataset.ph); });
+
+  const app = document.getElementById('app'), nav = document.getElementById('nav');
+  app.addEventListener('scroll', () => nav.classList.toggle('solid', app.scrollTop > 200), { passive: true });
+
+  /* 图集页码 */
+  const strip = document.getElementById('strip'), pager = document.getElementById('pager');
+  strip.addEventListener('scroll', () => {
+    const i = Math.round(strip.scrollLeft / strip.clientWidth) + 1;
+    pager.textContent = `${Math.min(i, 5)} / 5`;
+  }, { passive: true });
+
+  /* 秒杀倒计时（到今晚 24:00） */
+  const hh = document.getElementById('hh'), mm = document.getElementById('mm'), ss = document.getElementById('ss');
+  setInterval(() => {
+    const n = new Date(), end = new Date(n); end.setHours(24, 0, 0, 0);
+    let s = Math.max(0, Math.floor((end - n) / 1000));
+    hh.textContent = String(Math.floor(s / 3600)).padStart(2, '0');
+    mm.textContent = String(Math.floor(s % 3600 / 60)).padStart(2, '0');
+    ss.textContent = String(s % 60).padStart(2, '0');
+  }, 1000);
+
+  /* ── SKU 面板 ─────────────────────────────────────── */
+  const sku = document.getElementById('sku'), scrim = document.getElementById('scrim');
+  const skuPrice = document.getElementById('skuPrice'), skuStock = document.getElementById('skuStock');
+  const skuTxt = document.getElementById('skuTxt'), price = document.getElementById('price'), was = document.getElementById('was');
+  const qtyEl = document.getElementById('qty');
+  let mode = 'cart', qty = 1;
+
+  function pick(id) { return document.querySelector(`#${id} .opt.on`); }
+  function sync() {
+    const roast = pick('gRoast').dataset.v, pack = pick('gPack');
+    const unit = +pack.dataset.p;
+    skuPrice.innerHTML = `<i>¥</i>${unit * qty}`;
+    price.innerHTML = `<i>¥</i>${unit}`;
+    was.textContent = '¥' + Math.round(unit * 1.44);
+    skuStock.textContent = `库存 2,318 件 · 已选「${roast} / ${pack.dataset.v}」`;
+    skuTxt.innerHTML = `${roast} · ${pack.dataset.v} · <small>数量 ${qty}</small>`;
+    qtyEl.value = qty;
+  }
+  ['gRoast', 'gPack'].forEach(id => {
+    const w = document.getElementById(id);
+    w.addEventListener('click', e => {
+      const b = e.target.closest('.opt');
+      if (!b) return;
+      [...w.children].forEach(x => x.classList.toggle('on', x === b));
+      sync();
+    });
+  });
+  document.getElementById('plus').addEventListener('click', () => { if (qty < 20) { qty++; sync(); } });
+  document.getElementById('minus').addEventListener('click', () => { if (qty > 1) { qty--; sync(); } });
+
+  function openSku(m) { mode = m; sku.classList.add('on'); scrim.classList.add('on'); }
+  function closeSku() { sku.classList.remove('on'); scrim.classList.remove('on'); }
+  document.querySelectorAll('[data-sku]').forEach(b => b.addEventListener('click', () => openSku(b.dataset.sku)));
+  document.getElementById('skuRow').addEventListener('click', () => openSku('cart'));
+  document.getElementById('skuX').addEventListener('click', closeSku);
+  scrim.addEventListener('click', closeSku);
+
+  /* ── 加购：小球飞入 + 角标 ────────────────────────── */
+  const fly = document.getElementById('fly'), badge = document.getElementById('badge');
+  const cartIc = document.getElementById('cartIc'), toast = document.getElementById('toast');
+  let count = 0, tTimer = null;
+
+  function flyToCart() {
+    const phone = document.querySelector('.phone').getBoundingClientRect();
+    const from = document.querySelector('.sku .hd img').getBoundingClientRect();
+    const to = cartIc.getBoundingClientRect();
+    const x0 = from.left - phone.left + from.width / 2 - 11, y0 = from.top - phone.top + from.height / 2 - 11;
+    const x1 = to.left - phone.left + to.width / 2 - 11,   y1 = to.top - phone.top + 6;
+
+    fly.style.transition = 'none';
+    fly.style.transform = `translate(${x0}px, ${y0}px) scale(1.6)`;
+    fly.style.opacity = '1';
+    requestAnimationFrame(() => {
+      // 两段缓动拼出抛物线：先横向匀速，再纵向加速落下
+      fly.style.transition = 'transform .62s cubic-bezier(.42,-0.28,.72,.62), opacity .2s ease .5s';
+      fly.style.transform = `translate(${x1}px, ${y1}px) scale(.5)`;
+      fly.style.opacity = '0';
+    });
+  }
+  function showToast(txt) {
+    toast.textContent = txt; toast.classList.add('on');
+    clearTimeout(tTimer); tTimer = setTimeout(() => toast.classList.remove('on'), 1600);
+  }
+  document.getElementById('skuOk').addEventListener('click', () => {
+    if (mode === 'now') { closeSku(); showToast('正在跳转结算…'); return; }
+    flyToCart();
+    setTimeout(() => {
+      count += qty;
+      badge.textContent = count;
+      badge.classList.add('on', 'pop');
+      setTimeout(() => badge.classList.remove('pop'), 440);
+    }, 560);
+    closeSku(); showToast('已加入购物车');
+  });
+
+  /* 收藏 */
+  const fav = document.getElementById('fav');
+  fav.addEventListener('click', () => {
+    fav.classList.toggle('on');
+    showToast(fav.classList.contains('on') ? '已加入收藏' : '已取消收藏');
+  });
+
+  sync();
+})();
+</script>
+</body>
+</html>
