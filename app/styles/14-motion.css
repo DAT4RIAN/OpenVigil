@@ -1,0 +1,118 @@
+/* finesse · product · mist-teal · state transitions · 2026-09-16
+ * Four beats: route arrival, overlay opening, control feedback, result confirmation.
+ * Final states remain authored in the base rules; no animation delays an action. */
+:root {
+  --motion-fast: 140ms;
+  --motion-enter: 240ms;
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .drawer-backdrop,
+  .mobile-backdrop {
+    animation: backdrop-reveal 180ms ease-out;
+  }
+
+  .command-dialog {
+    transform-origin: top center;
+    animation: command-enter var(--motion-enter) var(--motion-ease);
+  }
+
+  .notification-popover {
+    transform-origin: top right;
+    animation: popover-enter 200ms var(--motion-ease);
+  }
+
+  .detail-drawer {
+    animation: drawer-enter var(--motion-enter) var(--motion-ease);
+  }
+
+  .advanced-filter-panel,
+  .query-state--success,
+  .empty-state {
+    animation: surface-enter 180ms var(--motion-ease);
+  }
+
+  .query-state--success .query-state__icon {
+    animation: confirmation-enter var(--motion-enter) var(--motion-ease);
+  }
+
+  .nav-item > svg,
+  .command-item > svg:last-child {
+    transition: transform var(--motion-fast) var(--motion-ease);
+  }
+
+  .progress-value {
+    transition: transform 300ms var(--motion-ease);
+  }
+}
+
+/* Only pointer-capable controls react to hover; operational cards stay still. */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
+  .nav-item:hover > svg,
+  .command-item:hover > svg:last-child {
+    transform: translateX(2px);
+  }
+}
+
+.progress-value {
+  transform-origin: left center;
+}
+
+@keyframes backdrop-reveal {
+  from {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes surface-enter {
+  from {
+    transform: translateY(4px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes command-enter {
+  from {
+    transform: translateX(-50%) translateY(-8px) scale(0.98);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes popover-enter {
+  from {
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes drawer-enter {
+  from {
+    transform: translateX(18px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes confirmation-enter {
+  from {
+    transform: scale(0.85);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button:active:not(:disabled) {
+    transform: none;
+  }
+  .progress-value {
+    transition: none;
+  }
+}

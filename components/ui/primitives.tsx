@@ -81,7 +81,7 @@ export function Progress({
       <div className="progress-track">
         <span
           className={cn("progress-value", `progress-value--${tone}`)}
-          style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+          style={{ width: "100%", transform: `scaleX(${Math.max(0, Math.min(100, value)) / 100})` }}
         />
       </div>
     </div>

@@ -2,6 +2,18 @@
 
 # Long-running Execution Progress
 
+## 前端动效：2026-09-16
+
+- 状态：`DONE / LOCAL_UI_VALIDATED`。
+- 已实施：页头归位、搜索/通知/详情层展开、导航图标反馈、进度缩放过渡、成功确认与登录区分组归位；文字在全过程保持完整对比度。
+- 约束：无新增依赖，保留静态完整终态，支持运行中启用减少动态效果；不重挂载表单、不延迟业务操作。
+- 阶段验证：构建、类型检查、修改文件 ESLint、12 项定向浏览器检查与 Node `185/185` 通过。真实中间帧、终态、运行中减少动态效果、弹层焦点均通过。
+- 已修复：首次全量浏览器检查发现文字淡入中间帧对比度不足，改为位移并新增动画首帧对比度检查；最终全量 Playwright `41/41` 通过，无 skip，原有截图基线未改动。
+- 最终检查：build、bundle budget、TypeScript、修改文件 ESLint/Prettier、`git diff --check` 通过；finesse 静态扫描无 P0。CSS 精确摘要随新增动效模块更新，导入顺序和摘要校验完整保留。
+- 本地预览：`http://localhost:3001/login`；`.artifacts/motion/preview.webm` 为本地实际操作录屏。登录、搜索、详情抽屉运行无页面错误，进度条比例与真实值一致。
+- 验证边界：本地 Demo 与隔离生产 UI 场景；无真实生产发布声明。本机静态/动效搜索层采样帧间隔 P95 均约 33.4ms，不作为稳定 60fps 或物理手机性能证据；现有 >500kB 分块提示保留。
+- 方案：[frontend-motion.md](docs/design/frontend-motion.md)。
+
 ## 登录页与生成图片：2026-09-15
 
 - 状态：`DONE / LOCAL_UI_VALIDATED`。

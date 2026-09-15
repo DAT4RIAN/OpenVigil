@@ -410,4 +410,34 @@
   .primaryAction {
     transition: none;
   }
+  .primaryAction:active {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .heroCopy {
+    animation: login-arrive 420ms var(--motion-ease);
+  }
+  .content > :is(.welcomeIcon, .kicker, h1, .intro) {
+    animation: login-arrive 360ms var(--motion-ease) backwards;
+  }
+  .content > :is(.identityCard, .primaryAction, .assurance, .help) {
+    animation: login-arrive 360ms var(--motion-ease) 60ms backwards;
+  }
+  .help summary svg {
+    transition: transform var(--motion-fast) var(--motion-ease);
+  }
+  .help[open] p {
+    animation: login-arrive 180ms ease-out;
+  }
+}
+
+@keyframes login-arrive {
+  from {
+    translate: 0 8px;
+  }
+  to {
+    translate: 0 0;
+  }
 }

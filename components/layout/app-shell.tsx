@@ -45,6 +45,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Avatar, Button } from "@/components/ui/primitives";
+import { usePageEntrance } from "@/lib/use-page-entrance";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { RuntimeHealthBadge } from "@/components/ui/query-state";
 import { agents } from "@/lib/agent-data";
@@ -603,6 +604,7 @@ export function AppShell({
   pageHealth?: RuntimeHealthSnapshot;
 }) {
   const isProduction = runtimeMode === "production";
+  const pageEntranceRef = usePageEntrance(activePath);
   const { session, can } = useOpenVigilIdentity();
   const workflow = useDemoWorkflow();
   const displayAlarms = useMemo(
@@ -1131,7 +1133,9 @@ export function AppShell({
             )}
           </div>
         </header>
-        <main className="app-main">{children}</main>
+        <main className="app-main" ref={pageEntranceRef}>
+          {children}
+        </main>
       </div>
 
       <CommandPalette

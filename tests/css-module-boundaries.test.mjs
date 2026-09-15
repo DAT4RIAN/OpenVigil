@@ -18,6 +18,7 @@ const styleFiles = [
   "11-overlays-and-responsive.css",
   "12-health.css",
   "13-access-recovery.css",
+  "14-motion.css",
 ];
 
 test("the global stylesheet preserves import order and the reviewed rule stream", async () => {
@@ -30,10 +31,10 @@ test("the global stylesheet preserves import order and the reviewed rule stream"
     styleFiles.map((file) => readFile(new URL(`app/styles/${file}`, root), "utf8")),
   );
   const ruleStream = modules.join("").replaceAll(/\s+/g, "");
-  // Visual baseline intentionally revised by the 2026-09-15 polish.
-  // See docs/design/frontend-polish-plan.md for screenshot and behavior checks.
+  // Motion rules added after reviewing their real intermediate and terminal frames.
+  // See docs/design/frontend-motion.md; existing screenshot baselines remain unchanged.
   assert.equal(
     createHash("sha256").update(ruleStream).digest("hex"),
-    "fcdff4b5e098fe4627f71a776dda9dfe1a603b15eeab51251ddb52e25f2673c7",
+    "16937714145e2281f07637c69852988233d3ca91f32ba97176a6ad885534ae26",
   );
 });
