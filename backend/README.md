@@ -221,6 +221,36 @@ LiteLLM calls are bounded by `WINDOPS_LITELLM_TIMEOUT_SECONDS` and
 component-scope, confidence, recommendation-safety, and review-coverage gates. Provider
 or evaluation failure is fail-closed and never falls back to deterministic demo reasoning.
 
+### Chat-model providers
+
+The Python backend reads `backend/.env` through `get_settings()`; the repository-root
+`.env` is for the frontend Worker and weather integration. Copy `example.env` to
+`backend/.env`, set `WINDOPS_AGENT_MODE=litellm`, choose one `WINDOPS_LLM_PROVIDER`,
+and fill **only that provider's** API key. Never commit the local `.env`. The active
+provider's `BASE_URL`, `API_KEY`, and `MODEL` are passed to the LiteLLM chat call;
+blank keys and insecure/credential-bearing URLs fail configuration validation.
+`WINDOPS_LLM_PROVIDER=default` keeps the existing `WINDOPS_LITELLM_MODEL` behavior.
+
+| `WINDOPS_LLM_PROVIDER` | Base URL in `example.env` | Example chat model |
+| --- | --- | --- |
+| `siliconflow` | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V4-Flash` |
+| `bailian` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| `deepseek` | `https://api.deepseek.com` | `deepseek-flash` |
+
+For Bailian, the supplied Beijing URL needs a Beijing-region key; change the
+URL and key together for another region. These settings configure chat reasoning
+only. `WINDOPS_EMBEDDING_MODEL` and its provider credentials remain separate;
+the selected chat key is not reused for embeddings. [SiliconFlow](https://docs.siliconflow.cn/docs/userguide/quickstart),
+[Bailian](https://help.aliyun.com/en/model-studio/base-url), and
+[DeepSeek](https://api-docs.deepseek.com/quick_start/pricing-details-cny/) publish
+the endpoint details and current model availability.
+
+[OpenCode Go](https://dev.opencode.ai/docs/go/) publishes the
+`https://opencode.ai/zen/go/v1` base URL and model-specific endpoints, but its
+subscription is intended for coding agents with session-aware traffic. This
+wind-operations backend does not route platform diagnosis calls through Go; set
+its key in a supported coding agent if that is the intended use.
+
 ## Observability and recovery
 
 Production configuration requires OTLP-over-HTTPS tracing and a dedicated

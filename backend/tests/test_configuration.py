@@ -120,6 +120,23 @@ def test_explicit_sqlite_test_configuration_is_valid() -> None:
     assert settings.environment is Environment.TEST
 
 
+@pytest.mark.parametrize("provider", ["siliconflow", "bailian", "deepseek"])
+def test_selected_llm_provider_requires_its_own_key(provider: str) -> None:
+    with pytest.raises(ValidationError, match="selected LLM provider requires an API key"):
+        Settings(agent_mode="litellm", llm_provider=provider)
+
+
+def test_selected_llm_provider_rejects_insecure_or_credential_bearing_url() -> None:
+    for base_url in ("http://example.com/v1", "https://user:pass@example.com/v1"):
+        with pytest.raises(ValidationError, match="credential-free HTTPS base URL"):
+            Settings(
+                agent_mode="litellm",
+                llm_provider="siliconflow",
+                siliconflow_base_url=base_url,
+                siliconflow_api_key="test-only-key",
+            )
+
+
 def test_production_human_identities_fail_closed_without_explicit_asset_scope() -> None:
     kwargs = _production_kwargs()
     kwargs["identity_scope_mappings"] = {}

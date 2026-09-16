@@ -8,7 +8,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from windops_backend.agents.reasoning import LiteLLMReasoningProvider
+from windops_backend.agents.reasoning import build_reasoning_provider
 from windops_backend.agents.tools import EMBEDDING_DIMENSIONS, LiteLLMEmbeddingProvider
 from windops_backend.config import Settings
 from windops_backend.enums import Environment
@@ -90,12 +90,7 @@ async def test_real_release_dependencies_and_providers() -> None:
         assert len(embedding) == 1
         assert len(embedding[0]) == EMBEDDING_DIMENSIONS
 
-        reasoning = LiteLLMReasoningProvider(
-            settings.litellm_model,
-            timeout_seconds=settings.litellm_timeout_seconds,
-            max_retries=settings.litellm_max_retries,
-            minimum_diagnosis_confidence=settings.litellm_minimum_diagnosis_confidence,
-        )
+        reasoning = build_reasoning_provider(settings)
         diagnosis = await reasoning.generate(
             PublicDiagnosis,
             "Diagnose only the governed gearbox scope and cite the supplied evidence.",

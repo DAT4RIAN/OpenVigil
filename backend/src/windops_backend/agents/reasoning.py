@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import Any, Protocol, TypeVar
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from windops_backend.config import Settings
 from windops_backend.schemas import (
@@ -260,11 +260,15 @@ class LiteLLMReasoningProvider:
         timeout_seconds: int,
         max_retries: int,
         minimum_diagnosis_confidence: float,
+        api_base: str | None = None,
+        api_key: SecretStr | None = None,
     ) -> None:
         self.model = model
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.minimum_diagnosis_confidence = minimum_diagnosis_confidence
+        self.api_base = api_base
+        self.api_key = api_key
         self._last_usage: dict[str, Any] = {}
 
     def reset_usage(self) -> None:
@@ -329,6 +333,14 @@ class LiteLLMReasoningProvider:
                     response_format={"type": "json_object"},
                     num_retries=self.max_retries,
                     timeout=self.timeout_seconds,
+                    **(
+                        {
+                            "api_base": self.api_base,
+                            "api_key": self.api_key.get_secret_value(),
+                        }
+                        if self.api_base is not None and self.api_key is not None
+                        else {}
+                    ),
                 )
             content = response.choices[0].message.content
             if not isinstance(content, str):
@@ -372,10 +384,13 @@ class LiteLLMReasoningProvider:
 
 def build_reasoning_provider(settings: Settings) -> PublicReasoningProvider:
     if settings.agent_mode == "litellm":
+        model, api_base, api_key = settings.reasoning_connection()
         return LiteLLMReasoningProvider(
-            settings.litellm_model,
+            model,
             timeout_seconds=settings.litellm_timeout_seconds,
             max_retries=settings.litellm_max_retries,
             minimum_diagnosis_confidence=settings.litellm_minimum_diagnosis_confidence,
+            api_base=api_base,
+            api_key=api_key,
         )
     return DeterministicReasoningProvider()

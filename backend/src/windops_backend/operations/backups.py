@@ -329,7 +329,7 @@ def safe_configuration_snapshot(settings: Settings) -> dict[str, Any]:
         },
         "auth_mode": settings.auth_mode,
         "agent_mode": settings.agent_mode,
-        "litellm_model": settings.litellm_model,
+        "litellm_model": settings.reasoning_connection()[0],
         "embedding_model": settings.embedding_model,
         "knowledge_graph_backend": settings.knowledge_graph_backend,
         "neo4j_database": settings.neo4j_database,

@@ -10,8 +10,10 @@ from windops_backend.agents.reasoning import (
     LiteLLMReasoningProvider,
     ReasoningEvaluationError,
     ReasoningProviderUnavailableError,
+    build_reasoning_provider,
     evaluate_public_output,
 )
+from windops_backend.config import Settings
 from windops_backend.schemas import PublicDiagnosis
 
 
@@ -75,3 +77,55 @@ async def test_litellm_provider_timeout_is_fail_closed(monkeypatch: pytest.Monke
         "max_retries": 1,
         "timeout_seconds": 5,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider_name", "key_field", "model", "base_url"),
+    [
+        (
+            "siliconflow",
+            "siliconflow_api_key",
+            "openai/deepseek-ai/DeepSeek-V4-Flash",
+            "https://api.siliconflow.cn/v1",
+        ),
+        (
+            "bailian",
+            "bailian_api_key",
+            "openai/qwen-plus",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        ),
+        (
+            "deepseek",
+            "deepseek_api_key",
+            "openai/deepseek-flash",
+            "https://api.deepseek.com",
+        ),
+    ],
+)
+async def test_selected_llm_provider_routes_credentials_to_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_name: str,
+    key_field: str,
+    model: str,
+    base_url: str,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    async def capture_completion(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        raise TimeoutError
+
+    monkeypatch.setitem(sys.modules, "litellm", SimpleNamespace(acompletion=capture_completion))
+    settings = Settings(
+        agent_mode="litellm",
+        llm_provider=provider_name,
+        **{key_field: "test-only-provider-key"},
+    )
+    provider = build_reasoning_provider(settings)
+    with pytest.raises(ReasoningProviderUnavailableError, match="timed out"):
+        await provider.generate(PublicDiagnosis, "diagnose", _context())
+    assert captured["model"] == model
+    assert captured["api_base"] == base_url
+    assert captured["api_key"] == "test-only-provider-key"
+    assert "test-only-provider-key" not in repr(settings)

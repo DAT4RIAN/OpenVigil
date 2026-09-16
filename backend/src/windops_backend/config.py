@@ -139,6 +139,16 @@ class Settings(BaseSettings):
     model_inference_targets: dict[str, ModelInferenceTarget] = Field(default_factory=dict)
     agent_mode: Literal["deterministic", "litellm"] = "deterministic"
     litellm_model: str = "openai/gpt-5-mini"
+    llm_provider: Literal["default", "siliconflow", "bailian", "deepseek"] = "default"
+    siliconflow_base_url: str = "https://api.siliconflow.cn/v1"
+    siliconflow_api_key: SecretStr = SecretStr("")
+    siliconflow_model: str = "deepseek-ai/DeepSeek-V4-Flash"
+    bailian_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    bailian_api_key: SecretStr = SecretStr("")
+    bailian_model: str = "qwen-plus"
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_api_key: SecretStr = SecretStr("")
+    deepseek_model: str = "deepseek-flash"
     litellm_timeout_seconds: int = Field(default=45, ge=5, le=120)
     litellm_max_retries: int = Field(default=2, ge=0, le=5)
     litellm_minimum_diagnosis_confidence: float = Field(default=0.5, ge=0, le=1)
@@ -233,8 +243,40 @@ class Settings(BaseSettings):
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite+")
 
+    def reasoning_connection(self) -> tuple[str, str | None, SecretStr | None]:
+        """Resolve the selected OpenAI-compatible chat endpoint without exposing its key."""
+        if self.llm_provider == "default":
+            return self.litellm_model, None, None
+        provider_settings = {
+            "siliconflow": (
+                self.siliconflow_model,
+                self.siliconflow_base_url,
+                self.siliconflow_api_key,
+            ),
+            "bailian": (self.bailian_model, self.bailian_base_url, self.bailian_api_key),
+            "deepseek": (self.deepseek_model, self.deepseek_base_url, self.deepseek_api_key),
+        }
+        model, base_url, api_key = provider_settings[self.llm_provider]
+        return f"openai/{model}", base_url, api_key
+
     @model_validator(mode="after")
     def enforce_environment_boundaries(self) -> "Settings":
+        if self.agent_mode == "litellm" and self.llm_provider != "default":
+            model, base_url, api_key = self.reasoning_connection()
+            parsed = urlparse(base_url or "")
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError("selected LLM provider requires a credential-free HTTPS base URL")
+            if not model.removeprefix("openai/").strip():
+                raise ValueError("selected LLM provider requires an explicit model")
+            if api_key is None or not api_key.get_secret_value().strip():
+                raise ValueError("selected LLM provider requires an API key")
         care_prefixes = (
             self.minio_care_raw_prefix,
             self.minio_care_standard_prefix,
