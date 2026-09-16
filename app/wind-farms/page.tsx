@@ -5,8 +5,8 @@ import { getProductionBackendConfig } from "@/lib/production-runtime";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "华东海上风电场",
-  description: "64 台海上风电机组的状态、健康与拓扑概览。",
+  title: "风场概览",
+  description: "风电场机组状态、健康与拓扑概览。",
 };
 
 export default function Page() {

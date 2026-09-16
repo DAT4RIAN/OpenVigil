@@ -1,9 +1,12 @@
 /* finesse · register=product · shell=split-photo-login · palette=mist-teal
- * SOUL=6 SPECTACLE=2 DENSITY=4 · 2026-09-15 */
+ * SOUL=6 SPECTACLE=2 DENSITY=4 · onshore-grassland · 2026-09-16 */
 .shell {
   --hero-ink: #f0f8f8;
   --hero-muted: #c9dade;
   --hero-line: rgb(225 244 245 / 0.24);
+  --hero-shade-top: rgb(20 35 29 / 0.62);
+  --hero-shade-middle: rgb(20 35 29 / 0.3);
+  --hero-shade-bottom: rgb(14 29 24 / 0.94);
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
   min-height: 100svh;
@@ -41,10 +44,10 @@
   z-index: -1;
   background: linear-gradient(
     180deg,
-    rgb(7 31 39 / 0.32),
+    var(--hero-shade-top),
     transparent 32%,
-    rgb(7 31 39 / 0.38) 60%,
-    rgb(7 31 39 / 0.94)
+    var(--hero-shade-middle) 60%,
+    var(--hero-shade-bottom)
   );
 }
 

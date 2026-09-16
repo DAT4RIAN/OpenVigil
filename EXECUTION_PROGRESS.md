@@ -2,6 +2,17 @@
 
 # Long-running Execution Progress
 
+## 登录页风场图片与定位文案：2026-09-16
+
+- 状态：`DONE / LOCAL_UI_VALIDATED`。
+- 已实施：生成并接入草地、山脊风场图片，更新登录页桌面与手机文案、图片说明和遮罩；保留登录身份与演示路径。
+- 最终文案修正：用户明确要求统一使用“风电”，撤回刻意强调“陆上风电”的表述；登录页恢复“看见风场全貌”和“风电智能运维平台”，保留新图片。同步 README、PRD、UI 规范、页面元信息和本地项目介绍。
+- 文案修正后复验：重新构建、TypeScript、差异检查及登录浏览器测试 `5/5` 通过；已重启本项目 3001 预览并核验页面展示最终文案。
+- 已验证：构建、bundle budget、TypeScript、修改代码 ESLint/Prettier、`git diff --check` 通过；Node `185/185`、登录浏览器测试 `5/5`、登录动效与减少动态效果 `2/2` 通过，无 skip。
+- 视觉验证：320/375/390/414/768/1440px 深浅主题、无横向溢出、WCAG 与新图加载通过；已审视桌面深浅主题与手机截图。
+- 本地预览：`http://localhost:3001/login`；已实际验证登录页进入演示工作台并返回。生产身份流程在隔离 fixture 中验证，不代表真实外部身份或生产发布验收。
+- 素材与提示词：[login-onshore-update.md](docs/design/login-onshore-update.md)。内置生成工具没有型号核验参数，不声明具体使用 Image 2.5。原有 >500kB 分块提示保留，bundle budget 通过。
+
 ## 前端动效：2026-09-16
 
 - 状态：`DONE / LOCAL_UI_VALIDATED`。

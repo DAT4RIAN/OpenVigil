@@ -70,10 +70,12 @@ test("login image, light and dark themes, responsive layout and accessibility", 
 }) => {
   for (const theme of ["light", "dark"]) {
     await page.addInitScript((value) => localStorage.setItem("openvigil-theme", value), theme);
-    for (const width of [1440, 768, 390, 320]) {
+    for (const width of [1440, 768, 414, 390, 375, 320]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/login");
       await expect(page.getByRole("link", { name: "使用 ChatGPT 登录" })).toBeVisible();
+      await expect(page.getByText("风电智能运维平台", { exact: true })).toBeVisible();
+      await expect(page.getByText(/陆上风电|陆上风场|海上风电|海上风场/)).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
@@ -86,8 +88,9 @@ test("login image, light and dark themes, responsive layout and accessibility", 
       });
       expect(results.violations).toEqual([]);
       if (width === 1440) {
-        const hero = page.getByRole("img", { name: /AI 生成的海上风电场/ });
+        const hero = page.getByRole("img", { name: /AI 生成的风电场/ });
         await expect(hero).toBeVisible();
+        await expect(hero).toHaveAttribute("src", "/images/login-onshore-wind-farm.png");
         expect(
           await hero.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 1000),
         ).toBe(true);

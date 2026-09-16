@@ -3,7 +3,9 @@
 > AI-Native Multi-Agent Operations Platform for Wind Farms  
 > 风电运维多智能体平台
 
-OpenVigil 是一个可运行的海上风电智能运维平台候选实现。它把风场态势、SCADA 时序、工业告警、设备健康、Multi-Agent Mission、可解释决策、人工审批、工单执行和知识反馈串成一条可追踪的业务闭环，并提供独立的 CARE v6 离线故障检测基准、受治理评估和平台回放链路。
+OpenVigil 是一个风电智能运维平台候选实现。它把风场态势、SCADA 时序、工业告警、设备健康、Multi-Agent Mission、可解释决策、人工审批、工单执行和知识反馈串成一条可追踪的业务闭环，并提供独立的 CARE v6 离线故障检测基准、受治理评估和平台回放链路。
+
+产品统一定位为“风电智能运维平台”。登录页图片与 Demo 风场均为场景示例，不限定产品定位；各场景的实际接入和适用能力，以对应数据、配置和验收证据为准。
 
 名称 **OpenVigil** 由 **Open + Vigil** 构成：Open 代表开放架构、接口、模型生态和数据接入；Vigil 代表对设备微弱、缓慢异常信号的持续守望。为避免品牌迁移破坏既有生产集成，Python 包 `windops_backend`、`WINDOPS_*` 环境变量、`x-windops-*` HTTP 头、数据库/图谱对象、对象存储 bucket、遥测与告警规则标识、实时协议仍保留为稳定的兼容命名空间。
 

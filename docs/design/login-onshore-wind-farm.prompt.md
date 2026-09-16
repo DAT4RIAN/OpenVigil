@@ -1,0 +1,7 @@
+# 陆上风场登录背景生成提示词
+
+工具：内置 `image_gen`。日期：2026-09-16。具体模型版本未由工具提供。
+
+```text
+Use case: photorealistic-natural. Asset type: portrait background photograph for the left panel of the OpenVigil wind operations login page. Primary request: a refined editorial aerial photograph of an ONshore wind farm across rolling inland grassland and distant layered ridgelines at early sunrise. This product primarily serves land-based wind energy. Scene: muted sage-green grass, subtle ochre earth, a narrow plausible maintenance access road winding between turbine bases, distant hazy hills, restrained pale golden dawn sky. Several physically plausible three-bladed white wind turbines on solid land, one clear hero turbine in upper middle-right, smaller turbines receding into the landscape. Photorealistic industrial landscape, calm, grounded, precise. Portrait 4:5 composition, suitable for a tall left-side login panel. Keep the lower 40 percent darker and visually calm with textured grassland for overlaid white HTML copy. Keep top left uncluttered for an HTML brand mark. Natural teal-sage shadows and warm dawn highlights to complement a mist-gray/teal interface; avoid heavy blue cast. All turbine hubs and blades fully visible with credible proportions. No sea, no ocean, no shoreline, no offshore platforms, no ships, no floating turbines. No text, no letters, no logos, no watermark, no UI, no charts, no artificial telemetry or sci-fi glow. Generate a high-resolution finished image.
+```

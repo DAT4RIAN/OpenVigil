@@ -50,8 +50,8 @@ function LoginContent({ runtimeMode }: { readonly runtimeMode: OpenVigilRuntimeM
       <section className={styles.hero} aria-label="OpenVigil 风电智能运维">
         <Image
           className={styles.heroImage}
-          src="/images/login-wind-farm.png"
-          alt="AI 生成的海上风电场意境图：晨光中，风机伫立于海面"
+          src="/images/login-onshore-wind-farm.png"
+          alt="AI 生成的风电场意境图：晨光中，白色风机沿草地与山脊展开，检修道路连接机组"
           width={1122}
           height={1402}
           priority
@@ -81,7 +81,7 @@ function LoginContent({ runtimeMode }: { readonly runtimeMode: OpenVigilRuntimeM
             <span>运维闭环</span>
           </div>
         </div>
-        <span className={styles.imageCredit}>海上风电 · AI 生成视觉</span>
+        <span className={styles.imageCredit}>风电场 · AI 生成视觉</span>
       </section>
 
       <section className={styles.panel} aria-labelledby="login-title">

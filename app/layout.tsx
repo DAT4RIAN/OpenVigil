@@ -56,7 +56,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = `${protocol}://${host}`;
   const socialImage = new URL("/og.png", origin).toString();
   const description =
-    "AI 原生的风电场智能运维控制中心：从 SCADA 异常发现、多 Agent 协同诊断，到人工审批与工单执行。";
+    "AI 原生的风电智能运维平台：从 SCADA 异常发现、多 Agent 协同诊断，到人工审批与工单执行。";
 
   return {
     metadataBase: new URL(origin),
