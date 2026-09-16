@@ -1,0 +1,9 @@
+.logo {
+  display: block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  padding: 3px;
+  border-radius: 7px;
+  background: #e9f3f2;
+  object-fit: contain;
+}

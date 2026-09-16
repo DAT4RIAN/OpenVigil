@@ -65,6 +65,10 @@ export async function generateMetadata(): Promise<Metadata> {
       template: "%s · OpenVigil",
     },
     description,
+    icons: {
+      icon: { url: "/images/openvigil-logo.png", type: "image/png", sizes: "1254x1254" },
+      apple: "/images/openvigil-logo.png",
+    },
     openGraph: {
       type: "website",
       title: "OpenVigil · AI 原生风场智能运维",

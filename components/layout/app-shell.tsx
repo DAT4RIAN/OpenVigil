@@ -37,14 +37,14 @@ import {
   Settings2,
   ShieldCheck,
   Sun,
-  TowerControl,
-  Wind,
   Wrench,
   X,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 import { Avatar, Button } from "@/components/ui/primitives";
+import { BrandLogo } from "@/components/ui/brand-logo";
+import { WindFarmIcon, WindTurbineIcon } from "@/components/ui/wind-icons";
 import { usePageEntrance } from "@/lib/use-page-entrance";
 import { StatusBadge } from "@/components/data-display/status-badge";
 import { RuntimeHealthBadge } from "@/components/ui/query-state";
@@ -152,11 +152,11 @@ const navigation: NavigationGroup[] = [
   {
     label: "资产与监测",
     items: [
-      { label: "风场", href: "/wind-farms", icon: Wind, capability: "view.assets" },
+      { label: "风场", href: "/wind-farms", icon: WindFarmIcon, capability: "view.assets" },
       {
         label: "风机",
         href: "/turbines/WT-023",
-        icon: TowerControl,
+        icon: WindTurbineIcon,
         capability: "view.assets",
       },
       { label: "实时监测", href: "/scada", icon: Activity, capability: "view.telemetry" },
@@ -283,7 +283,7 @@ const primaryCommands = [
     label: "打开 WT-023 机组详情",
     description: "健康度 68 · 主轴承预警",
     href: "/turbines/WT-023",
-    icon: TowerControl,
+    icon: WindTurbineIcon,
   },
   {
     label: "查看 MISSION-2026-0823",
@@ -356,7 +356,7 @@ const primaryCommands = [
     label: "选择风场",
     description: "当前可用：华东海上风电场",
     href: "/wind-farms",
-    icon: Wind,
+    icon: WindFarmIcon,
   },
   {
     label: "查看 Agent 控制中心",
@@ -371,7 +371,7 @@ const domainCommands = [
     label: turbine.id,
     description: `${turbine.model} · 健康度 ${turbine.healthScore} · ${turbine.status}`,
     href: `/turbines/${turbine.id}`,
-    icon: TowerControl,
+    icon: WindTurbineIcon,
   })),
   ...alarms.map((alarm) => ({
     label: alarm.id,
@@ -787,9 +787,7 @@ export function AppShell({
       >
         <div className="sidebar__brand">
           <Link href="/" className="brand-lockup" aria-label="OpenVigil 首页">
-            <span className="brand-mark">
-              <Wind size={20} strokeWidth={2.25} />
-            </span>
+            <BrandLogo />
             <span className="brand-copy">
               <strong>OpenVigil</strong>
               <small>工业智能</small>
@@ -808,7 +806,7 @@ export function AppShell({
 
         <Link className="farm-switcher" href="/wind-farms" aria-label="选择风场">
           <span className="farm-switcher__icon">
-            <TowerControl size={17} />
+            <WindFarmIcon size={17} />
           </span>
           <span className="farm-switcher__copy">
             <small>{isProduction ? "生产资产范围" : "当前风场"}</small>

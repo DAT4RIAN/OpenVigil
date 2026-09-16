@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { SearchX, Wind } from "lucide-react";
+import { SearchX } from "lucide-react";
+import { BrandLogo } from "@/components/ui/brand-logo";
 
 export default function NotFound() {
   return (
     <main className="route-state">
       <span className="route-state__brand">
-        <Wind size={22} /> OpenVigil
+        <BrandLogo size={32} /> OpenVigil
       </span>
       <div className="route-state__icon">
         <SearchX size={25} />

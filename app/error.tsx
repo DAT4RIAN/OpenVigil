@@ -1,6 +1,7 @@
 "use client";
 
-import { TriangleAlert, RefreshCcw, Wind } from "lucide-react";
+import { TriangleAlert, RefreshCcw } from "lucide-react";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { Button } from "@/components/ui/primitives";
 
 export default function ErrorBoundary({
@@ -12,7 +13,7 @@ export default function ErrorBoundary({
   return (
     <main className="route-state" role="alert">
       <span className="route-state__brand">
-        <Wind size={22} /> OpenVigil
+        <BrandLogo size={32} /> OpenVigil
       </span>
       <div className="route-state__icon route-state__icon--critical">
         <TriangleAlert size={25} />

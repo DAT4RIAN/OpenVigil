@@ -7,9 +7,9 @@ import {
   LoaderCircle,
   LockKeyhole,
   ShieldCheck,
-  Wind,
 } from "lucide-react";
 import Image from "next/image";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type MouseEvent } from "react";
 import { chatGPTSignInPath, safeRelativeReturnPath } from "@/lib/auth-paths";
@@ -58,9 +58,7 @@ function LoginContent({ runtimeMode }: { readonly runtimeMode: OpenVigilRuntimeM
           unoptimized
         />
         <div className={styles.heroBrand}>
-          <span className={styles.brandMark}>
-            <Wind size={24} aria-hidden="true" />
-          </span>
+          <BrandLogo size={42} />
           <span>OpenVigil</span>
         </div>
         <div className={styles.heroCopy}>
@@ -87,7 +85,7 @@ function LoginContent({ runtimeMode }: { readonly runtimeMode: OpenVigilRuntimeM
       <section className={styles.panel} aria-labelledby="login-title">
         <header className={styles.panelHeader}>
           <span className={styles.mobileBrand}>
-            <Wind size={20} aria-hidden="true" /> OpenVigil
+            <BrandLogo size={28} /> OpenVigil
           </span>
           <span className={styles.environment}>
             <span />
@@ -97,7 +95,7 @@ function LoginContent({ runtimeMode }: { readonly runtimeMode: OpenVigilRuntimeM
 
         <div className={styles.content}>
           <span className={styles.welcomeIcon}>
-            <Wind size={28} aria-hidden="true" />
+            <BrandLogo size={40} />
           </span>
           <p className={styles.kicker}>风电智能运维平台</p>
           <h1 id="login-title">欢迎回到 OpenVigil</h1>

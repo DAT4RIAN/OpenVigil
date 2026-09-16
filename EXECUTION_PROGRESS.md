@@ -2,6 +2,42 @@
 
 # Long-running Execution Progress
 
+## 停止本地服务：2026-09-16
+
+- 用户要求停止服务；已停止本项目前端、API、Dramatiq worker、outbox relay、read-audit worker 及其子进程。
+- 使用同一 `openvigil-local` Compose 配置执行 `stop`，所有项目容器已停止；四个持久化数据卷与容器保留。
+- 复核：本轮记录的进程残留为 0；3000、8000、15432、16379、19000、19001、17474、17687 均无监听。其他项目服务未操作。
+- 下方部署/图标更新记录为历史验证结果，当前本地运行状态为 `STOPPED`。
+
+## 风场与风机导航图标：2026-09-16
+
+- 状态：`DONE / LOCAL_UI_VALIDATED`。
+- 以同一组 24px viewBox、currentColor、圆角线条 SVG 替换侧栏语义不符的气流/塔台图标：风场为前后两台三叶风机，风机为单台三叶风机。保持实际 17px 尺寸；同步风场切换和相关搜索入口，复用 Lucide 的类型、ref 与装饰图标可访问性规则。
+- 验证：build、bundle budget、TypeScript、修改文件 ESLint/Prettier、git diff --check 通过；真实浏览器验证两入口及键盘导航、折叠侧栏、320px 导航抽屉、减少动态效果与深浅主题侧栏 WCAG，通过且无 pageerror。已审视实际侧栏截图。
+- 更新已部署到本地 3000 服务；Python 后端与依赖保持运行。组件预览和截图位于 `.artifacts/local-deployment/WindIcons.preview.html`、`wind-icons-*.png`。本次为组件范围，不新增页面设计轮换记录。
+
+## 本地前后端部署：2026-09-16
+
+- 状态：`DONE / LOCAL_SERVICES_VALIDATED`；演示工作台与独立 Python 开发后端均已启动，不代表生产身份网关联通或生产验收。
+- 已验证当前工作树前端 build 与 bundle budget 通过；保留用户未提交 Logo/UI 改动。
+- 使用隔离 Compose 项目 `openvigil-local`；PostgreSQL/Redis/MinIO/Neo4j 已绑定 `15432/16379/19000–19001/17474/17687`，四个服务均 healthy，MinIO 初始化退出 0；避开其他服务占用的 9000 端口。
+- 本地运行配置和日志位于被忽略的 `.artifacts/local-deployment/`；原有根目录及 backend `.env` 不变。
+- 前端：`http://127.0.0.1:3000/login`，当前源码构建启动；8 项 HTTP 检查均为 200，真实 Chromium 验证登录页进入首页且 pageerror 为 0。演示 workflow 明确为 `ephemeral / writable=false`，Python 网关未配置。
+- 开发服务启动未就绪，已停止本轮对应进程并改用已构建产物。证据位于 `.artifacts/local-deployment/frontend-verification.json`、页面截图及启动日志。
+- Docker 故障已解决：原始 `dockerInference` 无法访问/错误 1920。用户明确授权后，将 `C:\Users\jy\AppData\Local\Docker\run` 与 `C:\Users\jy\AppData\Local\docker-secrets-engine` 分别改名为同级 `.backup-20260916-165237` 备份，重启 Docker 后 Engine 29.6.2 可用。没有删除镜像、容器、数据卷或原运行目录；原始错误保存在 `.artifacts/local-deployment/docker-failure.txt`。
+- 后端 `http://127.0.0.1:8000`：迁移至 `0028_read_audit_pipeline`；TimescaleDB/pgvector 扩展均存在；healthz/readyz/docs、已鉴权 session/catalog/data-catalog 返回 200，未鉴权 catalog 返回 401。catalog 含 8 agents、8 skills、17 tools；3 条业务读审计已落 PostgreSQL。
+- API、Dramatiq worker、outbox relay、read-audit worker 均保持运行；worker 日志确认 ready。Redis PING 和 5 个 MinIO bucket 验证通过。脱敏证据：`.artifacts/local-deployment/backend-verification.json`。
+- 保留现有 backend `development / deterministic / static_tokens` 配置；没有配置真实 LLM、生产身份网关或把 Demo 页面接到 Python 权威数据。启动说明、进程 PID 与日志位于本地制品目录；`git diff --check` 通过。
+
+## 用户 Logo 替换：2026-09-16
+
+- 状态：`DONE / LOCAL_UI_VALIDATED`。
+- 使用用户提供的透明 PNG 原图，保存为 `public/images/openvigil-logo.png`；源文件与项目文件 SHA-256 一致，未重绘或修改图像。
+- 统一 `BrandLogo` 组件用于登录页桌面/手机、侧栏、异常页和 404 页；浅色底保证深色主题可辨识。更新浏览器 icon、Apple touch icon 和 README，移除旧 favicon。
+- 验证：build、bundle budget、TypeScript、修改代码 ESLint/Prettier、差异检查通过；Node `185/185`，登录与首页视觉浏览器检查 `6/6`，无 skip，截图基线未修改。已审视桌面登录和深色手机截图。
+- HTTP 核验：渲染后的 icon 与 Apple touch icon 均指向新素材；图片返回 200，404 页面包含新 Logo。验证后停止临时测试服务，3001/4179 端口均已释放。
+- 验证边界：本地界面与隔离测试，不构成生产发布验收。保留现有 >500kB 构建分块提示，bundle budget 通过。
+
 ## 登录页风场图片与定位文案：2026-09-16
 
 - 状态：`DONE / LOCAL_UI_VALIDATED`。

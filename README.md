@@ -1,5 +1,7 @@
 # OpenVigil Multi-Agent Platform
 
+<img src="public/images/openvigil-logo.png" alt="OpenVigil Logo" width="80" height="80" />
+
 > AI-Native Multi-Agent Operations Platform for Wind Farms  
 > 风电运维多智能体平台
 
