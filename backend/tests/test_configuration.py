@@ -1,6 +1,9 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
+import windops_backend.config as config_module
 from windops_backend.config import ModelInferenceTarget, Settings
 from windops_backend.enums import Environment
 
@@ -118,6 +121,26 @@ def test_explicit_sqlite_test_configuration_is_valid() -> None:
     )
     assert settings.is_sqlite is True
     assert settings.environment is Environment.TEST
+
+
+def test_get_settings_reads_only_repository_root_dotenv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repository = tmp_path / "project"
+    fake_module_path = repository / "backend" / "src" / "windops_backend" / "config.py"
+    fake_module_path.parent.mkdir(parents=True)
+    fake_module_path.touch()
+    (repository / ".env").write_text("WINDOPS_RELEASE_ID=from-root\n", encoding="utf-8")
+    (repository / "backend" / ".env").write_text(
+        "WINDOPS_RELEASE_ID=from-backend\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(config_module, "__file__", str(fake_module_path))
+    monkeypatch.delenv("WINDOPS_RELEASE_ID", raising=False)
+    config_module.get_settings.cache_clear()
+    try:
+        assert config_module.get_settings().release_id == "from-root"
+    finally:
+        config_module.get_settings.cache_clear()
 
 
 @pytest.mark.parametrize("provider", ["siliconflow", "bailian", "deepseek"])

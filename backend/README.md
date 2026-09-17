@@ -214,7 +214,7 @@ Set production values through the environment/secret manager, including
 URLs, Sites identity-role mappings, the gateway delegation secret, a metrics token,
 trusted hosts and rate-limit policy. Production rejects blank model identifiers,
 static role-key authentication, localhost/insecure public MinIO bases and example credentials. See
-`example.env` for names, not deployable credentials.
+the repository-root `../.env.example` for names, not deployable credentials.
 
 LiteLLM calls are bounded by `WINDOPS_LITELLM_TIMEOUT_SECONDS` and
 `WINDOPS_LITELLM_MAX_RETRIES`. Outputs must pass strict schema, evidence-grounding,
@@ -223,15 +223,15 @@ or evaluation failure is fail-closed and never falls back to deterministic demo 
 
 ### Chat-model providers
 
-The Python backend reads `backend/.env` through `get_settings()`; the repository-root
-`.env` is for the frontend Worker and weather integration. Copy `example.env` to
-`backend/.env`, set `WINDOPS_AGENT_MODE=litellm`, choose one `WINDOPS_LLM_PROVIDER`,
+The frontend Worker and Python backend both read the repository-root `.env`.
+Copy `../.env.example` to `../.env` only if the latter does not already exist.
+Set `WINDOPS_AGENT_MODE=litellm`, choose one `WINDOPS_LLM_PROVIDER`,
 and fill **only that provider's** API key. Never commit the local `.env`. The active
 provider's `BASE_URL`, `API_KEY`, and `MODEL` are passed to the LiteLLM chat call;
 blank keys and insecure/credential-bearing URLs fail configuration validation.
 `WINDOPS_LLM_PROVIDER=default` keeps the existing `WINDOPS_LITELLM_MODEL` behavior.
 
-| `WINDOPS_LLM_PROVIDER` | Base URL in `example.env` | Example chat model |
+| `WINDOPS_LLM_PROVIDER` | Base URL in `../.env.example` | Example chat model |
 | --- | --- | --- |
 | `siliconflow` | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V4-Flash` |
 | `bailian` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |

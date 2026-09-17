@@ -109,7 +109,7 @@ class Settings(BaseSettings):
     """Runtime configuration with a hard production/test storage boundary."""
 
     model_config = SettingsConfigDict(
-        # Runtime entrypoints load the repository-local dotenv file explicitly
+        # Runtime entrypoints load the repository-root dotenv file explicitly
         # through get_settings().  Direct Settings(...) construction must stay
         # deterministic for tests and tools that provide their own values.
         env_file=None,
@@ -646,7 +646,7 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    local_env_file = Path(__file__).resolve().parents[2] / ".env"
+    local_env_file = Path(__file__).resolve().parents[3] / ".env"
     # pydantic-settings supplies underscore-prefixed source controls at runtime;
     # its mypy plugin intentionally exposes only declared model fields.
     settings_factory = cast(Callable[..., Settings], Settings)

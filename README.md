@@ -409,6 +409,7 @@ db/schema.ts                   35 表 Drizzle Schema
 drizzle/                       已生成的 SQLite/D1 迁移与元数据
 worker/                        Cloudflare Worker 入口
 tests/                         页面、API、迁移、检索、导出、工作流和工具运行时测试
+.env.example                   前端与 Python 后端共用的唯一配置模板
 backend/
   src/windops_backend/         FastAPI、LangGraph、SQL 工具、outbox、worker 与领域服务
     api/benchmarks.py          CARE 数据集、评估、诊断、回放与受控导出 API
@@ -421,7 +422,6 @@ backend/
   tests/                       SQLite 纵切、CARE、RBAC、工具、RAG、租约与失败审计测试
   tests/external/              PostgreSQL/TimescaleDB/CARE 与受保护 release 环境门禁
   docker-compose.yml           仅供本地的生产形态依赖栈
-  example.env                  变量名称与不可部署的开发示例值
 docs/
   care-v6-*.md                 CARE 实施计划与需求评审
   adr/                         列式存储等架构决策
@@ -501,14 +501,15 @@ pnpm test
 
 ### 本地运行 Python 纵切
 
-以下命令在 PowerShell 中执行。先复制 `backend/example.env` 为 `.env`，再让本地 MinIO 凭据与 `docker-compose.yml` 保持一致；示例值不可用于生产。
+以下命令在 PowerShell 中执行。前端与 Python 后端共用仓库根目录的 `.env`，只在首次配置时从根目录 `.env.example` 复制，已有 `.env` 不得覆盖。让本地 MinIO 凭据与 `docker-compose.yml` 保持一致；示例值不可用于生产。
 
 ```powershell
-cd C:\coding\project\wind-agent\backend
+# 从仓库根目录开始
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+cd backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[test,dev]"
-Copy-Item example.env .env
 docker compose up -d
 alembic upgrade head
 windops-reference-import --reference-pack wt023

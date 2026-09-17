@@ -42,8 +42,9 @@ deploy a working service.
 
 Provision a namespaced Secret named `windops-runtime` through the approved
 secret manager/CSI operator. It must contain the complete `WINDOPS_*`
-production configuration described in `example.env`. Do not create the Secret
-from a checked-in `.env` file. In particular, production validation requires
+production configuration described in the repository-root `../../.env.example`.
+Do not create the Secret from a checked-in `.env` file. In particular,
+production validation requires
 TLS service URLs, all five MinIO buckets, Sites delegation and role mappings,
 telemetry source policies and distinct credentials, LiteLLM/embedding/model
 targets, trusted external Host names, Redis rate limiting, OTLP and a dedicated

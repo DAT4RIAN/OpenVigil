@@ -252,9 +252,11 @@ PostgreSQL 支持递归遍历、深度或广度排序以及循环检测，适合
 
 ## 本地运行
 
+以下命令从仓库根目录执行：
+
 ```powershell
-cd C:\coding\project\wind-agent\backend
-Copy-Item example.env .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+cd backend
 docker compose up -d postgres redis minio neo4j
 python -m pip install -e ".[test,dev]"
 alembic upgrade head
