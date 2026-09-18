@@ -1,6 +1,8 @@
 # OpenVigil production deployment baseline
 
-This directory is a vendor-neutral Kubernetes baseline for the FastAPI API,
+Deployment manifests and policy files described here live under `backend/deploy/`.
+
+Those manifests form a vendor-neutral Kubernetes baseline for the FastAPI API,
 Dramatiq workers, durable outbox relay, read-audit batch/retention workers,
 one-time Alembic migration, disruption
 budget, autoscaling, default-deny network policy, scheduled verified backup, and
@@ -27,7 +29,7 @@ as UID/GID 10001 and includes no test or development dependencies. `pg_dump`, `p
 and must match the production server major; a merely newer client is rejected
 because it can emit settings unknown to the older restore target. The exact
 reviewed Python and PostgreSQL client images are recorded in
-`deploy/release-policy.json`. Before any cluster apply:
+`backend/deploy/release-policy.json`. Before any cluster apply:
 
 1. scan the image and close all critical/high findings;
 2. generate and retain an SPDX or CycloneDX SBOM;
@@ -42,7 +44,7 @@ deploy a working service.
 
 Provision a namespaced Secret named `windops-runtime` through the approved
 secret manager/CSI operator. It must contain the complete `WINDOPS_*`
-production configuration described in the repository-root `../../.env.example`.
+production configuration described in the repository-root `.env.example`.
 Do not create the Secret from a checked-in `.env` file. In particular,
 production validation requires
 TLS service URLs, all five MinIO buckets, Sites delegation and role mappings,
@@ -57,7 +59,7 @@ Keep the read-audit defaults unless an approved capacity review changes them:
 days and three future monthly partitions. Run both `windops-read-audit-worker`
 and `windops-read-audit-maintenance`; the API deliberately fails business reads
 closed if the durable stream is unavailable or full. See
-`../../docs/runbooks/read-audit-retention.md` for outage and restore checks.
+`runbooks/read-audit-retention.md` for outage and restore checks.
 
 Provision a second external Secret named `windops-care-runtime` for the CARE
 CronJob only. It contains exactly `WINDOPS_CARE_DATABASE_URL`,

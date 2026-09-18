@@ -11,7 +11,7 @@ BACKEND_ROOT = REPOSITORY_ROOT / "backend"
 DECLARATION_FILES = (
     REPOSITORY_ROOT / "README.md",
     REPOSITORY_ROOT / "docs" / "runbooks" / "release-acceptance.md",
-    BACKEND_ROOT / "deploy" / "README.md",
+    REPOSITORY_ROOT / "docs" / "production-deployment.md",
     REPOSITORY_ROOT / "docs" / "demo-gap-audit.md",
 )
 

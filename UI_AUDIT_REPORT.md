@@ -21,7 +21,7 @@
 - `AGENTS.md`
 - `PRODUCT_REQUIREMENTS.md`
 - `UI_UX_SPEC.md`
-- `docs/ui/reference/README.md`
+- `docs/ui/reference/selection.md`
 - `docs/ui/reference/dashboard-desktop.png`
 - 当前前端的 22 个路由（Demo 模式逐页浏览）
 - App Shell、首页、Mission、工单、预测、模型治理、全局状态、数据表格和全局样式实现

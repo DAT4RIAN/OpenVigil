@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "windops-backend"
 version = "0.1.0"
 description = "Auditable FastAPI and LangGraph platform for governed wind operations"
-readme = "README.md"
+readme = { text = "OpenVigil Python backend. Project documentation: repository-root README.md and docs/backend-operations.md.", content-type = "text/markdown" }
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
 dependencies = [

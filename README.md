@@ -65,6 +65,8 @@ Cloudflare Sites 只托管 Worker 网关，不托管 `backend/` Python 服务。
 
 ## Screenshot
 
+界面设计参考的选定方向与使用边界见 [UI 参考说明](docs/ui/reference/selection.md)。
+
 ![OpenVigil Operations Command Center](./public/openvigil-command-center.png)
 
 首页把全场 KPI、健康矩阵、告警态势、Agent 活动和 WT-023 主故事放在同一运营视图中。上图是仓库现有的静态预览，可能滞后于当前界面，不作为本轮视觉验收或生产部署证明。
@@ -292,6 +294,8 @@ create_work_order
 
 ## Python 生产候选后端
 
+后端运行、鉴权与模型配置详见 [后端运维说明](docs/backend-operations.md)；生产镜像、Kubernetes 部署与发布门槛详见 [生产部署说明](docs/production-deployment.md)。
+
 `backend/` 是独立的 Python 3.12 服务，真实实现以下通用任务链路（WT-023 为默认参考模板）：
 
 ```text
@@ -423,6 +427,8 @@ backend/
   tests/external/              PostgreSQL/TimescaleDB/CARE 与受保护 release 环境门禁
   docker-compose.yml           仅供本地的生产形态依赖栈
 docs/
+  backend-operations.md          Python 后端运行、鉴权和模型配置
+  production-deployment.md       生产部署与发布门槛
   care-v6-*.md                 CARE 实施计划与需求评审
   adr/                         列式存储等架构决策
   runbooks/                    发布、备份恢复、CARE 全量运行与制品治理

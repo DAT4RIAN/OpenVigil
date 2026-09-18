@@ -1,4 +1,7 @@
-# OpenVigil Python backend — durable Mission and work-order platform
+# OpenVigil Python backend operations
+
+The Python package and local Compose stack live in `backend/`. Unless stated otherwise,
+commands below run from that directory.
 
 This Python 3.12 service implements the audited operational chain:
 
@@ -51,7 +54,7 @@ fails closed. Read tokens remain replayable within their short validity window.
 Every retryable side-effect `POST` except source-event-idempotent SCADA ingest
 requires `Idempotency-Key`; receipts are scoped by authenticated subject,
 command type, target, key, and canonical request hash. See
-`../docs/runbooks/delegated-replay-and-command-idempotency.md` for response,
+`runbooks/delegated-replay-and-command-idempotency.md` for response,
 audit, cleanup, and incident contracts.
 
 Knowledge-graph reads also require an explicit backend-owned scope grant in
@@ -174,13 +177,13 @@ production deployment. Its services bind to localhost and do not replace TLS,
 secret management, backups, ingress policy, or PostgreSQL/Redis/MinIO release
 integration tests.
 
-`Dockerfile` and `deploy/kubernetes/` provide the production application
+`backend/Dockerfile` and `backend/deploy/kubernetes/` provide the production application
 baseline: a non-root multi-stage image, three API replicas, independent
 Dramatiq workers, a durable outbox relay, one-time migration Job, dedicated
 read-audit batch/retention workers, readiness and liveness probes, resource
 bounds, HPA, disruption budget, default-deny network
 policy and scheduled verified backups. The checked-in digest is intentionally
-non-deployable. Follow `deploy/README.md` to inject the exact signed image digest
+non-deployable. Follow `production-deployment.md` to inject the exact signed image digest
 and secret-manager-backed runtime configuration; the local Compose stack is
 never an allowed production substitute. Run `windops-deployment-policy` against
 the final rendered manifests to produce the content-addressed deployment-policy
@@ -190,7 +193,7 @@ egress and an approved encrypted backup StorageClass.
 ## Install and run
 
 ```powershell
-cd C:\coding\project\wind-agent\backend
+cd backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[test,dev]"
@@ -231,11 +234,11 @@ provider's `BASE_URL`, `API_KEY`, and `MODEL` are passed to the LiteLLM chat cal
 blank keys and insecure/credential-bearing URLs fail configuration validation.
 `WINDOPS_LLM_PROVIDER=default` keeps the existing `WINDOPS_LITELLM_MODEL` behavior.
 
-| `WINDOPS_LLM_PROVIDER` | Base URL in `../.env.example` | Example chat model |
-| --- | --- | --- |
-| `siliconflow` | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V4-Flash` |
-| `bailian` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
-| `deepseek` | `https://api.deepseek.com` | `deepseek-flash` |
+| `WINDOPS_LLM_PROVIDER` | Base URL in `../.env.example`                       | Example chat model              |
+| ---------------------- | --------------------------------------------------- | ------------------------------- |
+| `siliconflow`          | `https://api.siliconflow.cn/v1`                     | `deepseek-ai/DeepSeek-V4-Flash` |
+| `bailian`              | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus`                     |
+| `deepseek`             | `https://api.deepseek.com`                          | `deepseek-flash`                |
 
 For Bailian, the supplied Beijing URL needs a Beijing-region key; change the
 URL and key together for another region. These settings configure chat reasoning
@@ -261,7 +264,7 @@ targets for machine verification. The production `/readyz` probe verifies
 PostgreSQL, Redis, all five governed MinIO buckets, and Neo4j; `/healthz` remains
 a process-liveness probe only. Collector and Prometheus rule examples live in
 `ops/`, with multi-window error-budget alerts and runbooks under
-`../docs/runbooks/`.
+`runbooks/`.
 
 Recovery commands are intentionally separate from application startup:
 
@@ -278,7 +281,7 @@ from the four authoritative MinIO buckets, a non-secret configuration snapshot,
 Alembic revision, row-count invariants, and SHA-256 for every artifact. Restore
 validates the complete bundle and target isolation before mutation, then reads
 back every object and database invariant. See
-`../docs/runbooks/backup-recovery.md`; never run a restore against a live target
+`runbooks/backup-recovery.md`; never run a restore against a live target
 without an approved change and traffic isolation.
 
 Neo4j is a disposable read projection, never the transaction authority. Raw
@@ -339,4 +342,4 @@ The repository suite intentionally skips the external release test unless
 `WINDOPS_RUN_EXTERNAL_RELEASE_TESTS=1` is set in an isolated production-shaped
 environment. A release is blocked until that test, a real restore drill, DAST,
 and browser accessibility/visual acceptance produce retained evidence. Follow
-`../docs/runbooks/release-acceptance.md`; a skipped gate is not a pass.
+`runbooks/release-acceptance.md`; a skipped gate is not a pass.
