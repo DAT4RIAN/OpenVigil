@@ -70,7 +70,9 @@ yarn-error.log*
 *.ppt
 *.pptx
 *.pdf
-/docs/agent-engineer-interview-project-introduction.md
+
+# Project documentation
+/docs/
 
 # Local finesse design history
 /.finesse/

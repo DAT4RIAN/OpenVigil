@@ -171,7 +171,7 @@ flowchart TB
 | 评估       | `within-farm-leave-one-turbine-out-v1` 覆盖 36 fold / 95 events / 281,249 prediction points；12 个候选通过、24 个候选失败，失败结果仍完整登记      |
 | 跨场结论   | 明确禁用；只有建立版本化跨场 ontology 并取得人工审核记录后才能启用，当前结果不得宣传为跨场泛化                                                     |
 | 平台闭环   | 受治理目录和评估进入 Data/Model/Diagnosis 页面；选定事件可回放到 TimescaleDB，串联 prediction、Alarm、Mission、Decision 和受控导出                 |
-| 许可       | 数据集及其受许可约束的派生分发制品遵循 CC BY-SA 4.0、归属、许可链接和 ShareAlike 复核；OpenVigil 自有源码仍为 MIT                                  |
+| 许可       | 数据集及其受许可约束的派生分发制品遵循 CC BY-SA 4.0、归属、许可链接和 ShareAlike 复核；OpenVigil 自有源码采用 Apache License 2.0                   |
 | 官方复验   | MIT 许可的 EnergyFaultDetector v0.6.2 以 commit `a338b6e…` 的 submodule 固定；CI 对 commit/tree/source/license hash 与评分 golden vectors 失败关闭 |
 
 全量候选在 2026-08-27 完成 `5,242,948` 行导入，实测 693.52 rows/s、进程峰值 521,977,856 bytes；36-fold 评估耗时 125.83 s、进程峰值 235,524,096 bytes。2026-08-29 再次使用当前 verifier 对全部 95 个事件、36 个 fold 和引用制品做只读复算并通过。这些是本地候选证据，不等于生产 registry 签名、SBOM、集群准入或现场系统验收。
@@ -595,7 +595,7 @@ flowchart LR
 
 ## 许可证
 
-OpenVigil 自有源码以 [MIT License](./LICENSE) 发布。CARE v6 数据集 **不是 MIT 资产，也不随本仓库分发**；数据集及受其许可约束的派生分发制品遵循 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)，需要保留来源归属、许可链接、变更说明和 ShareAlike。数据集引用为 Christian Gück、Cyriana M. A. Roelofs / Fraunhofer IEE，Zenodo DOI [`10.5281/zenodo.15846963`](https://doi.org/10.5281/zenodo.15846963)。第三方项目、依赖、名称和商标仍遵循各自许可证与权利边界；完整归属、审计提交、许可证链接和 clean-room 声明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+OpenVigil 自有源码以 [Apache License 2.0](./LICENSE) 发布。CARE v6 数据集及其受许可约束的派生分发制品 **不受 Apache License 2.0 覆盖，也不随本仓库分发**；它们遵循 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)，需要保留来源归属、许可链接、变更说明和 ShareAlike。数据集引用为 Christian Gück、Cyriana M. A. Roelofs / Fraunhofer IEE，Zenodo DOI [`10.5281/zenodo.15846963`](https://doi.org/10.5281/zenodo.15846963)。第三方项目、依赖、名称和商标仍遵循各自许可证与权利边界；完整归属、审计提交、许可证链接和 clean-room 声明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
 ## 开源参考与致谢
 

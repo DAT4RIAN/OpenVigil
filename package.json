@@ -2,7 +2,7 @@
   "name": "openvigil-multi-agent-platform",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT",
+  "license": "Apache-2.0",
   "packageManager": "pnpm@11.21.0",
   "engines": {
     "node": ">=22.13.0"

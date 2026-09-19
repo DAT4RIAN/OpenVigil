@@ -336,7 +336,7 @@ Related Journeys: `P-003`, `P-004`
 5. 训练、校准、推理和普通浏览不能读取 prediction 真值；只有最终 evaluator 和获授权的评估后查看流程可以访问。
 6. 首版只支持单事件与场内 leave-one-asset-out 评估；跨风场保持禁用。
 7. CARE 输出不得包含伪造 RUL、30 天故障概率、真实场站时间或未经证实的根因结论。
-8. 数据与受许可证约束的派生分发制品遵循 CC BY-SA 4.0 的归属、许可链接、变更说明和 ShareAlike 复核；OpenVigil 自有源码维持 MIT 边界。
+8. 数据与受许可证约束的派生分发制品遵循 CC BY-SA 4.0 的归属、许可链接、变更说明和 ShareAlike 复核；OpenVigil 自有源码采用 Apache License 2.0。
 9. anomaly 激活和回滚只接受服务端从权威评估、制品和审批状态生成的一次性授权；客户端不得提交自称通过的指标或 capability。
 
 #### Acceptance Criteria

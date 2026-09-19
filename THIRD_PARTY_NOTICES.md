@@ -39,7 +39,7 @@ Release engineering should generate and archive a dependency license inventory o
 
 ## CARE v6 benchmark data and derived artifacts
 
-The repository's MIT `LICENSE` applies to OpenVigil code, not to CARE source data or CARE-derived data artifacts. CARE v6, “Wind Turbine SCADA Data For Early Fault Detection,” is attributed to Christian Gück and Cyriana M. A. Roelofs, Fraunhofer Institute for Energy Economics and Energy System Technology, and is published at [Zenodo DOI 10.5281/zenodo.15846963](https://doi.org/10.5281/zenodo.15846963) under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+The repository's Apache License 2.0 `LICENSE` applies to OpenVigil code, not to CARE source data or CARE-derived data artifacts. CARE v6, “Wind Turbine SCADA Data For Early Fault Detection,” is attributed to Christian Gück and Cyriana M. A. Roelofs, Fraunhofer Institute for Energy Economics and Energy System Technology, and is published at [Zenodo DOI 10.5281/zenodo.15846963](https://doi.org/10.5281/zenodo.15846963) under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
 The recommended scholarly citation is: Gück, C.; Roelofs, C.M.A.; Faulstich, S. “CARE to Compare: A Real-World Benchmark Dataset for Early Fault Detection in Wind Turbine Data.” _Data_ 2024, 9, 138. [https://doi.org/10.3390/data9120138](https://doi.org/10.3390/data9120138).
 
