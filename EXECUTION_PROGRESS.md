@@ -2591,3 +2591,26 @@ Validation completed:
 - 演示稿 10 页完整导入，package integrity、字体、模板覆盖率和版式 validator 通过；最终文件中旧展示品牌命中为 0。
 - Brand Audit Pass #1：用户可见旧品牌 0、旧可见资产名 0、非白名单技术改名 0、缺失 OpenVigil 交付物 0。
 - Brand Audit Pass #2：在进度持久化后重新执行同一审计，结果保持 0 / 0 / 0 / 0，旧名演示稿不存在。
+
+---
+
+# 14. Button Glass Material (2026-09-22)
+
+Status: `DONE_LOCAL_VALIDATED`
+
+Implemented:
+
+- 新增共享按钮玻璃材质：低透明背景、12px 背景模糊、1px 内缘折射、克制的色相阴影；覆盖共享 `.button` 与原生 `button`，排除 Drawer / Mobile backdrop。
+- 保持既有 mist-teal 语义色、6px radius 与 primary / secondary / ghost / danger 变体；未把玻璃层扩散到卡片或页面背景。
+- `Button` 新增 error / success 状态，loading 使用覆盖层保留原按钮宽度，并提供 `aria-busy`、禁用重复点击和 reduced-motion / reduced-transparency / forced-colors 回退。
+- 新增 `Button.preview.html` 展示 default、hover、focus-visible、active、disabled、loading、error、success 八状态；组件级构建未写 `.finesse/log.json`。
+- `UI_UX_SPEC.md` 已同步为“禁止大面积装饰性玻璃拟态，允许按钮使用受约束玻璃材质”。
+
+Validation:
+
+- `pnpm test`: `186 / 186` passed，0 skipped；包含 production build 与 bundle budget。
+- `pnpm run typecheck`: passed。
+- scoped ESLint 与 Prettier：passed；`git diff --check`: passed（仅 Windows LF/CRLF 提示）。
+- 独立 OpenVigil E2E server `127.0.0.1:4187`：按钮定向 Playwright `2 / 2` passed；浅色/深色、共享/原生按钮、八状态、Axe、reduced transparency、320/375/414/768 preview 与 390px 产品页触控/单行标签通过。
+- finesse detector：`P0 = 0`；preview 的 `missing-stamp` P2 不适用于 component-scope，组件 stamp 已位于 `15-button-glass.css` 首行。
+- 全量 `pnpm test:e2e` 未形成有效回归结果：固定端口 `127.0.0.1:4179` 已由仓库外 `smart-construction-platform` Vite 进程占用，Playwright `reuseExistingServer` 错误复用了该服务；发现后停止本次运行，未终止或修改外部进程。全量 E2E 状态为 `UNVERIFIED_PORT_CONFLICT`，不是产品测试失败。任务自启的 `4187` 已释放。

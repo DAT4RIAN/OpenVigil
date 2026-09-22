@@ -6,27 +6,38 @@ import { cn } from "@/lib/utils";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md" | "icon";
+type ButtonStatus = "error" | "success";
 
 export function Button({
   className,
   variant = "secondary",
   size = "md",
   loading,
+  status,
   children,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
   loading?: boolean;
+  status?: ButtonStatus;
 }) {
+  const state = loading ? "loading" : status;
+
   return (
     <button
+      {...props}
       className={cn("button", `button--${variant}`, `button--${size}`, className)}
       disabled={loading || props.disabled}
-      {...props}
+      aria-busy={loading || undefined}
+      data-state={state}
     >
-      {loading ? <LoaderCircle aria-hidden="true" className="spin" size={15} /> : null}
-      {children}
+      <span className="button__content">{children}</span>
+      {loading ? (
+        <span className="button__state" aria-hidden="true">
+          <LoaderCircle className="spin" size={15} />
+        </span>
+      ) : null}
     </button>
   );
 }

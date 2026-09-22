@@ -14,7 +14,7 @@ Image2 图片只是视觉意图，不是像素级真值；当图片、现有实�
 | Spec Version        | 1.0                                                                     |
 | Status              | Selected direction / implementation specification                       |
 | Owner               | Design                                                                  |
-| Last Updated        | 2026-09-15（已确认的前端视觉优化）                                        |
+| Last Updated        | 2026-09-22（按钮玻璃材质与八状态）                                      |
 | Product Baseline    | `PRODUCT_REQUIREMENTS.md` 1.0                                           |
 | Primary Viewport    | Desktop `1440 × 900`                                                    |
 | Supported Web Width | `320px` 及以上；正式浏览器版本以 PRD Open Question 6 的业务确认结果为准 |
@@ -142,7 +142,7 @@ Image2 图片只是视觉意图，不是像素级真值；当图片、现有实�
 - 控件间最小间距 `8px`；语义组内 `8–12px`；组间 `16–24px`。
 - Radius：按钮 / 输入 `6px`，卡片 `10px`，重点容器最大 `12px`；不使用大面积胶囊卡片。
 - 默认卡片使用 `1px` 边框和 `shadow-sm`；Drawer / Dialog 才使用 `shadow-md`。
-- 不使用玻璃拟态、霓虹描边、发光阴影、3D 透视或与信息无关的渐变。
+- 不使用大面积或装饰性的玻璃拟态、霓虹描边、发光阴影、3D 透视或与信息无关的渐变。按钮与按键可使用单层低透明玻璃材质，但必须保留 1px 内缘、克制阴影、实色降级和清晰语义对比；不得扩散到卡片与页面背景。
 
 ### 5.4 Color Tokens
 
@@ -173,6 +173,7 @@ Image2 图片只是视觉意图，不是像素级真值；当图片、现有实�
 #### Button
 
 - 使用现有 `Button` 的 primary、secondary、ghost、danger 与 sm / md / icon 变体。
+- 按钮玻璃材质统一由共享样式提供；页面不得自行叠加第二套模糊、发光或渐变。必须覆盖 default、hover、focus-visible、active、disabled、loading、error、success 八种状态，并支持减少动态效果、减少透明度与强制色模式。
 - 主按钮动词明确，包含对象或结果，例如“进入 Mission”“提交审批”“排程工单”。
 - 提交中显示进行状态并禁用重复点击；结果未知时不立即恢复成可再次新建的状态。
 - 破坏性或高风险操作必须使用确认 Dialog；不能只靠红色区分。

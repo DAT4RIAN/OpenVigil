@@ -19,6 +19,7 @@ const styleFiles = [
   "12-health.css",
   "13-access-recovery.css",
   "14-motion.css",
+  "15-button-glass.css",
 ];
 
 test("the global stylesheet preserves import order and the reviewed rule stream", async () => {
@@ -35,6 +36,6 @@ test("the global stylesheet preserves import order and the reviewed rule stream"
   // See docs/design/frontend-motion.md; existing screenshot baselines remain unchanged.
   assert.equal(
     createHash("sha256").update(ruleStream).digest("hex"),
-    "16937714145e2281f07637c69852988233d3ca91f32ba97176a6ad885534ae26",
+    "8309f4c8ed6085a5c91c9cf8bf72a087561ce6bb774e211360b5ce2c9c5c5737",
   );
 });

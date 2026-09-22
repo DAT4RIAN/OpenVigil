@@ -1,0 +1,209 @@
+/* finesse · component: button · register=product
+ * states: default · hover · focus-visible · active · disabled · loading · error · success
+ * tokens: inherited (app/styles/01-foundations.css) */
+:root {
+  --control-glass-filter: blur(12px) saturate(138%);
+  --control-glass-sheen: color-mix(in srgb, var(--surface) 34%, transparent);
+  --control-glass-sheen-hover: color-mix(in srgb, var(--surface) 52%, transparent);
+  --control-glass-sheen-low: color-mix(in srgb, var(--foreground) 3%, transparent);
+  --control-glass-inner-edge: color-mix(in srgb, var(--surface) 64%, transparent);
+  --control-glass-shadow-color: color-mix(in srgb, var(--sidebar) 26%, transparent);
+  --control-glass-shadow:
+    inset 0 1px 0 var(--control-glass-inner-edge),
+    inset 0 -1px 0 color-mix(in srgb, var(--foreground) 7%, transparent),
+    0 8px 18px -14px var(--control-glass-shadow-color);
+  --control-glass-shadow-hover:
+    inset 0 1px 0 var(--control-glass-sheen-hover),
+    inset 0 -1px 0 color-mix(in srgb, var(--foreground) 9%, transparent),
+    0 12px 22px -15px var(--control-glass-shadow-color);
+  --control-glass-shadow-pressed:
+    inset 0 2px 5px color-mix(in srgb, var(--sidebar) 18%, transparent),
+    inset 0 -1px 0 var(--control-glass-inner-edge);
+}
+
+:root[data-theme="dark"] {
+  --control-glass-sheen: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --control-glass-sheen-hover: color-mix(in srgb, var(--foreground) 13%, transparent);
+  --control-glass-sheen-low: color-mix(in srgb, var(--sidebar) 18%, transparent);
+  --control-glass-inner-edge: color-mix(in srgb, var(--foreground) 16%, transparent);
+  --control-glass-shadow-color: color-mix(in srgb, var(--sidebar) 64%, transparent);
+}
+
+:where(button:not(.drawer-backdrop, .mobile-backdrop), .button) {
+  --control-glass-current-sheen: var(--control-glass-sheen);
+  -webkit-backdrop-filter: var(--control-glass-filter);
+  backdrop-filter: var(--control-glass-filter);
+  background-clip: padding-box;
+  box-shadow: var(--control-glass-shadow);
+  isolation: isolate;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  position: relative;
+  transition-property: background-color, border-color, box-shadow, color, transform;
+  transition-duration: var(--motion-fast, 140ms);
+  transition-timing-function: var(--motion-ease, ease-out);
+  white-space: nowrap;
+}
+
+:where(button:not(.drawer-backdrop, .mobile-backdrop), .button)::before {
+  background: linear-gradient(
+    180deg,
+    var(--control-glass-current-sheen) 0%,
+    transparent 42%,
+    var(--control-glass-sheen-low) 100%
+  );
+  border: 1px solid var(--control-glass-inner-edge);
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 var(--control-glass-inner-edge);
+  content: "";
+  inset: 1px;
+  opacity: 0.62;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity var(--motion-fast, 140ms) var(--motion-ease, ease-out);
+}
+
+.button--primary {
+  background-color: color-mix(in srgb, var(--primary) 92%, transparent);
+  border-color: color-mix(in srgb, var(--primary-strong) 72%, var(--control-glass-inner-edge));
+  box-shadow: var(--control-glass-shadow);
+}
+
+.button--secondary {
+  background-color: color-mix(in srgb, var(--surface) 86%, transparent);
+  border-color: color-mix(in srgb, var(--border-strong) 58%, var(--control-glass-inner-edge));
+  box-shadow: var(--control-glass-shadow);
+}
+
+.button--ghost {
+  background-color: color-mix(in srgb, var(--surface) 24%, transparent);
+  border-color: color-mix(in srgb, var(--border) 74%, transparent);
+  box-shadow: var(--control-glass-shadow);
+}
+
+.button--danger {
+  background-color: color-mix(in srgb, var(--critical) 90%, transparent);
+  border-color: color-mix(in srgb, var(--critical) 72%, var(--control-glass-inner-edge));
+  box-shadow: var(--control-glass-shadow);
+}
+
+.button__content {
+  align-items: center;
+  display: inline-flex;
+  gap: inherit;
+  justify-content: center;
+  min-width: 0;
+}
+
+.button__state {
+  display: grid;
+  inset: 0;
+  place-items: center;
+  pointer-events: none;
+  position: absolute;
+}
+
+.button[data-state="loading"] .button__content {
+  opacity: 0;
+}
+
+.button[data-state="loading"]:disabled {
+  cursor: wait;
+  opacity: 1;
+}
+
+.button[data-state="error"] {
+  background-color: color-mix(in srgb, var(--critical-soft) 88%, transparent);
+  border-color: color-mix(in srgb, var(--critical) 48%, var(--control-glass-inner-edge));
+  color: var(--critical);
+}
+
+.button[data-state="success"] {
+  background-color: color-mix(in srgb, var(--success-soft) 88%, transparent);
+  border-color: color-mix(in srgb, var(--success) 48%, var(--control-glass-inner-edge));
+  color: var(--success);
+}
+
+:is(button:not(.drawer-backdrop, .mobile-backdrop), .button):is(:focus-visible, .is-focus) {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+:is(button:not(.drawer-backdrop, .mobile-backdrop), .button):is(:active, .is-active):not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+  box-shadow: var(--control-glass-shadow-pressed);
+}
+
+:is(button:not(.drawer-backdrop, .mobile-backdrop), .button):disabled,
+:is(button:not(.drawer-backdrop, .mobile-backdrop), .button)[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :is(button:not(.drawer-backdrop, .mobile-backdrop), .button):is(:hover, .is-hover):not(
+      :disabled,
+      [aria-disabled="true"]
+    ) {
+    --control-glass-current-sheen: var(--control-glass-sheen-hover);
+    box-shadow: var(--control-glass-shadow-hover);
+  }
+
+  .button--primary:is(:hover, .is-hover):not(:disabled, [aria-disabled="true"]) {
+    background-color: color-mix(in srgb, var(--primary-strong) 92%, transparent);
+  }
+
+  .button--secondary:is(:hover, .is-hover):not(:disabled, [aria-disabled="true"]),
+  .button--ghost:is(:hover, .is-hover):not(:disabled, [aria-disabled="true"]) {
+    background-color: color-mix(in srgb, var(--surface-strong) 84%, transparent);
+  }
+
+  .button--danger:is(:hover, .is-hover):not(:disabled, [aria-disabled="true"]) {
+    background-color: color-mix(in srgb, var(--critical) 96%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button:not(.drawer-backdrop, .mobile-backdrop), .button),
+  :where(button:not(.drawer-backdrop, .mobile-backdrop), .button)::before {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :where(button:not(.drawer-backdrop, .mobile-backdrop), .button) {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  :where(button:not(.drawer-backdrop, .mobile-backdrop), .button)::before {
+    display: none;
+  }
+
+  .button--primary {
+    background-color: var(--primary);
+  }
+
+  .button--secondary,
+  .button--ghost {
+    background-color: var(--surface);
+  }
+
+  .button--danger {
+    background-color: var(--critical);
+  }
+}
+
+@media (forced-colors: active) {
+  :where(button:not(.drawer-backdrop, .mobile-backdrop), .button) {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  :where(button:not(.drawer-backdrop, .mobile-backdrop), .button)::before {
+    display: none;
+  }
+}
