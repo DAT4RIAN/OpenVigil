@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 import windops_backend.config as config_module
+from windops_backend.agents.reasoning import LiteLLMReasoningProvider, build_reasoning_provider
 from windops_backend.config import ModelInferenceTarget, Settings
 from windops_backend.enums import Environment
 
@@ -139,6 +140,43 @@ def test_get_settings_reads_only_repository_root_dotenv(
     config_module.get_settings.cache_clear()
     try:
         assert config_module.get_settings().release_id == "from-root"
+    finally:
+        config_module.get_settings.cache_clear()
+
+
+def test_root_dotenv_selects_siliconflow_reasoning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repository = tmp_path / "project"
+    fake_module_path = repository / "backend" / "src" / "windops_backend" / "config.py"
+    fake_module_path.parent.mkdir(parents=True)
+    fake_module_path.touch()
+    (repository / ".env").write_text(
+        "WINDOPS_AGENT_MODE=litellm\n"
+        "WINDOPS_LLM_PROVIDER=siliconflow\n"
+        "WINDOPS_SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1\n"
+        "WINDOPS_SILICONFLOW_API_KEY=test-only-siliconflow-key\n"
+        "WINDOPS_SILICONFLOW_MODEL=deepseek-ai/DeepSeek-V3.2\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_module, "__file__", str(fake_module_path))
+    for name in (
+        "WINDOPS_AGENT_MODE",
+        "WINDOPS_LLM_PROVIDER",
+        "WINDOPS_SILICONFLOW_BASE_URL",
+        "WINDOPS_SILICONFLOW_API_KEY",
+        "WINDOPS_SILICONFLOW_MODEL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    config_module.get_settings.cache_clear()
+    try:
+        settings = config_module.get_settings()
+        provider = build_reasoning_provider(settings)
+        assert isinstance(provider, LiteLLMReasoningProvider)
+        assert provider.model == "openai/deepseek-ai/DeepSeek-V3.2"
+        assert provider.api_base == "https://api.siliconflow.cn/v1"
+        assert provider.api_key is not None
+        assert provider.api_key.get_secret_value() == "test-only-siliconflow-key"
     finally:
         config_module.get_settings.cache_clear()
 
