@@ -73,7 +73,7 @@ OpenVigil 当前是生产候选实现。Demo、单元测试、本地开发栈或
 
 ## 6. 部署与供应链
 
-部署方应使用经审阅的锁文件与固定构建输入，执行依赖审计、镜像扫描、SBOM 和签名验证，并保留与同一 commit、release ID、镜像 digest 绑定的验收证据。实际发布门禁见 [发布工作流](./.github/workflows/release.yml) 与 [README 的生产验收边界](./README.md#生产验收边界)。
+部署方应使用经审阅的锁文件与固定构建输入，执行依赖审计、镜像扫描、SBOM 和签名验证，并保留与同一 commit、release ID、镜像 digest 绑定的验收证据。实际发布门禁见 [发布工作流](./.github/workflows/release.yml) 与 [中文 README 的生产验收边界](./README-CN.md#生产验收边界)。
 
 不要因配置、依赖或安全检查失败而关闭门禁。`healthz` 成功只说明进程存活；依赖 readiness、身份/权限、数据隔离、恢复及外部安全验证应分别完成。Sites 的 Web 发布成功也不能替代 Python 后端、依赖与现场系统的安全验收。
 

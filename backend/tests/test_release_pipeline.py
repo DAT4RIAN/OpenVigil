@@ -73,9 +73,32 @@ def _assert_real_cross_layer_build_order(job: dict[str, object]) -> None:
     assert "working-directory" not in steps[build_index]
 
 
-def test_root_readme_declares_current_migration_head_without_stale_baselines() -> None:
-    source = ROOT_README_PATH.read_text(encoding="utf-8")
-    assert ROOT_README_PATH in DECLARATION_FILES
+@pytest.mark.parametrize(
+    ("readme_path", "required_statements"),
+    [
+        (
+            ROOT_README_PATH,
+            (
+                "Test counts come from command and CI discovery results",
+                "those skips do not count as release passes",
+                "making any skip a failure",
+            ),
+        ),
+        (
+            REPOSITORY_ROOT / "README-CN.md",
+            (
+                "测试数量以命令和 CI 自动发现结果为准",
+                "这些 skip 不被描述为发布通过",
+                "出现 skip 即失败",
+            ),
+        ),
+    ],
+)
+def test_root_readme_declares_current_migration_head_without_stale_baselines(
+    readme_path: Path, required_statements: tuple[str, ...]
+) -> None:
+    source = readme_path.read_text(encoding="utf-8")
+    assert readme_path in DECLARATION_FILES
     assert EXPECTED_HEAD in source
     stale_baselines = (
         "Python 119/120",
@@ -84,13 +107,17 @@ def test_root_readme_declares_current_migration_head_without_stale_baselines() -
         "201 项，189 passed",
         "12 个 `external_release`",
         "11 个 PostgreSQL/TimescaleDB/pgvector",
+        "16 consecutive Alembic",
+        "201 tests, 189 passed",
+        "12 `external_release`",
+        "11 PostgreSQL/TimescaleDB/pgvector",
     )
     for stale_baseline in stale_baselines:
         assert stale_baseline not in source
     assert "pnpm test:e2e" in source
-    assert "测试数量以命令和 CI 自动发现结果为准" in source
-    assert "这些 skip 不被描述为发布通过" in source
-    assert "出现 skip 即失败" in source
+    assert "WINDOPS_FAIL_ON_SKIPPED=1" in source
+    for statement in required_statements:
+        assert statement in source
 
 
 def test_release_workflow_is_protected_pinned_and_complete() -> None:

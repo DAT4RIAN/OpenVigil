@@ -1,6 +1,6 @@
 # 贡献指南
 
-欢迎为 OpenVigil 提交问题报告、文档、测试和代码改进。开始前请阅读 [README](./README.md)、[产品需求](./PRODUCT_REQUIREMENTS.md)、[UI/UX 规范](./UI_UX_SPEC.md) 和 [架构说明](./ARCHITECTURE.md)，了解业务闭环及 Demo / Production 的边界。使用 AI Agent 时，还须遵守 [AGENTS.md](./AGENTS.md)。
+欢迎为 OpenVigil 提交问题报告、文档、测试和代码改进。开始前请阅读 [中文 README](./README-CN.md)、[产品需求](./PRODUCT_REQUIREMENTS.md)、[UI/UX 规范](./UI_UX_SPEC.md) 和 [架构说明](./ARCHITECTURE.md)，了解业务闭环及 Demo / Production 的边界。使用 AI Agent 时，还须遵守 [AGENTS.md](./AGENTS.md)。
 
 **疑似安全漏洞请按 [安全政策](./SECURITY.md) 报告，不要在公开 Issue 或 Pull Request 中发布漏洞细节、密钥或用户数据。**
 
@@ -56,7 +56,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 | 手动 Python 后端   | 读取根 `.env`；生产连接、身份、模型与依赖必须分别配置并验证。                                                                                                     |
 | Windows 隔离开发栈 | 根目录运行 `./scripts/Start-Local.ps1`、`Status-Local.ps1`、`Stop-Local.ps1`；专用配置在 `.artifacts/local-stack/`，不读取或覆盖用户 `.env`，使用确定性测试推理。 |
 
-启动细节见 [README 的快速开始](./README.md#快速开始)。真实模型调用可能产生费用；在授权的账号和预算内运行，记录模型、案例、调用次数、失败与费用，勿把付费评测加入默认离线单元测试。
+启动细节见 [中文 README 的快速开始](./README-CN.md#快速开始)。真实模型调用可能产生费用；在授权的账号和预算内运行，记录模型、案例、调用次数、失败与费用，勿把付费评测加入默认离线单元测试。
 
 ## 3. 实现要求
 
@@ -80,7 +80,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 在仓库根目录执行格式检查，核对相对链接、命令路径和描述与代码是否一致：
 
 ```bash
-pnpm exec prettier --check CONTRIBUTING.md SECURITY.md README.md
+pnpm exec prettier --check CONTRIBUTING.md SECURITY.md README.md README-CN.md
 git diff --check
 ```
 
@@ -101,7 +101,7 @@ pnpm test
 
 `pnpm test` 包含生产构建、Bundle 预算及 Node 合同测试。CI 还通过 `pnpm test:coverage` 检查覆盖率预算；启动路径变更运行 `pnpm test:start-smoke`，UI 或交互变更运行相关 Playwright 用例，并在 PR 中提供实际页面截图和状态验证。
 
-首次运行浏览器测试可用 `pnpm exec playwright install chromium` 安装运行时。`pnpm test:e2e` 与真实依赖的 `pnpm test:e2e:business` 有不同的环境和数据边界，详见 [README 的开发说明](./README.md#开发)。
+首次运行浏览器测试可用 `pnpm exec playwright install chromium` 安装运行时。`pnpm test:e2e` 与真实依赖的 `pnpm test:e2e:business` 有不同的环境和数据边界，详见 [中文 README 的开发说明](./README-CN.md#开发)。
 
 ### Python
 
@@ -135,4 +135,4 @@ uv run alembic upgrade head --sql
 
 提交贡献前确认有权提供这些内容，并使 OpenVigil 自有源码的贡献与 [Apache License 2.0](./LICENSE) 兼容。第三方代码、素材和数据必须注明来源、版本、许可证及变更，参见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
-CARE 数据及受其许可证约束的派生分发制品不由本仓库的 Apache License 覆盖。不要将外部原始数据、个人信息或客户数据加入仓库；数据许可和分发边界以 [README 的许可证说明](./README.md#许可证) 为准。
+CARE 数据及受其许可证约束的派生分发制品不由本仓库的 Apache License 覆盖。不要将外部原始数据、个人信息或客户数据加入仓库；数据许可和分发边界以 [中文 README 的许可证说明](./README-CN.md#许可证) 为准。
