@@ -32,6 +32,7 @@ import {
 } from "@/components/pages/mission-detail-support";
 import { Avatar, Button, Card, CardHeader, KeyValue, Progress } from "@/components/ui/primitives";
 import { agentDisplayName } from "@/lib/agent-control-meta";
+import { deteriorationRiskLabel } from "@/lib/deterioration-risk";
 import { agents } from "@/lib/agent-data";
 import { overlayClientDecisions, overlayClientWorkOrders } from "@/lib/client-workflow-overlays";
 import { getCurrentWorkflowAuditCycle, getFeaturedMissionNarrative } from "@/lib/demo-workflow";
@@ -452,7 +453,7 @@ export function FeaturedMissionDetailPage() {
                 </div>
                 <div>
                   <small>恶化概率</small>
-                  <strong>{recommended?.deteriorationRiskPercent}%</strong>
+                  <strong>{deteriorationRiskLabel(recommended?.deteriorationRiskPercent)}</strong>
                 </div>
               </div>
               <a href="/decisions">

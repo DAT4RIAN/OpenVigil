@@ -135,7 +135,7 @@ async def readyz(
         await asyncio.wait_for(graph_store.verify_connectivity(), timeout=3)
     except Exception as exc:
         raise KnowledgeGraphUnavailableError("knowledge graph connectivity check failed") from exc
-    if settings.environment.value != "production":
+    if settings.environment.value != "production" and not settings.local_acceptance:
         return {"status": "ready", "knowledge_graph": graph_store.backend_name}
 
     unavailable: list[str] = []

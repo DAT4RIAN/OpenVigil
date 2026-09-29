@@ -1,6 +1,6 @@
 import { jsonResponse, parseBoundedInteger } from "@/app/api/_shared";
 import { readWorkflowForApi } from "@/app/api/_workflow";
-import { productionPredictiveAssessmentsResponse } from "@/lib/production-domain-adapter";
+import { productionPredictiveAssessmentsResponse } from "@/lib/production-adapters/models";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 import {

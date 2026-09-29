@@ -1,5 +1,5 @@
 import { missions } from "@/lib/operations-data";
-import { productionMissionsResponse } from "@/lib/production-domain-adapter";
+import { productionMissionsResponse } from "@/lib/production-adapters/workflow";
 import {
   getProductionBackendConfig,
   proxyProductionBackendRequest,

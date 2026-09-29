@@ -1,7 +1,7 @@
 import { jsonResponse } from "@/app/api/_shared";
 import { readWorkflowForApi } from "@/app/api/_workflow";
 import { buildDigitalTwinSnapshot } from "@/lib/digital-twin-data";
-import { productionDigitalTwinResponse } from "@/lib/production-domain-adapter";
+import { productionDigitalTwinResponse } from "@/lib/production-adapters/operations";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 export async function GET(request: Request): Promise<Response> {

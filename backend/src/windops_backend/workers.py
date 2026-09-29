@@ -6,6 +6,7 @@ import time
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
 
+from windops_backend.agents.runtime import prepare_reasoning_runtime
 from windops_backend.config import get_settings
 from windops_backend.db import create_engine, create_session_factory
 from windops_backend.knowledge_graph.factory import create_knowledge_graph_store
@@ -36,6 +37,9 @@ def configure_broker(redis_url: str) -> RedisBroker:
     return broker
 
 
+# Dramatiq imports this module before booting consumers. Import errors therefore
+# stop the worker before it can claim a mission, and cold SDK cost is startup cost.
+prepare_reasoning_runtime(get_settings())
 configure_broker(get_settings().redis_url)
 
 

@@ -84,7 +84,7 @@ async def test_real_release_dependencies_and_providers() -> None:
                 object_name,
             )
 
-        embedding = await LiteLLMEmbeddingProvider(settings.embedding_model).embed(
+        embedding = await LiteLLMEmbeddingProvider.from_settings(settings).embed(
             ["OpenVigil production release embedding verification"]
         )
         assert len(embedding) == 1

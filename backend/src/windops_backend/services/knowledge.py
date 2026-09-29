@@ -165,7 +165,7 @@ async def create_knowledge_document(
 def _embedding_provider(settings: Settings) -> EmbeddingProvider:
     if settings.environment is Environment.TEST:
         return DeterministicTestEmbeddingProvider()
-    return LiteLLMEmbeddingProvider(settings.embedding_model)
+    return LiteLLMEmbeddingProvider.from_settings(settings)
 
 
 async def _mark_document_failed(
@@ -197,14 +197,18 @@ async def process_knowledge_document_index_event(
             raise error
         document_id = str(event.payload["document_id"])
         try:
+            selected_provider = provider or _embedding_provider(settings)
             async with factory() as read_session:
                 document = await read_session.get(KnowledgeDocument, document_id)
                 if document is None:
                     raise NotFoundError(f"knowledge document {document_id} was not found")
-                if document.vectorized:
+                if (
+                    document.vectorized
+                    and document.embedding_provider == selected_provider.provider_name
+                    and document.embedding_model == selected_provider.model_name
+                ):
                     return await mark_event_succeeded(factory, event_id, claim_token)
                 embedding_inputs = chunk_embedding_text(document.title, document.body)
-            selected_provider = provider or _embedding_provider(settings)
             vectors = await embed_texts_with_controls(
                 selected_provider,
                 embedding_inputs,
@@ -220,7 +224,11 @@ async def process_knowledge_document_index_event(
                 )
                 if document is None:
                     raise NotFoundError(f"knowledge document {document_id} was not found")
-                if not document.vectorized:
+                if (
+                    not document.vectorized
+                    or document.embedding_provider != selected_provider.provider_name
+                    or document.embedding_model != selected_provider.model_name
+                ):
                     dialect = (
                         write_session.bind.dialect.name
                         if write_session.bind is not None

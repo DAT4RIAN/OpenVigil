@@ -849,6 +849,32 @@ test("production SCADA history rejects a missing turbineId without contacting th
   }
 });
 
+test("production decisions preserve unknown risk instead of inventing zero", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const value of [null, undefined, "12", -1, 101, 0, 12, 100]) {
+      globalThis.fetch = async () =>
+        backendJson({
+          decisions: [
+            {
+              decision_id: "DEC-UNKNOWN-RISK",
+              alternatives: [{ alternative_id: "ALT-1", deterioration_risk_percent: value }],
+            },
+          ],
+        });
+      const response = await runWithWorkerEnv(productionEnvironment, () =>
+        productionDecisionsResponse(sitesRequest("https://windops.example/api/decisions")),
+      );
+      assert.equal(response.status, 200);
+      const mapped = (await response.json()).data[0].alternatives[0];
+      const expected = typeof value === "number" && value >= 0 && value <= 100 ? value : null;
+      assert.equal(mapped.deteriorationRiskPercent, expected);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("production domain adapters expose authoritative mission, alarm, and work-order data", async () => {
   const originalFetch = globalThis.fetch;
   const observedUrls = [];
@@ -1290,5 +1316,45 @@ test("production collection adapters preserve one backend page and its cursor", 
     assert.ok(!observedUrls[0].includes("cursor=cursor-1"));
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("worker adds configured object-store origin without broadening other CSP directives", async () => {
+  const response = await worker.fetch(
+    new Request("https://app.example/api/alarms"),
+    {
+      WINDOPS_RUNTIME_MODE: "demo",
+      WINDOPS_ARTIFACT_UPLOAD_ORIGINS: "https://objects.example",
+    },
+    context,
+  );
+  const policy = response.headers.get("content-security-policy");
+  assert.match(policy, /connect-src 'self' https:\/\/objects\.example;/);
+  assert.match(policy, /object-src 'none'/);
+  assert.match(policy, /frame-ancestors 'none'/);
+});
+
+test("invalid upload policy rejects commands before backend execution", async () => {
+  let fetches = 0;
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => {
+    fetches += 1;
+    throw new Error("Unexpected backend call");
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://app.example/api/backend/missions/M-1/approvals", { method: "POST" }),
+      {
+        WINDOPS_RUNTIME_MODE: "production",
+        WINDOPS_ARTIFACT_UPLOAD_ORIGINS: "https://objects.example; connect-src *",
+      },
+      context,
+    );
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "INVALID_ARTIFACT_UPLOAD_ORIGINS");
+    assert.equal(fetches, 0);
+    assert.match(response.headers.get("content-security-policy"), /connect-src 'self';/);
+  } finally {
+    globalThis.fetch = original;
   }
 });

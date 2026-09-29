@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import func, select
 
+from windops_backend.agents.reasoning import AlternativeBundle, DeterministicReasoningProvider
 from windops_backend.agents.tools import SQLToolAdapter
 from windops_backend.errors import ApprovalGateError
 from windops_backend.models import Decision, WeatherWindow, WorkOrder
@@ -101,6 +102,34 @@ def assert_no_private_reasoning(value: Any) -> None:
     elif isinstance(value, list):
         for child in value:
             assert_no_private_reasoning(child)
+
+
+@pytest.mark.asyncio
+async def test_decision_preserves_proposal_reason_without_inventing_operating_limits(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = DeterministicReasoningProvider.generate
+    rationale = "Proposed inspection obtains missing bearing evidence; approval remains required."
+
+    async def generate(self, schema, instruction, public_context):
+        value = await original(self, schema, instruction, public_context)
+        if schema is AlternativeBundle:
+            next(item for item in value.alternatives if item.recommended).rationale = rationale
+        return value
+
+    monkeypatch.setattr(DeterministicReasoningProvider, "generate", generate)
+    mission = await create_review_mission(client, "SYNTHETIC-DECISION-EVIDENCE-BOUNDARY")
+    decision = mission["decision"]
+    recommended = next(item for item in decision["alternatives"] if item["recommended"])
+    assert decision["recommendation_reason"] == recommended["rationale"] == rationale
+    assert decision["recommended_alternative_id"] == recommended["alternative_id"]
+    risks = str(decision["risks"])
+    assert "70%" not in risks and "15-minute" not in risks
+    assert "vessel" not in risks and "marine" not in risks
+    assert "approved procedure limits" in risks
+    assert "does not authorize turbine operation" in risks
+    assert mission["status"] == "under_review"
+    assert mission["work_order_id"] is None and mission["approvals"] == []
 
 
 @pytest.mark.asyncio
@@ -325,6 +354,17 @@ async def test_wt023_full_audited_workflow(client: httpx.AsyncClient) -> None:
     cases = (await client.get(f"/api/v1/knowledge/cases?mission_id={mission_id}")).json()
     assert cases["count"] == 1
     assert len(cases["cases"][0]["resolution"]["completed_tasks"]) == 5
+    for turbine_id, expected_count in (("WT-023", 1), ("WT-NOT-OWNED", 0)):
+        scoped = await client.get(
+            f"/api/v1/knowledge/cases?mission_id={mission_id}",
+            headers={
+                "X-WindOps-Test-Principal": "scoped-case-reader",
+                "X-WindOps-Test-Role": "field_technician",
+                "X-WindOps-Test-Turbine-Ids": turbine_id,
+            },
+        )
+        assert scoped.status_code == 200
+        assert scoped.json()["count"] == expected_count
 
 
 @pytest.mark.asyncio

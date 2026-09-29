@@ -1,0 +1,9 @@
+{
+  "model": "openai/deepseek-ai/DeepSeek-V3.2",
+  "currency": "CNY",
+  "input_per_million": 4,
+  "output_per_million": 6,
+  "source": "https://docs.siliconflow.cn/docs/release-notes/overview (2026-06-25 notice, effective 2026-06-30; non-cache input rate used as an upper estimate, discounts and account billing not verified)",
+  "verified_at": "2026-09-27",
+  "maximum_total_cost": 1
+}

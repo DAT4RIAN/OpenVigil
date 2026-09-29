@@ -96,13 +96,36 @@ alembic upgrade head
 windops-reference-import --reference-pack wt023
 ```
 
-参考数据导入会提示输入 `operations_manager` 密钥。随后可在三个独立终端启动 outbox relay、Dramatiq worker 和 API：
+当前唯一迁移头为 `0028_read_audit_pipeline`；可在 `backend` 目录运行 `python scripts/verify_migration_head.py` 核对迁移图与文档声明。
+
+参考数据导入会提示输入 `operations_manager` 密钥。随后可在四个独立终端启动 outbox relay、Dramatiq worker、读审计 worker 和 API：
 
 ```powershell
 windops-outbox-relay
 dramatiq windops_backend.workers
+windops-read-audit-worker
 uvicorn windops_backend.main:app --host 127.0.0.1 --port 8000
 ```
+
+### 可重复的 Windows 本地启动
+
+完成前端依赖安装和 `backend/.venv` 创建后，可在仓库根目录运行：
+
+```powershell
+./scripts/Start-Local.ps1
+./scripts/Status-Local.ps1
+./scripts/Stop-Local.ps1
+```
+
+首次启动默认使用前端 `3000`、API `8000`；可通过 `-FrontendPort 3180 -ApiPort 8180` 指定空闲端口。后续启动自动沿用保存的端口；重复启动先核验现有服务，不重复创建进程。端口被占用或进程身份不匹配时停止操作，不自动结束占用者。
+
+此流程是隔离的开发栈：前端保持 Demo，独立 Python 后端使用 `development / deterministic / static_tokens`，不能作为生产网关联通或真实模型验收。脚本按当前仓库路径生成独立 Compose 项目，使用 PostgreSQL `25432`、Redis `26379`、MinIO `29000/29001`、Neo4j `27474/27687`，所有端口仅绑定回环地址。
+
+自动生成的本地凭据、Compose 配置、进程身份和日志位于被忽略的 `.artifacts/local-stack/`。这是该隔离启动流程专用的运行配置；不读取或覆盖用户根目录 `.env`，不自动导入参考数据。普通手动启动仍使用根目录 `.env`。不要分享或提交该制品目录。
+
+启动流程会等待依赖就绪、执行 Alembic 迁移、构建前端，并启动 API、Dramatiq、outbox relay、read-audit worker 和前端。状态检查验证迁移头、Redis、五个 MinIO 桶、Neo4j、API 鉴权、当前请求的读审计落库及登录页面。失败时保留依赖和数据用于诊断；日志中保留各进程输出。`Stop-Local.ps1` 核验 PID、创建时间、命令和仓库归属后停止对应进程及 Compose 项目，保留容器、凭据和数据卷。
+
+修改样式入口或数据库迁移后，执行 `pnpm check:architecture --write` 更新架构事实清单并检查差异；`pnpm check:architecture` 和 CI 会拒绝过期清单。
 
 ## 功能
 
@@ -132,6 +155,12 @@ SCADA / CMS / 气象 / 人工告警
 ```
 
 WT-023 演示故事覆盖从主轴承振动与温度异常，到 Mission、诊断、方案比较、审批、工单、5 项现场任务、健康恢复和知识沉淀的完整路径。所有写入都带幂等键、关联 ID、期望 revision 和追加式审计事件。
+
+Python 后端的可执行建议必须通过 `execution_plan_id` 绑定当前 Mission 的受控作业模板，动作须与模板一致。模板来自 `analysis_profile.work_order_plan` 或服务端默认检查模板，其内容和资产范围共同决定绑定标识。缺少、未知、过期或动作不匹配的绑定会在审批时返回 409；旧未绑定决策需要申请修订。未绑定的更换等建议可以保留讨论，但不会被自动替换成检查工单；任务、测量门槛、安全要求、时长和关闭规则始终取自受控模板。
+
+五类 AI 审查共用明确的 `review_target`，记录所审查候选方案及作业模板，评价对象是该维护方案的执行。作业前提保存在 `conditions`，机组运行限制保存在 `operating_constraints`；审查不授予运行许可，最终执行仍需人工批准。合法的失败审查会原样保留，历史未标注对象的审查不会被自动补成已验证的新审查。
+
+真实模型的执行账本在 `evaluation_result.request` 中记录请求摘要、消息 UTF-8 字节数和输出 token 配置，不保存请求正文；收到响应时另记录结束原因及公开响应大小。供应商标为截断的响应即使能解析为 JSON 也会被拒绝。后续节点失败、业务事务回滚时，失败记录中的 `completed_node_usage` 保留本次尝试此前成功模型节点的用量、模型及延迟，不保留已回滚的决策输出。失败节点用量未知时，整次尝试的费用仍不能视为完整或免费；历史缺失记录不会被补造。
 
 ### 业务工作区
 
@@ -265,7 +294,36 @@ WINDOPS_SILICONFLOW_MODEL=deepseek-ai/DeepSeek-V4-Flash
 
 阿里云百炼默认使用 `https://dashscope.aliyuncs.com/compatible-mode/v1`；DeepSeek 默认使用 `https://api.deepseek.com`。`base_url` 必须是无凭据的 HTTPS 地址，API Key 只能写入被 Git 忽略的根 `.env` 或生产 secret manager。
 
-OpenCode Go 面向编码 Agent 流量，当前后端不会读取 `OPENCODE_GO_*`。`.env.example` 仅保留其参考地址和变量名，避免把它误选为风电诊断推理供应商。聊天模型与 embedding 模型使用独立凭据，不能复用聊天 API Key 代替 embedding 配置。
+OpenCode Go 面向编码 Agent 流量，当前后端不会读取 `OPENCODE_GO_*`。`.env.example` 仅保留其参考地址和变量名，避免把它误选为风电诊断推理供应商。聊天与 embedding 使用独立连接配置；程序不会把聊天地址或密钥自动用作 embedding。若同一供应商账号已授权两类模型，可以将其密钥分别配置到两个入口。
+
+现有向量库要求 1536 维。兼容 OpenAI 协议的 embedding 服务可单独配置，例如支持该维度的 SiliconFlow Qwen 模型：
+
+```dotenv
+WINDOPS_EMBEDDING_MODEL=openai/Qwen/Qwen3-Embedding-4B
+WINDOPS_EMBEDDING_API_BASE=https://api.siliconflow.cn/v1
+WINDOPS_EMBEDDING_API_KEY=
+WINDOPS_EMBEDDING_DIMENSIONS=1536
+```
+
+密钥只填写在本机私有配置或部署密钥管理中。未配置上述地址/密钥/维度时，保留 LiteLLM 的默认连接行为。显式端点必须使用无内嵌凭据的 HTTPS；请求参数会传给真实供应商，响应必须具有完整唯一索引、1536 维和有限数值，不会补零或截断向量。供应商维度能力见 [SiliconFlow embedding 接口](https://docs.siliconflow.cn/docs/api/embeddings-post)。
+
+检索只比较当前 embedding provider/model 的向量。模型切换后，旧向量通过既有有界自动索引或全局知识管理员的 `POST /api/v1/knowledge-graph/reindex` 重新生成；未重新索引的旧向量不参与排名。生产联合验收使用与索引和查询相同的连接配置。
+
+### 真实模型回归评测
+
+在 `backend/` 目录及已激活的 `.venv` 中运行。命令读取根 `.env` 中既有的 LiteLLM 配置，实际调用供应商并产生费用；不接受 deterministic 替代。
+
+```powershell
+python -m windops_backend.operations.reasoning_eval --cases evaluations/wind-diagnosis-v1.json --pricing evaluations/siliconflow-v3.2-pricing.json --report ../.artifacts/improvements/reasoning-current.json
+```
+
+内置六个合成工程案例覆盖主轴承、齿轮箱、温度传感器、缺失数据、身份冲突和证据文本中的指令注入。评分验证故障分类、部件、置信度、支持结论的引用精确率、必需引用召回率和明确拒答；不把超时或错误算作拒答。案例标签、`required_evidence` 与 `supporting_evidence` 不进入模型上下文；可选的 `supporting_evidence` 用于标注额外有效引用，未提供时仅必需证据视为支持性引用。此小样本仅用于提示词和模型的工程回归，不能估计真实风场诊断准确率，也不证明自由文本结论不存在所有语义错误。运行的是独立评测提示词与公开诊断输出，不是生产工作流验收；生产置信度门禁保持不变。
+
+报告记录全部成功和失败案例、端到端 P95（包含首次供应商库加载）、逐次 token/费用、未知费用次数、已知费用小计，以及案例、提示词、代码摘要、Git 状态和请求/返回模型身份。没有供应商 usage、返回模型不匹配或请求超时时，总费用标记 `UNVERIFIED`，不会当成免费成功。费用是有日期和来源的价目表估算，未应用缓存折扣，不是账单；更换模型时须提供对应价格文件。
+
+单次请求设置 `max_tokens=1024`，不重试，最多运行案例集中的 50 个案例。[SiliconFlow API](https://docs.siliconflow.cn/docs/api/chat-completions-post) 的该参数仅限制最终回复，不包含模型内部思考用量。`maximum_total_cost` 是收到响应后的停止阈值，可能被最后一次请求超出，无法覆盖供应商未返回的计费；需要严格账户预算时须另设供应商侧额度。内置六案例集的阈值为 1 元。任何绝对门禁失败均保存报告并退出非零，不删除失败案例或自动重跑至通过。
+
+保留经审阅且绝对门禁通过的报告，后续命令增加 `--baseline <该报告路径>` 即可回归比较：相同案例摘要和报告版本、同币种价格下，分类/拒答/引用指标不得下降，P95 和估算费用最多增加 20%。不兼容或未通过的基线不能产生回归通过结论。真实风场案例应另建经专家复核的案例集，并使用 `expert-reviewed-field-cases` 标记其来源。
 
 ## 开发
 
@@ -290,6 +348,42 @@ pnpm run check:repository-artifacts
 
 `pnpm test` 会先执行生产构建和 Bundle 预算，再运行 Node 合同测试。`pnpm test:e2e` 使用真实 Chromium 验证关键页面、身份、权限与错误恢复。
 
+### 真实依赖业务闭环测试
+
+准备 Docker Engine/Compose、Node/pnpm 和 Python 3.12，在 `backend` 执行 `uv sync --frozen --extra test`，然后回到根目录：
+
+```bash
+pnpm exec playwright install chromium
+pnpm test:e2e:business
+```
+
+命令先构建当前前端，再创建独立随机 Compose 项目和回环端口，运行真实 PostgreSQL、Redis、MinIO、Neo4j、FastAPI、Dramatiq、outbox relay 与读审计 worker。Chromium 经 Worker 验证审批、权限拒绝、网络故障后的重试、幂等重放和五项现场证据上传，最终直接核对数据库记录与对象哈希。正常或失败结束均清理本次进程和合成数据卷；不操作已保存的本地开发栈。
+
+观测和参考资料为合成数据，诊断与 embedding 使用确定性测试实现，身份提供方及 release/image 身份也是测试配置；HTTP 进程覆盖实际生产鉴权/存储协议分支，worker 保持测试模型模式。这证明工程链路，不是模型准确率、真实身份提供方或生产发布验收。报告与私有日志保存在 `.artifacts/business-e2e/<run-id>/`；配置、私钥及 trace 可能包含临时凭据，CI 只上传 `report.json`。默认浏览器套件与既有配置轮换 smoke 保持独立。
+
+部署浏览器直传时，在 Worker 配置 `WINDOPS_ARTIFACT_UPLOAD_ORIGINS` 为后端签发上传地址的确切 HTTPS origin（多个用逗号分隔），并在对象存储配置允许应用 origin 的 PUT/CORS。默认 CSP 只允许同源连接；配置不接受通配符、路径、凭据或 CSP 指令，非法值在业务请求执行前返回 503。仅当页面和存储均为 `http://127.0.0.1` 时允许本地 HTTP，供上述隔离测试使用。
+
+### 本地用户性能测量
+
+先按“可重复的 Windows 本地启动”启动隔离栈，再在仓库根目录执行：
+
+```powershell
+./scripts/Start-Local.ps1
+pnpm exec playwright install chromium
+pnpm measure:performance --report .artifacts/improvements/performance.json
+./scripts/Stop-Local.ps1
+```
+
+测量脚本只连接当前仓库 `.artifacts/local-stack/configuration.json` 指定的回环端口，从隔离运行配置读取鉴权，不输出凭据。它不启停服务、不修改业务数据；真实 API 的读取审计照常落库。可用 `--samples 10 --api-samples 40 --list-size 5000` 调整样本数与压力数据量；浏览器样本最少 5 次，API 最少 20 次，按顺序执行，并保留所有失败样本。
+
+报告分别记录三类证据：
+
+- 首页、诊断中心和预测维护的 1440px / 390px Chromium 测量：FCP、指定内容可见并经过两帧后的时间、截至该时刻的 LCP/布局偏移/长任务、打开全局搜索的输入事件至可见结果两帧后的延迟。每次使用新浏览器上下文，服务端和操作系统缓存可能已预热。390px 是桌面浏览器窄视口，不是物理手机。
+- 告警长列表：用实际 Demo 告警结构生成 2,000 条合成记录，仅在本次浏览器中拦截读取响应，经真实页面和 DataTable 完成刷新、分页及筛选。现有 Demo 查询有 30 秒缓存；每次等待 31 秒真实时间再触发重连，此准备时间不计入刷新到绘制的延迟，不修改浏览器时钟。报告保留记录数、响应字节数、数据摘要和实际 DOM 行数。
+- 独立真实 FastAPI：鉴权请求 `/catalog`、`/turbines`、`/data-catalog`，一次预热后逐次记录完整响应及 JSON 解析耗时，计算 P50/P95，记录返回数量与字节数。空库的空列表会明确记为 0 条；不能把它解释为生产数据规模下的吞吐能力，也不能据此声称前后端生产链路已通过。
+
+固定本地预算为 FCP 2,500ms、内容就绪及列表刷新 4,000ms、交互 300ms、大列表筛选 1,000ms、API P95 500ms。缺样、请求失败、浏览器异常或超预算均退出非零，并保存报告；P95 使用 nearest-rank，5 次采样时等于最大值。报告同时保存 CPU/系统/浏览器、视口、数据量、Git 状态、构建及脚本摘要。这里的内容就绪、LCP 截止值与两帧交互测量属于本机实验指标，不能冒充真实用户的完整 LCP、INP 或正式 SLO 验收。
+
 ### Python
 
 在已激活的 `backend/.venv` 中执行：
@@ -312,6 +406,8 @@ uv run python -m pytest tests -q -k "care and not external_release"
 
 SQLite 测试使用确定性 embedding、内存制品 verifier 和内存图存储替身，不能替代 PostgreSQL、TimescaleDB、MinIO、Neo4j 或真实模型供应商验收。
 
+测试数量以命令和 CI 自动发现结果为准。普通本地运行缺少外部资源时，`external_release` 测试可能跳过；这些 skip 不被描述为发布通过。指定的外部验收环境必须设置 `WINDOPS_FAIL_ON_SKIPPED=1`，出现 skip 即失败，并按 [发布验收清单](docs/runbooks/release-acceptance.md) 保存实际证据。
+
 ## 生产验收边界
 
 生产候选代码已经覆盖身份委托、RBAC、数据范围、幂等、revision、outbox、审计、备份恢复、发布身份和失败关闭路径。以下事项仍需在批准环境完成：
@@ -326,6 +422,8 @@ SQLite 测试使用确定性 embedding、内存制品 verifier 和内存图存�
 Cloudflare Sites 只承载 Web 与身份网关，不托管 Python 后端。Sites 发布成功不能替代后端、依赖栈和现场系统验收。详细证据状态以 [EXECUTION_PROGRESS.md](./EXECUTION_PROGRESS.md)、[AUDIT_REPORT.md](./AUDIT_REPORT.md) 和 [UI_AUDIT_REPORT.md](./UI_AUDIT_REPORT.md) 为准。
 
 ## 贡献
+
+开发环境、验证要求和 PR 流程见 [贡献指南](./CONTRIBUTING.md)；漏洞报告与凭据保护要求见 [安全政策](./SECURITY.md)。
 
 欢迎提交 Issue 和 Pull Request：
 

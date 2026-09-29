@@ -7,9 +7,10 @@ from sqlalchemy import and_, false, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from windops_backend.access_control import turbine_scope_clause
 from windops_backend.errors import KnowledgeScopeError, NotFoundError
 from windops_backend.knowledge_graph.domain import GraphAccessPolicy
-from windops_backend.models import KnowledgeDocument, Tenant, Turbine, WindFarm
+from windops_backend.models import KnowledgeCase, KnowledgeDocument, Tenant, Turbine, WindFarm
 
 KNOWLEDGE_DATA_SCOPE = "knowledge"
 _KNOWLEDGE_SCOPE_ALIASES = frozenset(
@@ -198,12 +199,11 @@ async def resolve_knowledge_document_scope(
 def knowledge_case_scope_clause(policy: GraphAccessPolicy) -> ColumnElement[bool]:
     """Return the same policy for cases, whose asset ownership is relational."""
 
-    return knowledge_scope_clause(
+    return turbine_scope_clause(
         policy,
-        tenant_column=WindFarm.tenant_id,
-        wind_farm_column=WindFarm.id,
-        turbine_column=Turbine.id,
-        entity_column=None,
+        KnowledgeCase.turbine_id,
+        entity_columns=(KnowledgeCase.id, KnowledgeCase.mission_id, KnowledgeCase.work_order_id),
+        data_scopes="knowledge",
     )
 
 

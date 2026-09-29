@@ -1,5 +1,5 @@
 import { readWorkflowForApi } from "@/app/api/_workflow";
-import { productionReportsResponse } from "@/lib/production-domain-adapter";
+import { productionReportsResponse } from "@/lib/production-adapters/operations";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 import {
   buildReportCatalog,

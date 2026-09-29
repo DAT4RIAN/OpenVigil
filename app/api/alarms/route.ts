@@ -8,7 +8,7 @@ import {
 } from "@/db/alarm-runtime-store";
 import { overlayWorkflowAlarms } from "@/lib/server-workflow-overlays";
 import { getWorkerEnv } from "@/lib/worker-env";
-import { productionAlarmsResponse } from "@/lib/production-domain-adapter";
+import { productionAlarmsResponse } from "@/lib/production-adapters/workflow";
 import {
   getProductionBackendConfig,
   proxyProductionBackendRequest,

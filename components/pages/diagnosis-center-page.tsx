@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
@@ -24,327 +22,45 @@ import {
   Sparkles,
   Target,
 } from "lucide-react";
-import { StatusBadge, type StatusTone } from "@/components/data-display/status-badge";
+import { StatusBadge } from "@/components/data-display/status-badge";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { apiGet } from "@/lib/api-client";
-import {
-  createDiagnosisRecords,
-  diagnosisModelMeta,
-  diagnosisRecords,
-  sortDiagnosisRecords,
-  type DiagnosisRecord,
-  type DiagnosisStatus,
-} from "@/lib/diagnosis-data";
-import { useDemoWorkflow } from "@/lib/use-demo-workflow";
 import type { OpenVigilRuntimeMode } from "@/lib/production-runtime";
-import type { RiskLevel } from "@/lib/types";
-
 import styles from "./diagnosis-center-page.module.css";
-
-type StatusFilter = "all" | DiagnosisStatus;
-type RiskFilter = "all" | RiskLevel;
-
-interface DiagnosisResponse {
-  readonly data: readonly DiagnosisRecord[];
-  readonly meta: {
-    readonly count: number;
-    readonly total: number;
-    readonly filteredTotal: number;
-    readonly model: {
-      readonly mode: string;
-      readonly deterministic: boolean;
-      readonly readOnly: boolean;
-      readonly realInference: boolean;
-      readonly notice: string;
-    };
-  };
-}
-
-interface BenchmarkDiagnosisEnvelope {
-  readonly data: readonly {
-    readonly replay_run_id: string;
-    readonly event: {
-      readonly event_id: number;
-      readonly farm: string;
-      readonly logical_asset_id: string;
-      readonly online_turbine_id: string;
-    };
-    readonly replay: {
-      readonly status: string;
-      readonly mode: string;
-      readonly anchor_at: string;
-      readonly time_rule_version: string;
-      readonly time_semantics: string;
-      readonly error: string | null;
-    };
-    readonly model: {
-      readonly model_id: string | null;
-      readonly name: string | null;
-      readonly version: string | null;
-      readonly kind: string | null;
-      readonly artifact_sha256: string | null;
-      readonly artifact_present: boolean;
-    };
-    readonly deployment: {
-      readonly deployment_id: string | null;
-      readonly status: string | null;
-      readonly target_id: string | null;
-      readonly stale: boolean;
-      readonly threshold_policy_version: string | null;
-      readonly threshold_policy_sha256: string | null;
-    };
-    readonly quality_report: {
-      readonly status: string;
-      readonly quality_rule_version: string | null;
-      readonly feature_set_version: string | null;
-      readonly mask_count: number;
-      readonly mask_artifact: {
-        readonly uri: string | null;
-        readonly sha256: string | null;
-        readonly present: boolean;
-      };
-    };
-    readonly predictions: readonly {
-      readonly prediction_id: string;
-      readonly status: string;
-      readonly error_code: string | null;
-      readonly anomaly_score: number | null;
-      readonly binary_prediction: boolean | null;
-      readonly component: string | null;
-      readonly model_id: string;
-      readonly deployment_id: string;
-      readonly evaluation_run_id: string | null;
-      readonly feature_window: {
-        readonly start: string | null;
-        readonly end: string | null;
-        readonly start_sequence: number | null;
-        readonly end_sequence: number | null;
-      };
-      readonly threshold: {
-        readonly value: number | null;
-        readonly comparison: string | null;
-        readonly policy_version: string | null;
-        readonly policy_sha256: string | null;
-      };
-      readonly time_evidence: {
-        readonly synthetic_observed_at: string;
-        readonly observed_at_is_synthetic: boolean;
-        readonly time_claim: string | null;
-        readonly anonymous_observed_at: string | null;
-        readonly source_time_stamp: string | number | null;
-        readonly source_row_id: number | null;
-      };
-      readonly quality: {
-        readonly signal_count: number;
-        readonly signals_truncated: boolean;
-        readonly quality_counts: Readonly<Record<string, number>>;
-        readonly quality_mask_refs: readonly string[];
-      };
-      readonly evidence_artifact: {
-        readonly uri: string | null;
-        readonly sha256: string | null;
-        readonly present: boolean;
-      };
-      readonly links: {
-        readonly alarm_id: string | null;
-        readonly alarm_status: string | null;
-        readonly mission_id: string | null;
-        readonly mission_status: string | null;
-        readonly decision_id: string | null;
-      };
-    }[];
-    readonly predictions_truncated: boolean;
-    readonly first_alert: {
-      readonly prediction_id: string;
-      readonly alarm_id: string;
-      readonly mission_id: string | null;
-      readonly synthetic_observed_at: string;
-      readonly anonymous_observed_at: string | null;
-      readonly source_sequence: number;
-      readonly lead_source_rows: number | null;
-      readonly lead_semantics: "source-row-offset-not-rul";
-    } | null;
-    readonly truth: {
-      readonly access: "restricted" | "revealed";
-      readonly event_label: string | null;
-      readonly event_interval_start: number | null;
-      readonly event_interval_end: number | null;
-      readonly description: string | null;
-    };
-  }[];
-  readonly meta: {
-    readonly count: number;
-    readonly filtered_total: number;
-    readonly truth_revealed: boolean;
-    readonly truth_reveal_allowed: boolean;
-    readonly bounds: {
-      readonly diagnosis_page_max: number;
-      readonly predictions_per_replay_max: number;
-      readonly signals_inspected_per_prediction_max: number;
-    };
-  };
-}
-
-const statusLabels: Readonly<Record<DiagnosisStatus, string>> = {
-  triage: "待分诊",
-  monitoring: "持续监测",
-  analyzed: "诊断已形成",
-  "awaiting-review": "人工复核中",
-  "revision-needed": "方案待修订",
-  rejected: "方案被拒绝",
-  scheduled: "等待安全窗口",
-  "in-progress": "受控作业中",
-  closed: "验证闭环",
-};
-
-const riskLabels: Readonly<Record<RiskLevel, string>> = {
-  critical: "严重",
-  high: "高",
-  medium: "中",
-  low: "低",
-};
-
-const riskTone = (risk: RiskLevel): StatusTone =>
-  risk === "critical"
-    ? "critical"
-    : risk === "high"
-      ? "warning"
-      : risk === "medium"
-        ? "info"
-        : "success";
-
-const statusTone = (status: DiagnosisStatus): StatusTone => {
-  if (status === "closed") return "success";
-  if (status === "in-progress" || status === "scheduled" || status === "analyzed") return "info";
-  if (status === "rejected") return "critical";
-  if (status === "monitoring") return "neutral";
-  return "warning";
-};
-
-const sourceLabels: Readonly<Record<string, string>> = {
-  "scada-anomaly": "SCADA 异常检出",
-  "alarm-correlation": "告警关联接入",
-  "scheduled-health-scan": "定时健康扫描",
-};
-
-const initialRecords = sortDiagnosisRecords(diagnosisRecords, "priority-desc");
+import {
+  type StatusFilter,
+  type RiskFilter,
+  statusLabels,
+  riskLabels,
+  riskTone,
+  statusTone,
+  sourceLabels,
+} from "./diagnosis-center-support";
+import { useDiagnosisCenter } from "./use-diagnosis-center";
 
 export function DiagnosisCenterPage({ runtimeMode }: { runtimeMode: OpenVigilRuntimeMode }) {
-  const workflow = useDemoWorkflow();
-  const isProduction = runtimeMode === "production";
-  const [selectedId, setSelectedId] = useState("WT-023");
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
-  const [selectedBenchmarkReplayId, setSelectedBenchmarkReplayId] = useState("");
-  const [revealBenchmarkTruth, setRevealBenchmarkTruth] = useState(false);
-  const benchmarkDiagnosisEndpoint =
-    runtimeMode === "production"
-      ? [
-          "/api/backend/benchmarks/diagnoses?limit=16",
-          revealBenchmarkTruth ? "&revealTruth=true" : "",
-        ].join("")
-      : null;
-  const benchmarkDiagnosisQuery = useQuery({
-    queryKey: ["care-benchmark-diagnoses", benchmarkDiagnosisEndpoint],
-    queryFn: ({ signal }) =>
-      apiGet<BenchmarkDiagnosisEnvelope>(benchmarkDiagnosisEndpoint ?? "", signal),
-    enabled: Boolean(benchmarkDiagnosisEndpoint),
-    staleTime: 0,
-  });
-  const benchmarkDiagnoses = benchmarkDiagnosisQuery.data?.data ?? [];
-  const selectedBenchmarkDiagnosis =
-    benchmarkDiagnoses.find((row) => row.replay_run_id === selectedBenchmarkReplayId) ??
-    benchmarkDiagnoses[0] ??
-    null;
-
-  useEffect(() => {
-    const turbineId = new URLSearchParams(window.location.search).get("turbineId")?.toUpperCase();
-    if (!turbineId || !/^WT-[A-Z0-9-]+$/.test(turbineId)) return;
-    const timer = window.setTimeout(() => setSelectedId(turbineId), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (
-      !selectedBenchmarkDiagnosis ||
-      selectedBenchmarkDiagnosis.replay_run_id === selectedBenchmarkReplayId
-    ) {
-      return;
-    }
-    const timer = window.setTimeout(
-      () => setSelectedBenchmarkReplayId(selectedBenchmarkDiagnosis.replay_run_id),
-      0,
-    );
-    return () => window.clearTimeout(timer);
-  }, [selectedBenchmarkDiagnosis, selectedBenchmarkReplayId]);
-
-  const endpoint = useMemo(() => {
-    const params = new URLSearchParams({ limit: "64", sort: "priority-desc" });
-    if (query.trim()) params.set("q", query.trim());
-    if (statusFilter !== "all") params.set("status", statusFilter);
-    if (riskFilter !== "all") params.set("risk", riskFilter);
-    return `/api/diagnoses?${params.toString()}`;
-  }, [query, riskFilter, statusFilter]);
-
-  const diagnosisQuery = useQuery({
-    queryKey: ["diagnoses", endpoint],
-    queryFn: ({ signal }) => apiGet<DiagnosisResponse>(endpoint, signal),
-    initialData: {
-      data: isProduction ? [] : initialRecords,
-      meta: {
-        count: isProduction ? 0 : initialRecords.length,
-        total: isProduction ? 0 : initialRecords.length,
-        filteredTotal: isProduction ? 0 : initialRecords.length,
-        // production 初始不携带 fixture 模型声明，等待真实查询返回治理元数据。
-        model: isProduction
-          ? {
-              mode: "pending",
-              deterministic: false,
-              readOnly: true,
-              realInference: false,
-              notice: "正在读取生产诊断模型元数据…",
-            }
-          : diagnosisModelMeta,
-      },
-    },
-    initialDataUpdatedAt: 0,
-    staleTime: 0,
-  });
-
-  const workflowRecords = useMemo(
-    () =>
-      createDiagnosisRecords({
-        missionStatus: workflow.missionStatus,
-        decisionStatus: workflow.decisionStatus,
-        workOrderStatus: workflow.workOrderStatus,
-      }),
-    [workflow.decisionStatus, workflow.missionStatus, workflow.workOrderStatus],
-  );
-  const featured = workflowRecords[22];
-  const records = useMemo(
-    () =>
-      isProduction
-        ? diagnosisQuery.data.data
-        : diagnosisQuery.data.data.map((record) =>
-            record.turbineId === featured.turbineId ? featured : record,
-          ),
-    [diagnosisQuery.data.data, featured, isProduction],
-  );
-  const selected = records.find((record) => record.turbineId === selectedId) ?? records[0] ?? null;
-
-  useEffect(() => {
-    if (!selected || selected.turbineId === selectedId) return;
-    const timer = window.setTimeout(() => setSelectedId(selected.turbineId), 0);
-    return () => window.clearTimeout(timer);
-  }, [selected, selectedId]);
-
-  const highRiskCount = records.filter(
-    (record) => record.risk === "critical" || record.risk === "high",
-  ).length;
-  const reviewCount = records.filter((record) => record.status === "awaiting-review").length;
-  const topCandidate = selected?.candidates[0] ?? null;
+  const {
+    isProduction,
+    setSelectedId,
+    query,
+    setQuery,
+    statusFilter,
+    setStatusFilter,
+    riskFilter,
+    setRiskFilter,
+    setSelectedBenchmarkReplayId,
+    revealBenchmarkTruth,
+    setRevealBenchmarkTruth,
+    benchmarkDiagnosisQuery,
+    benchmarkDiagnoses,
+    selectedBenchmarkDiagnosis,
+    diagnosisQuery,
+    records,
+    selected,
+    highRiskCount,
+    reviewCount,
+    topCandidate,
+  } = useDiagnosisCenter({ runtimeMode });
 
   return (
     <AppShell runtimeMode={runtimeMode} activePath="/diagnosis">

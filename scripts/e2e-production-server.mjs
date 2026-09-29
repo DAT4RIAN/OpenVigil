@@ -136,7 +136,14 @@ const missionDetail = {
     recommendation_reason: "Controlled E2E recommendation",
     recommended_alternative_id: "ALT-E2E-001",
     selected_alternative_id: null,
-    alternatives: [{ alternative_id: "ALT-E2E-001", title: "Inspect bearing" }],
+    alternatives: [
+      {
+        alternative_id: "ALT-E2E-001",
+        title: "Inspect bearing",
+        action: "Inspect bearing",
+        execution_plan_id: `workplan:${"c".repeat(64)}`,
+      },
+    ],
   },
   approvals: [],
   executions: [],
@@ -392,6 +399,7 @@ const assetBinding = {
 const productionEnvironment = {
   ASSETS: assetBinding,
   WINDOPS_RUNTIME_MODE: "production",
+  WINDOPS_ARTIFACT_UPLOAD_ORIGINS: process.env.WINDOPS_ARTIFACT_UPLOAD_ORIGINS,
   WINDOPS_BACKEND_BASE_URL: BACKEND_ORIGIN,
   WINDOPS_BACKEND_AUTH_MODE: "sites_delegation",
   WINDOPS_BACKEND_DELEGATION_SECRET: DELEGATION_SECRET,

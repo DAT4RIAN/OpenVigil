@@ -94,6 +94,7 @@ const runtimeRoots = sourceFiles.filter((filePath) => {
       "build/sites-vite-plugin.ts",
       "db/schema.ts",
       "lib/index.ts",
+      "lib/production-domain-adapter.ts",
       "worker/index.ts",
     ].includes(relativePath)
   );
@@ -123,23 +124,44 @@ test("application runtime modules bypass the broad lib barrel", () => {
 });
 
 test("the compatibility barrel contains re-exports only", () => {
-  const barrelPath = path.join(repositoryRoot, "lib", "index.ts");
-  const sourceFile = ts.createSourceFile(
-    barrelPath,
-    readFileSync(barrelPath, "utf8"),
-    ts.ScriptTarget.Latest,
-    true,
-  );
+  for (const entry of ["index.ts", "production-domain-adapter.ts"]) {
+    const barrelPath = path.join(repositoryRoot, "lib", entry);
+    const sourceFile = ts.createSourceFile(
+      barrelPath,
+      readFileSync(barrelPath, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
 
-  assert.ok(sourceFile.statements.length > 0);
-  assert.ok(sourceFile.statements.every((statement) => ts.isExportDeclaration(statement)));
+    assert.ok(sourceFile.statements.length > 0);
+    assert.ok(sourceFile.statements.every((statement) => ts.isExportDeclaration(statement)));
+  }
+});
+
+test("adapter compatibility exports retain the exact domain function identities", async () => {
+  const facade = await import("../lib/production-domain-adapter.ts");
+  const domains = await Promise.all(
+    ["agents", "workflow", "knowledge", "models", "resources", "telemetry", "operations"].map(
+      (domain) => import(`../lib/production-adapters/${domain}.ts`),
+    ),
+  );
+  const owners = Object.assign({}, ...domains);
+  assert.equal(Object.keys(owners).length, 18);
+  assert.deepEqual(Object.keys(facade).sort(), Object.keys(owners).sort());
+  for (const [name, handler] of Object.entries(owners)) assert.equal(facade[name], handler);
+  for (const file of sourceFiles.filter((file) => normalizePath(file).startsWith("app/"))) {
+    assert.doesNotMatch(
+      readFileSync(file, "utf8"),
+      /from ["']@\/lib\/production-domain-adapter["']/,
+    );
+  }
 });
 
 test("the TypeScript runtime dependency graph remains acyclic", () => {
   assert.deepEqual(findCycles(), []);
 });
 
-test("every TypeScript source module is reachable from a runtime or build root", () => {
+test("every TypeScript source module is reachable from a runtime, build or compatibility root", () => {
   const reachable = runtimeReachableModules();
   assert.deepEqual(
     sourceFiles

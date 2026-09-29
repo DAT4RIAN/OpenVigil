@@ -72,7 +72,26 @@ yarn-error.log*
 *.pdf
 
 # Project documentation
-/docs/
+/docs/*
+!/docs/project-improvement-recommendations.md
+# CI and release checks read these files in a fresh checkout.
+!/docs/repository-artifact-policy.json
+!/docs/production-deployment.md
+!/docs/demo-gap-audit.md
+!/docs/runbooks/
+/docs/runbooks/*
+!/docs/runbooks/incident-response.md
+!/docs/runbooks/release-acceptance.md
+!/docs/runbooks/local-candidate-acceptance.md
+!/docs/runbooks/postgresql-migration-recovery.md
+!/docs/runbooks/collection-performance.md
+!/docs/runbooks/delegated-replay-and-command-idempotency.md
+!/docs/refactor/
+/docs/refactor/*
+!/docs/refactor/REFACTOR_FINAL_REPORT.md
+!/docs/history/
+/docs/history/*
+!/docs/history/EXECUTION_GOAL-care-v6.md
 
 # Local finesse design history
 /.finesse/

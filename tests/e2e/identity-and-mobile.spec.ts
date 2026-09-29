@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
-const baseURL = "http://127.0.0.1:4179";
+const baseURL = `http://127.0.0.1:${Number(process.env.WINDOPS_E2E_PORT ?? "4179")}`;
 
 interface E2eState {
   readonly approvalCalls: ReadonlyArray<{

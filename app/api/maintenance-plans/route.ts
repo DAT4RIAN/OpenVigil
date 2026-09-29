@@ -1,5 +1,5 @@
 import { errorResponse, jsonResponse, parseBoundedInteger } from "@/app/api/_shared";
-import { productionMaintenancePlansResponse } from "@/lib/production-domain-adapter";
+import { productionMaintenancePlansResponse } from "@/lib/production-adapters/operations";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 import { readWorkflowForApi } from "@/app/api/_workflow";
 import {

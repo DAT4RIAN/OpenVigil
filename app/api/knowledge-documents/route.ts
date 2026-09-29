@@ -1,5 +1,5 @@
 import { knowledgeDocuments } from "@/lib/knowledge-data";
-import { productionKnowledgeDocumentsResponse } from "@/lib/production-domain-adapter";
+import { productionKnowledgeDocumentsResponse } from "@/lib/production-adapters/knowledge";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 import { overlayWorkflowKnowledge } from "@/lib/server-workflow-overlays";
 import type { KnowledgeDocument, KnowledgeDocumentType } from "@/lib/types";

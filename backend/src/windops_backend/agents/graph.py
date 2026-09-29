@@ -1,4 +1,5 @@
 from collections.abc import Awaitable, Callable
+from copy import deepcopy
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any, cast
@@ -9,7 +10,9 @@ from langgraph.graph.state import CompiledStateGraph
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from windops_backend.agents.embedding_audit import capture_embedding_usage, merge_embedding_usage
 from windops_backend.agents.reasoning import (
+    REVIEW_COMMITTEE_AGENT,
     AlternativeBundle,
     PublicReasoningProvider,
     ReviewBundle,
@@ -19,8 +22,9 @@ from windops_backend.agents.tools import SQLToolAdapter
 from windops_backend.enums import ExecutionStatus
 from windops_backend.errors import InvalidTransitionError
 from windops_backend.models import AgentDefinition, AgentExecution, Evidence
-from windops_backend.schemas import PublicDiagnosis, PublicEvidence
+from windops_backend.schemas import MissionAnalysisProfile, PublicDiagnosis, PublicEvidence
 from windops_backend.services.events import append_domain_event
+from windops_backend.work_plan_binding import describe_execution_plan
 
 NodeOperation = Callable[[PublicWorkflowState], Awaitable[dict[str, Any]]]
 
@@ -37,6 +41,7 @@ class OpenVigilWorkflowGraph:
         self.session = session
         self.tools = tools
         self.reasoning = reasoning
+        self._completed_node_usage: list[dict[str, Any]] = []
         self.graph = self._build()
 
     @staticmethod
@@ -89,15 +94,17 @@ class OpenVigilWorkflowGraph:
         )
         self.session.add(execution)
         await self.session.flush()
+        embedding_calls: list[dict[str, Any]] = []
         try:
-            output = await operation(state)
+            with capture_embedding_usage() as embedding_calls:
+                output = await operation(state)
         except Exception as exc:
             execution.status = ExecutionStatus.FAILED.value
             execution.error_code = type(exc).__name__
             execution.completed_at = datetime.now(UTC)
             execution.latency_ms = max(0, round((perf_counter() - started) * 1000))
             execution.tool_calls = self.tools.consume_tool_calls()
-            usage = self.reasoning.consume_usage()
+            usage = merge_embedding_usage(self.reasoning.consume_usage(), embedding_calls)
             execution.provider = str(usage.get("provider", "sqlalchemy"))
             execution.model = usage.get("model")
             execution.token_usage = usage.get(
@@ -141,7 +148,7 @@ class OpenVigilWorkflowGraph:
         execution.completed_at = datetime.now(UTC)
         execution.latency_ms = max(0, round((perf_counter() - started) * 1000))
         execution.tool_calls = self.tools.consume_tool_calls()
-        usage = self.reasoning.consume_usage()
+        usage = merge_embedding_usage(self.reasoning.consume_usage(), embedding_calls)
         execution.provider = str(usage.get("provider", "sqlalchemy"))
         execution.model = usage.get("model")
         execution.token_usage = usage.get(
@@ -155,6 +162,21 @@ class OpenVigilWorkflowGraph:
         )
         execution.evaluation_result = usage.get("evaluation_result", {})
         execution.degradation_policy = usage.get("degradation_policy", {})
+        if execution.provider == "litellm":
+            # The business transaction may later roll back. Preserve only billing
+            # and request metadata, never rolled-back decisions or public outputs.
+            self._completed_node_usage.append(
+                deepcopy(
+                    {
+                        "node": node,
+                        "provider": execution.provider,
+                        "model": execution.model,
+                        "token_usage": execution.token_usage,
+                        "latency_ms": execution.latency_ms,
+                        "evaluation_result": execution.evaluation_result,
+                    }
+                )
+            )
         append_domain_event(
             self.session,
             event_type="agent.execution.succeeded",
@@ -295,9 +317,10 @@ class OpenVigilWorkflowGraph:
                 }
             draft = PublicEvidence(
                 evidence_id=("VIB-WT023" if is_vibration else f"SIGNAL-{component.upper()}"),
-                evidence_type="vibration_spectrum" if is_vibration else "condition_signal",
+                evidence_type="vibration_rms" if is_vibration else "condition_signal",
                 summary=(
-                    "RMS is above baseline with a bearing-fault spectral marker."
+                    "RMS telemetry and its baseline trend were evaluated; "
+                    "no frequency-domain spectrum was supplied."
                     if is_vibration
                     else (
                         f"{primary_variable} was evaluated against its governed baseline and "
@@ -312,7 +335,7 @@ class OpenVigilWorkflowGraph:
                         "rms_mm_s": float(analysis.get("rms_mm_s", 0)),
                         "trend_pct": float(analysis.get("trend_pct", 0)),
                         "anomaly_score": float(analysis.get("anomaly_score", 0)),
-                        "spectrum_marker": str(analysis.get("spectrum_marker", "none")),
+                        "spectrum_marker": str(analysis.get("spectrum_marker", "unavailable")),
                     }
                     if is_vibration
                     else {
@@ -400,13 +423,22 @@ class OpenVigilWorkflowGraph:
             )
             bundle = await self.reasoning.generate(
                 AlternativeBundle,
-                "Generate three public maintenance alternatives and exactly one recommendation.",
+                "Generate three public maintenance alternatives and exactly one recommendation. "
+                "Bind an executable option to an available execution_plan_id and copy its action "
+                "exactly. Other proposals must use a null execution_plan_id and remain "
+                "unexecutable until a governed plan is supplied. Never bind a different action "
+                "such as replacement to an inspection plan.",
                 {
                     "turbine_id": current["turbine_id"],
                     "analysis_profile": profile,
                     "diagnosis": current.get("diagnosis", {}),
                     "weather": weather,
                     "condition_evidence": condition_evidence,
+                    "available_execution_plans": [
+                        describe_execution_plan(
+                            MissionAnalysisProfile.model_validate(profile), current["turbine_id"]
+                        )
+                    ],
                 },
             )
             alternatives = [item.model_dump() for item in bundle.alternatives]
@@ -415,21 +447,25 @@ class OpenVigilWorkflowGraph:
                 current["mission_id"],
                 alternatives,
                 str(recommended["alternative_id"]),
-                (
-                    "Engineering, condition evidence, safety, weather, and production impact favor "
-                    "the governed controlled-intervention option."
-                ),
+                str(recommended["rationale"]),
                 [
                     {
                         "risk": (
-                            f"{str(profile['component']).replace('_', ' ')} degradation "
-                            "accelerates before inspection"
+                            "The proposed work requires verification of its execution conditions "
+                            "before it can proceed."
                         ),
-                        "mitigation": "70% derating and 15-minute vibration monitoring",
+                        "mitigation": (
+                            "Verify permits, isolation, resource readiness and approved procedure "
+                            "limits before execution. This proposal does not authorize turbine "
+                            "operation or prescribe operating setpoints."
+                        ),
                     },
                     {
-                        "risk": "marine weather window closes",
-                        "mitigation": "reserve the first suitable vessel window",
+                        "risk": "Forecast conditions may change before the proposed work.",
+                        "mitigation": (
+                            "Recheck weather against the approved limits for the actual work "
+                            "and access method before execution."
+                        ),
                     },
                 ],
             )
@@ -443,20 +479,55 @@ class OpenVigilWorkflowGraph:
             turbine_status = await self.tools.get_turbine_status(current["turbine_id"])
             resources = turbine_status["maintenance_resources"]
             weather = await self.tools.query_weather(str(turbine_status["wind_farm_id"]))
+            recommended = next(
+                item for item in current.get("alternatives", []) if item.get("recommended")
+            )
+            descriptor = describe_execution_plan(
+                MissionAnalysisProfile.model_validate(profile), current["turbine_id"]
+            )
             bundle = await self.reasoning.generate(
                 ReviewBundle,
-                "Publish engineering, safety, economic, resource, and compliance reviews.",
+                "Publish engineering, safety, economic, resource, and compliance reviews of "
+                "executing review_target, not of permission to continue turbine operation. "
+                "Bind every result to the supplied target. Use the governed execution plan, "
+                "evidence, resources and weather to assess the proposed work. Fail if the work "
+                "is unsafe, unsupported or noncompliant; never force a pass. A pre-existing "
+                "alarm alone does not mean its corrective inspection is prohibited. Put "
+                "prerequisites for field work in conditions and restrictions on turbine "
+                "operation in operating_constraints. Do not claim prerequisites have been "
+                "met or authorize operation. Human approval remains required.",
                 {
                     "analysis_profile": profile,
+                    "review_target": {
+                        "scope": "maintenance_execution",
+                        "alternative_id": recommended["alternative_id"],
+                        "execution_plan_id": recommended.get("execution_plan_id"),
+                    },
+                    "execution_plan": (
+                        descriptor
+                        if recommended.get("execution_plan_id") == descriptor["execution_plan_id"]
+                        else None
+                    ),
+                    "evidence": current.get("evidence", []),
                     "diagnosis": current.get("diagnosis", {}),
                     "alternatives": current.get("alternatives", []),
                     "resources": resources,
                     "weather": weather,
                 },
             )
-            return {"reviews": [review.model_dump() for review in bundle.reviews]}
+            if bundle.target is None:
+                raise InvalidTransitionError("the review committee did not identify its target")
+            # Enforce provenance at the persistence boundary even for custom providers.
+            if any(review.reviewer_agent != REVIEW_COMMITTEE_AGENT for review in bundle.reviews):
+                raise InvalidTransitionError(
+                    "reviewer identity does not match the governed committee"
+                )
+            return {
+                "reviews": [review.model_dump() for review in bundle.reviews],
+                "review_target": bundle.target.model_dump(mode="json"),
+            }
 
-        return await self._recorded(state, "reviews", "review_committee", operation)
+        return await self._recorded(state, "reviews", REVIEW_COMMITTEE_AGENT, operation)
 
     async def hitl(self, state: PublicWorkflowState) -> dict[str, Any]:
         async def operation(current: PublicWorkflowState) -> dict[str, Any]:
@@ -519,4 +590,15 @@ class OpenVigilWorkflowGraph:
         return builder.compile()
 
     async def invoke(self, state: PublicWorkflowState) -> PublicWorkflowState:
-        return cast(PublicWorkflowState, await self.graph.ainvoke(state))
+        self._completed_node_usage = []
+        try:
+            return cast(PublicWorkflowState, await self.graph.ainvoke(state))
+        except Exception as exc:
+            if self._completed_node_usage:
+                context = getattr(exc, "windops_public_context", {})
+                context["evaluation_result"] = {
+                    **context.get("evaluation_result", {}),
+                    "completed_node_usage": deepcopy(self._completed_node_usage),
+                }
+                exc.__dict__["windops_public_context"] = context
+            raise

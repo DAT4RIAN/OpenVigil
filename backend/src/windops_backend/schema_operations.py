@@ -176,15 +176,26 @@ class MaintenanceAlternative(BaseModel):
     alternative_id: str
     title: str
     action: str
+    execution_plan_id: str | None = Field(default=None, min_length=1, max_length=128)
     safety_risk: Literal["low", "medium", "high", "critical"]
     estimated_downtime_hours: float = Field(ge=0)
     estimated_cost_cny: float = Field(ge=0)
     estimated_energy_loss_mwh: float = Field(ge=0)
-    deterioration_risk_percent: float = Field(ge=0, le=100)
+    # Read legacy numeric records, but represent absent probability evidence as
+    # unknown. Generation applies the stricter no-unsupported-probability gate.
+    deterioration_risk_percent: float | None = Field(default=None, ge=0, le=100)
     weather_window_id: str | None = None
     required_resources: list[str] = Field(default_factory=list)
     rationale: str = Field(min_length=3, max_length=1000)
     recommended: bool = False
+
+
+class MaintenanceReviewTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["maintenance_execution"]
+    alternative_id: str = Field(min_length=1, max_length=64)
+    execution_plan_id: str | None = Field(min_length=1, max_length=128)
 
 
 class ReviewResult(BaseModel):
@@ -195,6 +206,7 @@ class ReviewResult(BaseModel):
     outcome: Literal["pass", "conditional_pass", "fail"]
     public_summary: str
     conditions: list[str] = Field(default_factory=list)
+    operating_constraints: list[str] = Field(default_factory=list)
 
 
 class ApprovalRequest(BaseModel):

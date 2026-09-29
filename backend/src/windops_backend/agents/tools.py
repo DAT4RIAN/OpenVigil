@@ -6,8 +6,9 @@ from time import perf_counter
 from typing import Any, Protocol, cast
 from uuid import uuid4
 
-from sqlalchemy import desc, func, select, update
+from sqlalchemy import desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 import windops_backend.agents.embeddings as _embeddings
 from windops_backend.agents.embeddings import (
@@ -70,6 +71,7 @@ from windops_backend.services.knowledge_access import (
     knowledge_scope_clause,
 )
 from windops_backend.work_order_templates import default_work_order_plan
+from windops_backend.work_plan_binding import describe_execution_plan, validate_execution_binding
 
 EMBEDDING_DIMENSIONS = _embeddings.EMBEDDING_DIMENSIONS
 EMBEDDING_MAX_INPUT_CHARACTERS = _embeddings.EMBEDDING_MAX_INPUT_CHARACTERS
@@ -206,7 +208,7 @@ class SQLToolAdapter:
                 (
                     DeterministicTestEmbeddingProvider()
                     if dialect == "sqlite" or runtime_settings.environment is Environment.TEST
-                    else LiteLLMEmbeddingProvider(runtime_settings.embedding_model)
+                    else LiteLLMEmbeddingProvider.from_settings(runtime_settings)
                 ),
             )
         else:
@@ -346,6 +348,7 @@ class SQLToolAdapter:
                 "turbine_id": turbine_id,
                 "samples": [],
                 "trend_pct": 0.0,
+                "spectrum_marker": "unavailable",
             }
         else:
             latest = rows[0]
@@ -358,9 +361,9 @@ class SQLToolAdapter:
                 "rms_mm_s": latest["value"],
                 "trend_pct": trend_pct,
                 "anomaly_score": float(attributes.get("anomaly_score", 0.0)),
-                "spectrum_marker": (
-                    "BPFO-sideband-pattern" if float(latest["value"]) >= 4.5 else "normal"
-                ),
+                # RMS amplitude cannot establish a frequency-domain fault signature.
+                # This tool reads scalar telemetry, not a verified spectrum artifact.
+                "spectrum_marker": "unavailable",
             }
         self._record_call("query_vibration", started, {"turbine_id": turbine_id})
         return result
@@ -415,8 +418,24 @@ class SQLToolAdapter:
         )
         return result
 
+    def _embedding_is_current(self, document: KnowledgeDocument) -> bool:
+        return (
+            document.vectorized
+            and document.embedding_provider == self.embedding_provider.provider_name
+            and document.embedding_model == self.embedding_provider.model_name
+        )
+
+    def _stale_embedding_clause(self) -> ColumnElement[bool]:
+        return or_(
+            KnowledgeDocument.vectorized.is_(False),
+            KnowledgeDocument.embedding_provider.is_distinct_from(
+                self.embedding_provider.provider_name
+            ),
+            KnowledgeDocument.embedding_model.is_distinct_from(self.embedding_provider.model_name),
+        )
+
     async def _ensure_document_vectors(self, documents: list[KnowledgeDocument]) -> None:
-        missing = [document for document in documents if not document.vectorized]
+        missing = [document for document in documents if not self._embedding_is_current(document)]
         if not missing:
             return
         document_chunks = [
@@ -455,7 +474,7 @@ class SQLToolAdapter:
                 (
                     await self.session.scalars(
                         select(KnowledgeDocument)
-                        .where(KnowledgeDocument.vectorized.is_(False))
+                        .where(self._stale_embedding_clause())
                         .order_by(KnowledgeDocument.id)
                         .limit(self.settings.embedding_batch_size)
                     )
@@ -498,7 +517,7 @@ class SQLToolAdapter:
                     (
                         await self.session.scalars(
                             knowledge_document_query(self.knowledge_policy)
-                            .where(KnowledgeDocument.vectorized.is_(False))
+                            .where(self._stale_embedding_clause())
                             .order_by(KnowledgeDocument.id)
                             .limit(MAX_QUERY_AUTO_INDEX_DOCUMENTS)
                         )
@@ -521,6 +540,9 @@ class SQLToolAdapter:
                     select(KnowledgeDocument, distance.label("distance"))
                     .where(
                         KnowledgeDocument.vectorized.is_(True),
+                        KnowledgeDocument.embedding_provider
+                        == self.embedding_provider.provider_name,
+                        KnowledgeDocument.embedding_model == self.embedding_provider.model_name,
                         knowledge_scope_clause(
                             self.knowledge_policy,
                             tenant_column=KnowledgeDocument.tenant_id,
@@ -551,7 +573,7 @@ class SQLToolAdapter:
                         ),
                     )
                     for document in documents
-                    if document.vectorized and document.embedding is not None
+                    if self._embedding_is_current(document) and document.embedding is not None
                 ),
                 key=lambda item: item[1],
                 reverse=True,
@@ -912,11 +934,27 @@ class SQLToolAdapter:
         turbine = await self.session.get(Turbine, turbine_id)
         if turbine is None:
             raise NotFoundError(f"turbine {turbine_id} was not found")
+        execution_plan = describe_execution_plan(profile, turbine_id)
+        try:
+            validate_execution_binding(selected_alternative, [execution_plan], require_bound=True)
+        except ValueError as exc:
+            raise ConflictError(str(exc)) from exc
         raw_weather_window_id = selected_alternative.get("weather_window_id")
         if not isinstance(raw_weather_window_id, str) or not raw_weather_window_id.strip():
             raise ConflictError("the approved alternative does not identify a weather window")
         weather_window_id = raw_weather_window_id.strip()
-        weather_window = await self.session.get(WeatherWindow, weather_window_id)
+        # The approval gate and the scoped turbine lookup above authorize this
+        # command. Resolve only the persisted decision's window for that turbine's
+        # farm; do not require (or grant) visibility of the farm-wide collection.
+        weather_table = WeatherWindow.__table__
+        weather_window = (
+            await self.session.execute(
+                select(weather_table).where(
+                    weather_table.c.id == weather_window_id,
+                    weather_table.c.wind_farm_id == turbine.wind_farm_id,
+                )
+            )
+        ).one_or_none()
         if weather_window is None:
             raise ConflictError(f"the approved weather window {weather_window_id} was not found")
         if weather_window.wind_farm_id != turbine.wind_farm_id:
@@ -962,6 +1000,7 @@ class SQLToolAdapter:
                 **plan.safety_plan,
                 "decision_alternative_id": selected_alternative_id,
                 "approved_action": selected_action,
+                "execution_plan_id": execution_plan["execution_plan_id"],
                 "weather_window_id": weather_window_id,
             },
             closure_policy={

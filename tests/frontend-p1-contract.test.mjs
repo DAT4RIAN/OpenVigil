@@ -190,7 +190,10 @@ test("production branches never render fixture drawer, approval, summary, or dia
     ]).then((parts) => parts.join("\n")),
     source("components/pages/decision-center-page.tsx"),
     source("components/pages/mission-center-page.tsx"),
-    source("components/pages/diagnosis-center-page.tsx"),
+    Promise.all([
+      source("components/pages/diagnosis-center-page.tsx"),
+      source("components/pages/use-diagnosis-center.ts"),
+    ]).then((parts) => parts.join("\n")),
   ]);
 
   // F1: 告警抽屉的特色卡与 fixture 关联数据只允许出现在 demo 分支。

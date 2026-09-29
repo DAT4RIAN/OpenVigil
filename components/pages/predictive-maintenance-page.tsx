@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { type CSSProperties } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   Activity,
   AlertTriangle,
@@ -21,16 +19,9 @@ import {
   TrendingUp,
   Wrench,
 } from "lucide-react";
-import {
-  evidenceBandFor,
-  matrixRiskFor,
-  predictiveAssessments,
-  predictiveModelMeta,
-  type PredictiveAssessment,
-} from "@/app/api/predictive-assessments/fixtures";
-import { TimeSeriesChart, type TimeSeriesPoint } from "@/components/charts/time-series-chart";
+import { TimeSeriesChart } from "@/components/charts/time-series-chart";
 import { DataTable } from "@/components/data-display/data-table";
-import { HealthBadge, StatusBadge } from "@/components/data-display/status-badge";
+import { StatusBadge } from "@/components/data-display/status-badge";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, EmptyState } from "@/components/ui/primitives";
@@ -38,471 +29,45 @@ import {
   OperationStateNotice,
   QueryStateNotice,
   RuntimeHealthBadge,
-  type OperationViewState,
 } from "@/components/ui/query-state";
-import { apiGet, apiPostCommand, createIdempotencyKey, OpenVigilApiError } from "@/lib/api-client";
-import { scadaSeries } from "@/lib/telemetry-data";
-import type { DemoWorkflowState } from "@/lib/demo-workflow";
-import { useDemoWorkflow } from "@/lib/use-demo-workflow";
-import type { RiskLevel, TrendDirection } from "@/lib/types";
-import { deriveQueryViewState, latestValidTimestamp, queryRuntimeHealth } from "@/lib/query-state";
-
+import { createIdempotencyKey } from "@/lib/api-client";
 import styles from "./predictive-maintenance-page.module.css";
-
-const windows = ["24H", "7D", "30D", "90D"] as const;
-type TimeWindow = (typeof windows)[number];
-type RiskFilter = "all" | RiskLevel;
-type TrendFilter = "all" | TrendDirection;
-type PredictiveAssessmentView = PredictiveAssessment & {
-  readonly modelId?: string;
-  readonly deploymentId?: string;
-  readonly featureObservedAt?: string;
-  readonly latencyMs?: number;
-};
-
-type PredictiveResponse = {
-  data: PredictiveAssessmentView[];
-  meta: {
-    count: number;
-    total: number;
-    filteredTotal: number;
-    model: {
-      id: string;
-      label: string;
-      mode: string;
-      observationWindowHours: number;
-      evaluatedAt: string;
-      deterministic: boolean;
-      readOnly: boolean;
-      performsRealInference: boolean;
-      notice: string;
-    };
-  };
-};
-
-const riskLabels: Record<RiskLevel, string> = {
-  critical: "严重",
-  high: "高",
-  medium: "中",
-  low: "低",
-};
-
-const trendLabels: Record<TrendDirection, string> = {
-  improving: "改善",
-  stable: "稳定",
-  declining: "下降",
-};
-
-const riskTone = (risk: RiskLevel): "critical" | "warning" | "info" | "success" =>
-  risk === "critical"
-    ? "critical"
-    : risk === "high"
-      ? "warning"
-      : risk === "medium"
-        ? "info"
-        : "success";
-
-const byPriority = (left: PredictiveAssessment, right: PredictiveAssessment): number =>
-  right.priorityScore - left.priorityScore || left.turbineId.localeCompare(right.turbineId);
-
-const assessmentColumns: readonly LegacyColumnDef<PredictiveAssessment, unknown>[] = [
-  {
-    accessorKey: "priorityScore",
-    header: "优先分",
-    cell: ({ row }) => <span className={styles.rank}>{row.original.priorityScore.toFixed(1)}</span>,
-  },
-  {
-    id: "asset",
-    header: "机组 / 部件",
-    accessorFn: (assessment) => `${assessment.turbineId} ${assessment.component}`,
-    cell: ({ row }) => (
-      <span>
-        <strong>{row.original.turbineId}</strong>
-        <small>{row.original.component}</small>
-      </span>
-    ),
-  },
-  {
-    accessorKey: "componentHealth",
-    header: "健康度",
-    cell: ({ row }) => <HealthBadge score={row.original.componentHealth} />,
-  },
-  {
-    accessorKey: "anomalyScore",
-    header: "异常分数",
-    cell: ({ row }) => (
-      <span>
-        <strong>{row.original.anomalyScore.toFixed(2)}</strong>
-        <small>证据等级 {row.original.evidenceBand}/5</small>
-      </span>
-    ),
-  },
-  {
-    accessorKey: "activeAlarmCount",
-    header: "活跃告警",
-    cell: ({ row }) => (
-      <span>
-        <strong>{row.original.activeAlarmCount}</strong>
-        <small>权威告警记录</small>
-      </span>
-    ),
-  },
-  {
-    accessorKey: "evidenceBand",
-    header: "证据等级",
-    cell: ({ row }) => (
-      <span>
-        <strong>{row.original.evidenceBand} / 5</strong>
-        <small>{trendLabels[row.original.trend]}</small>
-      </span>
-    ),
-  },
-  {
-    accessorKey: "matrixRisk",
-    header: "矩阵风险",
-    cell: ({ row }) => (
-      <StatusBadge
-        value={row.original.matrixRisk}
-        label={riskLabels[row.original.matrixRisk]}
-        tone={riskTone(row.original.matrixRisk)}
-        compact
-      />
-    ),
-  },
-];
-
-const dateLabel = (date: Date, window: TimeWindow): string =>
-  window === "24H"
-    ? date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })
-    : `${date.getMonth() + 1}/${date.getDate()}`;
-
-function withWorkflowState<T extends PredictiveAssessment>(
-  assessment: T,
-  workflow: DemoWorkflowState,
-): T {
-  if (assessment.turbineId !== "WT-023" || workflow.workOrderStatus !== "completed") {
-    return assessment;
-  }
-
-  const evidenceBand = evidenceBandFor(0.42, workflow.mainBearingHealthScore, 0);
-  const riskScore = evidenceBand * assessment.consequenceBand;
-  return {
-    ...assessment,
-    healthScore: workflow.turbineHealthScore,
-    componentHealth: workflow.mainBearingHealthScore,
-    state: "watch",
-    trend: "improving",
-    riskLevel: "medium",
-    anomalyScore: 0.42,
-    primaryFinding: "现场复测后振动与温升回落，进入趋势观察",
-    evidenceBand,
-    riskScore,
-    matrixRisk: matrixRiskFor(evidenceBand, assessment.consequenceBand),
-    priorityScore: Number(
-      ((100 - workflow.mainBearingHealthScore) * assessment.consequenceBand + 4.2).toFixed(2),
-    ),
-  };
-}
-
-function workflowRecommendation(workflow: DemoWorkflowState): {
-  readonly title: string;
-  readonly detail: string;
-} {
-  if (workflow.missionStatus === "completed" || workflow.workOrderStatus === "completed") {
-    return {
-      title: "维护闭环已验证",
-      detail: `${workflow.knowledgeCaseId ?? "WT-023 闭环案例"} 已沉淀，风险由 HIGH 降至 MEDIUM。`,
-    };
-  }
-
-  if (workflow.workOrderStatus === "in-progress") {
-    return {
-      title: "现场工单执行中",
-      detail: `WO-20260823-017 已完成 ${workflow.completedTaskIds.length}/5 项任务，等待复测与结果验证。`,
-    };
-  }
-
-  if (workflow.workOrderStatus === "scheduled") {
-    return {
-      title: "方案 B 已批准并排程",
-      detail: "人工审批已记录；WO-20260823-017 等待现场班组启动。",
-    };
-  }
-
-  if (workflow.decisionStatus === "rejected" || workflow.missionStatus === "decision-pending") {
-    return {
-      title: "方案 B 已被拒绝",
-      detail: "高风险执行门禁保持锁定；等待 Agent 生成新的处置方案。",
-    };
-  }
-
-  if (workflow.decisionStatus === "revision-requested" || workflow.missionStatus === "diagnosed") {
-    return {
-      title: "方案 B 待修订",
-      detail: "审批人已请求补充证据或调整方案；WO-20260823-017 保持草稿。",
-    };
-  }
-
-  if (workflow.decisionStatus === "approved") {
-    return {
-      title: "方案 B 已获人工批准",
-      detail: "审批记录已写入；WO-20260823-017 等待排程同步。",
-    };
-  }
-
-  return {
-    title: "方案 B 等待人工审批",
-    detail: "高风险执行门禁仍锁定；WO-20260823-017 保持草稿，尚未排程。",
-  };
-}
-
-function createTrendData(
-  assessment: PredictiveAssessment,
-  window: TimeWindow,
-  completed: boolean,
-): { health: TimeSeriesPoint[]; anomaly: TimeSeriesPoint[] } {
-  const windowConfig = {
-    "24H": { count: 25, intervalHours: 1 },
-    "7D": { count: 28, intervalHours: 6 },
-    "30D": { count: 30, intervalHours: 24 },
-    "90D": { count: 30, intervalHours: 72 },
-  }[window];
-  const turbineNumber = Number(assessment.turbineId.slice(3));
-  const end = Date.parse("2026-08-13T10:30:00+08:00");
-  const scadaAnomaly = scadaSeries.find((series) => series.metric === "anomaly-score");
-  const sourcePoints =
-    assessment.turbineId === "WT-023" && window === "24H"
-      ? scadaAnomaly?.points.slice(-windowConfig.count)
-      : undefined;
-
-  const anomaly = Array.from({ length: windowConfig.count }, (_, index): TimeSeriesPoint => {
-    const timestamp = new Date(
-      end - (windowConfig.count - 1 - index) * windowConfig.intervalHours * 60 * 60 * 1000,
-    );
-    const progress = index / Math.max(1, windowConfig.count - 1);
-    const source = sourcePoints?.[index];
-    const baseline = Math.max(0.08, assessment.anomalyScore - 0.2);
-    const simulated =
-      baseline +
-      (assessment.anomalyScore - baseline) * progress +
-      Math.sin((index + turbineNumber) * 0.74) * 0.025;
-    const preMaintenance = 0.72 + 0.14 * progress + Math.sin(index * 0.74) * 0.018;
-    const value = completed
-      ? preMaintenance - Math.max(0, (progress - 0.72) / 0.28) * 0.44
-      : (source?.value ?? simulated);
-
-    return {
-      timestamp: dateLabel(timestamp, window),
-      value: Number(Math.max(0.04, value).toFixed(2)),
-      anomaly: value >= 0.65,
-      aiEvent: Boolean(source?.aiEvent) || index === Math.floor(windowConfig.count * 0.72),
-    };
-  });
-
-  const health = anomaly.map((point, index): TimeSeriesPoint => {
-    const progress = index / Math.max(1, anomaly.length - 1);
-    const historicalOffset =
-      assessment.trend === "declining" ? 9 : assessment.trend === "improving" ? -5 : 2;
-    const recovery = completed ? Math.max(0, (progress - 0.72) / 0.28) * 15 : 0;
-    const value =
-      assessment.componentHealth +
-      historicalOffset * (1 - progress) +
-      recovery -
-      (completed ? 15 : 0) +
-      Math.sin((index + turbineNumber) * 0.52) * 0.7;
-    return {
-      timestamp: point.timestamp,
-      value: Number(Math.max(35, Math.min(99, value)).toFixed(1)),
-      anomaly: value < 75,
-      aiEvent: point.aiEvent,
-    };
-  });
-
-  return { health, anomaly };
-}
-
-function matrixCellRisk(evidence: number, consequence: number): RiskLevel {
-  return matrixRiskFor(evidence, consequence);
-}
+import {
+  windows,
+  type RiskFilter,
+  type TrendFilter,
+  riskLabels,
+  trendLabels,
+  riskTone,
+} from "./predictive-maintenance-support";
+import { assessmentColumns } from "./predictive-maintenance-columns";
+import { usePredictiveMaintenance } from "./use-predictive-maintenance";
 
 export function PredictiveMaintenancePage({ runtimeMode }: { runtimeMode: "demo" | "production" }) {
-  const workflow = useDemoWorkflow();
-  const [selectedId, setSelectedId] = useState(runtimeMode === "demo" ? "WT-023" : "");
-  const [timeWindow, setTimeWindow] = useState<TimeWindow>("30D");
-  const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
-  const [trendFilter, setTrendFilter] = useState<TrendFilter>("all");
-  const [inferenceOperation, setInferenceOperation] = useState<OperationViewState>({
-    lifecycle: "idle",
-  });
-
-  const endpoint = useMemo(() => {
-    const params = new URLSearchParams({ limit: "64", sort: "risk-desc" });
-    if (riskFilter !== "all") params.set("risk", riskFilter);
-    if (trendFilter !== "all") params.set("trend", trendFilter);
-    return `/api/predictive-assessments?${params.toString()}`;
-  }, [riskFilter, trendFilter]);
-
-  const assessmentsQuery = useQuery({
-    queryKey: ["predictive-assessments", endpoint],
-    queryFn: ({ signal }) => apiGet<PredictiveResponse>(endpoint, signal),
-    initialData:
-      runtimeMode === "demo"
-        ? {
-            data: [...predictiveAssessments],
-            meta: {
-              count: predictiveAssessments.length,
-              total: predictiveAssessments.length,
-              filteredTotal: predictiveAssessments.length,
-              model: predictiveModelMeta,
-            },
-          }
-        : undefined,
-    initialDataUpdatedAt: 0,
-    placeholderData: (previousData) => previousData,
-    retry: false,
-    staleTime: 60_000,
-  });
-  const assessmentState = deriveQueryViewState({
-    data: assessmentsQuery.data?.data,
-    dataUpdatedAt: assessmentsQuery.dataUpdatedAt,
-    error: assessmentsQuery.error,
-    isError: assessmentsQuery.isError,
-    isFetching: assessmentsQuery.isFetching,
-    isPending: assessmentsQuery.isPending,
-    isStale: assessmentsQuery.isStale,
-    isEmpty: (data) => data.length === 0,
-    sourceUpdatedAt:
-      runtimeMode === "production"
-        ? latestValidTimestamp(
-            assessmentsQuery.data?.data.map((assessment) => assessment.assessedAt) ?? [],
-          )
-        : null,
-    staleAfterMs: 60_000,
-  });
-  const pageHealth = queryRuntimeHealth(assessmentState, "在线状态评估");
-
-  const fleet = useMemo(() => {
-    const source = assessmentsQuery.data?.data ?? [];
-    return (
-      runtimeMode === "demo"
-        ? source.map((assessment) => withWorkflowState(assessment, workflow))
-        : [...source]
-    ).sort(byPriority);
-  }, [assessmentsQuery.data?.data, runtimeMode, workflow]);
-
-  useEffect(() => {
-    if (!fleet.length) return;
-    const requested = new URLSearchParams(window.location.search).get("turbineId")?.toUpperCase();
-    const next =
-      (requested && fleet.some((item) => item.turbineId === requested) ? requested : null) ??
-      (fleet.some((item) => item.turbineId === selectedId) ? selectedId : fleet[0].turbineId);
-    if (next === selectedId) return;
-    const timer = window.setTimeout(() => setSelectedId(next), 0);
-    return () => window.clearTimeout(timer);
-  }, [fleet, selectedId]);
-
-  const visible = useMemo(() => {
-    return fleet
-      .filter(
-        (assessment) =>
-          (riskFilter === "all" || assessment.matrixRisk === riskFilter) &&
-          (trendFilter === "all" || assessment.trend === trendFilter),
-      )
-      .sort(byPriority);
-  }, [fleet, riskFilter, trendFilter]);
-  const selected =
-    fleet.find((assessment) => assessment.turbineId === selectedId) ?? fleet[0] ?? null;
-  const closedLoop = Boolean(
-    runtimeMode === "demo" &&
-    selected?.turbineId === "WT-023" &&
-    workflow.workOrderStatus === "completed",
-  );
-  const recommendation = selected
-    ? runtimeMode === "demo" && selected.turbineId === "WT-023"
-      ? workflowRecommendation(workflow)
-      : {
-          title: "按风险优先级安排维护",
-          detail: `${selected.component} 当前为 ${riskLabels[selected.matrixRisk]}风险，建议结合异常、健康、告警与资源窗口持续评估。`,
-        }
-    : null;
-  const trendData = useMemo(
-    () =>
-      selected ? createTrendData(selected, timeWindow, closedLoop) : { health: [], anomaly: [] },
-    [closedLoop, selected, timeWindow],
-  );
-  const matrix = useMemo(
-    () =>
-      Array.from({ length: 5 }, (_, consequenceIndex) => {
-        const consequence = 5 - consequenceIndex;
-        return Array.from({ length: 5 }, (_, evidenceIndex) => {
-          const evidence = evidenceIndex + 1;
-          return {
-            consequence,
-            evidence,
-            risk: matrixCellRisk(evidence, consequence),
-            records: fleet.filter(
-              (assessment) =>
-                assessment.evidenceBand === evidence && assessment.consequenceBand === consequence,
-            ),
-          };
-        });
-      }),
-    [fleet],
-  );
-
-  const fleetHighRisk = fleet.filter((assessment) =>
-    ["critical", "high"].includes(assessment.matrixRisk),
-  ).length;
-  const modelMeta = assessmentsQuery.data?.meta.model ?? predictiveModelMeta;
-
-  const runOnlineInference = async (
-    operationKey = createIdempotencyKey("predictive-assessment-run"),
-  ) => {
-    if (!selected) return;
-    const turbineId = selected.turbineId;
-    const startedAt = Date.now();
-    setInferenceOperation({ lifecycle: "running", operationKey, startedAt });
-    try {
-      const result = await apiPostCommand<{
-        readonly count: number;
-        readonly failed: number;
-        readonly predictions: readonly { readonly error_code?: string }[];
-      }>("/api/backend/predictive-assessments/run", { turbine_ids: [turbineId] }, operationKey);
-      if (result.failed > 0) {
-        setInferenceOperation({
-          lifecycle: "failed",
-          operationKey,
-          startedAt,
-          completedAt: Date.now(),
-          code:
-            result.predictions.find((prediction) => prediction.error_code)?.error_code ??
-            "PREDICTION_PARTIAL_FAILURE",
-          message: `${result.failed} / ${result.count} 个在线评估未完成；已完成结果不受影响。`,
-        });
-        return;
-      }
-      const refreshed = await assessmentsQuery.refetch();
-      setInferenceOperation({
-        lifecycle: "success",
-        operationKey,
-        startedAt,
-        completedAt: Date.now(),
-        message: refreshed.isError
-          ? "权威命令已确认完成，但最新读取失败；请按页面 Stale 状态恢复。"
-          : "权威服务已确认完成，最新在线预测读取已刷新。",
-      });
-    } catch (error) {
-      const apiError = error instanceof OpenVigilApiError ? error : null;
-      setInferenceOperation({
-        lifecycle: apiError?.code === "COMMAND_RESULT_UNKNOWN" ? "result-unknown" : "failed",
-        operationKey: apiError?.operationKey ?? operationKey,
-        startedAt,
-        completedAt: Date.now(),
-        code: apiError?.code ?? "PREDICTION_RUN_FAILED",
-        message: error instanceof Error ? error.message : "在线评估失败。",
-      });
-    }
-  };
+  const {
+    selectedId,
+    setSelectedId,
+    timeWindow,
+    setTimeWindow,
+    riskFilter,
+    setRiskFilter,
+    trendFilter,
+    setTrendFilter,
+    inferenceOperation,
+    assessmentsQuery,
+    assessmentState,
+    pageHealth,
+    fleet,
+    visible,
+    selected,
+    closedLoop,
+    recommendation,
+    trendData,
+    matrix,
+    fleetHighRisk,
+    modelMeta,
+    runOnlineInference,
+  } = usePredictiveMaintenance({ runtimeMode });
 
   if (!selected || !recommendation) {
     const queryBlocked =

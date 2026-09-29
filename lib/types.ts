@@ -281,7 +281,7 @@ export interface DecisionAlternative {
   readonly title: string;
   readonly description: string;
   readonly safetyRisk: RiskLevel;
-  readonly deteriorationRiskPercent: number;
+  readonly deteriorationRiskPercent: number | null;
   readonly estimatedCostCny: number;
   readonly estimatedDowntimeHours: number;
   readonly estimatedEnergyLossMWh: number;

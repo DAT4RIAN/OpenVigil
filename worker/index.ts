@@ -5,7 +5,8 @@ import {
   DEFAULT_IMAGE_SIZES,
 } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
-import { runWithWorkerEnv, type OpenVigilWorkerEnv } from "../lib/worker-env";
+import { getWorkerEnv, runWithWorkerEnv, type OpenVigilWorkerEnv } from "../lib/worker-env";
+import { artifactUploadConnectSources } from "../lib/artifact-upload-policy";
 import {
   enforceProductionRequestBoundary,
   getProductionBackendConfig,
@@ -31,7 +32,26 @@ const CONTENT_SECURITY_POLICY = [
 function withSecurityHeaders(request: Request, response: Response, production: boolean): Response {
   if (response.status === 101) return response;
   const headers = new Headers(response.headers);
-  headers.set("content-security-policy", CONTENT_SECURITY_POLICY);
+  const configured =
+    getWorkerEnv().WINDOPS_ARTIFACT_UPLOAD_ORIGINS ??
+    (typeof process === "undefined" ? undefined : process.env.WINDOPS_ARTIFACT_UPLOAD_ORIGINS);
+  let connectSources = "'self'";
+  try {
+    connectSources = artifactUploadConnectSources(configured, request.url);
+  } catch {
+    // Invalid deployment configuration fails closed; never interpolate raw CSP text.
+    response = Response.json(
+      { error: { code: "INVALID_ARTIFACT_UPLOAD_ORIGINS" } },
+      { status: 503 },
+    );
+    headers.set("content-type", "application/json");
+    headers.delete("content-length");
+    headers.set("cache-control", "no-store");
+  }
+  headers.set(
+    "content-security-policy",
+    CONTENT_SECURITY_POLICY.replace("connect-src 'self'", `connect-src ${connectSources}`),
+  );
   headers.set("cross-origin-opener-policy", "same-origin");
   headers.set("cross-origin-resource-policy", "same-origin");
   headers.set("permissions-policy", "camera=(), geolocation=(), microphone=(), payment=(), usb=()");
@@ -46,6 +66,13 @@ function withSecurityHeaders(request: Request, response: Response, production: b
     statusText: response.statusText,
     headers,
   });
+}
+
+function configuredUploadOrigins(): string | undefined {
+  return (
+    getWorkerEnv().WINDOPS_ARTIFACT_UPLOAD_ORIGINS ??
+    (typeof process === "undefined" ? undefined : process.env.WINDOPS_ARTIFACT_UPLOAD_ORIGINS)
+  );
 }
 
 interface Env extends OpenVigilWorkerEnv {
@@ -89,6 +116,15 @@ const worker = {
     const runtimeEnv = normalizeWorkerEnv(env);
     return runWithWorkerEnv(runtimeEnv, async () => {
       const productionRequested = productionModeRequested(runtimeEnv);
+      try {
+        artifactUploadConnectSources(configuredUploadOrigins(), originalRequest.url);
+      } catch {
+        return withSecurityHeaders(
+          originalRequest,
+          Response.json({ error: { code: "INVALID_ARTIFACT_UPLOAD_ORIGINS" } }, { status: 503 }),
+          productionRequested,
+        );
+      }
       const boundaryResponse = enforceProductionRequestBoundary(originalRequest);
       if (boundaryResponse) {
         return withSecurityHeaders(originalRequest, boundaryResponse, productionRequested);

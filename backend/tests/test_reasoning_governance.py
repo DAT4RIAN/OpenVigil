@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from types import SimpleNamespace
 from typing import Any
@@ -129,3 +130,86 @@ async def test_selected_llm_provider_routes_credentials_to_litellm(
     assert captured["api_base"] == base_url
     assert captured["api_key"] == "test-only-provider-key"
     assert "test-only-provider-key" not in repr(settings)
+
+
+@pytest.mark.asyncio
+async def test_diagnosis_request_binds_scope_and_evidence_without_cross_request_leakage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contexts = [
+        _context(),
+        {"analysis_profile": {"component": "gearbox"}, "evidence": [{"evidence_id": "GB-1"}]},
+    ]
+    captured: list[dict[str, Any]] = []
+
+    async def completion(**kwargs: Any) -> Any:
+        payload = json.loads(kwargs["messages"][1]["content"])
+        context = payload["public_context"]
+        captured.append(payload["schema"])
+        value = PublicDiagnosis(
+            failure_mode="inspection_finding",
+            component=context["analysis_profile"]["component"],
+            confidence=0.8,
+            conclusion="Inspection supports human review.",
+            evidence_refs=[context["evidence"][0]["evidence_id"]],
+        )
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=value.model_dump_json()))]
+        )
+
+    monkeypatch.setitem(sys.modules, "litellm", SimpleNamespace(acompletion=completion))
+    provider = LiteLLMReasoningProvider(
+        "provider/model", timeout_seconds=5, max_retries=0, minimum_diagnosis_confidence=0.5
+    )
+    generic = PublicDiagnosis.model_json_schema()
+    for context in contexts:
+        await provider.generate(PublicDiagnosis, "diagnose", context)
+    for schema, context in zip(captured, contexts, strict=True):
+        properties = schema["properties"]
+        assert properties["component"]["const"] == context["analysis_profile"]["component"]
+        assert properties["evidence_refs"]["items"]["enum"] == [
+            context["evidence"][0]["evidence_id"]
+        ]
+        assert properties["evidence_refs"]["uniqueItems"] is True
+        # A scope contract must not force the model to invent higher confidence.
+        assert properties["confidence"]["minimum"] == 0
+    assert PublicDiagnosis.model_json_schema() == generic
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"component": "gearbox"},
+        {"evidence_refs": ["UNKNOWN"]},
+        {"evidence_refs": ["EVIDENCE-001", "EVIDENCE-001"]},
+        {"confidence": 0.1},
+    ],
+)
+async def test_provider_ignoring_request_contract_is_still_rejected(
+    monkeypatch: pytest.MonkeyPatch, changes: dict[str, Any]
+) -> None:
+    async def completion(**_kwargs: Any) -> Any:
+        value = PublicDiagnosis(
+            failure_mode="inspection_finding",
+            component="main_bearing",
+            confidence=0.8,
+            conclusion="Public output only.",
+            evidence_refs=["EVIDENCE-001"],
+        ).model_copy(update=changes)
+        return SimpleNamespace(
+            model="provider/model",
+            usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            choices=[SimpleNamespace(message=SimpleNamespace(content=value.model_dump_json()))],
+        )
+
+    monkeypatch.setitem(sys.modules, "litellm", SimpleNamespace(acompletion=completion))
+    provider = LiteLLMReasoningProvider(
+        "provider/model", timeout_seconds=5, max_retries=0, minimum_diagnosis_confidence=0.5
+    )
+    with pytest.raises(ReasoningEvaluationError):
+        await provider.generate(PublicDiagnosis, "diagnose", _context())
+    usage = provider.consume_usage()
+    assert usage["token_usage"]["total_tokens"] == 15
+    assert usage["evaluation_result"]["status"] == "failed"
+    assert usage["degradation_policy"]["automatic_deterministic_fallback"] is False

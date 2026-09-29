@@ -4,6 +4,7 @@ export interface OpenVigilWorkerEnv {
   readonly ASSETS?: Fetcher;
   readonly DB?: D1Database;
   readonly WINDOPS_RUNTIME_MODE?: string;
+  readonly WINDOPS_ARTIFACT_UPLOAD_ORIGINS?: string;
   readonly WINDOPS_BACKEND_BASE_URL?: string;
   readonly WINDOPS_BACKEND_AUTH_MODE?: string;
   readonly WINDOPS_BACKEND_API_TOKEN?: string;

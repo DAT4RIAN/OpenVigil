@@ -4,8 +4,12 @@ import asyncio
 import hashlib
 import math
 import struct
-from typing import Protocol
+from time import perf_counter
+from typing import Any, Protocol
 
+from pydantic import SecretStr
+
+from windops_backend.agents.embedding_audit import begin_embedding_attempt, embedding_response_usage
 from windops_backend.config import Settings
 
 EMBEDDING_DIMENSIONS = 1536
@@ -43,21 +47,86 @@ class LiteLLMEmbeddingProvider:
     provider_name = "litellm"
     production_ready = True
 
-    def __init__(self, model: str) -> None:
+    def __init__(
+        self,
+        model: str,
+        *,
+        api_base: str | None = None,
+        api_key: SecretStr | None = None,
+        dimensions: int | None = None,
+    ) -> None:
         if not model.strip():
             raise ValueError("an explicit embedding model is required")
+        if dimensions is not None and dimensions != EMBEDDING_DIMENSIONS:
+            raise ValueError(f"embedding dimensions must match {EMBEDDING_DIMENSIONS}")
         self.model_name = model
+        self._api_base = api_base
+        self._api_key = api_key
+        self._dimensions = dimensions
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> LiteLLMEmbeddingProvider:
+        return cls(
+            settings.embedding_model,
+            api_base=settings.embedding_api_base or None,
+            api_key=(
+                settings.embedding_api_key
+                if settings.embedding_api_key.get_secret_value()
+                else None
+            ),
+            dimensions=settings.embedding_dimensions,
+        )
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
         import litellm
 
-        response = await litellm.aembedding(model=self.model_name, input=texts)
-        ordered = sorted(response.data, key=lambda item: int(item["index"]))
+        options: dict[str, Any] = {}
+        if self._api_base is not None:
+            options["api_base"] = self._api_base
+        if self._api_key is not None:
+            options["api_key"] = self._api_key.get_secret_value()
+        if self._dimensions is not None:
+            options["dimensions"] = self._dimensions
+            if self._api_base is not None and self.model_name.startswith("openai/"):
+                # An explicitly configured compatible endpoint can support
+                # dimensions outside LiteLLM's built-in OpenAI model catalogue.
+                # Forward the requested value; never silently drop or reshape it.
+                options["allowed_openai_params"] = ["dimensions"]
+        receipt = begin_embedding_attempt(self.model_name, texts)
+        started = perf_counter()
+        try:
+            # The controlled batching loop owns retries. Disable both LiteLLM
+            # and its compatible-endpoint SDK retries so every attempt is visible.
+            response = await litellm.aembedding(
+                model=self.model_name, input=texts, num_retries=0, max_retries=0, **options
+            )
+            receipt["token_usage"] = embedding_response_usage(getattr(response, "usage", None))
+            vectors = self._validated_vectors(response, len(texts))
+        except (Exception, asyncio.CancelledError) as exc:
+            receipt.update(status="failed", error_code=type(exc).__name__)
+            raise
+        else:
+            receipt["status"] = "succeeded"
+            return vectors
+        finally:
+            receipt["latency_ms"] = max(0, round((perf_counter() - started) * 1000))
+
+    def _validated_vectors(self, response: Any, input_count: int) -> list[list[float]]:
+        indices = [item.get("index") for item in response.data]
+        if any(type(index) is not int for index in indices) or sorted(indices) != list(
+            range(input_count)
+        ):
+            raise RuntimeError("embedding response indices do not match the requested inputs")
+        ordered = sorted(response.data, key=lambda item: item["index"])
         vectors = [list(map(float, item["embedding"])) for item in ordered]
         if any(len(vector) != EMBEDDING_DIMENSIONS for vector in vectors):
             raise RuntimeError(
                 f"embedding model {self.model_name} must return {EMBEDDING_DIMENSIONS} dimensions"
             )
+        if any(not math.isfinite(value) for vector in vectors for value in vector):
+            raise RuntimeError("embedding response contains non-finite values")
         return vectors
 
 

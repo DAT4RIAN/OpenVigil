@@ -82,13 +82,36 @@ async def _create_approved_work_order(app: FastAPI, client: AsyncClient) -> str:
     mission_id = mission.json()["mission_id"]
     detail = (await client.get(f"/api/v1/missions/{mission_id}")).json()
     app.state.settings.eam_enabled = True
+    selected = next(item for item in detail["decision"]["alternatives"] if item["recommended"])
+    assert selected["execution_plan_id"].startswith("workplan:")
+    rejected = await client.post(
+        f"/api/v1/missions/{mission_id}/approvals",
+        headers={"Idempotency-Key": "eam-unbound-approval-001"},
+        json={
+            "action": "approve",
+            "expected_revision": detail["revision"],
+            "selected_alternative_id": "ALT-A",
+            "reason": "An unbound proposal must not create an EAM work order",
+        },
+    )
+    assert rejected.status_code == 409
+    assert "no governed execution plan" in rejected.json()["error"]["message"]
+    async with app.state.session_factory() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(OutboxEvent)
+                .where(OutboxEvent.event_type == EAM_WORK_ORDER_PUBLISH_REQUESTED)
+            )
+            == 0
+        )
     approved = await client.post(
         f"/api/v1/missions/{mission_id}/approvals",
         headers={"Idempotency-Key": "eam-mission-approval-001"},
         json={
             "action": "approve",
             "expected_revision": detail["revision"],
-            "selected_alternative_id": "ALT-A",
+            "selected_alternative_id": selected["alternative_id"],
             "reason": "Governed EAM integration test approval",
         },
     )
@@ -131,7 +154,9 @@ async def test_eam_publish_retry_and_status_callback_are_idempotent(
     outbound, idempotency_key = publisher.calls[0]
     assert idempotency_key == f"windops:{work_order_id}"
     assert outbound["work_order_id"] == work_order_id
-    assert outbound["selected_alternative_id"] == "ALT-A"
+    assert outbound["selected_alternative_id"] == pending_detail["selected_alternative_id"]
+    assert pending_detail["selected_action"] == "WT-023 Gearbox Inspection"
+    assert pending_detail["safety_plan"]["execution_plan_id"].startswith("workplan:")
     assert outbound["tasks"]
     assert outbound["resources"]
 

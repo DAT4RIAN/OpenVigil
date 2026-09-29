@@ -1,3 +1,4 @@
+import os
 import re
 from collections.abc import Callable
 from functools import lru_cache
@@ -116,6 +117,7 @@ class Settings(BaseSettings):
         env_prefix="WINDOPS_",
         case_sensitive=False,
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     environment: Environment = Environment.DEVELOPMENT
@@ -143,6 +145,7 @@ class Settings(BaseSettings):
     siliconflow_base_url: str = "https://api.siliconflow.cn/v1"
     siliconflow_api_key: SecretStr = SecretStr("")
     siliconflow_model: str = "deepseek-ai/DeepSeek-V4-Flash"
+    siliconflow_enable_thinking: bool | None = None
     bailian_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     bailian_api_key: SecretStr = SecretStr("")
     bailian_model: str = "qwen-plus"
@@ -150,7 +153,9 @@ class Settings(BaseSettings):
     deepseek_api_key: SecretStr = SecretStr("")
     deepseek_model: str = "deepseek-flash"
     litellm_timeout_seconds: int = Field(default=45, ge=5, le=120)
+    litellm_review_timeout_seconds: int | None = Field(default=None, ge=5, le=120)
     litellm_max_retries: int = Field(default=2, ge=0, le=5)
+    litellm_max_output_tokens: int | None = Field(default=None, ge=1, le=32768)
     litellm_minimum_diagnosis_confidence: float = Field(default=0.5, ge=0, le=1)
     otel_enabled: bool = False
     otel_service_name: str = "windops-backend"
@@ -162,6 +167,11 @@ class Settings(BaseSettings):
     slo_agent_success_target: float = Field(default=0.99, gt=0, le=1)
     slo_telemetry_freshness_seconds: int = Field(default=120, ge=10, le=86_400)
     embedding_model: str = "text-embedding-3-small"
+    embedding_api_base: str = ""
+    embedding_api_key: SecretStr = SecretStr("")
+    # Omit for providers with a fixed native dimension. Explicit overrides must
+    # match the existing pgvector schema; never pad or truncate provider vectors.
+    embedding_dimensions: int | None = Field(default=None, ge=1536, le=1536)
     embedding_timeout_seconds: int = Field(default=20, ge=1, le=120)
     embedding_batch_size: int = Field(default=16, ge=1, le=128)
     embedding_max_retries: int = Field(default=2, ge=0, le=5)
@@ -205,6 +215,8 @@ class Settings(BaseSettings):
     release_id: str = "development"
     release_commit_sha: str = ""
     release_image_digest: str = ""
+    # Opt-in committed local candidate; never relaxes production requirements.
+    local_acceptance: bool = False
     docs_enabled: bool = True
     trusted_hosts: list[str] = Field(
         default_factory=lambda: ["localhost", "127.0.0.1", "test", "testserver"]
@@ -261,6 +273,65 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def enforce_environment_boundaries(self) -> "Settings":
+        if self.local_acceptance:
+            if self.environment is not Environment.DEVELOPMENT:
+                raise ValueError("local acceptance requires the development environment")
+            if (
+                re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{2,127}", self.release_id) is None
+                or self.release_id.lower() in {"development", "unknown", "unreleased"}
+                or "replace" in self.release_id.lower()
+                or re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", self.release_commit_sha) is None
+                or set(self.release_commit_sha) == {"0"}
+                or re.fullmatch(r"sha256:[0-9a-f]{64}", self.release_image_digest) is None
+                or self.release_image_digest == "sha256:" + "0" * 64
+            ):
+                raise ValueError("local acceptance requires complete immutable release identity")
+            secret = self.gateway_delegation_secret.get_secret_value()
+            if (
+                self.auth_mode != "sites_delegation"
+                or len(secret) < 48
+                or secret.startswith("dev-")
+                or "replace" in secret.lower()
+                or self.test_auth_bypass_enabled
+            ):
+                raise ValueError("local acceptance requires authenticated gateway delegation")
+            human_roles = {
+                "operations_manager",
+                "operations_approver",
+                "maintenance_reviewer",
+                "field_technician",
+            }
+            if (
+                not self.identity_role_mappings
+                or set(self.identity_role_mappings) != set(self.identity_scope_mappings)
+                or any(
+                    not subject.strip() or len(roles) != 1 or roles[0] not in human_roles
+                    for subject, roles in self.identity_role_mappings.items()
+                )
+                or {roles[0] for roles in self.identity_role_mappings.values()} != human_roles
+                or any(
+                    not (scope.turbine_ids or scope.wind_farm_ids or scope.tenant_ids)
+                    or scope.allow_global
+                    or "*" in scope.turbine_ids + scope.wind_farm_ids + scope.tenant_ids
+                    for scope in self.identity_scope_mappings.values()
+                )
+            ):
+                raise ValueError("local acceptance requires four separate, explicitly scoped roles")
+        if self.embedding_api_base:
+            parsed_embedding = urlparse(self.embedding_api_base)
+            if (
+                parsed_embedding.scheme != "https"
+                or not parsed_embedding.hostname
+                or parsed_embedding.username is not None
+                or parsed_embedding.password is not None
+                or parsed_embedding.query
+                or parsed_embedding.fragment
+            ):
+                raise ValueError("embedding provider requires a credential-free HTTPS base URL")
+            if not self.embedding_api_key.get_secret_value().strip():
+                raise ValueError("embedding provider requires an explicit API key")
+            if not self.embedding_model.strip():
+                raise ValueError("embedding provider requires an explicit model")
         if self.agent_mode == "litellm" and self.llm_provider != "default":
             model, base_url, api_key = self.reasoning_connection()
             parsed = urlparse(base_url or "")
@@ -646,8 +717,14 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    local_env_file = Path(__file__).resolve().parents[3] / ".env"
+    # Managed local workers spawn child interpreters on Windows. They must inherit
+    # the isolated environment instead of loading unrelated root dotenv settings.
+    managed_local = os.getenv("WINDOPS_LOCAL_STACK") == "1"
+    local_env_file = None if managed_local else Path(__file__).resolve().parents[3] / ".env"
     # pydantic-settings supplies underscore-prefixed source controls at runtime;
     # its mypy plugin intentionally exposes only declared model fields.
     settings_factory = cast(Callable[..., Settings], Settings)
-    return settings_factory(_env_file=local_env_file)
+    settings = settings_factory(_env_file=local_env_file)
+    if managed_local and settings.environment is not Environment.DEVELOPMENT:
+        raise ValueError("managed local stack requires development environment")
+    return settings

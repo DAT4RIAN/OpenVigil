@@ -1,5 +1,5 @@
 import { errorResponse, jsonResponse } from "@/app/api/_shared";
-import { productionModelsResponse } from "@/lib/production-domain-adapter";
+import { productionModelsResponse } from "@/lib/production-adapters/models";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 import {
   PLATFORM_SNAPSHOT_AT,

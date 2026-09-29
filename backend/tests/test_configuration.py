@@ -144,6 +144,49 @@ def test_get_settings_reads_only_repository_root_dotenv(
         config_module.get_settings.cache_clear()
 
 
+def test_managed_local_child_ignores_root_dotenv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import json
+    import os
+    import subprocess
+    import sys
+
+    repository = tmp_path / "project"
+    fake_module_path = repository / "backend" / "src" / "windops_backend" / "config.py"
+    fake_module_path.parent.mkdir(parents=True)
+    (repository / ".env").write_text(
+        "WINDOPS_RELEASE_ID=unrelated-root\nWINDOPS_EAM_ENABLED=true\n", encoding="utf-8"
+    )
+    environment = {
+        key: value for key, value in os.environ.items() if not key.startswith("WINDOPS_")
+    }
+    environment["WINDOPS_LOCAL_STACK"] = "1"
+    code = (
+        "import json, sys; import windops_backend.config as config; "
+        "config.__file__ = sys.argv[1]; settings = config.get_settings(); "
+        "print(json.dumps([settings.release_id, settings.eam_enabled]))"
+    )
+    child = subprocess.run(
+        [sys.executable, "-c", code, str(fake_module_path)],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=20,
+    )
+    assert json.loads(child.stdout) == ["development", False]
+    monkeypatch.setenv("WINDOPS_LOCAL_STACK", "1")
+    monkeypatch.setenv("WINDOPS_ENVIRONMENT", "test")
+    monkeypatch.setenv("WINDOPS_KNOWLEDGE_GRAPH_BACKEND", "memory")
+    config_module.get_settings.cache_clear()
+    try:
+        with pytest.raises(ValueError, match="development environment"):
+            config_module.get_settings()
+    finally:
+        config_module.get_settings.cache_clear()
+
+
 def test_root_dotenv_selects_siliconflow_reasoning(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

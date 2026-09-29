@@ -97,9 +97,11 @@ class ApiSecurityHeadersMiddleware:
         release_id: str,
         release_commit_sha: str,
         release_image_digest: str,
+        local_acceptance: bool = False,
     ) -> None:
         self.app = app
         self.production = production
+        self.local_acceptance = local_acceptance
         self.release_id = release_id
         self.release_commit_sha = release_commit_sha
         self.release_image_digest = release_image_digest
@@ -124,7 +126,9 @@ class ApiSecurityHeadersMiddleware:
                     required[b"strict-transport-security"] = (
                         b"max-age=63072000; includeSubDomains; preload"
                     )
-                if self.production:
+                if self.local_acceptance:
+                    required[b"x-windops-acceptance-scope"] = b"local"
+                if self.production or self.local_acceptance:
                     required.update(
                         {
                             b"x-windops-release-id": self.release_id.encode("ascii"),

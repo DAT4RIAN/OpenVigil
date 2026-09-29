@@ -29,10 +29,14 @@ from windops_backend.enums import ApprovalAction, Environment
 from windops_backend.errors import ConflictError, InvalidTransitionError
 from windops_backend.main import create_app
 from windops_backend.models import (
+    AgentDefinition,
+    AgentSkillLink,
+    AgentToolLink,
     Alarm,
     Approval,
     BenchmarkEvaluationRun,
     BenchmarkEventResult,
+    CatalogVersion,
     CommandReceipt,
     Decision,
     DelegatedRequestAudit,
@@ -42,6 +46,8 @@ from windops_backend.models import (
     Mission,
     ModelDeployment,
     RegisteredModel,
+    SkillDefinition,
+    ToolDefinition,
     Turbine,
     WindFarm,
 )
@@ -55,6 +61,7 @@ from windops_backend.schemas import (
     BenchmarkEventResultCreateRequest,
     BenchmarkFileCreateRequest,
 )
+from windops_backend.services import seed
 from windops_backend.services.benchmark_metadata import (
     get_or_create_evaluation_run,
     record_event_result,
@@ -84,6 +91,92 @@ def _database_url() -> str:
     if not value:
         raise RuntimeError("WINDOPS_POSTGRES_TEST_URL is required")
     return make_url(value).render_as_string(hide_password=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("partial_catalog", [False, True])
+@pytest.mark.parametrize("commit_first", [False, True])
+async def test_catalog_initialization_serializes_until_transaction_end(
+    monkeypatch: pytest.MonkeyPatch, partial_catalog: bool, commit_first: bool
+) -> None:
+    version = f"test-{uuid4().hex[:16]}"
+    catalog_id = f"catalog-{version}"
+    monkeypatch.setattr(seed, "CATALOG_VERSION", version)
+    monkeypatch.setattr(seed, "CATALOG_VERSION_ID", catalog_id)
+    engine = create_async_engine(_database_url(), pool_size=3, max_overflow=0)
+    factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+    second_pid: asyncio.Future[int] = asyncio.get_running_loop().create_future()
+    second_task: asyncio.Task[None] | None = None
+
+    async def initialize_second() -> None:
+        async with factory() as session, session.begin():
+            second_pid.set_result(int(await session.scalar(text("SELECT pg_backend_pid()"))))
+            await seed.seed_agent_catalog(session)
+
+    async def wait_for_database_contention(observer: AsyncSession, pid: int) -> None:
+        # Observe a real PostgreSQL blocker, not a sleep-based assumption that
+        # the competing transaction has reached its insert/lock yet.
+        while True:
+            blockers = await observer.scalar(
+                text("SELECT cardinality(pg_blocking_pids(:pid))"), {"pid": pid}
+            )
+            if blockers:
+                return
+            if second_task is not None and second_task.done():
+                await second_task
+                pytest.fail("catalog initialization completed before the owner transaction ended")
+            await asyncio.sleep(0.01)
+
+    try:
+        if partial_catalog:
+            async with factory() as session, session.begin():
+                session.add(
+                    CatalogVersion(
+                        id=catalog_id,
+                        version=version,
+                        description="Preserve operator metadata",
+                        active=True,
+                    )
+                )
+        async with factory() as first, factory() as observer:
+            await seed.seed_agent_catalog(first)
+            await first.flush()
+            second_task = asyncio.create_task(initialize_second())
+            pid = await asyncio.wait_for(second_pid, timeout=10)
+            await asyncio.wait_for(wait_for_database_contention(observer, pid), timeout=10)
+            if commit_first:
+                await first.commit()
+            else:
+                await first.rollback()
+            await asyncio.wait_for(second_task, timeout=10)
+
+        # Re-entry on an existing catalog remains idempotent, including a
+        # partially populated catalog and a transaction that rolled back.
+        async with factory() as session, session.begin():
+            await seed.seed_agent_catalog(session)
+        async with factory() as session:
+            parent = await session.get(CatalogVersion, catalog_id)
+            assert parent is not None and parent.version == version
+            if partial_catalog:
+                assert parent.description == "Preserve operator metadata"
+            for model, expected in (
+                (ToolDefinition, len(seed.TOOL_CATALOG)),
+                (AgentDefinition, len(seed.AGENT_CATALOG)),
+                (SkillDefinition, len(seed.AGENT_CATALOG)),
+                (AgentSkillLink, len(seed.AGENT_CATALOG)),
+                (AgentToolLink, sum(len(agent[3]) for agent in seed.AGENT_CATALOG)),
+            ):
+                count = await session.scalar(
+                    select(func.count())
+                    .select_from(model)
+                    .where(model.catalog_version_id == catalog_id)
+                )
+                assert count == expected, (model.__tablename__, count, expected)
+    finally:
+        if second_task is not None and not second_task.done():
+            second_task.cancel()
+            await asyncio.gather(second_task, return_exceptions=True)
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

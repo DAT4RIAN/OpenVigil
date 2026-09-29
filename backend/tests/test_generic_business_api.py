@@ -126,26 +126,44 @@ async def test_mission_create_is_authorized_durable_and_idempotent(
     assert decision_body["mission_id"] == body["mission_id"]
     assert decision_body["mission_revision"] == mission_detail["revision"]
     assert decision_body["alternatives"][1]["estimated_energy_loss_mwh"] == 14
-    assert decision_body["alternatives"][1]["deterioration_risk_percent"] == 12
+    assert decision_body["alternatives"][1]["deterioration_risk_percent"] is None
 
+    unbound = await client.post(
+        f"/api/v1/missions/{body['mission_id']}/approvals",
+        headers={"Idempotency-Key": "generic-unbound-approval-001"},
+        json={
+            "action": "approve",
+            "expected_revision": mission_detail["revision"],
+            "selected_alternative_id": "ALT-A",
+            "reason": "Reject a proposal without a governed execution plan",
+        },
+    )
+    assert unbound.status_code == 409
+    assert "no governed execution plan" in unbound.json()["error"]["message"]
+    unchanged = (await client.get(f"/api/v1/missions/{body['mission_id']}")).json()
+    assert unchanged["revision"] == mission_detail["revision"]
+    assert unchanged["approvals"] == [] and unchanged["work_order_id"] is None
+    selected = next(item for item in decision_body["alternatives"] if item["recommended"])
+    assert selected["execution_plan_id"].startswith("workplan:")
     approved = await client.post(
         f"/api/v1/missions/{body['mission_id']}/approvals",
         headers={"Idempotency-Key": "generic-mission-approval-001"},
         json={
             "action": "approve",
             "expected_revision": mission_detail["revision"],
-            "selected_alternative_id": "ALT-A",
+            "selected_alternative_id": selected["alternative_id"],
             "reason": "Generic gearbox evidence package accepted",
         },
     )
     assert approved.status_code == 200
-    assert approved.json()["selected_alternative_id"] == "ALT-A"
+    assert approved.json()["selected_alternative_id"] == selected["alternative_id"]
     work_order_id = approved.json()["work_order_id"]
     work_order = (await client.get(f"/api/v1/work-orders/{work_order_id}")).json()
     assert work_order["title"] == "WT-023 Gearbox Inspection"
-    assert work_order["selected_alternative_id"] == "ALT-A"
-    assert work_order["selected_action"].startswith("Stop WT-023")
-    assert work_order["safety_plan"]["decision_alternative_id"] == "ALT-A"
+    assert work_order["selected_alternative_id"] == selected["alternative_id"]
+    assert work_order["selected_action"] == selected["action"] == "WT-023 Gearbox Inspection"
+    assert work_order["safety_plan"]["decision_alternative_id"] == selected["alternative_id"]
+    assert work_order["safety_plan"]["execution_plan_id"] == selected["execution_plan_id"]
     assert work_order["closure_policy"]["component"] == "gearbox"
     assert len(work_order["tasks"]) == 3
     assert all(

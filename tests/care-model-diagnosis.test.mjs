@@ -18,10 +18,13 @@ const modelCss = await readFile(
   new URL("../components/pages/model-management-page.module.css", import.meta.url),
   "utf8",
 );
-const diagnosisPage = await readFile(
-  new URL("../components/pages/diagnosis-center-page.tsx", import.meta.url),
-  "utf8",
-);
+const diagnosisPage = (
+  await Promise.all(
+    ["diagnosis-center-page.tsx", "diagnosis-center-support.ts", "use-diagnosis-center.ts"].map(
+      (filename) => readFile(new URL(`../components/pages/${filename}`, import.meta.url), "utf8"),
+    ),
+  )
+).join("\n");
 const diagnosisCss = await readFile(
   new URL("../components/pages/diagnosis-center-page.module.css", import.meta.url),
   "utf8",

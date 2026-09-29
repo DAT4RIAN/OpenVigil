@@ -14,6 +14,7 @@ class PublicWorkflowState(TypedDict):
     alternatives: NotRequired[list[dict[str, Any]]]
     decision_id: NotRequired[str]
     reviews: NotRequired[list[dict[str, Any]]]
+    review_target: NotRequired[dict[str, Any]]
     requires_human_approval: NotRequired[bool]
     approved: NotRequired[bool]
     approval_id: NotRequired[str]

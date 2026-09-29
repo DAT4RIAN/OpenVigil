@@ -1,11 +1,22 @@
 from collections.abc import AsyncIterator
+from types import SimpleNamespace
 
 import httpx
 import pytest
 
+import windops_backend.security as security
 from windops_backend.config import Settings
 from windops_backend.enums import Environment
 from windops_backend.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def rate_clock(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    # These assertions concern one fixed minute bucket, not wall-clock scheduling.
+    # Replace only the middleware's clock reference, never the global time module.
+    current = [1_700_000_000.0]
+    monkeypatch.setattr(security, "time", SimpleNamespace(time=lambda: current[0]))
+    return current
 
 
 class FakeRedis:
@@ -75,7 +86,7 @@ async def _client(
 
 
 @pytest.mark.asyncio
-async def test_redis_rate_limit_is_atomic_and_probes_are_exempt() -> None:
+async def test_redis_rate_limit_is_atomic_and_probes_are_exempt(rate_clock: list[float]) -> None:
     async for client in _client():
         for _ in range(10):
             response = await client.get("/api/v1/turbines")
@@ -91,6 +102,9 @@ async def test_redis_rate_limit_is_atomic_and_probes_are_exempt() -> None:
         ready = await client.get("/api/v1/readyz")
         assert health.status_code == 200
         assert ready.status_code == 200
+
+        rate_clock[0] += 60
+        assert (await client.get("/api/v1/turbines")).status_code == 200
 
 
 @pytest.mark.asyncio

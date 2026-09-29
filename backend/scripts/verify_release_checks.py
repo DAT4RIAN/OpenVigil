@@ -16,6 +16,7 @@ REQUIRED_CHECKS = frozenset(
         "care-postgres-contract",
         "browser-e2e",
         "real-cross-layer-e2e",
+        "business-cross-layer-e2e",
     }
 )
 

@@ -1,5 +1,5 @@
 import { resourceCenterSnapshot } from "@/lib/resource-data";
-import { productionResourcesResponse } from "@/lib/production-domain-adapter";
+import { productionResourcesResponse } from "@/lib/production-adapters/resources";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 import { errorResponse, jsonResponse } from "../_shared";

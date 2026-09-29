@@ -153,7 +153,11 @@ test("diagnosis center SSR renders anomaly intake, differential diagnosis, colla
 
 test("diagnosis selection remains inside filtered records and clears detail for an empty result", async () => {
   const source = await import("node:fs/promises").then((fs) =>
-    fs.readFile(new URL("../components/pages/diagnosis-center-page.tsx", import.meta.url), "utf8"),
+    Promise.all(
+      ["diagnosis-center-page.tsx", "use-diagnosis-center.ts"].map((filename) =>
+        fs.readFile(new URL(`../components/pages/${filename}`, import.meta.url), "utf8"),
+      ),
+    ).then((parts) => parts.join("\n")),
   );
 
   assert.match(source, /const selected = records\.find\([\s\S]*?\?\? records\[0\] \?\? null;/);

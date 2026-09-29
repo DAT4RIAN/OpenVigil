@@ -27,22 +27,24 @@ def _persistable_state(state: PublicWorkflowState) -> dict[str, Any]:
 
 
 async def _mission_knowledge_policy(session: AsyncSession, turbine_id: str) -> GraphAccessPolicy:
-    row = (
-        await session.execute(
-            select(Turbine, WindFarm)
-            .join(WindFarm, WindFarm.id == Turbine.wind_farm_id)
-            .where(Turbine.id == turbine_id)
-        )
-    ).one_or_none()
-    if row is None:
+    # Keep the caller's Turbine loader criteria, but resolve only its tenant
+    # through authoritative topology. Loading a WindFarm ORM entity here would
+    # require farm-wide visibility even for an authorized turbine-only approver.
+    farm = WindFarm.__table__.alias("mission_farm")
+    tenant_id = await session.scalar(
+        select(farm.c.tenant_id)
+        .select_from(Turbine)
+        .join(farm, farm.c.id == Turbine.wind_farm_id)
+        .where(Turbine.id == turbine_id)
+    )
+    if tenant_id is None:
         raise NotFoundError(f"turbine {turbine_id} was not found")
-    _, farm = row
     # Knowledge documents created with a farm or turbine target are resolved
     # to their authoritative tenant as well. The workflow therefore carries
     # the mission tenant boundary, while the relational case query below
     # still narrows evidence to the mission turbine.
     return GraphAccessPolicy.from_values(
-        tenant_ids=[farm.tenant_id],
+        tenant_ids=[tenant_id],
         data_scopes=["knowledge"],
         allow_global=True,
     )

@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -12,6 +13,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from redis.asyncio import Redis
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from windops_backend.agents.runtime import prepare_reasoning_runtime
 from windops_backend.api import router
 from windops_backend.config import Settings, get_settings
 from windops_backend.db import bootstrap_schema, create_engine, create_session_factory
@@ -78,6 +80,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.redis_client = None
         app.state.minio_client = None
         try:
+            app.state.reasoning_sdk_startup_seconds = (
+                await asyncio.to_thread(prepare_reasoning_runtime, runtime_settings)
+                if runtime_settings.agent_mode == "litellm"
+                else 0.0
+            )
             if runtime_settings.environment.value == "test":
                 app.state.artifact_verifier = InMemoryArtifactVerifier()
                 app.state.read_audit_sink = DatabaseReadAuditSink(session_factory)
@@ -169,6 +176,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         ApiSecurityHeadersMiddleware,
         production=runtime_settings.environment.value == "production",
+        local_acceptance=runtime_settings.local_acceptance,
         release_id=runtime_settings.release_id,
         release_commit_sha=runtime_settings.release_commit_sha,
         release_image_digest=runtime_settings.release_image_digest,

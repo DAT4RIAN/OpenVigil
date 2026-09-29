@@ -1,5 +1,5 @@
 import { SCADA_HISTORY_RANGES, getScadaHistory, type ScadaHistoryRange } from "@/lib/scada-history";
-import { productionScadaHistoryResponse } from "@/lib/production-domain-adapter";
+import { productionScadaHistoryResponse } from "@/lib/production-adapters/telemetry";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 import { jsonResponse } from "../_shared";

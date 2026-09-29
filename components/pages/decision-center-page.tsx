@@ -43,6 +43,7 @@ import {
   localizedStatusLabel,
 } from "@/lib/ui-localization";
 import { cn } from "@/lib/utils";
+import { deteriorationRiskLabel } from "@/lib/deterioration-risk";
 import { deriveQueryViewState, latestValidTimestamp, queryRuntimeHealth } from "@/lib/query-state";
 import type { ApprovalAction } from "@/lib/types";
 import type { OpenVigilCapability } from "@/lib/identity-session";
@@ -122,8 +123,14 @@ function AlternativeCard({
         </div>
         <div>
           <small>恶化概率</small>
-          <strong className={option.deteriorationRiskPercent > 30 ? "critical-text" : ""}>
-            {option.deteriorationRiskPercent}%
+          <strong
+            className={
+              option.deteriorationRiskPercent !== null && option.deteriorationRiskPercent > 30
+                ? "critical-text"
+                : ""
+            }
+          >
+            {deteriorationRiskLabel(option.deteriorationRiskPercent)}
           </strong>
         </div>
       </div>
@@ -497,8 +504,10 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
                   <ShieldCheck size={15} />
                 </span>
                 <span>
-                  <strong>降低安全风险</strong>
-                  <small>所选方案的恶化概率为 {selected?.deteriorationRiskPercent}%</small>
+                  <strong>恶化概率评估</strong>
+                  <small>
+                    所选方案恶化概率：{deteriorationRiskLabel(selected?.deteriorationRiskPercent)}
+                  </small>
                 </span>
               </div>
               <div>
@@ -569,7 +578,10 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
               />
               <KeyValue label="停机时间" value={`${selected?.estimatedDowntimeHours} 小时`} />
               <KeyValue label="发电损失" value={`${selected?.estimatedEnergyLossMWh} MWh`} />
-              <KeyValue label="故障恶化概率" value={`${selected?.deteriorationRiskPercent}%`} />
+              <KeyValue
+                label="故障恶化概率"
+                value={deteriorationRiskLabel(selected?.deteriorationRiskPercent)}
+              />
             </div>
           </Card>
 

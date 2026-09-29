@@ -16,6 +16,7 @@ from windops_backend.agents.tools import (
     SQLToolAdapter,
     chunk_embedding_text,
     embed_texts_with_controls,
+    pack_embedding_vector,
 )
 from windops_backend.knowledge_graph.domain import GraphAccessPolicy
 from windops_backend.models import DomainEvent, KnowledgeDocument, Tenant
@@ -69,6 +70,41 @@ class CancelledEmbeddingProvider:
     async def embed(self, texts: list[str]) -> list[list[float]]:
         del texts
         raise asyncio.CancelledError
+
+
+@pytest.mark.parametrize("stale_field", ["embedding_model", "embedding_provider"])
+async def test_retrieval_excludes_old_embedding_space_until_reindexed(app, stale_field) -> None:
+    provider = DeterministicTestEmbeddingProvider()
+    vector = (await provider.embed(["gearbox seal oil leak"]))[0]
+    async with app.state.session_factory() as session, session.begin():
+        document = KnowledgeDocument(
+            id="KB-STALE-SPACE",
+            title="Gearbox seal",
+            document_type="maintenance-procedure",
+            body="gearbox seal oil leak",
+            citation_uri="windops://knowledge/documents/KB-STALE-SPACE",
+            embedding=pack_embedding_vector(vector),
+            vectorized=True,
+            embedding_provider=provider.provider_name,
+            embedding_model=provider.model_name,
+            created_by="knowledge-manager",
+        )
+        setattr(document, stale_field, "previous-space")
+        session.add(document)
+    async with app.state.session_factory() as session, session.begin():
+        adapter = SQLToolAdapter(session, embedding_provider=provider)
+        matches = await adapter.query_similar_failures(
+            "gearbox seal oil leak", vectorize_missing=False
+        )
+        assert "KB-STALE-SPACE" not in [m.get("document_id") for m in matches]
+        await adapter.index_knowledge_documents()
+        document = await session.get(KnowledgeDocument, "KB-STALE-SPACE")
+        assert document.embedding_model == provider.model_name
+        assert document.embedding_provider == provider.provider_name
+        matches = await adapter.query_similar_failures(
+            "gearbox seal oil leak", vectorize_missing=False
+        )
+        assert "KB-STALE-SPACE" in [m.get("document_id") for m in matches]
 
 
 def test_knowledge_embedding_chunks_are_bounded_and_overlap() -> None:

@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useOpenVigilIdentity } from "@/components/providers/identity-provider";
 import { Button, Card, CardHeader, KeyValue } from "@/components/ui/primitives";
 import { apiGet, apiPostCommand, createIdempotencyKey } from "@/lib/api-client";
+import { MissionMaintenanceReviews } from "./mission-maintenance-reviews";
 
 interface ProductionMissionComment {
   readonly comment_id: string;
@@ -44,6 +45,8 @@ interface ProductionMissionDetail {
     readonly alternatives: readonly {
       readonly alternative_id: string;
       readonly title?: string;
+      readonly action?: string;
+      readonly execution_plan_id?: string | null;
     }[];
   } | null;
   readonly approvals: readonly {
@@ -62,6 +65,7 @@ interface ProductionMissionDetail {
     readonly latency_ms: number;
     readonly provider: string;
     readonly model: string;
+    readonly evaluation_result?: Readonly<Record<string, unknown>>;
     readonly started_at: string;
   }[];
   readonly created_at: string;
@@ -123,6 +127,17 @@ export function ProductionMissionDetailPage({ missionId }: { readonly missionId:
     },
   });
   const mission = detailQuery.data;
+  // The API orders persisted executions by start time. A failed visible attempt
+  // does not establish whether the background queue is currently retrying it.
+  const latestExecution = mission?.executions.at(-1);
+  const latestAnalysisFailed = !mission?.decision && latestExecution?.status === "failed";
+  const analysisFailureCode = latestExecution?.evaluation_result?.error_code;
+  const recommendedAlternative = mission?.decision?.alternatives.find(
+    (item) => item.alternative_id === mission.decision?.recommended_alternative_id,
+  );
+  const hasExecutableRecommendation =
+    typeof recommendedAlternative?.execution_plan_id === "string" &&
+    recommendedAlternative.execution_plan_id.trim().length > 0;
   const approvalMutation = useMutation({
     mutationFn: (action: "approve" | "reject" | "request_revision" | "escalate") => {
       if (!mission) throw new Error("Mission 尚未加载完成。");
@@ -135,6 +150,9 @@ export function ProductionMissionDetailPage({ missionId }: { readonly missionId:
               ? "mission.request_revision"
               : "mission.escalate";
       if (!can(capability)) throw new Error("当前角色没有执行此审批动作的权限。");
+      if (action === "approve" && !hasExecutableRecommendation) {
+        throw new Error("推荐方案尚未绑定可执行作业计划，请先要求修订。");
+      }
       return apiPostCommand<{
         readonly mission_status: string;
         readonly work_order_id: string | null;
@@ -359,15 +377,52 @@ export function ProductionMissionDetailPage({ missionId }: { readonly missionId:
                 />
                 <p>{mission.decision.recommendation_reason}</p>
                 <KeyValue label="推荐方案" value={mission.decision.recommended_alternative_id} />
+                <p>
+                  {recommendedAlternative?.action ??
+                    recommendedAlternative?.title ??
+                    "方案内容尚未提供。"}
+                </p>
+                {!hasExecutableRecommendation ? (
+                  <p className="maintenance-review-warning">
+                    推荐方案尚未绑定可执行作业计划，请先要求修订。
+                  </p>
+                ) : null}
                 <KeyValue
                   label="已选方案"
                   value={mission.decision.selected_alternative_id ?? "等待人工审批"}
                 />
               </>
             ) : (
-              <p>Agent 分析仍在进行，尚无持久化决策。</p>
+              <>
+                {latestAnalysisFailed ? (
+                  <div className="maintenance-review-warning" role="alert">
+                    <strong>最近一次分析执行失败</strong>
+                    <p>
+                      {analysisFailureCode === "provider_timeout"
+                        ? "模型响应超时。"
+                        : analysisFailureCode === "ReasoningEvaluationError"
+                          ? "模型输出未通过校验。"
+                          : "分析未完成，请查看执行记录。"}
+                    </p>
+                  </div>
+                ) : null}
+                <p>尚无可审批的持久化决策。刷新状态可查看最新执行记录。</p>
+                <Button
+                  variant="secondary"
+                  loading={detailQuery.isFetching}
+                  disabled={detailQuery.isFetching}
+                  onClick={() => void detailQuery.refetch()}
+                >
+                  刷新分析状态
+                </Button>
+              </>
             )}
           </Card>
+          <MissionMaintenanceReviews
+            state={mission.public_state}
+            alternatives={mission.decision?.alternatives ?? []}
+            recommendedId={mission.decision?.recommended_alternative_id}
+          />
           <Card>
             <CardHeader eyebrow="人工门禁" title={`${mission.approvals.length} 条审批记录`} />
             {mission.status === "under_review" &&
@@ -424,7 +479,11 @@ export function ProductionMissionDetailPage({ missionId }: { readonly missionId:
                     <Button
                       variant="primary"
                       loading={approvalMutation.isPending}
-                      disabled={approvalMutation.isPending || approvalReason.trim().length < 3}
+                      disabled={
+                        approvalMutation.isPending ||
+                        approvalReason.trim().length < 3 ||
+                        !hasExecutableRecommendation
+                      }
                       onClick={() => submitProductionApproval("approve")}
                     >
                       批准推荐方案

@@ -144,6 +144,7 @@ def test_release_workflow_is_protected_pinned_and_complete() -> None:
         "care-postgres-contract",
         "browser-e2e",
         "real-cross-layer-e2e",
+        "business-cross-layer-e2e",
     }
     assert "verify_release_checks.py" in source
     uses = re.findall(r"^\s*uses:\s*([^\s#]+)", source, flags=re.MULTILINE)
@@ -273,6 +274,7 @@ def test_release_check_gate_rejects_missing_browser_e2e() -> None:
     assert verify_release_checks(checks, "target")
 
 
+@pytest.mark.parametrize("selected_name", ["real-cross-layer-e2e", "business-cross-layer-e2e"])
 @pytest.mark.parametrize(
     ("status", "conclusion", "head_sha", "expected_pass"),
     [
@@ -280,10 +282,12 @@ def test_release_check_gate_rejects_missing_browser_e2e() -> None:
         ("in_progress", "success", "target", False),
         ("completed", "failure", "target", False),
         ("completed", "cancelled", "target", False),
+        ("completed", "skipped", "target", False),
         ("completed", "success", "other", False),
     ],
 )
 def test_release_gate_requires_completed_successful_real_cross_layer_check(
+    selected_name: str,
     status: str,
     conclusion: str,
     head_sha: str,
@@ -297,11 +301,11 @@ def test_release_gate_requires_completed_successful_real_cross_layer_check(
             "head_sha": "target",
         }
         for check_name in REQUIRED_CHECKS
-        if check_name != "real-cross-layer-e2e"
+        if check_name != selected_name
     ]
     checks.append(
         {
-            "name": "real-cross-layer-e2e",
+            "name": selected_name,
             "status": status,
             "conclusion": conclusion,
             "head_sha": head_sha,
@@ -310,7 +314,8 @@ def test_release_gate_requires_completed_successful_real_cross_layer_check(
     assert (not verify_release_checks(checks, "target")) is expected_pass
 
 
-def test_release_gate_rejects_missing_real_cross_layer_check() -> None:
+@pytest.mark.parametrize("selected_name", ["real-cross-layer-e2e", "business-cross-layer-e2e"])
+def test_release_gate_rejects_missing_real_cross_layer_check(selected_name: str) -> None:
     checks = [
         {
             "name": check_name,
@@ -319,7 +324,7 @@ def test_release_gate_rejects_missing_real_cross_layer_check() -> None:
             "head_sha": "target",
         }
         for check_name in REQUIRED_CHECKS
-        if check_name != "real-cross-layer-e2e"
+        if check_name != selected_name
     ]
     assert verify_release_checks(checks, "target")
 

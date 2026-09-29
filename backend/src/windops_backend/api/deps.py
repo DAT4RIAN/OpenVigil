@@ -143,10 +143,18 @@ def _utc_datetime(value: datetime) -> datetime:
 
 
 def _token_total(execution: AgentExecution) -> int:
-    value = execution.token_usage.get("total_tokens", 0)
+    usage = execution.token_usage
+    if "total_tokens" in usage:
+        value = usage["total_tokens"]
+        if value is None:
+            value = usage.get("known_total_tokens", 0)
+    else:
+        value = usage.get("total", 0)
+    if isinstance(value, bool):
+        return 0
     try:
-        return int(value)
-    except (TypeError, ValueError):
+        return max(0, int(value))
+    except (TypeError, ValueError, OverflowError):
         return 0
 
 

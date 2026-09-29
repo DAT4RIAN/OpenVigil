@@ -32,10 +32,10 @@ test("the global stylesheet preserves import order and the reviewed rule stream"
     styleFiles.map((file) => readFile(new URL(`app/styles/${file}`, root), "utf8")),
   );
   const ruleStream = modules.join("").replaceAll(/\s+/g, "");
-  // Motion rules added after reviewing their real intermediate and terminal frames.
-  // See docs/design/frontend-motion.md; existing screenshot baselines remain unchanged.
+  // Scoped maintenance-review rules visually checked on desktop and phone viewports.
+  // Evidence: .artifacts/improvements/review-ui/after/; existing rules and import order unchanged.
   assert.equal(
     createHash("sha256").update(ruleStream).digest("hex"),
-    "8309f4c8ed6085a5c91c9cf8bf72a087561ce6bb774e211360b5ce2c9c5c5737",
+    "65cf7a9fa73cb01163487a260aca746ba4f73474c90599bf2580ac1e12a8240c",
   );
 });

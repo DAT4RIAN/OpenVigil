@@ -1,5 +1,5 @@
 import { decisions } from "@/lib/operations-data";
-import { productionDecisionsResponse } from "@/lib/production-domain-adapter";
+import { productionDecisionsResponse } from "@/lib/production-adapters/workflow";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 import { overlayWorkflowDecision } from "@/lib/server-workflow-overlays";
 

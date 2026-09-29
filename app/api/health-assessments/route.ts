@@ -1,7 +1,7 @@
 import { healthAssessments } from "@/lib/health-data";
 import { overlayWorkflowHealth } from "@/lib/server-workflow-overlays";
 import type { HealthState, RiskLevel } from "@/lib/types";
-import { productionHealthAssessmentsResponse } from "@/lib/production-domain-adapter";
+import { productionHealthAssessmentsResponse } from "@/lib/production-adapters/telemetry";
 import { getProductionBackendConfig } from "@/lib/production-runtime";
 
 import { jsonResponse } from "../_shared";

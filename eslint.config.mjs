@@ -16,6 +16,9 @@ const eslintConfig = defineConfig([
     "work/**",
     ".test-tmp/**",
     ".artifacts/**",
+    // Bundled third-party skill example; application and project scripts remain linted.
+    ".agents/skills/finesse-ui/examples/lib/ScrollTrigger.min.js",
+    ".agents/skills/finesse-ui/examples/lib/gsap.min.js",
     "tmp/**",
     ".mypy_cache/**",
     ".ruff_cache/**",

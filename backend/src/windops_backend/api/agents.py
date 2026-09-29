@@ -168,7 +168,7 @@ async def governed_agents(
         agent["metrics"] = {
             "requests": len(history),
             "tool_calls": sum(len(item.tool_calls) for item in history),
-            "token_usage": sum(int(item.token_usage.get("total", 0) or 0) for item in history),
+            "token_usage": sum(_token_total(item) for item in history),
             "succeeded": succeeded,
             "failed": len(history) - succeeded,
             "success_rate": round(succeeded / len(history), 4) if history else None,

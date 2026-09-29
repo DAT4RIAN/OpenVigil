@@ -21,8 +21,6 @@ from windops_backend.errors import (
 from windops_backend.models import (
     KnowledgeCase,
     KnowledgeDocument,
-    Turbine,
-    WindFarm,
 )
 from windops_backend.outbox import (
     mark_dispatched,
@@ -245,8 +243,6 @@ async def knowledge_cases(
 ) -> dict[str, Any]:
     statement = (
         select(KnowledgeCase)
-        .join(Turbine, Turbine.id == KnowledgeCase.turbine_id)
-        .join(WindFarm, WindFarm.id == Turbine.wind_farm_id)
         .where(knowledge_case_scope_clause(principal.graph_access_policy()))
         .order_by(desc(KnowledgeCase.created_at))
     )

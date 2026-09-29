@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from windops_backend.agents.tools import TOOL_CATALOG, TOOL_CATALOG_VERSION
@@ -92,6 +92,14 @@ AGENT_CATALOG: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
 
 
 async def seed_agent_catalog(session: AsyncSession) -> None:
+    if session.get_bind().dialect.name == "postgresql":
+        # API startup and reference import may race on an empty or partial
+        # catalog. Serialize the whole parent/child initialization until the
+        # caller commits or rolls back; a parent-only upsert is insufficient.
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:scope, 0))"),
+            {"scope": f"windops:agent-catalog:{CATALOG_VERSION_ID}"},
+        )
     if await session.get(CatalogVersion, CATALOG_VERSION_ID) is None:
         session.add(
             CatalogVersion(

@@ -1,3 +1,45 @@
+.maintenance-review-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.maintenance-review-list article {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.maintenance-review-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+.maintenance-review-heading h3,
+.maintenance-review-list h4 {
+  font-size: var(--font-body);
+  margin: 4px 0;
+}
+.maintenance-review-list p,
+.maintenance-review-list ul {
+  line-height: 1.6;
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.maintenance-review-list ul {
+  padding-left: 18px;
+}
+.maintenance-review-warning {
+  background: var(--warning-soft);
+  border-left: 3px solid var(--warning);
+  line-height: 1.6;
+  padding: 8px;
+}
+.maintenance-review-target-id {
+  display: block;
+  font-size: var(--font-metadata);
+  overflow-wrap: anywhere;
+}
+
 .mission-summary {
   background: var(--surface);
   border: 1px solid var(--border);
