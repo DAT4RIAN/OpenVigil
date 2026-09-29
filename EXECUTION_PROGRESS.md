@@ -2,6 +2,14 @@
 
 # Long-running Execution Progress
 
+## 文档仅保留本地：2026-09-29
+
+- 用户授权：从 GitHub 当前 `main` 版本撤下 `docs/`，保留本地目录与全部原文件；本项不重写历史提交。
+- 已实施：取消 12 个文档文件的 Git 跟踪；整目录忽略且无放行规则。制品策略迁至 `scripts/repository-artifact-policy.json`，保留既有大小、缓存路径与来源门禁，增加禁止跟踪 `docs/`；格式命令不依赖本地文档目录。
+- 引用处理：根目录中的 33 个本地文档链接改为明确标注的本地资料路径，保留原始报告内容、结论和未完成状态。
+- 本地实现与验证：DONE。65 个本地文件的路径、字节数及 SHA-256 与操作前完全一致；不含 `docs/` 的干净导出通过 4 项链接/架构测试、架构检查、制品门禁及完整格式检查。隔离索引负向验证确认 CI 拒绝强制跟踪 `docs/`，未改变实际索引。
+- Git 交付边界：本项使用独立提交正常推送 `main`，不重写历史；远端交付结果以推送后 Git 引用核对为准。
+
 ## 当前活动运行：2026-09-27 项目改进
 
 - 当前 Goal：**blocked**。同一剩余门槛连续第三轮无进展，Goal 工具已确认受阻并停止自动重复检查。282 后端/622 前端、rc8 交付、动作提示契约与两上下文/提案均未变，main/index 保留；原工程作业终态，当前无匹配活跃测试/交付进程。九项目服务运行，五 Python 服务仍为旧 rc7，rc8 未激活，网关无业务放行收据。批准的固定八请求已使用完，追加两请求的现有问题尚无答复，真实动作资格与同镜像本机业务闭环未通过，当前无独立安全可推进项。没有新增付费调用、重复测试、配置/部署或上线；保留七项原范围、全部失败、账号、服务、数据及预算 0.5685302 元，整体未完成、Final Audit 0/2。证据 usageaudit/remaining-gate-audit-3.json 与 remaining-gate-status-3.json；等待现有补测范围答复或能改变结论的外部依据后恢复。
@@ -369,7 +377,7 @@
 - 已验证：构建、bundle budget、TypeScript、修改代码 ESLint/Prettier、`git diff --check` 通过；Node `185/185`、登录浏览器测试 `5/5`、登录动效与减少动态效果 `2/2` 通过，无 skip。
 - 视觉验证：320/375/390/414/768/1440px 深浅主题、无横向溢出、WCAG 与新图加载通过；已审视桌面深浅主题与手机截图。
 - 本地预览：`http://localhost:3001/login`；已实际验证登录页进入演示工作台并返回。生产身份流程在隔离 fixture 中验证，不代表真实外部身份或生产发布验收。
-- 素材与提示词：[login-onshore-update.md](docs/design/login-onshore-update.md)。内置生成工具没有型号核验参数，不声明具体使用 Image 2.5。原有 >500kB 分块提示保留，bundle budget 通过。
+- 素材与提示词：login-onshore-update.md（本地文档：`docs/design/login-onshore-update.md`）。内置生成工具没有型号核验参数，不声明具体使用 Image 2.5。原有 >500kB 分块提示保留，bundle budget 通过。
 
 ## 前端动效：2026-09-16
 
@@ -381,7 +389,7 @@
 - 最终检查：build、bundle budget、TypeScript、修改文件 ESLint/Prettier、`git diff --check` 通过；finesse 静态扫描无 P0。CSS 精确摘要随新增动效模块更新，导入顺序和摘要校验完整保留。
 - 本地预览：`http://localhost:3001/login`；`.artifacts/motion/preview.webm` 为本地实际操作录屏。登录、搜索、详情抽屉运行无页面错误，进度条比例与真实值一致。
 - 验证边界：本地 Demo 与隔离生产 UI 场景；无真实生产发布声明。本机静态/动效搜索层采样帧间隔 P95 均约 33.4ms，不作为稳定 60fps 或物理手机性能证据；现有 >500kB 分块提示保留。
-- 方案：[frontend-motion.md](docs/design/frontend-motion.md)。
+- 方案：frontend-motion.md（本地文档：`docs/design/frontend-motion.md`）。
 
 ## 登录页与生成图片：2026-09-15
 
@@ -391,7 +399,7 @@
 - 完整回归：Node `185/185`，Playwright `37/37`，无 skip；格式检查及 `git diff --check` 通过。原有 22 个业务页面与 38 个 API 路由清单校验保持，新增登录页单独校验。
 - 本地运行：`http://localhost:3001/login` 返回 200，已验证“登录页 → 演示工作台 → 返回登录页”，页面运行错误为 0；已审视实际本地截图 `.artifacts/login/local-demo-login.png`。
 - 首轮问题已解决：测试改用现有 `axe-core`；控制字符检查符合 ESLint；演示入口返回改为完整文档导航；页面清单精确更新为原 22 页加登录页。现有 >500kB 分块提示保留，bundle budget 通过。
-- 说明与实际生图提示词：[login-page.md](docs/design/login-page.md)。当前内置工具无法确认具体 Image 2.5 型号；本次不声明真实外部身份或生产发布验证通过。
+- 说明与实际生图提示词：login-page.md（本地文档：`docs/design/login-page.md`）。当前内置工具无法确认具体 Image 2.5 型号；本次不声明真实外部身份或生产发布验证通过。
 
 ## 前端视觉优化：2026-09-15
 
@@ -405,7 +413,7 @@
 - 最终验证：构建、bundle budget、TypeScript、修改源码/测试的 ESLint 与 Prettier、`git diff --check` 通过；Node `184/184`，Playwright `32/32`，均无 skip。完整浏览器回归包含 22 路由/四档视口、权限与失败恢复、WCAG、键盘与减少动态效果。
 - 基线维护：CSS 摘要在视觉审视后更新，完整保留导入顺序与精确摘要断言；首次 Node 的旧摘要失败和首次 E2E 的旧 P1 截图差异均已解决。一次构建并发导致测试读取不到临时产物，已等待完整构建后串行重跑通过。
 - 验证边界：本次为本地 Demo 与隔离的生产界面测试场景，不构成真实生产后端或外部发布门禁通过声明。现有 >500kB 构建分块提示仍在，项目 bundle budget 通过。
-- 方案与证据：[frontend-polish-plan.md](docs/design/frontend-polish-plan.md)。
+- 方案与证据：frontend-polish-plan.md（本地文档：`docs/design/frontend-polish-plan.md`）。
 
 ## 历史运行：2026-09-04 技术与 UI 审计整改
 

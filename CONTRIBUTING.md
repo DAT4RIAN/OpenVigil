@@ -69,6 +69,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 - Python 依赖调整需同步 `uv.lock`；在 `backend/` 运行 `uv run python scripts/export_container_requirements.py` 更新生成的容器依赖，再用 `--check` 核对一致性。
 - 修改样式入口或迁移声明后，用 `pnpm check:architecture --write` 更新生成的架构事实并审阅差异，再执行 `pnpm check:architecture`。
 - 密钥、私钥、真实业务数据、本地日志、缓存和运行制品不进入提交。截图、trace 和评测报告在分享前同样需要脱敏。
+- `docs/` 仅供本地使用，不上传或纳入提交。CI 配置保存在 `scripts/repository-artifact-policy.json`；公共文档引用本地资料时使用标明“本地文档”的路径，不添加依赖这些资料的仓库链接。
 
 ## 4. 按改动范围验证
 

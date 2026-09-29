@@ -4,9 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const policyPath = fileURLToPath(
-  new URL("../docs/repository-artifact-policy.json", import.meta.url),
-);
+const policyPath = fileURLToPath(new URL("./repository-artifact-policy.json", import.meta.url));
 const policy = JSON.parse(readFileSync(policyPath, "utf8"));
 
 if (policy.schema !== "windops.repository-artifact-policy.v1") {

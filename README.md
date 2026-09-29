@@ -327,6 +327,8 @@ python -m windops_backend.operations.reasoning_eval --cases evaluations/wind-dia
 
 ## 开发
 
+`docs/` 是仅保留在本地的文档目录，不纳入 Git 提交或 GitHub 分发。根目录中标注“本地文档”的路径供持有本地资料的维护者使用，干净克隆不包含这些资料。CI 所需的制品策略保存在 `scripts/repository-artifact-policy.json`，并禁止跟踪 `docs/` 下的文件；仓库格式检查不依赖本地文档目录。
+
 ### Web
 
 ```bash
@@ -406,7 +408,7 @@ uv run python -m pytest tests -q -k "care and not external_release"
 
 SQLite 测试使用确定性 embedding、内存制品 verifier 和内存图存储替身，不能替代 PostgreSQL、TimescaleDB、MinIO、Neo4j 或真实模型供应商验收。
 
-测试数量以命令和 CI 自动发现结果为准。普通本地运行缺少外部资源时，`external_release` 测试可能跳过；这些 skip 不被描述为发布通过。指定的外部验收环境必须设置 `WINDOPS_FAIL_ON_SKIPPED=1`，出现 skip 即失败，并按 [发布验收清单](docs/runbooks/release-acceptance.md) 保存实际证据。
+测试数量以命令和 CI 自动发现结果为准。普通本地运行缺少外部资源时，`external_release` 测试可能跳过；这些 skip 不被描述为发布通过。指定的外部验收环境必须设置 `WINDOPS_FAIL_ON_SKIPPED=1`，出现 skip 即失败，并按 发布验收清单（本地文档：`docs/runbooks/release-acceptance.md`） 保存实际证据。
 
 ## 生产验收边界
 

@@ -2,7 +2,7 @@
 
 ## 当前任务：2026-09-27 项目改进
 
-依据用户授权，完整实施 [项目改进建议](docs/project-improvement-recommendations.md) 的七项范围。项目长期规则仍以 `AGENTS.md` 为准。
+依据用户授权，完整实施 项目改进建议（本地文档：`docs/project-improvement-recommendations.md`） 的七项范围。项目长期规则仍以 `AGENTS.md` 为准。
 
 ### Source of Truth
 
@@ -12,7 +12,7 @@
 4. 实际代码、配置、测试及本轮验证制品：完成判据。
 5. `AUDIT_REPORT.md`、`UI_AUDIT_REPORT.md`、旧进度：历史审计证据，保留原问题和发布门禁，不直接代表当前验收。
 
-旧 CARE 执行覆盖层归档至 [历史目标](docs/history/EXECUTION_GOAL-care-v6.md)。历史 DONE、ACCEPTED、2 / 2 不覆盖本轮状态。
+旧 CARE 执行覆盖层归档至 历史目标（本地文档：`docs/history/EXECUTION_GOAL-care-v6.md`）。历史 DONE、ACCEPTED、2 / 2 不覆盖本轮状态。
 
 ### 全量实施与验收清单
 
