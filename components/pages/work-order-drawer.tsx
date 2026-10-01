@@ -127,6 +127,8 @@ function FieldTaskCompletionForm({
       if (!upload.ok) {
         throw new Error(`对象存储上传失败（HTTP ${upload.status}）。`);
       }
+      // Finish the response stream before refreshing the task or unmounting its form.
+      await upload.arrayBuffer();
       await apiPost(`${taskPath}/complete`, {
         result: result.trim(),
         artifact_uri: grant.artifact_uri,

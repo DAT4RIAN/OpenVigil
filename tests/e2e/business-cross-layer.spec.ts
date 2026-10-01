@@ -178,6 +178,15 @@ test("real asynchronous diagnosis, browser approval and MinIO evidence close one
     { defect_severity: "minor", spall_area_mm2: 1.2 },
     { photo_count: 5, main_bearing_health_score: 78, turbine_health_score: 82 },
   ];
+  const failedUploads: string[] = [];
+  page.on("requestfailed", (request) => {
+    if (
+      request.method() === "PUT" &&
+      new URL(request.url()).pathname.startsWith("/windops-field-evidence/")
+    ) {
+      failedUploads.push(request.failure()?.errorText ?? "unknown upload failure");
+    }
+  });
   let lastRequest: { url: string; body: unknown; key: string } | undefined;
   for (let index = 0; index < 5; index++) {
     const form = page.locator(".field-evidence-form");
@@ -208,8 +217,14 @@ test("real asynchronous diagnosis, browser approval and MinIO evidence close one
         response.url().endsWith(`/tasks/${task.task_id}/complete`) &&
         response.request().method() === "POST",
     );
+    const uploadFinished = page.waitForEvent("requestfinished", {
+      predicate: (request) =>
+        request.method() === "PUT" &&
+        new URL(request.url()).pathname.includes(`/tasks/${task.task_id}/`),
+    });
     await form.getByRole("button", { name: "上传证据并完成任务" }).click();
-    const completed = await completionResponse;
+    const [completed, uploaded] = await Promise.all([completionResponse, uploadFinished]);
+    expect((await uploaded.response())?.status()).toBe(200);
     expect(completed.status()).toBe(200);
     const result = await completed.json();
     expect(result.workflow_finalized).toBe(index === 4);
@@ -220,6 +235,7 @@ test("real asynchronous diagnosis, browser approval and MinIO evidence close one
     };
     if (index < 4) await expect(form).toContainText(`${index + 2}.`);
   }
+  expect(failedUploads).toEqual([]);
   await expect(page.getByText("证据已验证 · 工单已闭环")).toBeVisible();
   expect(lastRequest).toBeDefined();
   const completionReplay = await request.post(lastRequest!.url, {

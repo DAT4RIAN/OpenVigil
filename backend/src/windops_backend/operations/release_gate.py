@@ -310,6 +310,98 @@ def _safe_report_path(root: Path, relative_path: str) -> Path:
     return candidate
 
 
+def _verify_image_scan_raw(
+    root: Path, release: dict[str, Any], checks: list[dict[str, Any]]
+) -> None:
+    """Read the scan result itself; a passed wrapper cannot override failed raw evidence."""
+    references = {check["id"]: set(check["artifact_paths"]) for check in checks}
+    scan_paths = references["critical_findings_zero"]
+    if (
+        not scan_paths
+        or scan_paths != references["high_findings_zero"]
+        or not scan_paths.issubset(references["immutable_digest_scanned"])
+    ):
+        raise ValueError("image scan zero-finding checks must cite the same bound raw scan")
+    for relative in sorted(scan_paths):
+        try:
+            raw = json.loads(_safe_report_path(root, relative).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("raw image scan must be readable UTF-8 JSON") from exc
+        if (
+            not isinstance(raw, dict)
+            or raw.get("SchemaVersion") != 2
+            or raw.get("ArtifactType") != "container_image"
+        ):
+            raise ValueError("raw image scan must be a Trivy schema-2 container report")
+        if raw.get("Error") or raw.get("Errors"):
+            raise ValueError("raw image scan reports a scanner error")
+        results = raw.get("Results")
+        if not isinstance(results, list) or not results:
+            raise ValueError("raw image scan must contain completed scan results")
+        os_scanned = False
+        for result in results:
+            if (
+                not isinstance(result, dict)
+                or not isinstance(result.get("Target"), str)
+                or not result["Target"]
+            ):
+                raise ValueError("raw image scan contains a malformed result")
+            if result.get("Error") or result.get("Errors"):
+                raise ValueError("raw image scan reports a scanner error")
+            os_scanned |= (
+                result.get("Class") == "os-pkgs"
+                and isinstance(result.get("Type"), str)
+                and bool(result["Type"])
+            )
+            for field in ("Vulnerabilities", "Secrets"):
+                findings = result.get(field, [])
+                if findings is None:
+                    findings = []
+                if not isinstance(findings, list):
+                    raise ValueError("raw image scan findings must be arrays")
+                for finding in findings:
+                    severity = finding.get("Severity") if isinstance(finding, dict) else None
+                    if not isinstance(severity, str) or severity not in {
+                        "UNKNOWN",
+                        "LOW",
+                        "MEDIUM",
+                        "HIGH",
+                        "CRITICAL",
+                    }:
+                        raise ValueError("raw image scan finding severity is missing or invalid")
+                    if severity in {"CRITICAL", "HIGH"}:
+                        raise ValueError(f"raw image scan contains {severity} {field} findings")
+        if not os_scanned:
+            raise ValueError("raw image scan does not prove OS-package scanning")
+        metadata = raw.get("Metadata")
+        if not isinstance(metadata, dict):
+            raise ValueError("raw image scan metadata is missing or malformed")
+        image_config = metadata.get("ImageConfig")
+        config = image_config.get("config") if isinstance(image_config, dict) else None
+        labels = config.get("Labels") if isinstance(config, dict) else None
+        if not isinstance(labels, dict) or any(
+            labels.get(label) != release[field]
+            for label, field in (
+                ("org.opencontainers.image.version", "release_id"),
+                ("org.opencontainers.image.revision", "commit_sha"),
+            )
+        ):
+            raise ValueError("raw image scan OCI labels do not match the release identity")
+        repo_digests = metadata.get("RepoDigests", [])
+        if repo_digests is None:
+            repo_digests = []
+        if not isinstance(repo_digests, list) or not all(
+            isinstance(value, str) for value in repo_digests
+        ):
+            raise ValueError("raw image scan repository digests are malformed")
+        image_refs = [raw.get("ArtifactName"), *repo_digests]
+        if not any(
+            isinstance(ref, str) and ref.endswith("@" + release["image_digest"])
+            for ref in image_refs
+        ):
+            raise ValueError("raw image scan is not bound to the immutable release digest")
+
+
 def _verify_gate_report(
     root: Path,
     report_path: Path,
@@ -385,6 +477,8 @@ def _verify_gate_report(
         raise ValueError(f"{gate} gate report approver does not match the manifest")
     if approval["approval_reference"] != evidence_item["approval_reference"]:
         raise ValueError(f"{gate} gate report approval reference does not match the manifest")
+    if gate == "image_scan":
+        _verify_image_scan_raw(root, release, cast(list[dict[str, Any]], report["checks"]))
 
 
 def verify_release_evidence(evidence_dir: Path) -> dict[str, Any]:

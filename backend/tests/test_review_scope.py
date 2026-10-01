@@ -1,9 +1,11 @@
 import sys
 from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 from jsonschema import Draft202012Validator
+from sqlalchemy import select
 
 from windops_backend.agents.reasoning import (
     DeterministicReasoningProvider,
@@ -13,6 +15,7 @@ from windops_backend.agents.reasoning import (
     _response_schema,
     evaluate_public_output,
 )
+from windops_backend.storage import OutboxEvent
 
 
 def context() -> dict:
@@ -114,6 +117,135 @@ def test_historical_review_is_readable_without_inventing_a_target() -> None:
     legacy = ReviewBundle.model_validate(legacy_payload())
     assert legacy.target is None
     assert all(review.operating_constraints == [] for review in legacy.reviews)
+
+
+@pytest.mark.parametrize(
+    "constraint",
+    [
+        "Do not operate or rotate the turbine while personnel are in the nacelle or near "
+        "the main bearing without LOTO in place.",
+        "No turbine operation while personnel are exposed unless LOTO is applied.",
+        "Do not rotate the turbine except with lockout/tagout in place.",
+    ],
+)
+def test_loto_cannot_be_an_exception_to_personnel_exposure_restriction(constraint: str) -> None:
+    payload = bound_payload()
+    payload["reviews"][1]["operating_constraints"] = [constraint]
+    value = ReviewBundle.model_validate(payload)
+    with pytest.raises(ReasoningEvaluationError, match="LOTO as an operation exception"):
+        evaluate_public_output(value, public_context=context(), minimum_diagnosis_confidence=0.5)
+    assert value.model_dump() == payload
+    # Stored historical output remains readable; only new generation is rejected.
+    assert ReviewBundle.model_validate(payload).reviews[1].operating_constraints == [constraint]
+
+
+@pytest.mark.parametrize(
+    "constraint",
+    [
+        "No turbine operation or rotation while personnel are exposed; verified LOTO "
+        "is required before maintenance work.",
+        "Do not resume operation before responsible human approval of a separate "
+        "restart procedure.",
+        "LOTO must be verified before work. Turbine operation remains prohibited while "
+        "personnel are exposed.",
+    ],
+)
+def test_loto_work_prerequisite_and_unconditional_operating_restriction_are_preserved(
+    constraint: str,
+) -> None:
+    payload = bound_payload()
+    payload["reviews"][1]["operating_constraints"] = [constraint]
+    payload["reviews"][1]["outcome"] = "fail"
+    value = ReviewBundle.model_validate(payload)
+    result = evaluate_public_output(
+        value, public_context=context(), minimum_diagnosis_confidence=0.5
+    )
+    assert "no_loto_operation_exception" in result["checks"]
+    assert value.model_dump() == payload
+
+
+@pytest.mark.asyncio
+async def test_loto_exception_rejection_keeps_paid_usage_without_retry(monkeypatch) -> None:
+    payload = bound_payload()
+    payload["reviews"][1]["operating_constraints"] = [
+        "Do not operate or rotate the turbine while personnel are in the nacelle or near "
+        "the main bearing without LOTO in place."
+    ]
+    calls = []
+
+    async def completion(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(
+            model="provider/model",
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=ReviewBundle.model_validate(payload).model_dump_json()
+                    )
+                )
+            ],
+            usage={"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        )
+
+    monkeypatch.setitem(sys.modules, "litellm", SimpleNamespace(acompletion=completion))
+    provider = LiteLLMReasoningProvider(
+        "provider/model", timeout_seconds=5, max_retries=0, minimum_diagnosis_confidence=0.5
+    )
+    with pytest.raises(ReasoningEvaluationError, match="LOTO as an operation exception"):
+        await provider.generate(ReviewBundle, "Review the supplied maintenance proposal", context())
+    assert len(calls) == 1
+    usage = provider.consume_usage()
+    assert usage["token_usage"]["total_tokens"] == 30
+    assert usage["evaluation_result"]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_custom_provider_cannot_persist_a_loto_operation_exception(app, client, monkeypatch):
+    original = DeterministicReasoningProvider.generate
+
+    async def generate(self, schema, instruction, public_context):
+        value = await original(self, schema, instruction, public_context)
+        if schema is ReviewBundle:
+            value.reviews[1].operating_constraints = [
+                "Do not operate or rotate the turbine while personnel are in the nacelle or "
+                "near the main bearing without LOTO in place."
+            ]
+        return value
+
+    monkeypatch.setattr(DeterministicReasoningProvider, "generate", generate)
+    response = await client.post(
+        "/api/v1/scada/ingest",
+        json={
+            "samples": [
+                {
+                    "source_event_id": "REVIEW-LOTO-EXCEPTION-REGRESSION",
+                    "turbine_id": "WT-023",
+                    "observed_at": (datetime.now(UTC) - timedelta(minutes=3)).isoformat(),
+                    "variable": "main_bearing_vibration_rms",
+                    "value": 4.81,
+                    "unit": "mm/s",
+                    "attributes": {"baseline": 3.79, "anomaly_score": 0.86},
+                }
+            ]
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "INVALID_TRANSITION"
+    assert "LOTO as an operation exception" in response.json()["error"]["message"]
+    async with app.state.session_factory() as session:
+        event = (
+            await session.scalars(
+                select(OutboxEvent).where(
+                    OutboxEvent.event_type == "mission.analysis.requested",
+                    OutboxEvent.status == "failed",
+                )
+            )
+        ).one()
+        mission_id = event.payload["mission_id"]
+    mission = (await client.get(f"/api/v1/missions/{mission_id}")).json()
+    assert mission["status"] == "detected"
+    assert mission["decision"] is None and mission["work_order_id"] is None
+    assert mission["approvals"] == [] and not mission["public_state"].get("reviews")
 
 
 def test_review_request_cannot_omit_its_target_or_leak_a_prior_target() -> None:

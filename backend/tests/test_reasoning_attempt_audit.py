@@ -8,6 +8,7 @@ from sqlalchemy import select
 from windops_backend.agents.reasoning import (
     DeterministicReasoningProvider,
     LiteLLMReasoningProvider,
+    ReasoningEvaluationError,
     ReasoningProviderUnavailableError,
     ReviewBundle,
 )
@@ -22,6 +23,79 @@ def context():
         "analysis_profile": {"component": "main_bearing"},
         "evidence": [{"evidence_id": "E-1", "summary": "private synthetic evidence marker"}],
     }
+
+
+@pytest.mark.asyncio
+async def test_workflow_rejects_custom_provider_guidance_omission_and_preserves_usage(
+    app, client, monkeypatch
+):
+    original = DeterministicReasoningProvider.generate
+
+    async def generate(self, schema, instruction, public_context):
+        value = await original(self, schema, instruction, public_context)
+        if schema is PublicDiagnosis:
+            guidance = next(
+                item
+                for item in public_context["evidence"]
+                if item["evidence_type"] == "knowledge_citation"
+            )
+            assert guidance["metrics"]["documents_retrieved"] > 0
+            assert guidance["source_refs"]
+            self._last_usage = {
+                "provider": "litellm",
+                "model": "synthetic-guidance-output",
+                "token_usage": {
+                    "source": "provider_reported",
+                    "prompt_tokens": 20,
+                    "completion_tokens": 17,
+                    "total_tokens": 37,
+                },
+            }
+            return value.model_copy(
+                update={
+                    "conclusion": "Inspection guidance is available but does not confirm failure.",
+                    "evidence_refs": [
+                        ref for ref in value.evidence_refs if ref != guidance["evidence_id"]
+                    ],
+                }
+            )
+        return value
+
+    monkeypatch.setattr(DeterministicReasoningProvider, "generate", generate)
+    with pytest.raises(ReasoningEvaluationError, match="guidance without a knowledge citation"):
+        await client.post(
+            "/api/v1/scada/ingest",
+            json={
+                "samples": [
+                    {
+                        "source_event_id": "UNCITED-GUIDANCE",
+                        "turbine_id": "WT-023",
+                        "observed_at": "2026-09-27T00:00:00Z",
+                        "variable": "main_bearing_vibration_rms",
+                        "value": 4.81,
+                        "unit": "mm/s",
+                        "attributes": {"baseline": 3.79, "anomaly_score": 0.86},
+                    }
+                ]
+            },
+        )
+    async with app.state.session_factory() as session:
+        event = (
+            await session.scalars(
+                select(OutboxEvent).where(
+                    OutboxEvent.event_type == "mission.analysis.requested",
+                    OutboxEvent.status == "failed",
+                )
+            )
+        ).one()
+        mission_id = event.payload["mission_id"]
+    detail = (await client.get(f"/api/v1/missions/{mission_id}")).json()
+    assert detail["status"] == "detected"
+    assert detail["decision"] is None and detail["work_order_id"] is None
+    assert detail["approvals"] == []
+    failed = next(row for row in detail["executions"] if row["status"] == "failed")
+    assert failed["model"] == "synthetic-guidance-output"
+    assert failed["token_usage"]["total_tokens"] == 37
 
 
 @pytest.mark.asyncio

@@ -15,7 +15,10 @@ from windops_backend.agents.reasoning import (
     REVIEW_COMMITTEE_AGENT,
     AlternativeBundle,
     PublicReasoningProvider,
+    ReasoningEvaluationError,
     ReviewBundle,
+    validate_diagnosis_guidance_citations,
+    validate_review_operating_constraints,
 )
 from windops_backend.agents.state import PublicWorkflowState
 from windops_backend.agents.tools import SQLToolAdapter
@@ -65,14 +68,24 @@ class OpenVigilWorkflowGraph:
         started = perf_counter()
         self.tools.reset_tool_calls()
         self.reasoning.reset_usage()
-        agent_definition = await self.session.scalar(
-            select(AgentDefinition)
-            .where(
-                AgentDefinition.agent_key == agent_role,
-                AgentDefinition.active.is_(True),
+        # The graph selects this role for an already-authorized mission. Read only
+        # its internal catalog identity, without granting the caller global
+        # catalog visibility; mission and tool access retain their asset scope.
+        definition_table = AgentDefinition.__table__
+        agent_definition = (
+            (
+                await self.session.execute(
+                    select(definition_table.c.id, definition_table.c.catalog_version_id)
+                    .where(
+                        definition_table.c.agent_key == agent_role,
+                        definition_table.c.active.is_(True),
+                    )
+                    .order_by(definition_table.c.version.desc())
+                    .limit(1)
+                )
             )
-            .order_by(AgentDefinition.version.desc())
-            .limit(1)
+            .mappings()
+            .one_or_none()
         )
         if agent_definition is None:
             raise InvalidTransitionError(
@@ -81,8 +94,8 @@ class OpenVigilWorkflowGraph:
         execution = AgentExecution(
             id=str(uuid4()),
             mission_id=state["mission_id"],
-            catalog_version_id=agent_definition.catalog_version_id,
-            agent_definition_id=agent_definition.id,
+            catalog_version_id=agent_definition["catalog_version_id"],
+            agent_definition_id=agent_definition["id"],
             node=node,
             agent_role=agent_role,
             status=ExecutionStatus.RUNNING.value,
@@ -392,18 +405,20 @@ class OpenVigilWorkflowGraph:
     async def diagnosis(self, state: PublicWorkflowState) -> dict[str, Any]:
         async def operation(current: PublicWorkflowState) -> dict[str, Any]:
             profile = self._analysis_profile(current)
+            context = {
+                "turbine_id": current["turbine_id"],
+                "analysis_profile": profile,
+                "evidence": current.get("evidence", []),
+            }
             diagnosis = await self.reasoning.generate(
                 PublicDiagnosis,
                 (
                     f"Produce the public diagnosis for {current['turbine_id']} "
                     f"{profile['component']} from the cited evidence."
                 ),
-                {
-                    "turbine_id": current["turbine_id"],
-                    "analysis_profile": profile,
-                    "evidence": current.get("evidence", []),
-                },
+                context,
             )
+            validate_diagnosis_guidance_citations(diagnosis, context)
             return {
                 "diagnosis": diagnosis.model_dump(),
                 "workflow_status": "diagnosed",
@@ -522,6 +537,10 @@ class OpenVigilWorkflowGraph:
                 raise InvalidTransitionError(
                     "reviewer identity does not match the governed committee"
                 )
+            try:
+                validate_review_operating_constraints(bundle)
+            except ReasoningEvaluationError as exc:
+                raise InvalidTransitionError(str(exc)) from exc
             return {
                 "reviews": [review.model_dump() for review in bundle.reviews],
                 "review_target": bundle.target.model_dump(mode="json"),

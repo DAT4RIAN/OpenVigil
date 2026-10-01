@@ -19,6 +19,7 @@ from windops_backend.operations.release_gate import (
     REQUIRED_GATE_CHECKS,
     REQUIRED_RELEASE_GATES,
     _safe_report_path,
+    _verify_image_scan_raw,
 )
 from windops_backend.operations.report_io import (
     sha256_file as _sha256_file,
@@ -163,6 +164,11 @@ def record_gate_report(
     errors = sorted(Draft202012Validator(GATE_REPORT_SCHEMA).iter_errors(report), key=str)
     if errors:
         raise ReleaseEvidenceError(f"gate report schema violation: {errors[0].message}")
+    if gate == "image_scan":
+        try:
+            _verify_image_scan_raw(root, report["release"], check_records)
+        except ValueError as exc:
+            raise ReleaseEvidenceError(str(exc)) from exc
     report_path = root / "reports" / f"{gate}.json"
     _atomic_json(report_path, report)
     return report_path

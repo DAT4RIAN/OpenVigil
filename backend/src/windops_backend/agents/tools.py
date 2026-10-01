@@ -6,7 +6,7 @@ from time import perf_counter
 from typing import Any, Protocol, cast
 from uuid import uuid4
 
-from sqlalchemy import desc, func, or_, select, update
+from sqlalchemy import Table, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -812,17 +812,21 @@ class SQLToolAdapter:
         return {"health_event_id": event.id, "score": score, "status": status}
 
     async def _reserve_resources(self, mission_id: str, required_types: set[str]) -> list[str]:
+        # An approved, asset-scoped work plan may claim its required types from
+        # the shared pool. Keep public resource visibility scoped; this internal
+        # transaction reads only claim identities and retains locking/CAS guards.
+        resource_table = cast(Table, Resource.__table__)
         statement = (
-            select(Resource)
+            select(resource_table.c.id, resource_table.c.resource_type)
             .where(
-                Resource.status == ResourceStatus.AVAILABLE.value,
-                Resource.resource_type.in_(required_types),
+                resource_table.c.status == ResourceStatus.AVAILABLE.value,
+                resource_table.c.resource_type.in_(required_types),
             )
-            .order_by(Resource.id)
+            .order_by(resource_table.c.id)
         )
         if self.session.bind is not None and self.session.bind.dialect.name == "postgresql":
             statement = statement.with_for_update(skip_locked=True)
-        resources = (await self.session.scalars(statement)).all()
+        resources = (await self.session.execute(statement)).all()
         if {resource.resource_type for resource in resources} != required_types:
             raise ConflictError(
                 "every resource type required by the approved work plan must be "
@@ -834,10 +838,10 @@ class SQLToolAdapter:
             if resource.resource_type in claimed_types:
                 continue
             claimed = await self.session.execute(
-                update(Resource)
+                update(resource_table)
                 .where(
-                    Resource.id == resource.id,
-                    Resource.status == ResourceStatus.AVAILABLE.value,
+                    resource_table.c.id == resource.id,
+                    resource_table.c.status == ResourceStatus.AVAILABLE.value,
                 )
                 .values(status=ResourceStatus.RESERVED.value, updated_at=datetime.now(UTC))
             )

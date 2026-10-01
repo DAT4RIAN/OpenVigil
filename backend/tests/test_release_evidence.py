@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from release_scan_fixtures import trivy_image_scan
 from windops_backend.operations.release_evidence import (
     ReleaseEvidenceError,
     assemble_release_manifest,
@@ -30,7 +31,12 @@ def _record_all(root: Path) -> tuple[str, str, str, str]:
     for gate in REQUIRED_RELEASE_GATES:
         artifact = root / "artifacts" / f"{gate}.json"
         artifact.parent.mkdir(parents=True, exist_ok=True)
-        artifact.write_text(json.dumps({"gate": gate, "result": "passed"}), encoding="utf-8")
+        raw = (
+            trivy_image_scan(release_id, commit_sha, image_digest)
+            if gate == "image_scan"
+            else {"gate": gate, "result": "passed"}
+        )
+        artifact.write_text(json.dumps(raw), encoding="utf-8")
         relative = artifact.relative_to(root).as_posix()
         record_gate_report(
             root,
@@ -113,3 +119,41 @@ def test_evidence_builder_rejects_missing_checks_and_wrong_identity(tmp_path: Pa
                 (check, ["artifacts/scan.json"]) for check in REQUIRED_GATE_CHECKS["image_scan"]
             ],
         )
+
+
+@pytest.mark.parametrize("finding_type", ["Vulnerabilities", "Secrets"])
+@pytest.mark.parametrize("severity", ["CRITICAL", "HIGH"])
+def test_recording_rejects_raw_findings_despite_passed_check_names(
+    tmp_path: Path, finding_type: str, severity: str
+) -> None:
+    root = tmp_path / "failed-scan"
+    artifact = root / "artifacts" / "image-scan.json"
+    artifact.parent.mkdir(parents=True)
+    release_id, commit_sha, image_digest = "windops-scan-rc1", "a" * 40, "sha256:" + "b" * 64
+    raw = trivy_image_scan(release_id, commit_sha, image_digest)
+    raw["Results"][0][finding_type] = [{"Severity": severity}]
+    artifact.write_text(json.dumps(raw), encoding="utf-8")
+    now = datetime.now(UTC).isoformat()
+    with pytest.raises(ReleaseEvidenceError, match="raw image scan contains"):
+        record_gate_report(
+            root,
+            gate="image_scan",
+            release_id=release_id,
+            commit_sha=commit_sha,
+            image_digest=image_digest,
+            evidence_set_id=release_evidence_set_id(release_id, commit_sha, image_digest),
+            started_at=now,
+            completed_at=now,
+            target=f"registry.example/openvigil@{image_digest}",
+            tool_name="trivy",
+            tool_version="0.74.0",
+            approved_by="test-reviewer",
+            approval_reference="NEGATIVE-TEST-NOT-RELEASE",
+            artifacts=[("artifacts/image-scan.json", "application/json")],
+            checks=[
+                (check, ["artifacts/image-scan.json"])
+                for check in REQUIRED_GATE_CHECKS["image_scan"]
+            ],
+        )
+    assert not (root / "reports" / "image_scan.json").exists()
+    assert not (root / QUALIFICATION_NAME).exists()

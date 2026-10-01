@@ -184,6 +184,7 @@ async def test_diagnosis_request_binds_scope_and_evidence_without_cross_request_
         {"evidence_refs": ["UNKNOWN"]},
         {"evidence_refs": ["EVIDENCE-001", "EVIDENCE-001"]},
         {"confidence": 0.1},
+        {"failure_mode": "insufficient_evidence", "confidence": 0.9},
     ],
 )
 async def test_provider_ignoring_request_contract_is_still_rejected(
@@ -213,3 +214,91 @@ async def test_provider_ignoring_request_contract_is_still_rejected(
     assert usage["token_usage"]["total_tokens"] == 15
     assert usage["evaluation_result"]["status"] == "failed"
     assert usage["degradation_policy"]["automatic_deterministic_fallback"] is False
+
+
+@pytest.mark.parametrize("minimum_confidence", [0.0, 0.5])
+def test_zero_confidence_abstention_preserves_production_release_gate(
+    minimum_confidence: float,
+) -> None:
+    answer = PublicDiagnosis(
+        failure_mode="insufficient_evidence",
+        component="main_bearing",
+        confidence=0,
+        conclusion="The inspection cannot be bound to the governed asset identity.",
+        evidence_refs=["EVIDENCE-001"],
+    )
+    if minimum_confidence == 0:
+        assert (
+            evaluate_public_output(
+                answer,
+                public_context=_context(),
+                minimum_diagnosis_confidence=minimum_confidence,
+            )["status"]
+            == "passed"
+        )
+    else:
+        with pytest.raises(ReasoningEvaluationError, match="below the release gate"):
+            evaluate_public_output(
+                answer,
+                public_context=_context(),
+                minimum_diagnosis_confidence=minimum_confidence,
+            )
+
+
+def _guidance_context() -> dict[str, Any]:
+    return {
+        **_context(),
+        "evidence": [
+            {"evidence_id": "EVIDENCE-001"},
+            {
+                "evidence_id": "KB-MAIN-BEARING",
+                "evidence_type": "knowledge_citation",
+                "summary": "The controlled corpus returned main-bearing inspection guidance.",
+                "source_refs": ["/api/v1/knowledge/documents/KB-MAIN-BEARING"],
+                "metrics": {"documents_retrieved": 1},
+            },
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "conclusion",
+    [
+        "The supplied knowledge citation provides inspection guidance but does not itself "
+        "confirm physical failure.",
+        "知识引用提供检查指南，但指南本身不能确认物理故障。",
+    ],
+)
+def test_diagnosis_rejects_uncited_retrieved_guidance(conclusion: str) -> None:
+    answer = PublicDiagnosis(
+        failure_mode="main_bearing_degradation",
+        component="main_bearing",
+        confidence=0.7,
+        conclusion=conclusion,
+        evidence_refs=["EVIDENCE-001"],
+    )
+    with pytest.raises(ReasoningEvaluationError, match="guidance without a knowledge citation"):
+        evaluate_public_output(
+            answer, public_context=_guidance_context(), minimum_diagnosis_confidence=0.5
+        )
+
+
+@pytest.mark.parametrize("discuss_guidance", [False, True])
+def test_guidance_citation_is_required_only_when_discussed(discuss_guidance: bool) -> None:
+    answer = PublicDiagnosis(
+        failure_mode="main_bearing_degradation",
+        component="main_bearing",
+        confidence=0.7,
+        conclusion=(
+            "The inspection guidance is available but does not confirm physical failure."
+            if discuss_guidance
+            else "The vibration exceeded its supplied threshold; the failure mechanism is unknown."
+        ),
+        evidence_refs=["EVIDENCE-001", "KB-MAIN-BEARING"] if discuss_guidance else ["EVIDENCE-001"],
+    )
+    assert (
+        evaluate_public_output(
+            answer, public_context=_guidance_context(), minimum_diagnosis_confidence=0.5
+        )["status"]
+        == "passed"
+    )

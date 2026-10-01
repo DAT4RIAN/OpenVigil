@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from sqlalchemy import and_, event, exists, false, func, or_, select, true
@@ -52,6 +52,14 @@ from windops_backend.models import (
 )
 
 ACCESS_POLICY_SESSION_KEY = "windops_access_policy"
+_ACCESS_CRITERIA_SESSION_KEY = "windops_access_criteria"
+
+
+@dataclass(frozen=True, slots=True)
+class _SessionAccessCriteria:
+    policy: GraphAccessPolicy
+    options: tuple[Any, ...]
+
 
 _DATA_SCOPE_ALIASES: dict[str, frozenset[str]] = {
     "agent": frozenset({"agent", "agents", "automation"}),
@@ -81,7 +89,10 @@ _DATA_SCOPE_ALIASES: dict[str, frozenset[str]] = {
 def attach_access_policy(session: AsyncSession, policy: GraphAccessPolicy) -> None:
     """Bind a server-created policy to every ORM read performed by this request session."""
 
-    session.sync_session.info[ACCESS_POLICY_SESSION_KEY] = policy
+    info = session.sync_session.info
+    if info.get(ACCESS_POLICY_SESSION_KEY) != policy:
+        info.pop(_ACCESS_CRITERIA_SESSION_KEY, None)
+    info[ACCESS_POLICY_SESSION_KEY] = policy
 
 
 def access_scope_audit(policy: GraphAccessPolicy) -> dict[str, object]:
@@ -861,4 +872,12 @@ def _apply_request_access_policy(execute_state: ORMExecuteState) -> None:
     policy = execute_state.session.info.get(ACCESS_POLICY_SESSION_KEY)
     if not isinstance(policy, GraphAccessPolicy):
         return
-    execute_state.statement = execute_state.statement.options(*_loader_criteria(policy))
+    info = execute_state.session.info
+    criteria = info.get(_ACCESS_CRITERIA_SESSION_KEY)
+    # SQLAlchemy loader options are reusable. Keep them within this session and
+    # compare the full immutable policy so even direct rebinding cannot use an
+    # earlier caller's grant; endpoint data-domain checks still run separately.
+    if not isinstance(criteria, _SessionAccessCriteria) or criteria.policy != policy:
+        criteria = _SessionAccessCriteria(policy, _loader_criteria(policy))
+        info[_ACCESS_CRITERIA_SESSION_KEY] = criteria
+    execute_state.statement = execute_state.statement.options(*criteria.options)
