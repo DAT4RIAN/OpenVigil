@@ -92,6 +92,38 @@ def _assert_real_cross_layer_build_order(job: dict[str, object]) -> None:
                 "出现 skip 即失败",
             ),
         ),
+        (
+            REPOSITORY_ROOT / "README-DE.md",
+            (
+                "Die Testanzahl ergibt sich aus der automatischen Ermittlung durch Befehle und CI",
+                "diese übersprungenen Tests gelten nicht als bestandene Release-Prüfungen",
+                "wodurch jedes Überspringen als Fehler gilt",
+            ),
+        ),
+        (
+            REPOSITORY_ROOT / "README-ES.md",
+            (
+                "El número de pruebas procede del descubrimiento automático de comandos y CI",
+                "esas omisiones no cuentan como aprobaciones de lanzamiento",
+                "de modo que cualquier omisión sea un fallo",
+            ),
+        ),
+        (
+            REPOSITORY_ROOT / "README-FR.md",
+            (
+                "Le nombre de tests provient de la découverte automatique par les commandes et CI",
+                "ces tests ignorés ne comptent pas comme validations de livraison",
+                "faisant de tout test ignoré un échec",
+            ),
+        ),
+        (
+            REPOSITORY_ROOT / "README-JA.md",
+            (
+                "テスト件数はコマンドと CI の自動検出結果に基づきます",
+                "これらのスキップはリリース合格として扱いません",
+                "スキップが 1 件でもあれば失敗",
+            ),
+        ),
     ],
 )
 def test_root_readme_declares_current_migration_head_without_stale_baselines(

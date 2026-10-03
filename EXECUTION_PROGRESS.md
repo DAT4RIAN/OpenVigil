@@ -2,6 +2,14 @@
 
 # Long-running Execution Progress
 
+## README 多语言版本：2026-10-03
+
+- 用户授权：为当前项目增加德语、西班牙语、法语、日语 README，沿用根目录独立语言文件并在六个版本之间提供导航。
+- 当前状态：DONE（文档本地验证）。新增 `README-DE.md`、`README-ES.md`、`README-FR.md`、`README-JA.md` 完整译文；中英文原正文保持，六个版本顶部均可切换语言。四份译文保留原文的 29 个章节、16 个命令/配置代码块、技术标识符和外部来源 URL，图示及说明文字已翻译。
+- 防漂移：`backend/scripts/verify_migration_head.py` 和既有 `backend/tests/test_release_pipeline.py` 参数化测试覆盖全部六份 README，保留测试数量、跳过不算发布通过、指定环境跳过即失败的说明。
+- 已验证：六份 README 的 Prettier 检查、126 处本地链接/图片/章节锚点、技术内容一致性、当前唯一迁移头 `0028_read_audit_pipeline`、发布流程测试 44/44、修改 Python 文件的 Ruff lint/格式及 `git diff --check` 均通过。未运行应用构建、服务启动或现场/生产验收；本项仅修改文档与相关校验范围。
+- 验收范围仅为文档及其一致性校验；既有项目改进、生产发布门禁及现场验收状态沿用下方原记录。
+
 ## 文档仅保留本地：2026-09-29
 
 - 用户授权：从 GitHub 当前 `main` 版本撤下 `docs/`，保留本地目录与全部原文件；本项不重写历史提交。
