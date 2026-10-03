@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">OpenVigil</h1>
-<p align="center"><a href="README.md">English</a> · <b>简体中文</b> · <a href="README-DE.md">Deutsch</a> · <a href="README-ES.md">Español</a> · <a href="README-FR.md">Français</a> · <a href="README-JA.md">日本語</a></p>
+<p align="center"><a href="README.md">English</a> · <b>简体中文</b> · <a href="README-DE.md">Deutsch</a> · <a href="README-ES.md">Español</a> · <a href="README-FR.md">Français</a> · <a href="README-JA.md">日本語</a> · <a href="README-KO.md">한국어</a> · <a href="README-IT.md">Italiano</a></p>
 <p align="center"><b>风电智能运维多智能体平台</b><br>把监测、诊断、人工决策与现场执行连接成可审计的业务闭环。</p>
 
 <p align="center">

@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">OpenVigil</h1>
-<p align="center"><a href="README.md">English</a> · <a href="README-CN.md">简体中文</a> · <a href="README-DE.md">Deutsch</a> · <a href="README-ES.md">Español</a> · <a href="README-FR.md">Français</a> · <b>日本語</b></p>
+<p align="center"><a href="README.md">English</a> · <a href="README-CN.md">简体中文</a> · <a href="README-DE.md">Deutsch</a> · <a href="README-ES.md">Español</a> · <a href="README-FR.md">Français</a> · <b>日本語</b> · <a href="README-KO.md">한국어</a> · <a href="README-IT.md">Italiano</a></p>
 <p align="center"><b>風力発電の運用・保守を支えるマルチエージェントプラットフォーム</b><br>監視、診断、人による意思決定、現場作業を、監査可能なワークフローでつなぎます。</p>
 
 <p align="center">

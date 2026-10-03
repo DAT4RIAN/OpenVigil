@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">OpenVigil</h1>
-<p align="center"><a href="README.md">English</a> · <a href="README-CN.md">简体中文</a> · <b>Deutsch</b> · <a href="README-ES.md">Español</a> · <a href="README-FR.md">Français</a> · <a href="README-JA.md">日本語</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README-CN.md">简体中文</a> · <b>Deutsch</b> · <a href="README-ES.md">Español</a> · <a href="README-FR.md">Français</a> · <a href="README-JA.md">日本語</a> · <a href="README-KO.md">한국어</a> · <a href="README-IT.md">Italiano</a></p>
 <p align="center"><b>Multi-Agenten-Plattform für intelligente Betriebsführung und Instandhaltung von Windenergieanlagen</b><br>Überwachung, Diagnose, menschliche Entscheidungen und Arbeiten vor Ort in einem auditierbaren Ablauf verbinden.</p>
 
 <p align="center">

@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">OpenVigil</h1>
-<p align="center"><a href="README.md">English</a> · <a href="README-CN.md">简体中文</a> · <a href="README-DE.md">Deutsch</a> · <b>Español</b> · <a href="README-FR.md">Français</a> · <a href="README-JA.md">日本語</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README-CN.md">简体中文</a> · <a href="README-DE.md">Deutsch</a> · <b>Español</b> · <a href="README-FR.md">Français</a> · <a href="README-JA.md">日本語</a> · <a href="README-KO.md">한국어</a> · <a href="README-IT.md">Italiano</a></p>
 <p align="center"><b>Plataforma multiagente para la operación y el mantenimiento inteligentes de parques eólicos</b><br>Conecta supervisión, diagnóstico, decisiones humanas y ejecución en campo en un flujo auditable.</p>
 
 <p align="center">

@@ -124,6 +124,22 @@ def _assert_real_cross_layer_build_order(job: dict[str, object]) -> None:
                 "スキップが 1 件でもあれば失敗",
             ),
         ),
+        (
+            REPOSITORY_ROOT / "README-KO.md",
+            (
+                "테스트 수는 명령과 CI의 자동 탐색 결과를 기준으로 합니다",
+                "이러한 건너뛰기는 릴리스 통과로 인정하지 않습니다",
+                "하나라도 건너뛰면 실패로 처리",
+            ),
+        ),
+        (
+            REPOSITORY_ROOT / "README-IT.md",
+            (
+                "Il numero di test deriva dal rilevamento automatico dei comandi e di CI",
+                "questi test saltati non contano come collaudi di rilascio superati",
+                "rendendo ogni test saltato un errore",
+            ),
+        ),
     ],
 )
 def test_root_readme_declares_current_migration_head_without_stale_baselines(
