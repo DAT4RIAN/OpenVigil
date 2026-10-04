@@ -76,3 +76,7 @@ yarn-error.log*
 
 # Local finesse design history
 /.finesse/
+
+# Recreated presentation intermediates stay local after archival.
+/.codex-finalizer/
+/output/architecture/
