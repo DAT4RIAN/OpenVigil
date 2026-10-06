@@ -35,7 +35,7 @@ from windops_backend.schemas import (
     ScadaIngestRequest,
     ScadaIngestResponse,
 )
-from windops_backend.services.ingest import ingest_samples
+from windops_backend.services.ingest import ingest_samples, stored_source_policy
 from windops_backend.services.workflow import advance_mission_to_review
 
 router = APIRouter()
@@ -63,7 +63,7 @@ async def ingest_scada(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail={"code": "INGEST_SOURCE_DISABLED", "message": "Source is disabled"},
                 )
-            policy = TelemetrySourcePolicy.model_validate(configured_source.policy)
+            policy = stored_source_policy(configured_source)
     if policy is None:
         if settings.environment.value == "production":
             raise HTTPException(

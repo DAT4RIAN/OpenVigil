@@ -5,7 +5,14 @@ from typing import Any, Literal
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from jsonschema.exceptions import SchemaError  # type: ignore[import-untyped]
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from windops_backend.enums import ApprovalAction
 
@@ -110,16 +117,37 @@ class WorkOrderPlan(BaseModel):
     required_resource_types: list[str] = Field(min_length=1, max_length=10)
     safety_plan: dict[str, Any]
     tasks: list[WorkOrderTaskTemplate] = Field(min_length=1, max_length=20)
+    closure_kind: Literal["health_score", "structural_retest"] = "health_score"
     closure_health_score_field: str = Field(
         default="turbine_health_score", pattern=r"^[a-z][a-z0-9_]{2,63}$"
     )
     healthy_threshold: float = Field(default=80, ge=0, le=100)
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_plan_identity(self, handler: Any) -> dict[str, Any]:
+        body: dict[str, Any] = handler(self)
+        if self.closure_kind == "health_score":
+            # Existing approvals are bound to the exact pre-extension plan SHA.
+            body.pop("closure_kind", None)
+        else:
+            body.pop("closure_health_score_field", None)
+            body.pop("healthy_threshold", None)
+        return body
 
     @model_validator(mode="after")
     def validate_closure_contract(self) -> WorkOrderPlan:
         if len(set(self.required_resource_types)) != len(self.required_resource_types):
             raise ValueError("required resource types must be unique")
         closure_properties = self.tasks[-1].measurement_schema.get("properties", {})
+        if self.closure_kind == "structural_retest":
+            source_contract = closure_properties.get("retest_source_id")
+            if not isinstance(source_contract, dict) or source_contract.get("type") != "string":
+                raise ValueError("structural closure must bind a registered retest source ID")
+            if "retest_source_id" not in self.tasks[-1].measurement_schema.get("required", []):
+                raise ValueError("the final structural task must require the retest source ID")
+            if "turbine_health_score" in closure_properties:
+                raise ValueError("structural retest cannot close on a handwritten health score")
+            return self
         health_contract = closure_properties.get(self.closure_health_score_field)
         if not isinstance(health_contract, dict) or health_contract.get("type") != "number":
             raise ValueError("the final task must define the numeric closure health-score field")
@@ -178,9 +206,9 @@ class MaintenanceAlternative(BaseModel):
     action: str
     execution_plan_id: str | None = Field(default=None, min_length=1, max_length=128)
     safety_risk: Literal["low", "medium", "high", "critical"]
-    estimated_downtime_hours: float = Field(ge=0)
-    estimated_cost_cny: float = Field(ge=0)
-    estimated_energy_loss_mwh: float = Field(ge=0)
+    estimated_downtime_hours: float | None = Field(default=None, ge=0)
+    estimated_cost_cny: float | None = Field(default=None, ge=0)
+    estimated_energy_loss_mwh: float | None = Field(default=None, ge=0)
     # Read legacy numeric records, but represent absent probability evidence as
     # unknown. Generation applies the stricter no-unsupported-probability gate.
     deterioration_risk_percent: float | None = Field(default=None, ge=0, le=100)

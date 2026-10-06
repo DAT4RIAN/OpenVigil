@@ -8,7 +8,7 @@ try {
         if ($null -eq $owned) { throw "$($record.role) is stopped." }
         Write-Output "$($record.role): running (PID $($record.pid), identity verified)"
     }
-    if ((@($records.role | Sort-Object) -join ',') -ne 'api,frontend,read-audit,relay,worker') { throw 'Managed service inventory is incomplete.' }
+    if ((@($records.role | Sort-Object) -join ',') -ne 'api,frontend,read-audit,relay,structural-worker,worker') { throw 'Managed service inventory is incomplete.' }
     Invoke-LocalCompose @('ps', '--all')
     & $script:LocalPython $script:LocalHelper verify
     if ($LASTEXITCODE -ne 0) { throw 'Local dependency/API verification failed.' }

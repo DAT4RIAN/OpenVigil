@@ -446,7 +446,12 @@ def test_ci_workflow_enforces_immutable_quality_and_postgres_gates() -> None:
     assert "test_postgres_care_fullscale.py" in care_commands
     assert "test_postgres_care_vertical_slice.py" in care_commands
     assert "windops-care-postgres-evidence" in care_commands
-    assert "0028_read_audit_pipeline" in care_commands
+    assert (
+        "from scripts.verify_migration_head import EXPECTED_HEAD; print(EXPECTED_HEAD)"
+        in care_commands
+    )
+    assert 'test "${migration_head}" = "${expected_migration_head}"' in care_commands
+    assert '--migration-head "${migration_head}"' in care_commands
     assert "WINDOPS_CARE_REAL_ARTIFACT_ROOT" in care_commands
     assert "WINDOPS_CARE_FULL_SCALE_ROOT" in care_commands
     assert "care-postgres-evidence/vertical-junit.xml" in care_commands

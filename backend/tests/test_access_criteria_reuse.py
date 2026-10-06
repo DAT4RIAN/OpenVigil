@@ -1,11 +1,15 @@
+import warnings
+
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import select
+from sqlalchemy.exc import SAWarning
 from sqlalchemy.orm import aliased
 
 import windops_backend.access_control as access_control
 from windops_backend.knowledge_graph.domain import GraphAccessPolicy
+from windops_backend.model_structural import TowerComponent
 from windops_backend.models import Turbine, WindFarm
 
 
@@ -91,3 +95,35 @@ async def test_endpoint_data_domain_remains_independent_of_row_criteria_reuse(
     )
     assert denied.status_code == 403, denied.text
     assert denied.json()["error"]["code"] == "DATA_SCOPE_FORBIDDEN"
+
+
+@pytest.mark.asyncio
+async def test_structural_entity_grant_stays_correlated_to_each_aliased_row(app: FastAPI):
+    async with app.state.session_factory() as session, session.begin():
+        rows = [
+            TowerComponent(
+                tenant_id="tenant-east-china",
+                wind_farm_id="WF-EAST-01",
+                turbine_id="WT-023",
+                code=f"C-{i}",
+                revision="r1",
+                component_type="joint",
+                name="synthetic alias fixture",
+                design_reference="synthetic permission challenge",
+                created_by="test",
+            )
+            for i in range(2)
+        ]
+        session.add_all(rows)
+        await session.flush()
+        granted_id, denied_id = rows[0].id, rows[1].id
+    policy = GraphAccessPolicy.from_values(
+        turbine_ids=["WT-023"], entity_ids=[granted_id], data_scopes=["structural"]
+    )
+    async with app.state.session_factory() as session:
+        access_control.attach_access_policy(session, policy)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", SAWarning)
+            alias = aliased(TowerComponent)
+            assert list(await session.scalars(select(alias.id))) == [granted_id]
+            assert denied_id not in list(await session.scalars(select(TowerComponent.id)))

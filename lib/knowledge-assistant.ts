@@ -13,7 +13,10 @@ export interface SourceCitation {
   readonly passageId: string;
   readonly docId: string;
   readonly title: string;
-  readonly page: number;
+  readonly page: number | null;
+  readonly documentVersion?: string;
+  readonly nativeLocator?: Readonly<Record<string, unknown>>;
+  readonly sourceSha256?: string | null;
   readonly section: string;
   /** Verbatim excerpt cut from the retrieved passage body. */
   readonly quote: string;
@@ -272,7 +275,7 @@ function citationReferences(
 function genericFindings(citations: readonly SourceCitation[]): readonly KnowledgeFinding[] {
   return citations.slice(0, 3).map((citation) => ({
     label: citation.section,
-    value: `${citation.title} · 第 ${citation.page} 页`,
+    value: `${citation.title} · ${citation.page === null ? "原生位置" : `第 ${citation.page} 页`}`,
     interpretation: citation.quote,
     evidenceIds: [],
     citationIds: [citation.passageId],

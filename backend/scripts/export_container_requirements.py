@@ -24,9 +24,10 @@ EXPORT_ARGS = [
 ]
 
 
-def export_requirements(output: Path) -> None:
+def export_requirements(output: Path, *, structural: bool = False) -> None:
+    arguments = [*EXPORT_ARGS, "--extra", "structural"] if structural else EXPORT_ARGS
     subprocess.run(
-        [*EXPORT_ARGS, "--output-file", str(output)],
+        [*arguments, "--output-file", str(output)],
         cwd=ROOT,
         check=True,
         stdout=subprocess.DEVNULL,
@@ -38,24 +39,30 @@ def main() -> int:
         description="Export the container dependency lock from pyproject.toml and uv.lock"
     )
     parser.add_argument(
+        "--structural",
+        action="store_true",
+        help="export the independent structural worker dependency lock",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="fail when requirements.container.txt is not reproducible from uv.lock",
     )
     args = parser.parse_args()
+    target = ROOT / "requirements.structural.txt" if args.structural else TARGET
 
     if args.check:
         with tempfile.TemporaryDirectory(prefix="windops-requirements-") as directory:
-            generated = Path(directory) / TARGET.name
-            export_requirements(generated)
-            if generated.read_bytes() != TARGET.read_bytes():
+            generated = Path(directory) / target.name
+            export_requirements(generated, structural=args.structural)
+            if generated.read_bytes() != target.read_bytes():
                 raise SystemExit(
-                    "requirements.container.txt is stale; run "
-                    "python scripts/export_container_requirements.py"
+                    f"{target.name} is stale; run python scripts/export_container_requirements.py"
+                    + (" --structural" if args.structural else "")
                 )
         return 0
 
-    export_requirements(TARGET)
+    export_requirements(target, structural=args.structural)
     return 0
 
 

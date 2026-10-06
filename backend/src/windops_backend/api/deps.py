@@ -603,6 +603,10 @@ def _require_endpoint_data_scope(request: Request, policy: GraphAccessPolicy) ->
 
 def _endpoint_data_scopes(path: str) -> tuple[str, ...] | None:
     normalized = path.casefold()
+    if normalized.startswith("/api/v1/turbines/") and normalized.endswith(
+        ("/tower-components", "/structural-health")
+    ):
+        return ("structural",)
     if normalized == "/api/v1/session":
         # Session bootstrap reports only server-owned roles/capabilities. It
         # must work for any valid business scope before a domain request runs.
@@ -615,6 +619,22 @@ def _endpoint_data_scopes(path: str) -> tuple[str, ...] | None:
         # GraphAccessPolicy after the explicit graph-scope dependency.
         return None
     rules: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+        (
+            (
+                "/api/v1/tower-components",
+                "/api/v1/tendon-assemblies",
+                "/api/v1/sensor-channels",
+                "/api/v1/structural-records",
+                "/api/v1/structural-analyses",
+                "/api/v1/prestress-observations",
+                "/api/v1/health-baselines",
+                "/api/v1/engineering-claims",
+                "/api/v1/structural-missions",
+                "/api/v1/structural-work-orders",
+                "/api/v1/structural-cases",
+            ),
+            ("structural",),
+        ),
         (("/api/v1/knowledge",), ("knowledge",)),
         (("/api/v1/turbines/",), ("asset",)),
         (("/api/v1/scada",), ("telemetry",)),

@@ -40,6 +40,17 @@ const categoryColors: Record<string, string> = {
   KnowledgeDocument: "#2f8a8a",
   KnowledgePassage: "#48a3a3",
   KnowledgeCase: "#a36293",
+  TowerComponent: "#56a764",
+  TendonAssembly: "#17816f",
+  SensorChannel: "#70a7b8",
+  WaveformRecord: "#2f8a8a",
+  StructuralAnalysisRun: "#3d73c5",
+  ModalObservation: "#48a3a3",
+  PrestressObservation: "#17816f",
+  HealthBaseline: "#256d85",
+  EngineeringClaim: "#c98a1f",
+  FieldMeasurement: "#7b69b7",
+  ClosureAssessment: "#a36293",
 };
 
 function css(name: string, fallback: string) {

@@ -350,6 +350,7 @@ async def test_seeded_graph_is_a_rebuildable_database_projection(
         "authoritativeSource": "postgresql",
         "projectionBackend": "memory-test-double",
         "consistency": "eventually-consistent-rebuildable-projection",
+        "engineeringClaimPolicy": "current-approved-revision-and-verified-source-bytes",
     }
     summary = body["data"]
     assert summary["sourceRevision"]
@@ -398,11 +399,14 @@ async def test_alarm_workflow_updates_fault_trace_and_reconciles(
     search_data = search.json()["data"]
     assert search_data["matches"]
     top_match = search_data["matches"][0]
-    assert top_match["retrieval_method"] == "deterministic_test_cosine"
+    assert top_match["retrieval_method"] == "deterministic_test_passage_cosine"
+    assert top_match["passage_id"]
+    assert top_match["document_version"] == "1"
+    assert top_match["page_number"] is None
     assert top_match["scopeMatched"] is True
     assert top_match["graphExpansion"]["failureModeIds"]
     assert top_match["graphExpansion"]["paths"]
-    assert search_data["retrieval"]["vector"] == ["deterministic_test_cosine"]
+    assert search_data["retrieval"]["vector"] == ["deterministic_test_passage_cosine"]
     assert search_data["retrieval"]["fusion"].startswith("0.70*vectorScore")
 
     support = await client.get("/api/v1/knowledge-graph/passages/KB-MB-GW165-001%23body/support")

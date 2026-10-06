@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable
 from datetime import UTC, datetime
 from time import perf_counter
+from traceback import extract_tb
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
@@ -12,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from windops_backend.agents.tools import SQLToolAdapter
 from windops_backend.api.deps import (
     Principal,
+    get_artifact_verifier,
     get_runtime_settings,
     get_session,
     require_global_roles,
@@ -27,6 +30,7 @@ from windops_backend.knowledge_graph.projection import (
 from windops_backend.knowledge_graph.retrieval import HybridKnowledgeRetrievalService
 from windops_backend.knowledge_graph.service import KnowledgeGraphService
 from windops_backend.knowledge_graph.store import KnowledgeGraphStore
+from windops_backend.knowledge_graph.structural_access import current_structural_graph_policy
 from windops_backend.outbox import (
     enqueue_knowledge_graph_projection,
     mark_dispatched,
@@ -36,9 +40,10 @@ from windops_backend.services.idempotency import (
     execute_idempotent_command,
     replace_idempotent_response,
 )
-from windops_backend.storage import OutboxEvent
+from windops_backend.storage import ArtifactVerifier, OutboxEvent
 
 router = APIRouter(prefix="/knowledge-graph", tags=["knowledge-graph"])
+logger = logging.getLogger(__name__)
 
 
 def get_graph_store(request: Request) -> KnowledgeGraphStore:
@@ -50,6 +55,7 @@ def _meta(store: KnowledgeGraphStore) -> dict[str, str]:
         "authoritativeSource": "postgresql",
         "projectionBackend": store.backend_name,
         "consistency": "eventually-consistent-rebuildable-projection",
+        "engineeringClaimPolicy": "current-approved-revision-and-verified-source-bytes",
     }
 
 
@@ -59,6 +65,17 @@ async def _available[GraphResult](operation: Awaitable[GraphResult]) -> GraphRes
     except DomainError:
         raise
     except Exception as exc:
+        # Preserve actionable server diagnostics without exposing exception values,
+        # credentials, private source contents, or a traceback to the client.
+        frames = extract_tb(exc.__traceback__)
+        frame = frames[-1] if frames else None
+        logger.warning(
+            "Knowledge graph read failed (%s); location=%s:%s:%s",
+            type(exc).__name__,
+            frame.filename if frame else "unknown",
+            frame.lineno if frame else 0,
+            frame.name if frame else "unknown",
+        )
         raise KnowledgeGraphUnavailableError(
             "knowledge graph projection is temporarily unavailable"
         ) from exc
@@ -91,14 +108,26 @@ async def _dispatch_projection_event(
     return "dispatched", None
 
 
+async def get_graph_read_policy(
+    session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_runtime_settings),
+    verifier: ArtifactVerifier = Depends(get_artifact_verifier),
+    principal: Principal = Depends(require_knowledge_graph_read_access),
+) -> GraphAccessPolicy:
+    return await _available(
+        current_structural_graph_policy(
+            session, principal.graph_access_policy(), verifier, settings
+        )
+    )
+
+
 @router.get("/summary")
 async def graph_summary(
     store: KnowledgeGraphStore = Depends(get_graph_store),
     principal: Principal = Depends(require_knowledge_graph_read_access),
+    policy: GraphAccessPolicy = Depends(get_graph_read_policy),
 ) -> dict[str, Any]:
-    summary = await _available(
-        KnowledgeGraphService(store).summary(principal.graph_access_policy())
-    )
+    summary = await _available(KnowledgeGraphService(store).summary(policy))
     return {"data": summary.as_dict(), "meta": _meta(store)}
 
 
@@ -108,12 +137,13 @@ async def entity_subgraph(
     depth: int = Query(default=2, ge=1, le=4),
     store: KnowledgeGraphStore = Depends(get_graph_store),
     principal: Principal = Depends(require_knowledge_graph_read_access),
+    policy: GraphAccessPolicy = Depends(get_graph_read_policy),
 ) -> dict[str, Any]:
     graph = await _available(
         KnowledgeGraphService(store).subgraph(
             entity_id,
             depth=depth,
-            policy=principal.graph_access_policy(),
+            policy=policy,
         )
     )
     return {"data": graph.as_dict(), "meta": _meta(store)}
@@ -128,6 +158,7 @@ async def hybrid_search(
     settings: Settings = Depends(get_runtime_settings),
     store: KnowledgeGraphStore = Depends(get_graph_store),
     principal: Principal = Depends(require_knowledge_graph_read_access),
+    policy: GraphAccessPolicy = Depends(get_graph_read_policy),
 ) -> dict[str, Any]:
     result = await _available(
         HybridKnowledgeRetrievalService(store).search(
@@ -136,7 +167,7 @@ async def hybrid_search(
             query=query.strip(),
             entity_id=entity_id.strip() if entity_id else None,
             limit=limit,
-            policy=principal.graph_access_policy(),
+            policy=policy,
         )
     )
     return {"data": result, "meta": _meta(store)}
@@ -147,11 +178,12 @@ async def turbine_fault_trace(
     turbine_id: str,
     store: KnowledgeGraphStore = Depends(get_graph_store),
     principal: Principal = Depends(require_knowledge_graph_read_access),
+    policy: GraphAccessPolicy = Depends(get_graph_read_policy),
 ) -> dict[str, Any]:
     graph = await _available(
         KnowledgeGraphService(store).fault_trace(
             turbine_id,
-            policy=principal.graph_access_policy(),
+            policy=policy,
         )
     )
     return {"data": graph.as_dict(), "meta": _meta(store)}
@@ -162,11 +194,12 @@ async def alarm_impact(
     alarm_id: str,
     store: KnowledgeGraphStore = Depends(get_graph_store),
     principal: Principal = Depends(require_knowledge_graph_read_access),
+    policy: GraphAccessPolicy = Depends(get_graph_read_policy),
 ) -> dict[str, Any]:
     graph = await _available(
         KnowledgeGraphService(store).alarm_impact(
             alarm_id,
-            policy=principal.graph_access_policy(),
+            policy=policy,
         )
     )
     return {"data": graph.as_dict(), "meta": _meta(store)}
@@ -177,11 +210,12 @@ async def similar_cases(
     failure_mode_id: str,
     store: KnowledgeGraphStore = Depends(get_graph_store),
     principal: Principal = Depends(require_knowledge_graph_read_access),
+    policy: GraphAccessPolicy = Depends(get_graph_read_policy),
 ) -> dict[str, Any]:
     graph = await _available(
         KnowledgeGraphService(store).similar_cases(
             failure_mode_id,
-            policy=principal.graph_access_policy(),
+            policy=policy,
         )
     )
     return {"data": graph.as_dict(), "meta": _meta(store)}
@@ -192,11 +226,12 @@ async def passage_support(
     passage_id: str,
     store: KnowledgeGraphStore = Depends(get_graph_store),
     principal: Principal = Depends(require_knowledge_graph_read_access),
+    policy: GraphAccessPolicy = Depends(get_graph_read_policy),
 ) -> dict[str, Any]:
     graph = await _available(
         KnowledgeGraphService(store).passage_support(
             passage_id,
-            policy=principal.graph_access_policy(),
+            policy=policy,
         )
     )
     supporting_ids = {
@@ -230,9 +265,9 @@ async def graph_observability(
     session: AsyncSession = Depends(get_session),
     store: KnowledgeGraphStore = Depends(get_graph_store),
     principal: Principal = Depends(require_knowledge_graph_read_access),
+    policy: GraphAccessPolicy = Depends(get_graph_read_policy),
 ) -> dict[str, Any]:
     started = perf_counter()
-    policy = principal.graph_access_policy()
     summary = await _available(KnowledgeGraphService(store).summary(policy))
     unsupported = await _available(
         store.unsupported_failure_mode_uids(KNOWLEDGE_GRAPH_PROJECTION_ID, policy)
@@ -307,12 +342,13 @@ async def reconcile_graph(
     settings: Settings = Depends(get_runtime_settings),
     store: KnowledgeGraphStore = Depends(get_graph_store),
     principal: Principal = Depends(require_knowledge_graph_read_access),
+    policy: GraphAccessPolicy = Depends(get_graph_read_policy),
 ) -> dict[str, Any]:
     report = await _available(
         KnowledgeGraphService(
             store,
             limits=ProjectionLimits.from_settings(settings),
-        ).reconcile(session, principal.graph_access_policy())
+        ).reconcile(session, policy)
     )
     return {"data": report.as_dict(), "meta": _meta(store)}
 

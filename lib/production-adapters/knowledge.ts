@@ -1,4 +1,4 @@
-import { text, number, list, record, backendCollection } from "./shared.ts";
+import { text, list, record, backendCollection } from "./shared.ts";
 
 const knowledgeDocumentTypes = new Set([
   "equipment-manual",
@@ -29,6 +29,7 @@ export async function productionKnowledgeDocumentsResponse(request: Request): Pr
   if (result instanceof Response) return result;
   const documents = result.rows.map((row) => {
     const metadata = record(row.metadata);
+    const sourceLayout = record(row.source_layout);
     const documentType = text(row.document_type, "technical-standard");
     return {
       id: text(row.document_id),
@@ -39,7 +40,10 @@ export async function productionKnowledgeDocumentsResponse(request: Request): Pr
       version: text(row.document_version, "1"),
       updatedAt: text(row.updated_at, text(row.created_at)),
       vectorized: row.vectorized === true,
-      pageCount: number(metadata.page_count),
+      pageCount:
+        typeof sourceLayout.page_count === "number" && sourceLayout.page_count > 0
+          ? sourceLayout.page_count
+          : null,
       language: text(metadata.language, "zh-CN") === "en-US" ? "en-US" : "zh-CN",
       tags: list(metadata.tags).map(String),
       summary: text(metadata.summary, text(row.title)),

@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+
+# Supply the already built, immutable backend runtime; never use a floating tag.
+ARG BACKEND_IMAGE=registry.invalid/windops-backend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+FROM ${BACKEND_IMAGE} AS builder
+USER root
+WORKDIR /build
+COPY requirements.container.txt requirements.structural.txt ./
+COPY src/windops_backend/structural_dependencies.py ./structural_dependencies.py
+RUN cmp /app/requirements.container.txt requirements.container.txt \
+    && python structural_dependencies.py verify --lock requirements.container.txt \
+    && python structural_dependencies.py delta --base requirements.container.txt \
+        --structural requirements.structural.txt --output requirements.structural-delta.txt \
+    && python -m pip wheel --no-deps --require-hashes --wheel-dir /wheels -r requirements.structural-delta.txt
+COPY pyproject.toml ./
+COPY src ./src
+RUN python -m pip wheel --no-deps --wheel-dir /wheels .
+
+FROM ${BACKEND_IMAGE} AS structural-worker
+ARG BACKEND_IMAGE
+ARG WINDOPS_RELEASE_ID=unreleased
+ARG WINDOPS_COMMIT_SHA=unknown
+LABEL org.opencontainers.image.title="OpenVigil structural worker" \
+    org.opencontainers.image.version="${WINDOPS_RELEASE_ID}" \
+    org.opencontainers.image.revision="${WINDOPS_COMMIT_SHA}" \
+    org.opencontainers.image.base.name="${BACKEND_IMAGE}"
+USER root
+ENV OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLBACKEND=Agg
+COPY --from=builder /wheels /wheels
+COPY requirements.structural.txt /app/requirements.structural.txt
+COPY --from=builder /build/requirements.structural-delta.txt /app/requirements.structural-delta.txt
+RUN python -m pip install --no-deps --no-index --find-links=/wheels --require-hashes -r /app/requirements.structural-delta.txt \
+    && python -m pip install --no-index --find-links=/wheels --no-deps --force-reinstall windops-backend \
+    && python -m pip check \
+    && python -m windops_backend.structural_dependencies verify --lock /app/requirements.structural.txt \
+    && rm -rf /wheels
+USER 10001:10001
+HEALTHCHECK NONE
+CMD ["dramatiq", "windops_backend.structural_tasks", "--queues", "structural-analysis", "--processes", "1", "--threads", "1"]

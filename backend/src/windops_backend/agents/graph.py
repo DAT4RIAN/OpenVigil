@@ -25,6 +25,7 @@ from windops_backend.agents.tools import SQLToolAdapter
 from windops_backend.enums import ExecutionStatus
 from windops_backend.errors import InvalidTransitionError
 from windops_backend.models import AgentDefinition, AgentExecution, Evidence
+from windops_backend.schema_structural_workflow import StructuralScreeningOutput
 from windops_backend.schemas import MissionAnalysisProfile, PublicDiagnosis, PublicEvidence
 from windops_backend.services.events import append_domain_event
 from windops_backend.work_plan_binding import describe_execution_plan
@@ -245,6 +246,27 @@ class OpenVigilWorkflowGraph:
 
     async def scada(self, state: PublicWorkflowState) -> dict[str, Any]:
         async def operation(current: PublicWorkflowState) -> dict[str, Any]:
+            if current.get("structural_context"):
+                context = await self.tools.query_structural_context(current["mission_id"])
+                cards = context["evidence_cards"]
+                draft = PublicEvidence(
+                    evidence_id="STRUCTURAL-SOURCE",
+                    evidence_type="structural_source_quality",
+                    summary=(
+                        "Registered structural measurements and their immutable calibration "
+                        "and source identities; field qualification remains unverified."
+                    ),
+                    source_refs=[card["evidence_id"] for card in cards],
+                    metrics={
+                        "source_count": len(cards),
+                        "missing_evidence": "; ".join(context["missing_evidence"]),
+                    },
+                ).model_dump()
+                evidence = await self._persist_evidence(current, draft)
+                return {
+                    "evidence": [*current.get("evidence", []), evidence],
+                    "structural_context": context,
+                }
             profile = self._analysis_profile(current)
             component = str(profile["component"])
             primary_variable = str(profile["primary_variable"])
@@ -306,6 +328,25 @@ class OpenVigilWorkflowGraph:
 
     async def vibration(self, state: PublicWorkflowState) -> dict[str, Any]:
         async def operation(current: PublicWorkflowState) -> dict[str, Any]:
+            if current.get("structural_context"):
+                context = await self.tools.query_structural_context(current["mission_id"])
+                comparison = context["comparison"]
+                draft = PublicEvidence(
+                    evidence_id="STRUCTURAL-COMPARISON",
+                    evidence_type="structural_screening",
+                    summary=(
+                        "Source-grounded modal/environmental or direct-force comparison; "
+                        "unavailable comparisons remain explicitly unassessed."
+                    ),
+                    source_refs=[card["evidence_id"] for card in context["evidence_cards"]],
+                    metrics={
+                        key: value
+                        for key, value in comparison.items()
+                        if isinstance(value, (float, int, str))
+                    },
+                ).model_dump()
+                evidence = await self._persist_evidence(current, draft)
+                return {"evidence": [*current.get("evidence", []), evidence]}
             profile = self._analysis_profile(current)
             component = str(profile["component"])
             primary_variable = str(profile["primary_variable"])
@@ -392,7 +433,7 @@ class OpenVigilWorkflowGraph:
                 current,
                 draft,
                 citation_uri=(
-                    str(first_document["citation_href"]) if first_document is not None else None
+                    str(first_document["citation_uri"]) if first_document is not None else None
                 ),
                 retrieval_method=(
                     str(first_document["retrieval_method"]) if first_document is not None else None
@@ -409,7 +450,34 @@ class OpenVigilWorkflowGraph:
                 "turbine_id": current["turbine_id"],
                 "analysis_profile": profile,
                 "evidence": current.get("evidence", []),
+                **(
+                    {"structural_context": current["structural_context"]}
+                    if current.get("structural_context")
+                    else {}
+                ),
             }
+            if current.get("structural_context"):
+                from windops_backend.agents.reasoning import evaluate_public_output
+                from windops_backend.services.structural_missions import persist_screening_claim
+
+                output = await self.reasoning.generate(
+                    StructuralScreeningOutput,
+                    "Interpret the supplied structural screening only. "
+                    "Preserve missing evidence and source IDs; propose calibrated retest and human "
+                    "engineering review. No damage, absolute force from modal frequency, "
+                    "operating permission or tensioning action can be inferred.",
+                    context,
+                )
+                evaluate_public_output(
+                    output, public_context=context, minimum_diagnosis_confidence=0
+                )
+                body = output.model_dump(mode="json")
+                claim_id = await persist_screening_claim(self.session, current["mission_id"], body)
+                return {
+                    "diagnosis": body,
+                    "engineering_claim_id": claim_id,
+                    "workflow_status": "diagnosed",
+                }
             diagnosis = await self.reasoning.generate(
                 PublicDiagnosis,
                 (
@@ -431,10 +499,14 @@ class OpenVigilWorkflowGraph:
             profile = self._analysis_profile(current)
             turbine_status = await self.tools.get_turbine_status(current["turbine_id"])
             weather = await self.tools.query_weather(str(turbine_status["wind_farm_id"]))
-            condition_evidence = await self.tools.assess_condition_evidence(
-                current["turbine_id"],
-                str(profile["component"]),
-                str(profile["primary_variable"]),
+            condition_evidence = (
+                current["structural_context"]
+                if current.get("structural_context")
+                else await self.tools.assess_condition_evidence(
+                    current["turbine_id"],
+                    str(profile["component"]),
+                    str(profile["primary_variable"]),
+                )
             )
             bundle = await self.reasoning.generate(
                 AlternativeBundle,
@@ -449,6 +521,11 @@ class OpenVigilWorkflowGraph:
                     "diagnosis": current.get("diagnosis", {}),
                     "weather": weather,
                     "condition_evidence": condition_evidence,
+                    **(
+                        {"structural_context": current["structural_context"]}
+                        if current.get("structural_context")
+                        else {}
+                    ),
                     "available_execution_plans": [
                         describe_execution_plan(
                             MissionAnalysisProfile.model_validate(profile), current["turbine_id"]
@@ -528,6 +605,11 @@ class OpenVigilWorkflowGraph:
                     "alternatives": current.get("alternatives", []),
                     "resources": resources,
                     "weather": weather,
+                    **(
+                        {"structural_context": current["structural_context"]}
+                        if current.get("structural_context")
+                        else {}
+                    ),
                 },
             )
             if bundle.target is None:

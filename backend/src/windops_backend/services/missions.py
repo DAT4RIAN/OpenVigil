@@ -94,6 +94,17 @@ async def create_mission(
     turbine = await session.get(Turbine, alarm.turbine_id)
     if turbine is None:  # pragma: no cover - protected by the database foreign key
         raise NotFoundError(f"turbine {alarm.turbine_id} was not found")
+    if (
+        alarm.code == "STRUCTURAL_REVIEW_REQUIRED"
+        or payload.analysis_profile.component == "hybrid_tower_structure"
+        or (
+            payload.analysis_profile.work_order_plan is not None
+            and payload.analysis_profile.work_order_plan.closure_kind == "structural_retest"
+        )
+    ):
+        raise DomainError(
+            "structural missions require the server-frozen structural mission endpoint"
+        )
     existing_mission = await session.scalar(select(Mission).where(Mission.alarm_id == alarm.id))
     if existing_mission is not None:
         raise AlarmAlreadyAssignedError(

@@ -6,16 +6,13 @@ from time import perf_counter
 from typing import Any, Protocol, cast
 from uuid import uuid4
 
-from sqlalchemy import Table, desc, func, or_, select, update
+from sqlalchemy import Table, desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 import windops_backend.agents.embeddings as _embeddings
 from windops_backend.agents.embeddings import (
     MAX_QUERY_AUTO_INDEX_DOCUMENTS,
-    _citation_href,
-    _cosine_similarity,
-    _unpack_vector,
 )
 from windops_backend.agents.embeddings import (
     DeterministicTestEmbeddingProvider as DeterministicTestEmbeddingProvider,
@@ -70,6 +67,7 @@ from windops_backend.services.knowledge_access import (
     knowledge_document_query,
     knowledge_scope_clause,
 )
+from windops_backend.storage import ArtifactVerifier
 from windops_backend.work_order_templates import default_work_order_plan
 from windops_backend.work_plan_binding import describe_execution_plan, validate_execution_binding
 
@@ -77,7 +75,7 @@ EMBEDDING_DIMENSIONS = _embeddings.EMBEDDING_DIMENSIONS
 EMBEDDING_MAX_INPUT_CHARACTERS = _embeddings.EMBEDDING_MAX_INPUT_CHARACTERS
 EMBEDDING_CHUNK_OVERLAP_CHARACTERS = _embeddings.EMBEDDING_CHUNK_OVERLAP_CHARACTERS
 MAX_EMBEDDING_CHUNKS_PER_DOCUMENT = _embeddings.MAX_EMBEDDING_CHUNKS_PER_DOCUMENT
-TOOL_CATALOG_VERSION = "2026.08.1"
+TOOL_CATALOG_VERSION = "2026.10.1"
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -85,6 +83,7 @@ def _as_utc(value: datetime) -> datetime:
 
 
 TOOL_CATALOG: tuple[dict[str, str], ...] = (
+    {"name": "query_structural_context", "mode": "read"},
     {"name": "get_turbine_status", "mode": "read"},
     {"name": "query_scada", "mode": "read"},
     {"name": "query_alarm_history", "mode": "read"},
@@ -195,8 +194,10 @@ class SQLToolAdapter:
         embedding_provider: EmbeddingProvider | None = None,
         settings: Settings | None = None,
         knowledge_policy: GraphAccessPolicy | None = None,
+        artifact_verifier: ArtifactVerifier | None = None,
     ) -> None:
         self.session = session
+        self.artifact_verifier = artifact_verifier
         runtime_settings = settings or get_settings()
         self.settings = runtime_settings
         self.minio_public_base = runtime_settings.minio_public_base
@@ -248,6 +249,19 @@ class SQLToolAdapter:
                 "latency_ms": max(0, round((perf_counter() - started) * 1000)),
             }
         )
+
+    async def query_structural_context(self, mission_id: str) -> dict[str, Any]:
+        from windops_backend.services.structural_missions import structural_mission_detail
+
+        started = perf_counter()
+        result = await structural_mission_detail(self.session, mission_id)
+        self._record_call(
+            "query_structural_context",
+            started,
+            {"mission_id": mission_id},
+            len(result["evidence_cards"]),
+        )
+        return result
 
     async def get_turbine_status(self, turbine_id: str) -> dict[str, Any]:
         started = perf_counter()
@@ -426,40 +440,52 @@ class SQLToolAdapter:
         )
 
     def _stale_embedding_clause(self) -> ColumnElement[bool]:
-        return or_(
-            KnowledgeDocument.vectorized.is_(False),
-            KnowledgeDocument.embedding_provider.is_distinct_from(
-                self.embedding_provider.provider_name
-            ),
-            KnowledgeDocument.embedding_model.is_distinct_from(self.embedding_provider.model_name),
-        )
+        from windops_backend.services.knowledge_passages import stale_document_clause
+
+        return stale_document_clause(self.embedding_provider)
 
     async def _ensure_document_vectors(self, documents: list[KnowledgeDocument]) -> None:
-        missing = [document for document in documents if not self._embedding_is_current(document)]
-        if not missing:
-            return
-        document_chunks = [
-            chunk_embedding_text(document.title, document.body) for document in missing
-        ]
+        from windops_backend.services.knowledge_passages import (
+            document_passages,
+            passage_current,
+            passage_embedding_input,
+            store_passage_vectors,
+        )
+
+        pending_documents = []
+        for candidate in documents:
+            document = await self.session.scalar(
+                select(KnowledgeDocument)
+                .where(KnowledgeDocument.id == candidate.id)
+                .with_for_update()
+            )
+            if document is None:
+                continue
+            passages = await document_passages(self.session, document, create_legacy=True)
+            if self._embedding_is_current(document) and all(
+                passage_current(passage, self.embedding_provider) for passage in passages
+            ):
+                continue
+            pending_documents.append((document, passages))
         vectors = await embed_texts_with_controls(
             self.embedding_provider,
-            [chunk for chunks in document_chunks for chunk in chunks],
+            [
+                passage_embedding_input(document, passage)
+                for document, passages in pending_documents
+                for passage in passages
+            ],
             settings=self.settings,
         )
-        dialect = self.session.bind.dialect.name if self.session.bind is not None else "unknown"
-        vector_offset = 0
-        for document, chunks in zip(missing, document_chunks, strict=True):
-            chunk_vectors = vectors[vector_offset : vector_offset + len(chunks)]
-            vector_offset += len(chunks)
-            vector = aggregate_embedding_vectors(chunk_vectors)
-            indexed_at = datetime.now(UTC)
-            document.embedding = pack_embedding_vector(vector) if dialect == "sqlite" else vector
-            document.vectorized = True
-            document.ingestion_status = "indexed"
-            document.embedding_provider = self.embedding_provider.provider_name
-            document.embedding_model = self.embedding_provider.model_name
-            document.indexed_at = indexed_at
-            document.updated_at = indexed_at
+        offset = 0
+        for document, passages in pending_documents:
+            store_passage_vectors(
+                self.session,
+                document,
+                passages,
+                vectors[offset : offset + len(passages)],
+                self.embedding_provider,
+            )
+            offset += len(passages)
         await self.session.flush()
 
     async def index_knowledge_documents(self) -> dict[str, Any]:
@@ -533,71 +559,19 @@ class SQLToolAdapter:
                 self.embedding_provider, [query], settings=self.settings
             )
         )[0]
-        if dialect == "postgresql":
-            distance = KnowledgeDocument.embedding.cosine_distance(query_vector)
-            ranked = (
-                await self.session.execute(
-                    select(KnowledgeDocument, distance.label("distance"))
-                    .where(
-                        KnowledgeDocument.vectorized.is_(True),
-                        KnowledgeDocument.embedding_provider
-                        == self.embedding_provider.provider_name,
-                        KnowledgeDocument.embedding_model == self.embedding_provider.model_name,
-                        knowledge_scope_clause(
-                            self.knowledge_policy,
-                            tenant_column=KnowledgeDocument.tenant_id,
-                            wind_farm_column=KnowledgeDocument.wind_farm_id,
-                            turbine_column=KnowledgeDocument.turbine_id,
-                            entity_column=KnowledgeDocument.id,
-                            data_scope_column=KnowledgeDocument.data_scope,
-                        ),
-                    )
-                    .order_by(distance)
-                    .limit(limit)
-                )
-            ).all()
-            doc_matches = [
-                (document, 1.0 - float(distance_value)) for document, distance_value in ranked
-            ]
-            retrieval_method = "pgvector_hnsw_cosine"
-        elif dialect == "sqlite":
-            doc_matches = sorted(
-                (
-                    (
-                        document,
-                        _cosine_similarity(
-                            query_vector,
-                            _unpack_vector(document.embedding)
-                            if isinstance(document.embedding, bytes)
-                            else list(document.embedding or []),
-                        ),
-                    )
-                    for document in documents
-                    if self._embedding_is_current(document) and document.embedding is not None
-                ),
-                key=lambda item: item[1],
-                reverse=True,
-            )[:limit]
-            retrieval_method = "deterministic_test_cosine"
-        else:
-            raise RuntimeError(f"unsupported RAG database dialect: {dialect}")
+        from windops_backend.services.knowledge_passages import retrieve_passages
 
-        result = [
-            {
-                "match_type": "knowledge_document",
-                "document_id": document.id,
-                "title": document.title,
-                "excerpt": document.body[:320],
-                "similarity": round(similarity, 6),
-                "citation_uri": document.citation_uri,
-                "citation_href": _citation_href(document.citation_uri, self.minio_public_base),
-                "retrieval_method": retrieval_method,
-                "embedding_provider": self.embedding_provider.provider_name,
-                "embedding_model": self.embedding_provider.model_name,
-            }
-            for document, similarity in doc_matches
-        ]
+        result = await retrieve_passages(
+            self.session,
+            self.knowledge_policy,
+            self.embedding_provider,
+            query_vector,
+            limit=limit,
+            minio_public_base=self.minio_public_base,
+        )
         if turbine_id:
+            from windops_backend.services.structural_closure import reviewed_case_clause
+
             cases = (
                 await self.session.scalars(
                     select(KnowledgeCase)
@@ -612,6 +586,7 @@ class SQLToolAdapter:
                         )
                     )
                     .where(KnowledgeCase.turbine_id == turbine_id)
+                    .where(reviewed_case_clause())
                     .order_by(desc(KnowledgeCase.created_at))
                     .limit(limit)
                 )
@@ -820,6 +795,7 @@ class SQLToolAdapter:
             select(resource_table.c.id, resource_table.c.resource_type)
             .where(
                 resource_table.c.status == ResourceStatus.AVAILABLE.value,
+                resource_table.c.quantity > 0,
                 resource_table.c.resource_type.in_(required_types),
             )
             .order_by(resource_table.c.id)
@@ -991,6 +967,14 @@ class SQLToolAdapter:
             )
 
         work_order_id = f"WO-{now:%Y%m%d}-{uuid4().hex[:6].upper()}"
+        if plan.closure_kind == "structural_retest":
+            from windops_backend.services.structural_missions import (
+                require_reviewed_structural_claim,
+            )
+
+            await require_reviewed_structural_claim(
+                self.session, mission_id, self.artifact_verifier, self.settings
+            )
         work_order = WorkOrder(
             id=work_order_id,
             mission_id=mission_id,
@@ -1007,11 +991,23 @@ class SQLToolAdapter:
                 "execution_plan_id": execution_plan["execution_plan_id"],
                 "weather_window_id": weather_window_id,
             },
-            closure_policy={
-                "health_score_field": plan.closure_health_score_field,
-                "healthy_threshold": plan.healthy_threshold,
-                "component": profile.component,
-            },
+            closure_policy=(
+                {
+                    "kind": "structural_retest",
+                    "component": profile.component,
+                    "component_id": plan.safety_plan["component_id"],
+                    "template_version": plan.safety_plan["template_version"],
+                }
+                if plan.closure_kind == "structural_retest"
+                else {
+                    "health_score_field": plan.closure_health_score_field,
+                    "healthy_threshold": plan.healthy_threshold,
+                    "component": profile.component,
+                }
+            ),
+            assigned_team="Onshore structural measurement team"
+            if plan.closure_kind == "structural_retest"
+            else "East China Offshore Team A",
             planned_start=planned_start,
             deadline=planned_end,
             estimated_duration_hours=estimated_duration_hours,

@@ -161,6 +161,7 @@ const navigation: NavigationGroup[] = [
       },
       { label: "实时监测", href: "/scada", icon: Activity, capability: "view.telemetry" },
       { label: "设备健康", href: "/health", icon: HeartPulse, capability: "view.assets" },
+      { label: "混塔结构", href: "/structural", icon: GitBranch, capability: "view.assets" },
     ],
   },
   {

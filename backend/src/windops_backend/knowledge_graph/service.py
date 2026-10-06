@@ -34,7 +34,9 @@ class KnowledgeGraphService:
         return await self.store.summary(snapshot.projection_id)
 
     async def summary(self, policy: GraphAccessPolicy | None = None) -> GraphSummary:
-        return await self.store.summary(KNOWLEDGE_GRAPH_PROJECTION_ID, policy)
+        return await self.store.summary(
+            KNOWLEDGE_GRAPH_PROJECTION_ID, policy or GraphAccessPolicy(unrestricted=True)
+        )
 
     async def subgraph(
         self,
@@ -43,6 +45,9 @@ class KnowledgeGraphService:
         depth: int,
         policy: GraphAccessPolicy | None = None,
     ) -> GraphSubgraph:
+        # Internal callers without a principal can inspect business facts, but
+        # require the same fresh claim proof before consuming reviewed statements.
+        policy = policy or GraphAccessPolicy(unrestricted=True)
         uid = await self.store.resolve_uid(KNOWLEDGE_GRAPH_PROJECTION_ID, entity_id, policy)
         if uid is None:
             raise NotFoundError(f"knowledge graph entity {entity_id} was not found")
@@ -74,13 +79,21 @@ class KnowledgeGraphService:
     async def passage_support(
         self, passage_id: str, policy: GraphAccessPolicy | None = None
     ) -> GraphSubgraph:
-        return await self.subgraph(passage_id, depth=4, policy=policy)
+        try:
+            return await self.subgraph(passage_id, depth=4, policy=policy)
+        except NotFoundError:
+            if not passage_id.endswith("#body"):
+                raise
+            # Historical links addressed a whole document. Keep that alias,
+            # while returning the actual document graph and its passage set.
+            return await self.subgraph(passage_id.removesuffix("#body"), depth=4, policy=policy)
 
     async def reconcile(
         self,
         session: AsyncSession,
         policy: GraphAccessPolicy | None = None,
     ) -> ReconciliationReport:
+        policy = policy or GraphAccessPolicy(unrestricted=True)
         expected = await build_knowledge_graph_snapshot(session, limits=self.limits)
         if policy is not None:
             expected = policy.filter_snapshot(expected)

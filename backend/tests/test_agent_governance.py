@@ -10,6 +10,71 @@ from windops_backend.enums import AlarmSeverity
 from windops_backend.models import Alarm, IngestReceipt
 
 
+@pytest.mark.asyncio
+async def test_bundled_catalog_upgrade_preserves_stops_and_custom_active_releases(app) -> None:
+    from sqlalchemy import delete
+
+    from windops_backend.models import (
+        AgentDefinition,
+        AgentSkillLink,
+        AgentToolLink,
+        CatalogVersion,
+    )
+    from windops_backend.services.seed import CATALOG_VERSION, seed_agent_catalog
+
+    async with app.state.session_factory() as session, session.begin():
+        # Replace only this test database's pristine bundled definitions with a
+        # previous-install snapshot; no production data or deployment is involved.
+        await session.execute(delete(AgentSkillLink))
+        await session.execute(delete(AgentToolLink))
+        await session.execute(delete(AgentDefinition))
+        session.add(
+            CatalogVersion(
+                id="synthetic-previous-catalog",
+                version="2026.08.1",
+                description="Synthetic previous-install governance challenge",
+            )
+        )
+        await session.flush()
+        for key, version, active in (
+            ("scada_analysis_agent", "2026.08.1", False),
+            ("vibration_diagnosis_agent", "2026.08.1", True),
+            ("work_order_agent", "2026.09.2", True),
+        ):
+            session.add(
+                AgentDefinition(
+                    id=f"agent:{key}@{version}",
+                    agent_key=key,
+                    role=key,
+                    version=version,
+                    catalog_version_id="synthetic-previous-catalog",
+                    display_name=key,
+                    description="Synthetic prior governed state",
+                    active=active,
+                )
+            )
+        await session.flush()
+        await seed_agent_catalog(session)
+        stopped = await session.get(
+            AgentDefinition, f"agent:scada_analysis_agent@{CATALOG_VERSION}"
+        )
+        vibration = await session.get(
+            AgentDefinition, f"agent:vibration_diagnosis_agent@{CATALOG_VERSION}"
+        )
+        workorder = await session.get(AgentDefinition, f"agent:work_order_agent@{CATALOG_VERSION}")
+        assert stopped.active is False
+        assert vibration.active is True
+        assert workorder.active is False
+        assert (await session.get(AgentDefinition, "agent:work_order_agent@2026.09.2")).active
+        assert not (
+            await session.get(AgentDefinition, "agent:vibration_diagnosis_agent@2026.08.1")
+        ).active
+        vibration.active = False
+        await session.flush()
+        await seed_agent_catalog(session)
+        assert vibration.active is False
+
+
 async def _seed_alarm(app: FastAPI) -> str:
     alarm_id = "ALARM-AGENT-TOOL-001"
     async with app.state.session_factory() as session, session.begin():
@@ -85,7 +150,7 @@ async def test_agent_start_stop_release_and_cas(client: Any) -> None:
         headers={"Idempotency-Key": "agent-release-2026-08-2"},
         json={
             "source_definition_id": agent["definition_id"],
-            "version": "2026.08.2",
+            "version": "2026.10.2",
             "display_name": "SCADA Analysis Agent",
             "role": "scada_analysis_agent",
             "description": "Production release with governed source-quality checks",
@@ -94,7 +159,7 @@ async def test_agent_start_stop_release_and_cas(client: Any) -> None:
     )
     assert released.status_code == 201, released.text
     assert released.json()["active"] is True
-    assert released.json()["version"] == "2026.08.2"
+    assert released.json()["version"] == "2026.10.2"
 
     refreshed = await client.get("/api/v1/agents")
     row = next(

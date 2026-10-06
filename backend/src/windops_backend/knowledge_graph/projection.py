@@ -15,7 +15,7 @@ from math import ceil
 from time import monotonic
 from typing import TYPE_CHECKING, Any, Self
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
@@ -35,6 +35,7 @@ from windops_backend.models import (
     Evidence,
     KnowledgeCase,
     KnowledgeDocument,
+    KnowledgePassage,
     Mission,
     Resource,
     ResourceReservation,
@@ -50,7 +51,7 @@ if TYPE_CHECKING:
     from windops_backend.config import Settings
 
 KNOWLEDGE_GRAPH_PROJECTION_ID = "windops-operational-knowledge-v1"
-KNOWLEDGE_GRAPH_MODEL_VERSION = "2026.08.1"
+KNOWLEDGE_GRAPH_MODEL_VERSION = "2026.10.2"
 _MEMORY_ACCOUNTING_SAFETY_FACTOR = 1.50
 _PYTHON_MEMORY_HEADROOM_RATIO = 0.15
 _SNAPSHOT_HANDOFF_BYTES_PER_ITEM = 160
@@ -573,7 +574,7 @@ class _MissionContext:
     alarm_id: str
     revision: int
     failure_uid: str | None
-    confidence: float
+    confidence: float | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -592,6 +593,13 @@ class _TaskContext:
 class _ResourceContext:
     resource_uid: str
     resource_type: str
+
+
+def _knowledge_owner(properties: GraphProperties, key: str) -> str | None:
+    value = properties.get(key)
+    if value is None or isinstance(value, str):
+        return value
+    raise ValueError("knowledge document graph ownership must be a string or null")
 
 
 async def build_knowledge_graph_snapshot(
@@ -752,7 +760,7 @@ async def _build_knowledge_graph_snapshot(
         diagnosis_value = mission.public_state.get("diagnosis", {})
         diagnosis = diagnosis_value if isinstance(diagnosis_value, dict) else {}
         failure_uid: str | None = None
-        if diagnosis.get("failure_mode"):
+        if diagnosis.get("failure_mode") and not mission.public_state.get("structural_context"):
             failure_mode_id = _slug(str(diagnosis["failure_mode"]))
             failure_uid = failure_mode_uids.get(failure_mode_id)
             if failure_uid is None:
@@ -779,7 +787,8 @@ async def _build_knowledge_graph_snapshot(
             createdAt=_iso(mission.created_at),
             updatedAt=_iso(mission.updated_at),
         )
-        confidence = float(diagnosis.get("confidence", 0.0))
+        confidence = diagnosis.get("confidence")
+        confidence = float(confidence) if isinstance(confidence, int | float) else None
         context = _MissionContext(
             mission.id,
             mission_uid,
@@ -797,7 +806,7 @@ async def _build_knowledge_graph_snapshot(
                 mission_uid,
                 failure_uid,
                 qualifier=mission.id,
-                confidence=float(diagnosis.get("confidence", 0.0)),
+                confidence=confidence,
                 source="postgresql-mission-public-state",
                 observedAt=_iso(mission.updated_at),
                 validFrom=_iso(mission.updated_at),
@@ -896,11 +905,62 @@ async def _build_knowledge_graph_snapshot(
             turbineId=document.turbine_id,
             title=document.title,
             documentType=document.document_type,
+            documentVersion=document.document_version,
+            artifactSha256=document.artifact_sha256,
             citationUri=document.citation_uri,
             vectorized=document.vectorized,
             source="postgresql",
             updatedAt=_iso(document.updated_at),
         )
+        passage_uids[document.citation_uri] = document_uid
+
+    async for passage in _iter_bounded_scalar_rows(
+        session,
+        select(KnowledgePassage).order_by(KnowledgePassage.id),
+        budget=budget,
+        key_column=KnowledgePassage.id,
+        key_attribute="id",
+    ):
+        document_uid = graph_uid(NodeType.KNOWLEDGE_DOCUMENT, passage.document_id)
+        parent = builder.nodes.get(document_uid)
+        if parent is None:
+            continue
+        citation_uri = f"windops://knowledge/passages/{passage.id}"
+        passage_uid = builder.node(
+            NodeType.KNOWLEDGE_PASSAGE,
+            passage.id,
+            tenantId=_knowledge_owner(parent.properties, "tenantId"),
+            windFarmId=_knowledge_owner(parent.properties, "windFarmId"),
+            turbineId=_knowledge_owner(parent.properties, "turbineId"),
+            documentId=passage.document_id,
+            documentVersion=passage.document_version,
+            ordinal=passage.ordinal,
+            pageNumber=passage.page_number,
+            section=passage.section,
+            body=passage.text,
+            charStart=passage.char_start,
+            charEnd=passage.char_end,
+            nativeLocator=_json(passage.native_locator),
+            sourceSha256=passage.source_sha256,
+            textSha256=passage.text_sha256,
+            parserVersion=passage.parser_version,
+            citationUri=citation_uri,
+            source="postgresql-knowledge-passage",
+            updatedAt=_iso(passage.indexed_at or passage.created_at),
+        )
+        passage_uids[citation_uri] = passage_uid
+        builder.relationship(RelationshipType.HAS_PASSAGE, document_uid, passage_uid)
+
+    # Preserve access to historical aggregate text without inventing a file page.
+    has_passages = exists(select(1).where(KnowledgePassage.document_id == KnowledgeDocument.id))
+    async for document in _iter_bounded_scalar_rows(
+        session,
+        select(KnowledgeDocument).where(~has_passages).order_by(KnowledgeDocument.id),
+        budget=budget,
+        key_column=KnowledgeDocument.id,
+        key_attribute="id",
+    ):
+        document_uid = graph_uid(NodeType.KNOWLEDGE_DOCUMENT, document.id)
         passage_uid = builder.node(
             NodeType.KNOWLEDGE_PASSAGE,
             f"{document.id}#body",
@@ -908,6 +968,9 @@ async def _build_knowledge_graph_snapshot(
             windFarmId=document.wind_farm_id,
             turbineId=document.turbine_id,
             documentId=document.id,
+            documentVersion=document.document_version,
+            pageNumber=None,
+            nativeLocator='{"kind":"database_text","source_verified":false}',
             section="body",
             body=document.body,
             tokenEstimate=max(1, len(document.body.encode("utf-8")) // 4),
@@ -915,7 +978,6 @@ async def _build_knowledge_graph_snapshot(
             source="postgresql-knowledge-document",
             updatedAt=_iso(document.updated_at),
         )
-        passage_uids[document.id] = passage_uid
         builder.relationship(RelationshipType.HAS_PASSAGE, document_uid, passage_uid)
 
     async for evidence in _iter_bounded_scalar_rows(
@@ -970,12 +1032,18 @@ async def _build_knowledge_graph_snapshot(
                     stance=stance,
                 )
         if evidence.citation_uri:
-            for document_id, passage_uid in passage_uids.items():
-                if document_id in evidence.citation_uri:
+            for uri in set(
+                re.findall(
+                    r"windops://knowledge/(?:documents|passages)/[A-Za-z0-9._-]+",
+                    evidence.citation_uri,
+                )
+            ):
+                citation_node_uid = passage_uids.get(uri)
+                if citation_node_uid is not None:
                     builder.relationship(
                         RelationshipType.DERIVED_FROM,
                         evidence_uid,
-                        passage_uid,
+                        citation_node_uid,
                         citationUri=evidence.citation_uri,
                         retrievalMethod=evidence.retrieval_method,
                     )
@@ -1238,9 +1306,11 @@ async def _build_knowledge_graph_snapshot(
 
     resource_context.release()
 
+    from windops_backend.services.structural_closure import reviewed_case_clause
+
     async for case in _iter_bounded_scalar_rows(
         session,
-        select(KnowledgeCase).order_by(KnowledgeCase.id),
+        select(KnowledgeCase).where(reviewed_case_clause()).order_by(KnowledgeCase.id),
         budget=budget,
         key_column=KnowledgeCase.id,
         key_attribute="id",
@@ -1277,8 +1347,12 @@ async def _build_knowledge_graph_snapshot(
                 linked_mission.failure_uid,
                 case_uid,
                 source="closed-loop-knowledge-case",
-                confidence=float(case.diagnosis.get("confidence", 1.0)),
+                confidence=case.diagnosis.get("confidence"),
             )
+
+    from windops_backend.knowledge_graph.structural_projection import project_structural_nodes
+
+    await project_structural_nodes(session, builder, budget)
 
     work_order_by_mission.release()
     mission_context.release()

@@ -90,14 +90,14 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 cd backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[test,dev]"
+python -m pip install -e ".[test,dev,structural]"
 
 docker compose up -d
 alembic upgrade head
 windops-reference-import --reference-pack wt023
 ```
 
-当前唯一迁移头为 `0028_read_audit_pipeline`；可在 `backend` 目录运行 `python scripts/verify_migration_head.py` 核对迁移图与文档声明。
+当前唯一迁移头为 `0032_structural_workflow`；可在 `backend` 目录运行 `python scripts/verify_migration_head.py` 核对迁移图与文档声明。
 
 参考数据导入会提示输入 `operations_manager` 密钥。随后可在四个独立终端启动 outbox relay、Dramatiq worker、读审计 worker 和 API：
 
@@ -190,7 +190,17 @@ Demo 中的 22 个 Agent 分为三层：
 | Review    | Safety、Engineering、Economic、Compliance、Resource Review                        | 复核安全、工程、经济、合规和资源条件   |
 | Execution | Work Order、Crew、Spare Parts、Maintenance、Report、Knowledge                     | 把获批决策转换为受控执行与反馈         |
 
-Python 后端使用独立的 LangGraph 工作流和 11-tool SQL 目录。界面与 API 只展示公开、结构化、可审计的依据，不展示或伪造模型隐藏的 Chain-of-Thought。
+Python 后端使用独立的 LangGraph 工作流和受治理 SQL 工具目录。界面与 API 只展示公开、结构化、可审计的依据，不展示或伪造模型隐藏的 Chain-of-Thought。
+
+### 陆上混塔运维
+
+生产工作台 `/structural` 接通构件、索束、测点校准、原始波形与直接索力登记、独立结构分析队列和健康基线。波形原件按 SHA-256 验证；pyOMA2 FDD 输出质量原因、模态和未量化的不确定性，塔筒模态不能用于估算未经标定的绝对索力。
+
+模态漂移与直接预应力场景复用 Mission、工程结论独立复核、审批、复测工单、健康复核和待审案例。规程段落保留原文定位，图谱结论读取重新核对权限、批准修订与来源原件；不足、撤回、过期和来源变化会阻止消费结论。
+
+分析记录冻结算法、执行代码、配置和校准身份；双镜像部署时还冻结 API / 结构镜像 digest 与发布 bundle。结果哈希可在 PostgreSQL JSONB 回读后复算。镜像字段明确表示部署声明，未配置时为 `unbound`；正式运行镜像身份仍需外部部署与签名证据。
+
+本地软件验收使用合成信号、测试身份和确定性推理。真实 SHM、混塔参数、校准、授权规程和现场责任人待提供，现场与正式发布资格保持未验证。当前实施与证据见 [执行进度](EXECUTION_PROGRESS.md)。
 
 ### CARE v6 基准
 
@@ -353,7 +363,7 @@ pnpm run check:repository-artifacts
 
 ### 真实依赖业务闭环测试
 
-准备 Docker Engine/Compose、Node/pnpm 和 Python 3.12，在 `backend` 执行 `uv sync --frozen --extra test`，然后回到根目录：
+准备 Docker Engine/Compose、Node/pnpm 和 Python 3.12，在 `backend` 执行 `uv sync --frozen --extra test --extra structural`，然后回到根目录：
 
 ```bash
 pnpm exec playwright install chromium

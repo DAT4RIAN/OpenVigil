@@ -34,6 +34,23 @@ class _BatchIngestFallback(RuntimeError):
     """Retry a batch through the fully general per-sample path."""
 
 
+def stored_source_policy(source: IngestSource) -> TelemetrySourcePolicy:
+    """Read both legacy split-column and current complete JSON policies.
+
+    Migration 0007 stored identity/enabled columns separately from constraints.
+    Use those actual values when absent in JSON; validate every persisted limit
+    and keep explicit JSON values rather than substituting a permissive policy.
+    """
+    return TelemetrySourcePolicy.model_validate(
+        {
+            "display_name": source.display_name,
+            "source_kind": source.source_kind,
+            "enabled": source.enabled,
+            **source.policy,
+        }
+    )
+
+
 def _payload_hash(sample: ScadaSampleIn, source_id: str) -> str:
     encoded = json.dumps(
         {"source_id": source_id, "sample": sample.model_dump(mode="json")},

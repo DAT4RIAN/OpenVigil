@@ -44,6 +44,7 @@ import {
 } from "@/lib/ui-localization";
 import { cn } from "@/lib/utils";
 import { deteriorationRiskLabel } from "@/lib/deterioration-risk";
+import { decisionConfidence, decisionMoney, decisionQuantity } from "@/lib/decision-values";
 import { deriveQueryViewState, latestValidTimestamp, queryRuntimeHealth } from "@/lib/query-state";
 import type { ApprovalAction } from "@/lib/types";
 import type { OpenVigilCapability } from "@/lib/identity-session";
@@ -111,15 +112,15 @@ function AlternativeCard({
         </div>
         <div>
           <small>停机时间</small>
-          <strong>{option.estimatedDowntimeHours} h</strong>
+          <strong>{decisionQuantity(option.estimatedDowntimeHours, "h")}</strong>
         </div>
         <div>
           <small>预计成本</small>
-          <strong>¥{(option.estimatedCostCny / 10000).toFixed(1)}万</strong>
+          <strong>{decisionMoney(option.estimatedCostCny)}</strong>
         </div>
         <div>
           <small>发电损失</small>
-          <strong>{option.estimatedEnergyLossMWh} MWh</strong>
+          <strong>{decisionQuantity(option.estimatedEnergyLossMWh, "MWh")}</strong>
         </div>
         <div>
           <small>恶化概率</small>
@@ -438,7 +439,7 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
             </div>
             <div className="decision-confidence">
               <small>AI 置信度</small>
-              <strong>{currentDecision.confidencePercent}%</strong>
+              <strong>{decisionConfidence(currentDecision.confidencePercent)}</strong>
               <span>高</span>
             </div>
             <a href={`/missions/${currentDecision.missionId}`}>
@@ -530,8 +531,8 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
                 <span>
                   <strong>控制经济损失</strong>
                   <small>
-                    预计成本 ¥{((selected?.estimatedCostCny ?? 0) / 10000).toFixed(1)} 万，发电损失{" "}
-                    {selected?.estimatedEnergyLossMWh} MWh
+                    预计成本 {decisionMoney(selected?.estimatedCostCny)}，发电损失{" "}
+                    {decisionQuantity(selected?.estimatedEnergyLossMWh, "MWh")}
                   </small>
                 </span>
               </div>
@@ -540,7 +541,7 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
                   <PackageCheck size={15} />
                 </span>
                 <span>
-                  <strong>资源已就绪</strong>
+                  <strong>所需资源</strong>
                   <small>{selected?.requiredResources.join("、") || "无需额外现场资源"}</small>
                 </span>
               </div>
@@ -572,12 +573,15 @@ export function DecisionCenterPage({ runtimeMode }: { runtimeMode: "demo" | "pro
                   />
                 }
               />
+              <KeyValue label="预计成本" value={decisionMoney(selected?.estimatedCostCny)} />
               <KeyValue
-                label="预计成本"
-                value={`¥${((selected?.estimatedCostCny ?? 0) / 10000).toFixed(1)} 万`}
+                label="停机时间"
+                value={decisionQuantity(selected?.estimatedDowntimeHours, "小时")}
               />
-              <KeyValue label="停机时间" value={`${selected?.estimatedDowntimeHours} 小时`} />
-              <KeyValue label="发电损失" value={`${selected?.estimatedEnergyLossMWh} MWh`} />
+              <KeyValue
+                label="发电损失"
+                value={decisionQuantity(selected?.estimatedEnergyLossMWh, "MWh")}
+              />
               <KeyValue
                 label="故障恶化概率"
                 value={deteriorationRiskLabel(selected?.deteriorationRiskPercent)}

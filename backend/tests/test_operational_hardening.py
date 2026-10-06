@@ -124,10 +124,10 @@ async def test_versioned_catalog_is_persisted_and_linked_to_executions(
     client: httpx.AsyncClient,
 ) -> None:
     catalog = (await client.get("/api/v1/catalog")).json()
-    assert catalog["catalog_version"]["version"] == "2026.08.1"
+    assert catalog["catalog_version"]["version"] == "2026.10.1"
     assert len(catalog["agents"]) == 8
     assert len(catalog["skills"]) == 8
-    assert len(catalog["tools"]) == 17
+    assert len(catalog["tools"]) == 18
     assert all(agent["skills"] for agent in catalog["agents"])
 
     ingested = await client.post("/api/v1/scada/ingest", json=anomaly("SCADA-WT023-CATALOG-001"))
@@ -137,7 +137,7 @@ async def test_versioned_catalog_is_persisted_and_linked_to_executions(
     assert all(row["agent_definition_id"] for row in detail["executions"])
     recorded_calls = [call for row in detail["executions"] for call in row["tool_calls"]]
     assert recorded_calls
-    assert {call["version"] for call in recorded_calls} == {"2026.08.1"}
+    assert {call["version"] for call in recorded_calls} == {"2026.10.1"}
 
     async with app.state.session_factory() as session:
         rows = (

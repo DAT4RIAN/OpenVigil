@@ -137,6 +137,34 @@ jobs:
           evidence_set_digest="$(printf '%s\n%s\n%s\n' "${RELEASE_ID}" "${GITHUB_SHA}" "${{ steps.build.outputs.digest }}" | sha256sum | cut -d' ' -f1)"
           echo "EVIDENCE_SET_ID=sha256:${evidence_set_digest}" >> "${GITHUB_ENV}"
 
+      - name: Build the dedicated structural image from the exact API digest
+        id: structural-build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: backend
+          file: backend/Dockerfile.structural
+          platforms: ${{ steps.policy.outputs.platform }}
+          push: true
+          pull: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ env.IMAGE_REPOSITORY }}-structural:${{ github.sha }}
+          build-args: |
+            BACKEND_IMAGE=${{ env.IMAGE_REPOSITORY }}@${{ steps.build.outputs.digest }}
+            WINDOPS_RELEASE_ID=${{ env.RELEASE_ID }}
+            WINDOPS_COMMIT_SHA=${{ github.sha }}
+
+      - name: Export the two-image bundle identity
+        run: |
+          set -euo pipefail
+          structural_digest="${{ steps.structural-build.outputs.digest }}"
+          [[ "${structural_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          test "${structural_digest}" != "${IMAGE_DIGEST}"
+          echo "STRUCTURAL_IMAGE_DIGEST=${structural_digest}" >> "${GITHUB_ENV}"
+          echo "STRUCTURAL_IMAGE_REF=${IMAGE_REPOSITORY}-structural@${structural_digest}" >> "${GITHUB_ENV}"
+          bundle_id="$(uv run --project backend python -c 'import sys; from windops_backend.operations.hybrid_identity import hybrid_bundle_id; print(hybrid_bundle_id(*sys.argv[1:]))' "${RELEASE_ID}" "${GITHUB_SHA}" "${IMAGE_DIGEST}" "${structural_digest}")"
+          echo "RELEASE_BUNDLE_ID=${bundle_id}" >> "${GITHUB_ENV}"
+
       - name: Publish GitHub build provenance
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
         with:
@@ -147,15 +175,27 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
 
+      - name: Publish structural image build provenance
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ${{ env.IMAGE_REPOSITORY }}-structural
+          subject-digest: ${{ steps.structural-build.outputs.digest }}
+          push-to-registry: true
+
       - name: Sign and verify the immutable image
         run: |
           set -euo pipefail
-          mkdir -p release-evidence
+          mkdir -p release-evidence/structural
           cosign sign --yes "${IMAGE_REF}"
           cosign verify \
             --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main$" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE_REF}" > release-evidence/signature-verification.json
+          cosign sign --yes "${STRUCTURAL_IMAGE_REF}"
+          cosign verify \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${STRUCTURAL_IMAGE_REF}" > release-evidence/structural/signature-verification.json
 
       - name: Scan immutable image for blocking vulnerabilities
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
@@ -175,6 +215,24 @@ jobs:
           output: release-evidence/sbom.spdx.json
           exit-code: "0"
 
+      - name: Scan the structural image for blocking vulnerabilities
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          image-ref: ${{ env.IMAGE_REPOSITORY }}-structural@${{ steps.structural-build.outputs.digest }}
+          format: json
+          output: release-evidence/structural/image-scan.json
+          exit-code: "1"
+          ignore-unfixed: false
+          severity: CRITICAL,HIGH
+
+      - name: Generate the structural SPDX SBOM
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          image-ref: ${{ env.IMAGE_REPOSITORY }}-structural@${{ steps.structural-build.outputs.digest }}
+          format: spdx-json
+          output: release-evidence/structural/sbom.spdx.json
+          exit-code: "0"
+
       - name: Attest and verify the SBOM
         run: |
           set -euo pipefail
@@ -186,6 +244,12 @@ jobs:
             --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main$" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${IMAGE_REF}" > release-evidence/sbom-attestation-verification.json
+          cosign attest --yes --type spdxjson --predicate release-evidence/structural/sbom.spdx.json "${STRUCTURAL_IMAGE_REF}"
+          cosign verify-attestation \
+            --type spdxjson \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${STRUCTURAL_IMAGE_REF}" > release-evidence/structural/sbom-attestation-verification.json
 
       - name: Verify image structure, labels, entrypoints, lock, and client compatibility
         working-directory: backend
@@ -211,6 +275,18 @@ jobs:
             "WINDOPS_RELEASE_ID=${RELEASE_ID}" \
             "WINDOPS_RELEASE_COMMIT_SHA=${GITHUB_SHA}" \
             "WINDOPS_RELEASE_IMAGE_DIGEST=${IMAGE_DIGEST}" >> "${RUNNER_TEMP}/windops-release.env"
+
+      - name: Verify the structural scientific runtime against the exact API parent
+        run: >-
+          uv run --project backend python -m windops_backend.operations.structural_artifact
+          --image "${STRUCTURAL_IMAGE_REF}"
+          --api-image "${IMAGE_REF}"
+          --release-id "${RELEASE_ID}"
+          --commit-sha "${GITHUB_SHA}"
+          --source-url "https://github.com/${GITHUB_REPOSITORY}"
+          --policy backend/deploy/release-policy.json
+          --lock backend/requirements.structural.txt
+          --report release-evidence/structural/container-artifact.json
 
       - name: Run production migration and dependency readiness from the built image
         working-directory: backend
@@ -284,6 +360,28 @@ jobs:
           --junitxml=../release-evidence/external-release-junit.xml
           -q
 
+      - name: Render and verify the two-image structural deployment
+        run: |
+          set -euo pipefail
+          kubectl kustomize backend/deploy/hybrid-tower > release-evidence/structural/kustomize-base.yaml
+          uv run --project backend python backend/scripts/render_release_manifests.py \
+            --input release-evidence/structural/kustomize-base.yaml \
+            --output release-evidence/structural/rendered-manifests.yaml \
+            --release-id "${RELEASE_ID}" --commit-sha "${GITHUB_SHA}" \
+            --image "${IMAGE_REF}" --structural-image "${STRUCTURAL_IMAGE_REF}"
+          uv run --project backend windops-deployment-policy \
+            --manifests release-evidence/structural/rendered-manifests.yaml \
+            --expected-image-digest "${IMAGE_DIGEST}" \
+            --expected-structural-image-digest "${STRUCTURAL_IMAGE_DIGEST}" \
+            --expected-release-id "${RELEASE_ID}" --expected-commit-sha "${GITHUB_SHA}" \
+            --approved-backup-storage-class "${{ steps.policy.outputs.storage_class }}" \
+            --report release-evidence/structural/deployment-policy.json
+          printf '%s\n' \
+            "WINDOPS_API_IMAGE_DIGEST=${IMAGE_DIGEST}" \
+            "WINDOPS_STRUCTURAL_IMAGE_DIGEST=${STRUCTURAL_IMAGE_DIGEST}" \
+            "WINDOPS_RELEASE_BUNDLE_ID=${RELEASE_BUNDLE_ID}" \
+            > release-evidence/structural/runtime-bindings.env
+
       - name: Create a verified backup from the release image
         run: |
           set -euo pipefail
@@ -327,7 +425,7 @@ jobs:
             | sha256sum --check --strict
           uv run --project backend python backend/scripts/stage_independent_release_evidence.py \
             --archive "${archive}" \
-            --evidence-dir release-evidence
+            --evidence-dir release-evidence --hybrid
           rm -f -- "${archive}"
 
       - name: Verify protected full-scale CARE acceptance for this image
@@ -431,6 +529,22 @@ jobs:
             --arg evidence_set_id "${EVIDENCE_SET_ID}" \
             '.status == "qualified" and .release_id == $release_id and .commit_sha == $commit_sha and .image_digest == $image_digest and .evidence_set_id == $evidence_set_id and .gate_count == 11' \
             release-evidence/release-qualification.json
+
+      - name: Qualify the complete API and structural image bundle
+        run: |
+          set -euo pipefail
+          uv run --project backend python -m windops_backend.operations.hybrid_release_gate \
+            --evidence-dir release-evidence \
+            --release-id "${RELEASE_ID}" --commit-sha "${GITHUB_SHA}" \
+            --api-image "${IMAGE_REF}" --structural-image "${STRUCTURAL_IMAGE_REF}" \
+            --source-url "https://github.com/${GITHUB_REPOSITORY}" \
+            --policy backend/deploy/release-policy.json \
+            --lock backend/requirements.structural.txt \
+            --qualification-output release-evidence/hybrid-release-qualification.json \
+            > release-evidence/hybrid-verifier.json
+          jq -e --arg bundle_id "${RELEASE_BUNDLE_ID}" \
+            '.status == "qualified" and .bundle_id == $bundle_id and .api_gate_count == 11' \
+            release-evidence/hybrid-release-qualification.json
 
       - name: Remove decoded protected configuration
         if: always()

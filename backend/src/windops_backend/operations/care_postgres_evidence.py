@@ -12,7 +12,7 @@ from typing import Any
 
 from windops_backend.operations.report_io import write_atomic_json
 
-EXPECTED_MIGRATION_HEAD = "0028_read_audit_pipeline"
+EXPECTED_MIGRATION_HEAD = "0032_structural_workflow"
 MIN_REPLAY_ROWS_PER_SECOND = 50.0
 MAX_QUERY_P95_MS = 500.0
 MAX_REPLAY_SQL_STATEMENTS_PER_BATCH = 40

@@ -33,6 +33,7 @@ import {
 import { Avatar, Button, Card, CardHeader, KeyValue, Progress } from "@/components/ui/primitives";
 import { agentDisplayName } from "@/lib/agent-control-meta";
 import { deteriorationRiskLabel } from "@/lib/deterioration-risk";
+import { decisionConfidence, decisionMoney, decisionQuantity } from "@/lib/decision-values";
 import { agents } from "@/lib/agent-data";
 import { overlayClientDecisions, overlayClientWorkOrders } from "@/lib/client-workflow-overlays";
 import { getCurrentWorkflowAuditCycle, getFeaturedMissionNarrative } from "@/lib/demo-workflow";
@@ -424,7 +425,7 @@ export function FeaturedMissionDetailPage() {
             <CardHeader
               eyebrow="当前决策"
               title={approval === "approve" ? "人工批准方案" : "AI 推荐方案"}
-              description={`综合置信度 ${featuredDecision.confidencePercent}%`}
+              description={`综合置信度 ${decisionConfidence(featuredDecision.confidencePercent)}`}
             />
             <div className="decision-recommendation">
               <span className="decision-recommendation__badge">
@@ -445,11 +446,11 @@ export function FeaturedMissionDetailPage() {
                 </div>
                 <div>
                   <small>停机时间</small>
-                  <strong>{recommended?.estimatedDowntimeHours} h</strong>
+                  <strong>{decisionQuantity(recommended?.estimatedDowntimeHours, "h")}</strong>
                 </div>
                 <div>
                   <small>预计成本</small>
-                  <strong>¥{((recommended?.estimatedCostCny ?? 0) / 10000).toFixed(1)}万</strong>
+                  <strong>{decisionMoney(recommended?.estimatedCostCny)}</strong>
                 </div>
                 <div>
                   <small>恶化概率</small>

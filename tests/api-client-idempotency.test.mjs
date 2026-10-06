@@ -83,6 +83,41 @@ test("a twice-lost command response is result-unknown and retains the reconcilia
   }
 });
 
+test("an unreadable successful command retains its reconciliation key and HTTP failures keep status", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response("{truncated", { status: 201 });
+    await assert.rejects(
+      () => apiPostCommand("/api/backend/test", {}, "truncated-command-001"),
+      (error) =>
+        error instanceof OpenVigilApiError &&
+        error.status === 0 &&
+        error.code === "COMMAND_RESULT_UNKNOWN" &&
+        error.operationKey === "truncated-command-001",
+    );
+    globalThis.fetch = async () => new Response("<html>unavailable</html>", { status: 503 });
+    await assert.rejects(
+      () => apiGet("/api/backend/test"),
+      (error) =>
+        error instanceof OpenVigilApiError &&
+        error.status === 503 &&
+        error.code === "INVALID_API_RESPONSE",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a valid nullable JSON read preserves the original API value", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => Response.json(null);
+    assert.equal(await apiGet("/api/backend/test"), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("API access failures distinguish authentication, authorization, backend, and network", async () => {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;

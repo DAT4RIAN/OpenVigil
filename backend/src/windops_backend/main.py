@@ -44,10 +44,12 @@ from windops_backend.services.platform_governance import (
 )
 from windops_backend.services.seed import seed_agent_catalog, seed_wt023_demo
 from windops_backend.storage import InMemoryArtifactVerifier, MinioArtifactVerifier
+from windops_backend.structural_provenance import deployment_identity
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     runtime_settings = settings or get_settings()
+    deployment_identity(runtime_settings, "api")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

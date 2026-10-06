@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import and_, false, or_, select, true
+from sqlalchemy import Select, and_, false, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -29,7 +29,7 @@ class KnowledgeDocumentScope:
 def _allowed_values(values: frozenset[str], column: Any) -> ColumnElement[bool] | None:
     if not values:
         return None
-    allowed = true() if "*" in values else column.in_(tuple(values))
+    allowed = true() if "*" in values else func.lower(column).in_(tuple(sorted(values)))
     return and_(column.is_not(None), allowed)
 
 
@@ -76,12 +76,18 @@ def knowledge_scope_clause(
         return false()
     scoped_visibility: ColumnElement[bool] = and_(*grants) if grants else false()
     if policy.allow_global:
+        global_entity_grant = (
+            _allowed_values(policy.entity_ids, entity_column) if entity_column is not None else None
+        )
         scoped_visibility = or_(
             scoped_visibility,
             and_(
                 tenant_column.is_(None),
                 wind_farm_column.is_(None),
                 turbine_column.is_(None),
+                global_entity_grant
+                if global_entity_grant is not None
+                else (false() if policy.entity_ids else true()),
             ),
         )
     return and_(data_scope, scoped_visibility)
@@ -107,11 +113,11 @@ def principal_can_access_knowledge_scope(
         if not _KNOWLEDGE_SCOPE_ALIASES.intersection(policy.data_scopes):
             return False
 
-    if tenant_id is None and wind_farm_id is None and turbine_id is None and policy.allow_global:
-        return True
-
     def matches(value: str | None, allowed: frozenset[str]) -> bool:
         return value is not None and ("*" in allowed or value.casefold() in allowed)
+
+    if tenant_id is None and wind_farm_id is None and turbine_id is None and policy.allow_global:
+        return not policy.entity_ids or matches(document_id, policy.entity_ids)
 
     if policy.entity_ids and not matches(document_id, policy.entity_ids):
         return False
@@ -207,7 +213,7 @@ def knowledge_case_scope_clause(policy: GraphAccessPolicy) -> ColumnElement[bool
     )
 
 
-def knowledge_document_query(policy: GraphAccessPolicy) -> Any:
+def knowledge_document_query(policy: GraphAccessPolicy) -> Select[tuple[KnowledgeDocument]]:
     return select(KnowledgeDocument).where(
         knowledge_scope_clause(
             policy,

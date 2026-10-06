@@ -461,6 +461,15 @@ redis = [
 ]
 
 [[package]]
+name = "et-xmlfile"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/38/af70d7ab1ae9d4da450eeec1fa3918940a5fafb9055e934af8d6eb0c2313/et_xmlfile-2.0.0.tar.gz", hash = "sha256:dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54", size = 17234, upload-time = "2024-10-25T17:25:40.039Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/8b/5fe2cc11fee489817272089c4203e679c63b570a5aaeb18d852ae3cbba6a/et_xmlfile-2.0.0-py3-none-any.whl", hash = "sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa", size = 18059, upload-time = "2024-10-25T17:25:39.051Z" },
+]
+
+[[package]]
 name = "fastapi"
 version = "0.141.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1193,6 +1202,18 @@ wheels = [
 ]
 
 [[package]]
+name = "openpyxl"
+version = "3.1.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "et-xmlfile" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3d/f9/88d94a75de065ea32619465d2f77b29a0469500e99012523b91cc4141cd1/openpyxl-3.1.5.tar.gz", hash = "sha256:cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050", size = 186464, upload-time = "2024-06-28T14:03:44.161Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/da/977ded879c29cbd04de313843e76868e6e13408a94ed6b987245dc7c8506/openpyxl-3.1.5-py2.py3-none-any.whl", hash = "sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2", size = 250910, upload-time = "2024-06-28T14:03:41.161Z" },
+]
+
+[[package]]
 name = "opentelemetry-api"
 version = "1.44.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1704,6 +1725,25 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/af/c3/8a3b59c25070cc61dc517fbdfa5dc0904670c96f605cc69759dc09166b99/pyjwt-2.14.0.tar.gz", hash = "sha256:77283c83fb56ecf566a886c757a714bc83668e38156de2cce8263302f42e0b86", size = 113177, upload-time = "2026-09-11T13:11:54.638Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9c/97/672cb32ce0dfea44b740cb7b4f97038463b9cf7c0ead1aacf595572851d6/pyjwt-2.14.0-py3-none-any.whl", hash = "sha256:ad0cef71c756a56e74863c2919cf0985f72decbcfcb550ee2f422e7c62b5eedc", size = 32896, upload-time = "2026-09-11T13:11:53.409Z" },
+]
+
+[[package]]
+name = "pyoma-2"
+version = "1.4.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "openpyxl" },
+    { name = "pandas" },
+    { name = "pydantic" },
+    { name = "requests" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/22/2b/d52f7eb9e6ca2e39efa610b2072a4221cc40ffd59f24c8ea773aa2f13042/pyoma_2-1.4.3.tar.gz", hash = "sha256:b6f02c59ed9d177716587d9c440bcef0063170a0d030d93ae48a5a2cdf9e470b", size = 7255464, upload-time = "2026-09-22T10:10:16.691Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/29/a2/4f449c0a0641a2afe3bad1ccb0fd73eebe9b99546f1afe0058dd6b07cf94/pyoma_2-1.4.3-py3-none-any.whl", hash = "sha256:c3f2c4caf0b3403ac581d03983873ad29af58e87a14ed4cbd9ea2ad70ae9889a", size = 144529, upload-time = "2026-09-22T10:10:15.385Z" },
 ]
 
 [[package]]
@@ -2354,6 +2394,7 @@ dependencies = [
     { name = "litellm" },
     { name = "minio" },
     { name = "neo4j" },
+    { name = "numpy" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-instrumentation-fastapi" },
@@ -2389,6 +2430,9 @@ dev = [
 reference = [
     { name = "pandas" },
 ]
+structural = [
+    { name = "pyoma-2" },
+]
 test = [
     { name = "aiosqlite" },
     { name = "pytest" },
@@ -2419,6 +2463,7 @@ requires-dist = [
     { name = "minio", specifier = ">=7.2,<8" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.17,<2" },
     { name = "neo4j", specifier = ">=5.28,<7" },
+    { name = "numpy", specifier = ">=2.1,<3" },
     { name = "opentelemetry-api", specifier = ">=1.36,<2" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.36,<2" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.57b0,<1" },
@@ -2432,6 +2477,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "pydantic-settings", specifier = ">=2.10,<3" },
     { name = "pyjwt", specifier = ">=2.14,<3" },
+    { name = "pyoma-2", marker = "extra == 'structural'", specifier = "==1.4.3" },
     { name = "pypdf", specifier = ">=6.16.1,<7" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3,<10" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=1.1,<2" },
@@ -2444,7 +2490,7 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.42,<3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.35,<1" },
 ]
-provides-extras = ["connectors", "benchmark", "reference", "test", "dev"]
+provides-extras = ["structural", "connectors", "benchmark", "reference", "test", "dev"]
 
 [package.metadata.requires-dev]
 dev = [

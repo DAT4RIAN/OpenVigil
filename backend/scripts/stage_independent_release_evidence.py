@@ -22,7 +22,8 @@ MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 MAX_MEMBERS = 10_000
 
 
-def stage_independent_evidence(archive: Path, evidence_dir: Path) -> None:
+def stage_independent_evidence(archive: Path, evidence_dir: Path, *, hybrid: bool = False) -> None:
+    required_gates = INDEPENDENT_GATES | ({"structural_runtime"} if hybrid else set())
     if not archive.is_file() or archive.is_symlink():
         raise ValueError("independent release evidence archive is missing or unsafe")
     if archive.stat().st_size <= 0 or archive.stat().st_size > MAX_ARCHIVE_BYTES:
@@ -56,7 +57,7 @@ def stage_independent_evidence(archive: Path, evidence_dir: Path) -> None:
                 raise ValueError("independent release evidence archive expands beyond its limit")
             if relative.parts[0] == "reports" and len(relative.parts) == 2:
                 gate = relative.stem
-                if relative.suffix != ".json" or gate not in INDEPENDENT_GATES:
+                if relative.suffix != ".json" or gate not in required_gates:
                     raise ValueError("independent release evidence contains an unexpected report")
                 reports_found.add(gate)
             elif relative.parts[0] != "artifacts":
@@ -71,7 +72,7 @@ def stage_independent_evidence(archive: Path, evidence_dir: Path) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             with bundle.open(member) as source, target.open("xb") as destination:
                 shutil.copyfileobj(source, destination, length=1024 * 1024)
-    missing = INDEPENDENT_GATES - reports_found
+    missing = required_gates - reports_found
     if missing:
         raise ValueError(
             "independent release evidence is missing reports: " + ", ".join(sorted(missing))
@@ -84,8 +85,9 @@ def main() -> None:
     )
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
+    parser.add_argument("--hybrid", action="store_true")
     args = parser.parse_args()
-    stage_independent_evidence(args.archive, args.evidence_dir)
+    stage_independent_evidence(args.archive, args.evidence_dir, hybrid=args.hybrid)
 
 
 if __name__ == "__main__":

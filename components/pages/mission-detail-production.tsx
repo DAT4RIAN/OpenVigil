@@ -11,6 +11,7 @@ import { useOpenVigilIdentity } from "@/components/providers/identity-provider";
 import { Button, Card, CardHeader, KeyValue } from "@/components/ui/primitives";
 import { apiGet, apiPostCommand, createIdempotencyKey } from "@/lib/api-client";
 import { MissionMaintenanceReviews } from "./mission-maintenance-reviews";
+import { StructuralReviewPanel, StructuralHealthReview } from "./structural-review-panel";
 
 interface ProductionMissionComment {
   readonly comment_id: string;
@@ -262,6 +263,17 @@ export function ProductionMissionDetailPage({ missionId }: { readonly missionId:
       />
 
       <section className="mission-detail-grid">
+        {mission.public_state.structural === true ? (
+          <div className="mission-context-column">
+            <StructuralReviewPanel missionId={mission.mission_id} />
+            {mission.work_order_id ? (
+              <StructuralHealthReview
+                workOrderId={mission.work_order_id}
+                turbineId={mission.turbine_id}
+              />
+            ) : null}
+          </div>
+        ) : null}
         <div className="mission-context-column">
           <Card className="mission-overview-card">
             <CardHeader eyebrow="权威状态" title={mission.title} />

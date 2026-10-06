@@ -282,9 +282,9 @@ export interface DecisionAlternative {
   readonly description: string;
   readonly safetyRisk: RiskLevel;
   readonly deteriorationRiskPercent: number | null;
-  readonly estimatedCostCny: number;
-  readonly estimatedDowntimeHours: number;
-  readonly estimatedEnergyLossMWh: number;
+  readonly estimatedCostCny: number | null;
+  readonly estimatedDowntimeHours: number | null;
+  readonly estimatedEnergyLossMWh: number | null;
   readonly weatherWindowId: string | null;
   readonly requiredResources: readonly string[];
   readonly recommended: boolean;
@@ -309,7 +309,7 @@ export interface Decision {
   readonly turbineId: string;
   readonly incident: string;
   readonly diagnosis: string;
-  readonly confidencePercent: number;
+  readonly confidencePercent: number | null;
   readonly status: DecisionStatus;
   readonly risk: RiskLevel;
   readonly evidenceIds: readonly string[];
@@ -325,7 +325,14 @@ export interface Decision {
 
 export type WorkOrderPriority = "critical" | "high" | "medium" | "low";
 export type WorkOrderStatus =
-  "draft" | "pending-approval" | "scheduled" | "in-progress" | "paused" | "completed" | "closed";
+  | "draft"
+  | "pending-approval"
+  | "scheduled"
+  | "in-progress"
+  | "awaiting-health-review"
+  | "paused"
+  | "completed"
+  | "closed";
 
 export interface WorkOrderTask {
   readonly id: string;
@@ -535,7 +542,7 @@ export interface KnowledgeDocument {
   readonly version: string;
   readonly updatedAt: ISODateTime;
   readonly vectorized: boolean;
-  readonly pageCount: number;
+  readonly pageCount: number | null;
   readonly language: "zh-CN" | "en-US";
   readonly tags: readonly string[];
   readonly summary: string;

@@ -23,7 +23,7 @@ try {
     # Do not migrate beneath live application processes during an idempotent restart.
     $live = @($records | Where-Object { $null -ne (Get-OwnedProcess $_) })
     if ($live.Count -gt 0) {
-        if ($live.Count -eq 5 -and (@($live.role | Sort-Object) -join ',') -eq 'api,frontend,read-audit,relay,worker') {
+        if ($live.Count -eq 6 -and (@($live.role | Sort-Object) -join ',') -eq 'api,frontend,read-audit,relay,structural-worker,worker') {
             & $script:LocalPython $script:LocalHelper verify
             if ($LASTEXITCODE -ne 0) { throw 'Existing stack is not ready; inspect Status-Local.ps1 and private logs.' }
             $response = Invoke-WebRequest "http://127.0.0.1:$FrontendPort/login" -TimeoutSec 5 -UseBasicParsing
@@ -46,7 +46,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
     } finally { Pop-Location }
     $records = @()
-    foreach ($role in @('relay', 'worker', 'read-audit', 'api')) {
+    foreach ($role in @('relay', 'worker', 'structural-worker', 'read-audit', 'api')) {
         $record = Start-OwnedProcess $role $script:LocalPython @($script:LocalHelper, $role)
         $started.Add($record)
         $records += $record

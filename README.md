@@ -90,14 +90,14 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 cd backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[test,dev]"
+python -m pip install -e ".[test,dev,structural]"
 
 docker compose up -d
 alembic upgrade head
 windops-reference-import --reference-pack wt023
 ```
 
-The current sole migration head is `0028_read_audit_pipeline`. From `backend/`, run `python scripts/verify_migration_head.py` to check the migration graph and documented declarations.
+The current sole migration head is `0032_structural_workflow`. From `backend/`, run `python scripts/verify_migration_head.py` to check the migration graph and documented declarations.
 
 The reference import prompts for the `operations_manager` key. Then start the outbox relay, Dramatiq worker, read-audit worker, and API in four separate terminals:
 
@@ -190,7 +190,17 @@ The Demo's 22 Agents are organized into three layers:
 | Review    | Safety, Engineering, Economic, Compliance, Resource Review                        | Review safety, engineering, economics, compliance, and resource conditions  |
 | Execution | Work Order, Crew, Spare Parts, Maintenance, Report, Knowledge                     | Turn approved decisions into governed execution and feedback                |
 
-The Python backend uses an independent LangGraph workflow and a SQL catalog with 11 tools. The UI and APIs expose only public, structured, auditable evidence and conclusions. They do not display or fabricate a model's hidden Chain-of-Thought.
+The Python backend uses an independent LangGraph workflow and a governed SQL tool catalog. The UI and APIs expose only public, structured, auditable evidence and conclusions. They do not display or fabricate a model's hidden Chain-of-Thought.
+
+### Onshore hybrid tower operations
+
+The production workspace at `/structural` connects tower components, tendons, calibrated channels, original waveforms, direct force measurements, a dedicated analysis queue, and health baselines. Original objects are checked by SHA-256. pyOMA2 FDD retains quality exclusions, modes, and unquantified uncertainty; tower modes cannot estimate uncalibrated absolute tendon force.
+
+Modal drift and direct prestress scenarios reuse Missions, independent engineering review, approvals, retest work orders, health review, and pending knowledge cases. Procedure passages retain original locations. Graph statement reads revalidate scope, approved revisions, and original sources; insufficient data, withdrawal, expiry, and source drift prevent consumption.
+
+Analyses freeze algorithm, execution code, configuration, and calibration identities. A hybrid deployment also freezes both API and structural image digests and their release bundle. Result hashes survive PostgreSQL JSONB roundtrips. Image fields are explicitly deployment declarations and remain `unbound` when absent; independently observed runtime identity still requires deployment and signature evidence.
+
+Local software acceptance uses synthetic signals, test identities, and deterministic reasoning. Real SHM, tower parameters, calibration, authorized procedures, and responsible field personnel remain pending; field and formal release qualification remain unverified. See [execution progress](EXECUTION_PROGRESS.md) for implementation and evidence.
 
 ### CARE v6 benchmark
 
@@ -353,7 +363,7 @@ pnpm run check:repository-artifacts
 
 ### Business workflow tests with real dependencies
 
-Prepare Docker Engine/Compose, Node/pnpm, and Python 3.12. Run `uv sync --frozen --extra test` in `backend/`, then return to the repository root:
+Prepare Docker Engine/Compose, Node/pnpm, and Python 3.12. Run `uv sync --frozen --extra test --extra structural` in `backend/`, then return to the repository root:
 
 ```bash
 pnpm exec playwright install chromium

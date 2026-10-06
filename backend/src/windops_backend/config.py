@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from windops_backend.enums import Environment
+from windops_backend.structural_provenance import deployment_identity
 
 
 class TelemetryVariablePolicy(BaseModel):
@@ -215,6 +216,9 @@ class Settings(BaseSettings):
     release_id: str = "development"
     release_commit_sha: str = ""
     release_image_digest: str = ""
+    api_image_digest: str = ""
+    structural_image_digest: str = ""
+    release_bundle_id: str = ""
     # Opt-in committed local candidate; never relaxes production requirements.
     local_acceptance: bool = False
     docs_enabled: bool = True
@@ -273,6 +277,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def enforce_environment_boundaries(self) -> "Settings":
+        # Optional for legacy deployments; a partial hybrid declaration is invalid.
+        deployment_identity(self)
         if self.local_acceptance:
             if self.environment is not Environment.DEVELOPMENT:
                 raise ValueError("local acceptance requires the development environment")

@@ -1,0 +1,246 @@
+{
+  "schema_version": "openvigil.structural-reference.v1",
+  "frozen_at": "2026-10-05",
+  "plan_sha256": "6db90c43795daf46bcc7175edf8a81d239e155ec0d2b9707061daae5431a1f58",
+  "identity_boundary": "commit identities are prior clone receipts; current selected files independently hashed; no claim of full-tree Git verification after metadata removal",
+  "runtime": {
+    "pyOMA_2": "1.4.3",
+    "langgraph": "1.2.11",
+    "pyoma_fdd_matches_reference_after_newline_normalization": true
+  },
+  "repositories": [
+    {
+      "repository": "langchain-ai/langgraph",
+      "url": "https://github.com/langchain-ai/langgraph.git",
+      "directory_name": "langgraph",
+      "commit_from_clone_receipt": "9a0394d88b2211f299dcd69df92db3480c69ee61",
+      "commit_observed_at": "2026-10-05T05:53:02.1932840Z",
+      "git_metadata": "removed_by_prior_user_request",
+      "current_selected_files": [
+        {
+          "path": "README.md",
+          "sha256": "4b5bf18421432989b6e46f22751fed5d0a14a908628e039fc6e1d6543d1e858c"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "ab08cf7f0b8d47e474d2e66e0212f18f6c70f5097f404de8a35c665012c9b199"
+        }
+      ],
+      "usage": "existing_controlled_orchestration"
+    },
+    {
+      "repository": "dagghe/pyOMA2",
+      "url": "https://github.com/dagghe/pyOMA2.git",
+      "directory_name": "pyOMA2",
+      "commit_from_clone_receipt": "8aad6c402dd2220daaff5d498498a2f5beded314",
+      "commit_observed_at": "2026-10-05T05:57:06.9696115Z",
+      "git_metadata": "removed_by_prior_user_request",
+      "current_selected_files": [
+        {
+          "path": "README.md",
+          "sha256": "a42a7cde2fa426ded0f826333b522aae88bab67208783fbddc14b9e97e9e3128"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "ff03b3c3d6fbd95b25957b8264cbf13e46ba926235f2ac7fa6071bc614a7cef8"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "edf2187039eedc8ae2e76b49fa6a431ee53a07ab0cf27cfcdec306d59423c1d6"
+        },
+        {
+          "path": "src/pyoma2/functions/fdd.py",
+          "sha256": "2754124a90d05a04294dd3f2ea049aa433f424ffc01d7cf0bb5fde5cabe22705"
+        }
+      ],
+      "usage": "pinned_headless_structural_worker"
+    },
+    {
+      "repository": "AEFDI/EnergyFaultDetector",
+      "url": "https://github.com/AEFDI/EnergyFaultDetector.git",
+      "directory_name": "EnergyFaultDetector",
+      "commit_from_clone_receipt": "ced470e1386066931bad32f3cb6e24bac9c5bb89",
+      "commit_observed_at": "2026-10-05T05:51:54.5581133Z",
+      "git_metadata": "removed_by_prior_user_request",
+      "current_selected_files": [
+        {
+          "path": "README.md",
+          "sha256": "ba37eef5eaaff46ab747f6fdab9373b87755880fed77474c9d43e9296132f52f"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "65f98b52eaf71a731ac8f878a0214896d63d6c0ffd4df6f486ca5e2440c2615f"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "57dfdba6130ce79cdc01e55deb07094e56a048784d8bf0d44a44d7b4f47e2aa4"
+        }
+      ],
+      "usage": "research_or_benchmark_only_no_runtime_install"
+    },
+    {
+      "repository": "docling-project/docling",
+      "url": "https://github.com/docling-project/docling.git",
+      "directory_name": "docling",
+      "commit_from_clone_receipt": "eda5b5fc86d10b2b79a900ff3e69fc159d5f6014",
+      "commit_observed_at": "2026-10-05T05:58:19.6773826Z",
+      "git_metadata": "removed_by_prior_user_request",
+      "current_selected_files": [
+        {
+          "path": "README.md",
+          "sha256": "ce605634509dc87d79182131ad001e5fddf6053963b9045b971c6e87e6b9bfa1"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "5548fe5439075583606b3ce553c5c18f2397fb0abf0ad6b9c37dd6db7f137e85"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "d7d084887670bce366a49c736ac5360563373ed99de08c28b598d350c5680cae"
+        }
+      ],
+      "usage": "candidate_page_and_native_position_parser"
+    },
+    {
+      "repository": "OpenFAST/openfast",
+      "url": "https://github.com/OpenFAST/openfast.git",
+      "directory_name": "openfast",
+      "commit_from_clone_receipt": "2895884d2be01862173c88d70f86b358d2f1a50a",
+      "commit_observed_at": "2026-10-05T05:53:49.0496130Z",
+      "git_metadata": "removed_by_prior_user_request",
+      "current_selected_files": [
+        {
+          "path": "LICENSE",
+          "sha256": "e03ba41d7fab20700769fe4118bab50d800cb74f990353a05d2f5fff1c228363"
+        }
+      ],
+      "usage": "research_or_benchmark_only_no_runtime_install"
+    },
+    {
+      "repository": "KratosMultiphysics/Kratos",
+      "url": "https://github.com/KratosMultiphysics/Kratos.git",
+      "directory_name": "Kratos",
+      "commit_from_clone_receipt": "126f2d83c61172f8613de51ed6513e21df9e29d0",
+      "commit_observed_at": "2026-10-05T05:53:50.6299828Z",
+      "git_metadata": "removed_by_prior_user_request",
+      "current_selected_files": [
+        {
+          "path": "README.md",
+          "sha256": "2c0c9d26a12916c7be8d5dbf9b38c16a6680bf7b110fe741431c30345670d4a7"
+        },
+        {
+          "path": "LICENSE.txt",
+          "sha256": "50ec04aff6bf04de3c2710ec576c39e9a113af80b3e53dd72986eb7e97aac7ab"
+        }
+      ],
+      "usage": "research_or_benchmark_only_no_runtime_install"
+    },
+    {
+      "repository": "OpenSees/OpenSees",
+      "url": "https://github.com/OpenSees/OpenSees.git",
+      "directory_name": "OpenSees",
+      "commit_from_clone_receipt": "aa3806ff159c3cc74554e0df5dfb9b69456615e8",
+      "commit_observed_at": "2026-10-05T05:55:44.4463648Z",
+      "git_metadata": "removed_by_prior_user_request",
+      "current_selected_files": [
+        {
+          "path": "README.md",
+          "sha256": "7df21380c1a7907de68898d12fb04e84bfd293f5d4bf12af83182e23a6701a0d"
+        }
+      ],
+      "usage": "research_or_benchmark_only_no_runtime_install"
+    },
+    {
+      "repository": "HKUDS/LightRAG",
+      "url": "https://github.com/HKUDS/LightRAG.git",
+      "directory_name": "LightRAG",
+      "commit_from_clone_receipt": "453dce83d6d0354a06e46c8d4029a0895c4e054b",
+      "commit_observed_at": "2026-10-05T05:55:46.1998951Z",
+      "git_metadata": "removed_by_prior_user_request",
+      "current_selected_files": [
+        {
+          "path": "README.md",
+          "sha256": "d586507db9c07fd2c1a72c499b0201d3acec59869b81193535faf794e583e7af"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "24a15ed9538a29044fb3fbb3c645b9ae643bca293fc383e6a5272e81c41968a7"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "5d4367d08cd7a47b4f03eb4cb87c1bbe519b27d4daed6458f1d655d1b17cb29f"
+        }
+      ],
+      "usage": "research_or_benchmark_only_no_runtime_install"
+    },
+    {
+      "repository": "microsoft/graphrag",
+      "url": "https://github.com/microsoft/graphrag.git",
+      "directory_name": "graphrag",
+      "commit_from_clone_receipt": "769542fbf1d8e5b4c6a8677fefc34621c87894c5",
+      "commit_observed_at": "2026-10-05T05:57:08.1641135Z",
+      "git_metadata": "removed_by_prior_user_request",
+      "current_selected_files": [
+        {
+          "path": "README.md",
+          "sha256": "36df9326f1e83343fd46373a2a059093590e4c2ad2256d3ed5de5c5e6e492709"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "e7ebce5c2fe82a6518c48f1f9d25535829f04f3cb5cb7ef85a19b1952b87ddac"
+        }
+      ],
+      "usage": "research_or_benchmark_only_no_runtime_install"
+    },
+    {
+      "repository": "vibrantlabsai/ragas",
+      "url": "https://github.com/vibrantlabsai/ragas.git",
+      "directory_name": "ragas",
+      "commit_from_clone_receipt": "298b68274234c060deacab3cf5fb52aa3a20e885",
+      "commit_observed_at": "2026-10-05T05:57:09.8092506Z",
+      "git_metadata": "removed_by_prior_user_request",
+      "current_selected_files": [
+        {
+          "path": "README.md",
+          "sha256": "fe75300a32083ce163f90f778ad3b5963d0196bd323002788d3f79950ed6ccb2"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "4acca6f8cbd03e143ec8578672daea43e7ce362ec71521a8e203958e69562975"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "db1550a35b2459b39d08005996553c5c6cfa2a91b728f7c975effdc2ca5984a7"
+        }
+      ],
+      "usage": "research_or_benchmark_only_no_runtime_install"
+    },
+    {
+      "repository": "open-telemetry/opentelemetry-python",
+      "url": "https://github.com/open-telemetry/opentelemetry-python.git",
+      "directory_name": "opentelemetry-python",
+      "commit_from_clone_receipt": "5e8083e845dc0b0225d8674240c556c879ce852f",
+      "commit_observed_at": "2026-10-05T05:57:11.2656585Z",
+      "git_metadata": "removed_by_prior_user_request",
+      "current_selected_files": [
+        {
+          "path": "README.md",
+          "sha256": "46177f31dd01f99343aceae3fd5c882a24691dbca6a32d841d45238777a2d2d9"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "3278a8ed6c3332e1ca62eb2d163139b207a1954fdd732c1947574ab76b090362"
+        }
+      ],
+      "usage": "existing_observability"
+    }
+  ]
+}

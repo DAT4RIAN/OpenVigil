@@ -10,6 +10,7 @@ from windops_backend.api.deps import (
     Principal,
     _drain_or_dispatch_graph_projection_events,
     _utc_iso,
+    get_artifact_verifier,
     get_runtime_settings,
     get_session,
     require_read_access,
@@ -49,6 +50,7 @@ from windops_backend.services.platform_governance import (
     create_mission_comment,
 )
 from windops_backend.services.workflow import advance_mission_to_review, record_approval
+from windops_backend.storage import ArtifactVerifier
 
 router = APIRouter()
 
@@ -528,6 +530,7 @@ async def approve_mission(
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8, max_length=128),
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_runtime_settings),
+    verifier: ArtifactVerifier = Depends(get_artifact_verifier),
     principal: Principal = Depends(
         require_roles(
             "operations_manager",
@@ -543,11 +546,14 @@ async def approve_mission(
             detail={"code": "FORBIDDEN", "message": "Insufficient role for approval action"},
         )
     trusted_payload = payload.model_copy(update={"approver": principal.subject})
+    # Replays must still satisfy current asset grants before returning a receipt.
+    if await session.get(Mission, mission_id) is None:
+        raise NotFoundError(f"mission {mission_id} was not found")
     event_ids: list[str] = []
 
     async def operation() -> dict[str, Any]:
         mission, approval, work_order = await record_approval(
-            session, settings, mission_id, trusted_payload
+            session, settings, mission_id, trusted_payload, artifact_verifier=verifier
         )
         event_ids.extend(await pending_events_for_missions(session, [mission_id]))
         return {

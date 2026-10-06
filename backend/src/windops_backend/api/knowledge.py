@@ -18,6 +18,7 @@ from windops_backend.errors import (
     InvalidTransitionError,
     NotFoundError,
 )
+from windops_backend.knowledge_parsing import parse_knowledge_content
 from windops_backend.models import (
     KnowledgeCase,
     KnowledgeDocument,
@@ -37,7 +38,6 @@ from windops_backend.services.knowledge import (
     ALLOWED_KNOWLEDGE_CONTENT_TYPES,
     MAX_KNOWLEDGE_ARTIFACT_BYTES,
     create_knowledge_document,
-    extract_knowledge_text,
     process_knowledge_document_index_event,
     serialize_knowledge_document,
 )
@@ -153,7 +153,7 @@ async def ingest_knowledge_document(
             )
             if stored_content_type != payload.content_type:
                 raise ValueError("stored knowledge object content type does not match the command")
-            extracted_text = await extract_knowledge_text(content, stored_content_type)
+            parsed = await parse_knowledge_content(content, stored_content_type)
         except ValueError as exc:
             raise InvalidTransitionError(str(exc)) from exc
         scope = await resolve_knowledge_document_scope(
@@ -168,10 +168,11 @@ async def ingest_knowledge_document(
         document, document_replayed, event_id = await create_knowledge_document(
             session,
             payload,
-            extracted_text=extracted_text,
+            extracted_text=parsed.body,
             content_size_bytes=len(content),
             subject=principal.subject,
             scope=scope,
+            parsed=parsed,
         )
         if event_id is not None:
             event_ids.append(event_id)

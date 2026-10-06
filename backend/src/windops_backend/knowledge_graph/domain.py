@@ -27,6 +27,17 @@ class NodeType(StrEnum):
     KNOWLEDGE_DOCUMENT = "KnowledgeDocument"
     KNOWLEDGE_PASSAGE = "KnowledgePassage"
     KNOWLEDGE_CASE = "KnowledgeCase"
+    TOWER_COMPONENT = "TowerComponent"
+    TENDON_ASSEMBLY = "TendonAssembly"
+    SENSOR_CHANNEL = "SensorChannel"
+    WAVEFORM_RECORD = "WaveformRecord"
+    STRUCTURAL_ANALYSIS_RUN = "StructuralAnalysisRun"
+    MODAL_OBSERVATION = "ModalObservation"
+    PRESTRESS_OBSERVATION = "PrestressObservation"
+    HEALTH_BASELINE = "HealthBaseline"
+    ENGINEERING_CLAIM = "EngineeringClaim"
+    FIELD_MEASUREMENT = "FieldMeasurement"
+    CLOSURE_ASSESSMENT = "ClosureAssessment"
 
 
 class RelationshipType(StrEnum):
@@ -49,6 +60,16 @@ class RelationshipType(StrEnum):
     HAS_PROCEDURE = "HAS_PROCEDURE"
     RECORDED_FOR = "RECORDED_FOR"
     ASSIGNED_TO = "ASSIGNED_TO"
+    HAS_COMPONENT = "HAS_COMPONENT"
+    HAS_TENDON = "HAS_TENDON"
+    HAS_ANALYSIS = "HAS_ANALYSIS"
+    HAS_OBSERVATION = "HAS_OBSERVATION"
+    HAS_BASELINE = "HAS_BASELINE"
+    HAS_CLAIM = "HAS_CLAIM"
+    HAS_MEASUREMENT = "HAS_MEASUREMENT"
+    HAS_ASSESSMENT = "HAS_ASSESSMENT"
+    ASSESSED_BY = "ASSESSED_BY"
+    FOLLOWUP_TO = "FOLLOWUP_TO"
 
 
 def graph_uid(node_type: NodeType, entity_id: str) -> str:
@@ -170,6 +191,22 @@ _NODE_DATA_SCOPES: dict[NodeType, str] = {
     NodeType.KNOWLEDGE_DOCUMENT: "knowledge",
     NodeType.KNOWLEDGE_PASSAGE: "knowledge",
     NodeType.KNOWLEDGE_CASE: "knowledge",
+    **{
+        kind: "structural"
+        for kind in (
+            NodeType.TOWER_COMPONENT,
+            NodeType.TENDON_ASSEMBLY,
+            NodeType.SENSOR_CHANNEL,
+            NodeType.WAVEFORM_RECORD,
+            NodeType.STRUCTURAL_ANALYSIS_RUN,
+            NodeType.MODAL_OBSERVATION,
+            NodeType.PRESTRESS_OBSERVATION,
+            NodeType.HEALTH_BASELINE,
+            NodeType.ENGINEERING_CLAIM,
+            NodeType.FIELD_MEASUREMENT,
+            NodeType.CLOSURE_ASSESSMENT,
+        )
+    },
 }
 
 
@@ -195,6 +232,9 @@ class GraphAccessPolicy:
     data_scopes: frozenset[str] = frozenset()
     allow_global: bool = False
     unrestricted: bool = False
+    # A SQL/object-store read grants only these exact approved claim revisions.
+    # Ordinary grants, including test-system unrestricted, do not establish this proof.
+    validated_claim_identities: frozenset[str] | None = None
 
     @classmethod
     def from_values(
@@ -243,23 +283,41 @@ class GraphAccessPolicy:
     @staticmethod
     def _candidate_values(node: GraphNode) -> set[str]:
         candidates = {node.entity_id.casefold()}
-        for key in (
-            "tenantId",
-            "windFarmId",
-            "turbineId",
-            "alarmId",
-            "missionId",
-            "workOrderId",
-            "documentId",
-            "taskId",
-            "sourceKey",
+        keys: tuple[str, ...] = ("tenantId", "windFarmId", "turbineId")
+        # Structural fact rows use exact row or asset-hierarchy grants in SQL.
+        # Their foreign keys describe relationships, not permission inheritance.
+        # Claims retain the independently validated current-source proof below.
+        if (
+            graph_data_scope(node.node_type) != "structural"
+            or node.node_type is NodeType.ENGINEERING_CLAIM
         ):
+            keys += (
+                "alarmId",
+                "missionId",
+                "workOrderId",
+                "documentId",
+                "taskId",
+                "sourceKey",
+                "componentId",
+                "tendonId",
+                "sensorId",
+                "recordId",
+                "runId",
+                "claimId",
+            )
+        for key in keys:
             value = node.properties.get(key)
             if value is not None:
                 candidates.add(str(value).strip().casefold())
         return candidates
 
     def allows(self, node: GraphNode) -> bool:
+        if node.node_type is NodeType.ENGINEERING_CLAIM:
+            identity = node.properties.get("readIdentity")
+            if not isinstance(identity, str) or identity not in (
+                self.validated_claim_identities or ()
+            ):
+                return False
         if self.unrestricted:
             return True
 
@@ -302,10 +360,14 @@ class GraphAccessPolicy:
             return False
         if self.turbine_ids and turbine_id is None and has_asset_scope:
             return False
-        if self.entity_ids and not self._candidate_values(node).intersection(self.entity_ids):
+        if (
+            self.entity_ids
+            and "*" not in self.entity_ids
+            and not self._candidate_values(node).intersection(self.entity_ids)
+        ):
             return False
 
-        if self.data_scopes:
+        if self.data_scopes and "*" not in self.data_scopes:
             node_scope = graph_data_scope(node.node_type).casefold()
             aliases = {
                 node_scope,
@@ -320,7 +382,9 @@ class GraphAccessPolicy:
         return True
 
     def filter_snapshot(self, snapshot: GraphSnapshot) -> GraphSnapshot:
-        if self.unrestricted:
+        if self.unrestricted and not any(
+            node.node_type is NodeType.ENGINEERING_CLAIM for node in snapshot.nodes
+        ):
             return snapshot
         visible_nodes = tuple(node for node in snapshot.nodes if self.allows(node))
         visible_uids = {node.uid for node in visible_nodes}

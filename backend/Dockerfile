@@ -13,10 +13,11 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /build
-COPY pyproject.toml requirements.container.txt ./
+COPY requirements.container.txt ./
+RUN python -m pip wheel --require-hashes --wheel-dir /wheels -r requirements.container.txt
+COPY pyproject.toml ./
 COPY src ./src
-RUN python -m pip wheel --require-hashes --wheel-dir /wheels -r requirements.container.txt \
-    && python -m pip wheel --no-deps --wheel-dir /wheels .
+RUN python -m pip wheel --no-deps --wheel-dir /wheels .
 
 FROM ${PYTHON_BASE_IMAGE} AS runtime
 

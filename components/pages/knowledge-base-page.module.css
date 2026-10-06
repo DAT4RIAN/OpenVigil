@@ -656,6 +656,33 @@
   gap: 8px;
 }
 
+.sourceDownload {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
+.sourceDownload p {
+  color: var(--critical);
+}
+
+.sourceNote {
+  color: var(--foreground-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.previewPage .passageText {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.previewPage.citedPassage {
+  border-color: var(--primary);
+  border-left-color: var(--primary);
+}
+
 .drawerSection h3 {
   margin: 0;
   color: var(--foreground);

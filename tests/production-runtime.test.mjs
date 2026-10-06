@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   PREDICTIVE_ASSESSMENT_RUN_TIMEOUT_MS,
+  KNOWLEDGE_GRAPH_READ_TIMEOUT_MS,
   isAllowedProductionGatewayPath,
   isAllowedProductionGatewayRequest,
   probeProductionBackend,
@@ -16,6 +17,7 @@ import {
   productionDecisionsResponse,
   productionHealthAssessmentsResponse,
   productionMissionsResponse,
+  productionKnowledgeDocumentsResponse,
   productionResourcesResponse,
   productionScadaHistoryResponse,
   productionScadaMeasurementsResponse,
@@ -120,12 +122,123 @@ test("predictive inference uses the explicit gateway timeout contract", () => {
   assert.equal(productionBackendRequestTimeoutMs("/api/v1/turbines", 8_000), 8_000);
 });
 
+test("graph reads allow the bounded source proof without extending command or unrelated timeouts", () => {
+  assert.equal(KNOWLEDGE_GRAPH_READ_TIMEOUT_MS, 15_000);
+  for (const path of ["summary", "search", "entities/claim-id/subgraph"]) {
+    assert.equal(
+      productionBackendRequestTimeoutMs(`/api/v1/knowledge-graph/${path}`, 5_000, "GET"),
+      15_000,
+    );
+  }
+  assert.equal(
+    productionBackendRequestTimeoutMs("/api/v1/knowledge-graph/summary", 25_000, "GET"),
+    25_000,
+  );
+  assert.equal(
+    productionBackendRequestTimeoutMs("/api/v1/knowledge-graph/rebuild", 5_000, "POST"),
+    5_000,
+  );
+  assert.equal(
+    productionBackendRequestTimeoutMs("/api/v1/knowledge-graph/reindex", 5_000, "POST"),
+    5_000,
+  );
+  assert.equal(
+    productionBackendRequestTimeoutMs("/api/v1/knowledge-graph-other/summary", 5_000, "GET"),
+    5_000,
+  );
+  assert.equal(productionBackendRequestTimeoutMs("/api/v1/turbines", 5_000, "GET"), 5_000);
+});
+
 test("rotation confirmation is method-scoped at the production gateway", () => {
   const path = "/api/v1/platform/configuration-security-audits/audit-42/rotation-confirmation";
   assert.equal(isAllowedProductionGatewayPath(path), true);
   assert.equal(isAllowedProductionGatewayRequest("POST", path), true);
   assert.equal(isAllowedProductionGatewayRequest("GET", path), false);
   assert.equal(isAllowedProductionGatewayRequest("DELETE", path), false);
+});
+
+test("knowledge passage and verified source reads have bounded paths and methods", () => {
+  const id = "12345678-1234-4234-8234-123456789012";
+  for (const path of [
+    "/api/v1/knowledge/documents/KB-TOWER-R1/passages",
+    "/api/v1/knowledge/documents/KB-TOWER-R1/source",
+    `/api/v1/knowledge/passages/${id}`,
+  ]) {
+    assert.equal(isAllowedProductionGatewayRequest("GET", path), true);
+    for (const method of ["POST", "PUT", "DELETE"]) {
+      assert.equal(isAllowedProductionGatewayRequest(method, path), false);
+    }
+  }
+  assert.equal(isAllowedProductionGatewayPath("/api/v1/knowledge/passages/arbitrary/path"), false);
+  assert.equal(
+    isAllowedProductionGatewayPath("/api/v1/knowledge/documents/KB-R1/source/extra"),
+    false,
+  );
+});
+
+test("production knowledge catalog uses parsed source pagination and preserves unknown pages", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () =>
+    backendJson({
+      documents: [
+        {
+          document_id: "KB-PDF-R1",
+          title: "Synthetic PDF",
+          document_type: "maintenance-procedure",
+          source_layout: { page_count: 2 },
+          metadata: { page_count: 999 },
+        },
+        {
+          document_id: "KB-LEGACY-R1",
+          title: "Legacy text",
+          document_type: "maintenance-procedure",
+          metadata: { page_count: 999 },
+        },
+      ],
+    });
+  try {
+    const response = await runWithWorkerEnv(productionEnvironment, () =>
+      productionKnowledgeDocumentsResponse(
+        sitesRequest("https://windops.example/api/knowledge-documents"),
+      ),
+    );
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.data.documents[0].pageCount, 2);
+    assert.equal(body.data.documents[1].pageCount, null);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("structural acquisition and analysis paths remain scoped to their declared methods", () => {
+  const id = "1fb3df61-a3b1-4b1b-9eb0-219c2e7dd540";
+  const paths = [
+    ["/api/v1/tower-components", "POST"],
+    ["/api/v1/tendon-assemblies", "POST"],
+    ["/api/v1/sensor-channels", "POST"],
+    ["/api/v1/prestress-observations", "POST"],
+    ["/api/v1/structural-records", "GET"],
+    ["/api/v1/structural-records", "POST"],
+    ["/api/v1/structural-records/uploads/presign", "POST"],
+    ["/api/v1/structural-analyses", "POST"],
+    [`/api/v1/structural-analyses/${id}`, "GET"],
+    ["/api/v1/health-baselines", "POST"],
+    [`/api/v1/health-baselines/${id}`, "GET"],
+    ["/api/v1/turbines/WT-023/tower-components", "GET"],
+    ["/api/v1/turbines/WT-023/structural-health", "GET"],
+  ];
+  for (const [path, method] of paths) {
+    assert.equal(isAllowedProductionGatewayPath(path), true, path);
+    assert.equal(isAllowedProductionGatewayRequest(method, path), true, path);
+    assert.equal(isAllowedProductionGatewayRequest("DELETE", path), false, path);
+  }
+  assert.equal(
+    isAllowedProductionGatewayRequest("POST", `/api/v1/structural-analyses/${id}`),
+    false,
+  );
+  assert.equal(isAllowedProductionGatewayPath("/api/v1/structural-analyses/arbitrary/path"), false);
+  assert.equal(isAllowedProductionGatewayPath("/api/v1/health-baselines/export/raw"), false);
 });
 
 test("governed benchmark reads are explicitly allowed by the production gateway", () => {
@@ -869,6 +982,9 @@ test("production decisions preserve unknown risk instead of inventing zero", asy
       const mapped = (await response.json()).data[0].alternatives[0];
       const expected = typeof value === "number" && value >= 0 && value <= 100 ? value : null;
       assert.equal(mapped.deteriorationRiskPercent, expected);
+      assert.equal(mapped.estimatedCostCny, null);
+      assert.equal(mapped.estimatedDowntimeHours, null);
+      assert.equal(mapped.estimatedEnergyLossMWh, null);
     }
   } finally {
     globalThis.fetch = originalFetch;
@@ -1332,6 +1448,29 @@ test("worker adds configured object-store origin without broadening other CSP di
   assert.match(policy, /connect-src 'self' https:\/\/objects\.example;/);
   assert.match(policy, /object-src 'none'/);
   assert.match(policy, /frame-ancestors 'none'/);
+});
+
+test("engineering claim gateway keeps creation, independent review, and reads distinct", () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  assert.equal(isAllowedProductionGatewayRequest("POST", "/api/v1/engineering-claims"), true);
+  assert.equal(isAllowedProductionGatewayRequest("GET", "/api/v1/engineering-claims"), false);
+  assert.equal(isAllowedProductionGatewayRequest("GET", `/api/v1/engineering-claims/${id}`), true);
+  assert.equal(
+    isAllowedProductionGatewayRequest("POST", `/api/v1/engineering-claims/${id}/review`),
+    true,
+  );
+  assert.equal(
+    isAllowedProductionGatewayRequest("GET", `/api/v1/engineering-claims/${id}/review`),
+    false,
+  );
+  assert.equal(
+    isAllowedProductionGatewayRequest("DELETE", `/api/v1/engineering-claims/${id}`),
+    false,
+  );
+  assert.equal(
+    isAllowedProductionGatewayRequest("POST", `/api/v1/engineering-claims/${id}/approve`),
+    false,
+  );
 });
 
 test("invalid upload policy rejects commands before backend execution", async () => {

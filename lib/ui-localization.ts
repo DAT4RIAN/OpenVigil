@@ -3,6 +3,7 @@ const statusLabels: Readonly<Record<string, string>> = {
   acknowledged: "已确认",
   analyzing: "分析中",
   approved: "已批准",
+  "awaiting-health-review": "待健康复核",
   available: "可用",
   cataloged: "已编目",
   closed: "已关闭",

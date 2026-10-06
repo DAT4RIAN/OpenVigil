@@ -4,6 +4,7 @@ import json
 from collections import Counter, deque
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from itertools import chain
 from typing import Any, Protocol
 
 from windops_backend.knowledge_graph.domain import (
@@ -312,6 +313,7 @@ def _neo4j_properties(properties: GraphProperties) -> dict[str, object]:
 
 class Neo4jKnowledgeGraphStore:
     backend_name = "neo4j"
+    MAX_SNAPSHOT_READ_ATTEMPTS = 3
 
     def __init__(self, driver: Any, database: str, *, write_batch_size: int = 500) -> None:
         if write_batch_size <= 0:
@@ -482,29 +484,54 @@ class Neo4jKnowledgeGraphStore:
         boundary testable without weakening the production Neo4j path.
         """
 
-        async with self._driver.session(database=self._database) as session:
-            metadata_result = await session.run(
-                "MATCH (projection:WindOpsGraphProjection {projectionId: $projection_id}) "
-                "RETURN projection.sourceRevision AS source_revision, "
-                "projection.projectionSequence AS projection_sequence, "
-                "projection.generatedAt AS generated_at",
-                projection_id=projection_id,
+        metadata_query = (
+            "MATCH (projection:WindOpsGraphProjection {projectionId: $projection_id}) "
+            "RETURN projection.sourceRevision AS source_revision, "
+            "projection.projectionSequence AS projection_sequence, "
+            "projection.generatedAt AS generated_at, "
+            "projection.nodeCount AS node_count, "
+            "projection.relationshipCount AS relationship_count"
+        )
+        for _ in range(self.MAX_SNAPSHOT_READ_ATTEMPTS):
+            async with self._driver.session(database=self._database) as session:
+                metadata_result = await session.run(metadata_query, projection_id=projection_id)
+                metadata = await metadata_result.single()
+                if metadata is None:
+                    return None
+                node_result = await session.run(
+                    "MATCH (node:WindOpsKnowledge {projectionId: $projection_id}) "
+                    "RETURN properties(node) AS properties",
+                    projection_id=projection_id,
+                )
+                node_rows = await node_result.data()
+                relationship_result = await session.run(
+                    "MATCH ()-[relationship {projectionId: $projection_id}]->() "
+                    "RETURN properties(relationship) AS properties",
+                    projection_id=projection_id,
+                )
+                relationship_rows = await relationship_result.data()
+                after_result = await session.run(metadata_query, projection_id=projection_id)
+                after = await after_result.single()
+            # Neo4j read-committed isolation also permits changes between reads
+            # inside one transaction. Use the existing immutable row version tags
+            # and metadata counts, rather than pretending execute_read is a snapshot.
+            if (
+                after is not None
+                and dict(metadata) == dict(after)
+                and metadata["node_count"] == len(node_rows)
+                and metadata["relationship_count"] == len(relationship_rows)
+                and all(
+                    row["properties"].get("sourceRevision") == metadata["source_revision"]
+                    and row["properties"].get("projectionSequence")
+                    == metadata["projection_sequence"]
+                    for row in chain(node_rows, relationship_rows)
+                )
+            ):
+                break
+        else:
+            raise RuntimeError(
+                "knowledge graph projection changed throughout bounded snapshot reads"
             )
-            metadata = await metadata_result.single()
-            if metadata is None:
-                return None
-            node_result = await session.run(
-                "MATCH (node:WindOpsKnowledge {projectionId: $projection_id}) "
-                "RETURN properties(node) AS properties",
-                projection_id=projection_id,
-            )
-            node_rows = await node_result.data()
-            relationship_result = await session.run(
-                "MATCH ()-[relationship {projectionId: $projection_id}]->() "
-                "RETURN properties(relationship) AS properties",
-                projection_id=projection_id,
-            )
-            relationship_rows = await relationship_result.data()
 
         generated_raw = str(metadata["generated_at"])
         try:

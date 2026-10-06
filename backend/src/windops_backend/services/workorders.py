@@ -84,6 +84,14 @@ async def complete_task(
         )
     normalized_measurement = dict(request.measurement)
     normalized_measurement["schema_version"] = task.schema_version
+    if (
+        work_order.closure_policy.get("kind") == "structural_retest"
+        and "retest_source_id" in request.measurement
+    ):
+        from windops_backend.services.structural_closure import assess_retest
+
+        # Source must exist, match this work order and be measured after its creation.
+        await assess_retest(session, work_order, str(request.measurement["retest_source_id"]))
 
     try:
         await artifact_verifier.verify(
@@ -137,6 +145,23 @@ async def complete_task(
     )
     finalized = pending == 0 and evidence_count == task_count and bool(task_count)
     case_id: str | None = None
+    if finalized and work_order.closure_policy.get("kind") == "structural_retest":
+        work_order.status = WorkOrderStatus.AWAITING_HEALTH_REVIEW.value
+        work_order.updated_at = now
+        append_domain_event(
+            session,
+            event_type="structural.retest.review_required",
+            aggregate_type="work_order",
+            aggregate_id=work_order.id,
+            payload={
+                "work_order_id": work_order.id,
+                "mission_id": work_order.mission_id,
+                "turbine_id": work_order.turbine_id,
+                "status": work_order.status,
+            },
+        )
+        # A complete acquisition handoff does not resolve the alarm or qualify health.
+        finalized = False
     if finalized:
         work_order.status = WorkOrderStatus.COMPLETED.value
         work_order.completed_at = now

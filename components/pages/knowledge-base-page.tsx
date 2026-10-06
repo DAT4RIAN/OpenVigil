@@ -42,6 +42,8 @@ import { featuredMission } from "@/lib/operations-data";
 import type { KnowledgeDocument, KnowledgeDocumentType } from "@/lib/types";
 import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
+import { knowledgeSourceLocation } from "@/lib/knowledge-source";
+import { KnowledgeCitationDrawer, KnowledgeSourceViewer } from "./knowledge-source-viewer";
 
 import styles from "./knowledge-base-page.module.css";
 
@@ -100,19 +102,25 @@ function isAssistantSuccess(value: unknown): value is AssistantSuccessEnvelope {
 }
 
 const formatDate = (value: string): string =>
-  new Date(value).toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  !Number.isFinite(Date.parse(value))
+    ? "未提供"
+    : new Date(value).toLocaleDateString("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
 
 function DocumentDrawer({
   document,
   citedPage,
+  citedPassageId,
+  runtimeMode,
   onClose,
 }: {
   readonly document: KnowledgeDocument;
   readonly citedPage: number | null;
+  readonly citedPassageId: string | null;
+  readonly runtimeMode: "demo" | "production";
   readonly onClose: () => void;
 }) {
   const dialogRef = useAccessibleDialog<HTMLElement>(onClose);
@@ -149,20 +157,32 @@ function DocumentDrawer({
             <StatusBadge value={document.type} label={typeLabel[document.type]} tone="info" />
             <span className={document.vectorized ? styles.indexed : styles.pendingIndex}>
               {document.vectorized ? <CheckCircle2 size={13} /> : <LoaderCircle size={13} />}
-              {document.vectorized ? "已进入演示检索目录" : "浏览器派生 · 待持久化索引"}
+              {runtimeMode === "production"
+                ? document.vectorized
+                  ? "已索引"
+                  : document.ingestionStatus === "failed"
+                    ? "索引失败"
+                    : "等待索引"
+                : document.vectorized
+                  ? "已进入演示检索目录"
+                  : "浏览器派生 · 待持久化索引"}
             </span>
           </div>
 
-          <section className={styles.previewPage}>
-            <span>文档预览 · 第 {citedPage ?? 1} 页</span>
-            <h3>{document.equipment}</h3>
-            <p>{document.summary}</p>
-            <div>
-              {document.tags.map((tag) => (
-                <span key={tag}>{tag}</span>
-              ))}
-            </div>
-          </section>
+          {runtimeMode === "production" ? (
+            <KnowledgeSourceViewer documentId={document.id} citedPassageId={citedPassageId} />
+          ) : (
+            <section className={styles.previewPage}>
+              <span>文档预览 · 第 {citedPage ?? 1} 页</span>
+              <h3>{document.equipment}</h3>
+              <p>{document.summary}</p>
+              <div>
+                {document.tags.map((tag) => (
+                  <span key={tag}>{tag}</span>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className={styles.drawerSection}>
             <h3>文档属性</h3>
@@ -177,7 +197,7 @@ function DocumentDrawer({
               </div>
               <div>
                 <dt>页数</dt>
-                <dd>{document.pageCount} 页</dd>
+                <dd>{document.pageCount === null ? "未提供" : `${document.pageCount} 页`}</dd>
               </div>
               <div>
                 <dt>语言</dt>
@@ -221,7 +241,11 @@ function CitationButton({
   return (
     <button className={styles.citation} type="button" onClick={() => onOpen(citation)}>
       <span>
-        <FileCheck2 size={14} /> {citation.docId} · P.{citation.page}
+        <FileCheck2 size={14} /> {citation.docId} ·{" "}
+        {knowledgeSourceLocation({
+          page_number: citation.page,
+          native_locator: citation.nativeLocator ?? {},
+        })}
       </span>
       <strong>{citation.title}</strong>
       <small>{citation.summary}</small>
@@ -238,6 +262,11 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
   const [type, setType] = useState<"all" | KnowledgeDocumentType>("all");
   const [selectedDocument, setSelectedDocument] = useState<KnowledgeDocument | null>(null);
   const [citedPage, setCitedPage] = useState<number | null>(null);
+  const [citedPassageId, setCitedPassageId] = useState<string | null>(null);
+  const [unlistedCitation, setUnlistedCitation] = useState<Pick<
+    SourceCitation,
+    "docId" | "title" | "passageId"
+  > | null>(null);
   const [question, setQuestion] = useState(
     runtimeMode === "production"
       ? "当前知识库有哪些已验证的维护证据？"
@@ -305,28 +334,47 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
     });
   }, [documents, query, type]);
 
-  const openDocument = useCallback((document: KnowledgeDocument, page: number | null = null) => {
-    setSelectedDocument(document);
-    setCitedPage(page);
-  }, []);
+  const openDocument = useCallback(
+    (document: KnowledgeDocument, page: number | null = null, passage: string | null = null) => {
+      setSelectedDocument(document);
+      setCitedPage(page);
+      setCitedPassageId(passage);
+      setUnlistedCitation(null);
+    },
+    [],
+  );
   const closeDocument = useCallback(() => {
     setSelectedDocument(null);
     setCitedPage(null);
+    setCitedPassageId(null);
+    setUnlistedCitation(null);
   }, []);
 
   useEffect(() => {
     const parameters = new URLSearchParams(window.location.search);
     const documentId = parameters.get("document");
+    const passageId = parameters.get("passage");
     const turbineId = parameters.get("turbineId");
     const document = documentId
       ? documents.find((candidate) => candidate.id === documentId)
       : undefined;
     const timer = window.setTimeout(() => {
-      if (document) openDocument(document);
+      if (document)
+        openDocument(
+          document,
+          null,
+          passageId && /^[a-f0-9-]{36}$/i.test(passageId) ? passageId : null,
+        );
+      else if (documentId && runtimeMode === "production" && documentQuery.isSuccess)
+        setUnlistedCitation({
+          docId: documentId,
+          title: documentId,
+          passageId: passageId ?? `${documentId}#body`,
+        });
       else if (turbineId) setQuery(turbineId);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [documents, openDocument]);
+  }, [documents, openDocument, runtimeMode, documentQuery.isSuccess]);
 
   const columns = useMemo<LegacyColumnDef<KnowledgeDocument, unknown>[]>(
     () => [
@@ -379,7 +427,8 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
       {
         accessorKey: "pageCount",
         header: "页数",
-        cell: ({ row }) => `${row.original.pageCount} 页`,
+        cell: ({ row }) =>
+          row.original.pageCount === null ? "未提供" : `${row.original.pageCount} 页`,
       },
       {
         accessorKey: "updatedAt",
@@ -438,7 +487,12 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
   };
   const openCitation = (citation: SourceCitation) => {
     const document = documents.find((candidate) => candidate.id === citation.docId);
-    if (document) openDocument(document, citation.page);
+    const passageId = /^[a-f0-9-]{36}$/i.test(citation.passageId) ? citation.passageId : null;
+    if (document) openDocument(document, citation.page, passageId);
+    else if (runtimeMode === "production") {
+      setSelectedDocument(null);
+      setUnlistedCitation(citation);
+    }
   };
   const uploadKnowledgeDocument = async (file: File) => {
     const extension = file.name.split(".").pop()?.toLowerCase();
@@ -813,7 +867,21 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
       </div>
 
       {selectedDocument ? (
-        <DocumentDrawer document={selectedDocument} citedPage={citedPage} onClose={closeDocument} />
+        <DocumentDrawer
+          key={selectedDocument.id}
+          document={selectedDocument}
+          citedPage={citedPage}
+          citedPassageId={citedPassageId}
+          runtimeMode={runtimeMode}
+          onClose={closeDocument}
+        />
+      ) : null}
+      {unlistedCitation ? (
+        <KnowledgeCitationDrawer
+          key={unlistedCitation.passageId}
+          citation={unlistedCitation}
+          onClose={closeDocument}
+        />
       ) : null}
     </AppShell>
   );

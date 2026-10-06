@@ -11,8 +11,16 @@ from typing import Any, cast
 
 import yaml  # type: ignore[import-untyped]
 
+from windops_backend.operations.hybrid_identity import (
+    HYBRID_ANNOTATIONS,
+    HYBRID_ENV,
+    STRUCTURAL_CONFIGURATION_RESOURCE,
+    STRUCTURAL_WORKLOAD,
+    hybrid_bundle_id,
+)
 from windops_backend.operations.report_io import sha256_file as _sha256
 from windops_backend.operations.report_io import write_atomic_json
+from windops_backend.operations.structural_artifact import STRUCTURAL_COMMAND
 
 PLACEHOLDER_DIGEST = "sha256:" + "0" * 64
 EXPECTED_NAMESPACE = "windops"
@@ -252,7 +260,8 @@ def _validate_container(
                 f"{workload_name}/{name} contains an unnamed or duplicate environment variable"
             )
         observed_environment[variable] = item.get("value")
-    for field, variable in RELEASE_ENV.items():
+    release_variables = {**RELEASE_ENV, **HYBRID_ENV} if "bundle_id" in release else RELEASE_ENV
+    for field, variable in release_variables.items():
         if observed_environment.get(variable) != release[field]:
             raise DeploymentPolicyError(
                 f"{workload_name}/{name} must bind {variable} to the approved release"
@@ -267,7 +276,12 @@ def _validate_release_annotations(
     release: dict[str, str],
 ) -> None:
     annotations = _mapping(metadata.get("annotations"), f"{field}.annotations")
-    for release_field, annotation in RELEASE_ANNOTATIONS.items():
+    release_annotations = (
+        {**RELEASE_ANNOTATIONS, **HYBRID_ANNOTATIONS}
+        if "bundle_id" in release
+        else RELEASE_ANNOTATIONS
+    )
+    for release_field, annotation in release_annotations.items():
         if annotations.get(annotation) != release[release_field]:
             raise DeploymentPolicyError(f"{field} must bind {annotation} to the approved release")
 
@@ -296,6 +310,9 @@ def _validate_workload(
     configuration_resource = (
         CARE_CONFIGURATION_RESOURCE if name == CARE_WORKLOAD else RUNTIME_CONFIGURATION_RESOURCE
     )
+    if name == STRUCTURAL_WORKLOAD:
+        service_account = STRUCTURAL_WORKLOAD
+        configuration_resource = STRUCTURAL_CONFIGURATION_RESOURCE
     if pod_spec.get("serviceAccountName") != service_account:
         raise DeploymentPolicyError(f"{kind}/{name} must use {service_account}")
     if pod_spec.get("automountServiceAccountToken") is not False:
@@ -449,7 +466,7 @@ def _validate_network_rules(value: object, field: str, peer_key: str) -> None:
                 raise DeploymentPolicyError(f"{field} requires numeric ports from 1 to 65535")
 
 
-def _validate_network_policy(documents: list[dict[str, Any]]) -> None:
+def _validate_network_policy(documents: list[dict[str, Any]], *, hybrid: bool = False) -> None:
     default_deny = _mapping(
         _named(documents, "NetworkPolicy", "windops-default-deny").get("spec"),
         "NetworkPolicy/windops-default-deny.spec",
@@ -481,11 +498,15 @@ def _validate_network_policy(documents: list[dict[str, Any]]) -> None:
             {
                 "key": "app.kubernetes.io/component",
                 "operator": "NotIn",
-                "values": ["care-worker"],
+                "values": ["care-worker", "structural-worker"] if hybrid else ["care-worker"],
             }
         ]
     } or egress.get("policyTypes") != ["Egress"]:
-        raise DeploymentPolicyError("windops-runtime-egress must exclude CARE worker pods")
+        raise DeploymentPolicyError(
+            "windops-runtime-egress must exclude isolated worker pods"
+            if hybrid
+            else "windops-runtime-egress must exclude CARE worker pods"
+        )
     _validate_network_rules(egress.get("egress"), "windops-runtime-egress.egress", "to")
 
     care_egress = _mapping(
@@ -597,6 +618,119 @@ def _validate_care_workload(documents: list[dict[str, Any]]) -> None:
             raise DeploymentPolicyError(f"{claim_name} must use approved encrypted storage")
 
 
+def _selector_matches(selector: dict[str, Any], labels: dict[str, Any]) -> bool:
+    if any(labels.get(key) != value for key, value in selector.get("matchLabels", {}).items()):
+        return False
+    for expression in selector.get("matchExpressions", []):
+        key, operator = expression["key"], expression["operator"]
+        present, value = key in labels, labels.get(key)
+        values = expression.get("values", [])
+        if operator == "In" and (not present or value not in values):
+            return False
+        if operator == "NotIn" and present and value in values:
+            return False
+        if operator == "Exists" and not present:
+            return False
+        if operator == "DoesNotExist" and present:
+            return False
+        if operator not in {"In", "NotIn", "Exists", "DoesNotExist"}:
+            raise DeploymentPolicyError("unsupported network-policy selector operator")
+    return True
+
+
+def _validate_structural_workload(documents: list[dict[str, Any]]) -> None:
+    workload = _named(documents, "Deployment", STRUCTURAL_WORKLOAD)
+    spec = workload["spec"]
+    pod = _pod_template(workload)["spec"]
+    if spec.get("replicas") != 1 or spec.get("strategy") != {"type": "Recreate"}:
+        raise DeploymentPolicyError("structural worker must use one replica and Recreate")
+    containers = pod["containers"]
+    if any(
+        pod["securityContext"].get(key) != 10001 for key in ("runAsUser", "runAsGroup", "fsGroup")
+    ):
+        raise DeploymentPolicyError("structural worker must run as UID/GID 10001")
+    if len(containers) != 1 or pod.get("initContainers"):
+        raise DeploymentPolicyError("structural worker cannot add sidecars or init containers")
+    container = containers[0]
+    if container.get("command", []) + container.get("args", []) != STRUCTURAL_COMMAND:
+        raise DeploymentPolicyError(
+            "structural worker must consume only its bounded dedicated queue"
+        )
+    environment = {item["name"]: item.get("value") for item in container["env"]}
+    expected = {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "MPLBACKEND": "Agg",
+    }
+    if any(environment.get(name) != value for name, value in expected.items()):
+        raise DeploymentPolicyError("structural worker must bound numeric thread concurrency")
+    if container["resources"] != {
+        "requests": {"cpu": "1", "memory": "1Gi", "ephemeral-storage": "128Mi"},
+        "limits": {"cpu": "2", "memory": "2Gi", "ephemeral-storage": "256Mi"},
+    }:
+        raise DeploymentPolicyError(
+            "structural worker resource budget differs from the approved budget"
+        )
+    if (
+        pod.get("terminationGracePeriodSeconds") != 180
+        or pod.get("volumes") != [{"name": "tmp", "emptyDir": {"sizeLimit": "128Mi"}}]
+        # Bounded Kubernetes emptyDir mount; this does not access host temporary files.
+        or container.get("volumeMounts") != [{"name": "tmp", "mountPath": "/tmp"}]  # nosec B108
+    ):
+        raise DeploymentPolicyError("structural worker storage and shutdown must remain bounded")
+    labels = _pod_template(workload)["metadata"]["labels"]
+    if labels.get("app.kubernetes.io/component") != "structural-worker":
+        raise DeploymentPolicyError("structural worker requires its isolated component label")
+    structural_policy = _named(documents, "NetworkPolicy", "windops-structural-egress")["spec"]
+    if structural_policy.get("podSelector") != {
+        "matchLabels": {"app.kubernetes.io/component": "structural-worker"}
+    } or structural_policy.get("policyTypes") != ["Egress"]:
+        raise DeploymentPolicyError("structural egress must select only structural workers")
+    expected_egress = [
+        {
+            "to": [
+                {
+                    "namespaceSelector": {
+                        "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
+                    },
+                    "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
+                }
+            ],
+            "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+        },
+        {
+            "to": [
+                {
+                    "namespaceSelector": {
+                        "matchLabels": {"windops.openai.com/structural-dependency-access": "true"}
+                    },
+                    "podSelector": {
+                        "matchLabels": {"windops.openai.com/structural-dependency-access": "true"}
+                    },
+                }
+            ],
+            "ports": [{"protocol": "TCP", "port": port} for port in (5432, 6379, 9000)],
+        },
+    ]
+    if structural_policy.get("egress") != expected_egress:
+        raise DeploymentPolicyError(
+            "structural egress may use only scoped DNS, PostgreSQL, Redis and MinIO"
+        )
+    # NetworkPolicy allows are additive: an extra matching policy would bypass this isolation.
+    for document in documents:
+        if document.get("kind") != "NetworkPolicy":
+            continue
+        name, policy = document["metadata"]["name"], document["spec"]
+        if _selector_matches(policy.get("podSelector", {}), labels):
+            if policy.get("ingress"):
+                raise DeploymentPolicyError("structural worker cannot receive network ingress")
+            if name != "windops-structural-egress" and policy.get("egress"):
+                raise DeploymentPolicyError(
+                    "additional policy grants structural worker network egress"
+                )
+
+
 def verify_deployment_policy(
     manifests: Path,
     *,
@@ -604,6 +738,7 @@ def verify_deployment_policy(
     expected_release_id: str,
     expected_commit_sha: str,
     approved_backup_storage_class: str,
+    expected_structural_image_digest: str | None = None,
 ) -> dict[str, Any]:
     if (
         re.fullmatch(r"sha256:[0-9a-f]{64}", expected_image_digest) is None
@@ -633,11 +768,29 @@ def verify_deployment_policy(
         )
 
     documents, files = _documents(manifests)
+    hybrid = expected_structural_image_digest is not None
+    if not hybrid and any(
+        resource.get("kind") in WORKLOAD_KINDS
+        and resource["metadata"]["name"] == STRUCTURAL_WORKLOAD
+        for resource in documents
+    ):
+        raise DeploymentPolicyError(
+            "structural workload requires explicit two-image release identity"
+        )
     observed_identities = {
         (cast(str, resource["kind"]), cast(str, _mapping(resource["metadata"], "metadata")["name"]))
         for resource in documents
     }
-    missing = REQUIRED_RESOURCE_IDENTITIES - observed_identities
+    required = REQUIRED_RESOURCE_IDENTITIES | (
+        {
+            ("Deployment", STRUCTURAL_WORKLOAD),
+            ("ServiceAccount", STRUCTURAL_WORKLOAD),
+            ("NetworkPolicy", "windops-structural-egress"),
+        }
+        if hybrid
+        else set()
+    )
+    missing = required - observed_identities
     if missing:
         formatted = ", ".join(f"{kind}/{name}" for kind, name in sorted(missing))
         raise DeploymentPolicyError(f"required rendered resources are missing: {formatted}")
@@ -653,7 +806,11 @@ def verify_deployment_policy(
         if namespace_labels.get(f"pod-security.kubernetes.io/{mode}") != "restricted":
             raise DeploymentPolicyError(f"windops namespace Pod Security {mode} must be restricted")
 
-    for account_name in (RUNTIME_SERVICE_ACCOUNT, CARE_SERVICE_ACCOUNT):
+    for account_name in (
+        RUNTIME_SERVICE_ACCOUNT,
+        CARE_SERVICE_ACCOUNT,
+        *([STRUCTURAL_WORKLOAD] if hybrid else []),
+    ):
         service_account = _named(documents, "ServiceAccount", account_name)
         if service_account.get("automountServiceAccountToken") is not False:
             raise DeploymentPolicyError(
@@ -672,14 +829,36 @@ def verify_deployment_policy(
         "commit_sha": expected_commit_sha,
         "image_digest": expected_image_digest,
     }
-    workloads = [
-        _validate_workload(resource, expected_image_digest, release)
-        for resource in documents
-        if resource.get("kind") in WORKLOAD_KINDS
-    ]
+    if expected_structural_image_digest is not None:
+        release.update(
+            {
+                "api_image_digest": expected_image_digest,
+                "structural_image_digest": expected_structural_image_digest,
+                "bundle_id": hybrid_bundle_id(
+                    expected_release_id,
+                    expected_commit_sha,
+                    expected_image_digest,
+                    expected_structural_image_digest,
+                ),
+            }
+        )
+    workloads = []
+    for resource in documents:
+        if resource.get("kind") not in WORKLOAD_KINDS:
+            continue
+        digest = (
+            expected_structural_image_digest
+            if resource["metadata"]["name"] == STRUCTURAL_WORKLOAD
+            else expected_image_digest
+        )
+        if digest is None:
+            raise DeploymentPolicyError("structural workload requires its explicit approved digest")
+        workloads.append(_validate_workload(resource, digest, {**release, "image_digest": digest}))
     _validate_availability(documents)
     _validate_care_workload(documents)
-    _validate_network_policy(documents)
+    _validate_network_policy(documents, hybrid=hybrid)
+    if hybrid:
+        _validate_structural_workload(documents)
     return {
         "format_version": 1,
         "gate": "deployment_policy",
@@ -688,6 +867,14 @@ def verify_deployment_policy(
         "expected_image_digest": expected_image_digest,
         "expected_release_id": expected_release_id,
         "expected_commit_sha": expected_commit_sha,
+        **(
+            {
+                "expected_structural_image_digest": expected_structural_image_digest,
+                "bundle_id": release["bundle_id"],
+            }
+            if hybrid
+            else {}
+        ),
         "approved_backup_storage_class": approved_backup_storage_class,
         "manifest_files": files,
         "resource_count": len(documents),
@@ -726,6 +913,7 @@ def main() -> None:
     )
     parser.add_argument("--manifests", type=Path, required=True)
     parser.add_argument("--expected-image-digest", required=True)
+    parser.add_argument("--expected-structural-image-digest")
     parser.add_argument("--expected-release-id", required=True)
     parser.add_argument("--expected-commit-sha", required=True)
     parser.add_argument("--approved-backup-storage-class", required=True)
@@ -735,6 +923,7 @@ def main() -> None:
         report = verify_deployment_policy(
             args.manifests,
             expected_image_digest=args.expected_image_digest,
+            expected_structural_image_digest=args.expected_structural_image_digest,
             expected_release_id=args.expected_release_id,
             expected_commit_sha=args.expected_commit_sha,
             approved_backup_storage_class=args.approved_backup_storage_class,

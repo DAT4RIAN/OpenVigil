@@ -77,7 +77,11 @@ const compareDocuments = (
   order: SortOrder,
 ): number => {
   const direction = order === "asc" ? 1 : -1;
-  if (sort === "pageCount") return (left.pageCount - right.pageCount) * direction;
+  if (sort === "pageCount") {
+    if (left.pageCount === null) return right.pageCount === null ? 0 : 1;
+    if (right.pageCount === null) return -1;
+    return (left.pageCount - right.pageCount) * direction;
+  }
   return left[sort].localeCompare(right[sort], "zh-CN") * direction;
 };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Box, Database, Network, RefreshCw, Search, Unplug } from "lucide-react";
 
@@ -58,6 +58,7 @@ type HybridKnowledgeMatch = {
     readonly failureModeIds: readonly string[];
     readonly evidenceIds: readonly string[];
     readonly caseIds: readonly string[];
+    readonly engineeringClaimIds?: readonly string[];
     readonly paths: readonly unknown[];
   };
 };
@@ -85,11 +86,18 @@ function displayProperty(value: unknown) {
   return JSON.stringify(value) ?? "—";
 }
 
+const subscribeToClientReady = () => () => undefined;
+
 export function KnowledgeGraphPage({
   runtimeMode,
 }: {
   readonly runtimeMode: "demo" | "production";
 }) {
+  const clientReady = useSyncExternalStore(
+    subscribeToClientReady,
+    () => true,
+    () => false,
+  );
   const [entityId, setEntityId] = useState(runtimeMode === "production" ? "" : "WT-023");
   const [draftEntityId, setDraftEntityId] = useState(runtimeMode === "production" ? "" : "WT-023");
   const [depth, setDepth] = useState(4);
@@ -118,7 +126,7 @@ export function KnowledgeGraphPage({
     enabled: submittedQuestion.length >= 3,
     retry: false,
   });
-  const response = graphQuery.data;
+  const response = graphQuery.isError || graphQuery.isFetching ? undefined : graphQuery.data;
   const graph = response?.data.graph;
   const summary = response?.data.summary;
 
@@ -170,12 +178,14 @@ export function KnowledgeGraphPage({
           >
             <input
               aria-label="图谱实体 ID"
+              disabled={!clientReady}
               value={draftEntityId}
               onChange={(event) => setDraftEntityId(event.target.value)}
               placeholder="WT-023 / ALARM-... / MISSION-..."
             />
             <select
               aria-label="关系深度"
+              disabled={!clientReady}
               value={depth}
               onChange={(event) => setDepth(Number(event.target.value))}
             >
@@ -184,7 +194,7 @@ export function KnowledgeGraphPage({
               <option value={3}>3 跳</option>
               <option value={4}>4 跳</option>
             </select>
-            <Button type="submit" variant="primary">
+            <Button type="submit" variant="primary" disabled={!clientReady}>
               <Search size={14} /> 查询
             </Button>
           </form>
@@ -260,11 +270,17 @@ export function KnowledgeGraphPage({
         >
           <input
             aria-label="知识图谱混合检索问题"
+            disabled={!clientReady}
             value={draftQuestion}
             onChange={(event) => setDraftQuestion(event.target.value)}
             placeholder="描述故障现象、设备范围或要复核的诊断……"
           />
-          <Button type="submit" variant="primary" loading={searchQuery.isFetching}>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={searchQuery.isFetching}
+            disabled={!clientReady}
+          >
             <Search size={14} /> 检索并扩图
           </Button>
         </form>
@@ -273,7 +289,7 @@ export function KnowledgeGraphPage({
             {searchError.message}
           </p>
         ) : null}
-        {searchQuery.data ? (
+        {searchQuery.data && !searchQuery.isError ? (
           <div className={styles.retrievalResult}>
             <p>{searchQuery.data.data.answer}</p>
             <div className={styles.matchGrid}>
@@ -292,6 +308,11 @@ export function KnowledgeGraphPage({
                     {match.graphExpansion.evidenceIds.length} 条证据 ·
                     {match.graphExpansion.paths.length} 条可解释路径
                   </small>
+                  {match.graphExpansion.engineeringClaimIds?.length ? (
+                    <small>
+                      {match.graphExpansion.engineeringClaimIds.length} 条独立审核的工程结论
+                    </small>
+                  ) : null}
                 </article>
               ))}
             </div>
@@ -367,6 +388,12 @@ export function KnowledgeGraphPage({
               <>
                 <span className={styles.entityType}>{selectedNode.type}</span>
                 <strong className={styles.entityId}>{selectedNode.uid}</strong>
+                {selectedNode.type === "EngineeringClaim" ? (
+                  <p className={styles.retrievalHint} role="note">
+                    独立审核的工程结论 · 修订 {displayProperty(selectedNode.properties.revision)}。
+                    仅供复核其证据与适用范围；不授权作业，现场资格未验证。
+                  </p>
+                ) : null}
                 <dl className={styles.properties}>
                   {Object.entries(selectedNode.properties).map(([key, value]) => (
                     <div key={key}>

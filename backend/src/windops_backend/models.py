@@ -23,6 +23,7 @@ from windops_backend.model_benchmark import (
     BenchmarkQualityReport,
     BenchmarkReplayRun,
 )
+from windops_backend.model_engineering_claim import EngineeringClaim, EngineeringClaimReview
 from windops_backend.model_identity_assets import (
     Tenant,
     Turbine,
@@ -40,6 +41,7 @@ from windops_backend.model_ingest_governance import (
 from windops_backend.model_knowledge import (
     KnowledgeDocument,
 )
+from windops_backend.model_knowledge_passage import KnowledgePassage
 from windops_backend.model_operations_support import (
     GeneratedReport,
     KnowledgeCase,
@@ -60,6 +62,22 @@ from windops_backend.model_registry import (
     ModelPrediction,
     RegisteredModel,
 )
+from windops_backend.model_structural import (
+    HealthBaseline,
+    ModalObservation,
+    PrestressObservation,
+    SensorChannel,
+    StructuralAnalysisRun,
+    TendonAssembly,
+    TowerComponent,
+    WaveformRecord,
+)
+from windops_backend.model_structural_workflow import (
+    StructuralCaseReview,
+    StructuralHealthReview,
+    StructuralMissionContext,
+    StructuralRetestHandoff,
+)
 from windops_backend.model_telemetry_operations import (
     Alarm,
     DomainEvent,
@@ -78,10 +96,17 @@ from windops_backend.model_workflow import (
 )
 
 __all__ = (
+    "StructuralMissionContext",
+    "StructuralHealthReview",
+    "StructuralCaseReview",
+    "StructuralRetestHandoff",
     "utcnow",
     "JSON_VALUE",
     "DEFAULT_TENANT_ID",
     "Base",
+    "HealthBaseline",
+    "EngineeringClaim",
+    "EngineeringClaimReview",
     "Tenant",
     "WindFarm",
     "Turbine",
@@ -120,6 +145,7 @@ __all__ = (
     "WorkOrderTask",
     "AssetHealthEvent",
     "KnowledgeDocument",
+    "KnowledgePassage",
     "RegisteredModel",
     "ModelDeployment",
     "ModelPrediction",
@@ -139,4 +165,11 @@ __all__ = (
     "Resource",
     "ResourceReservation",
     "WeatherWindow",
+    "TowerComponent",
+    "TendonAssembly",
+    "SensorChannel",
+    "WaveformRecord",
+    "StructuralAnalysisRun",
+    "ModalObservation",
+    "PrestressObservation",
 )

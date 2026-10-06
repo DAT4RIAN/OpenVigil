@@ -18,6 +18,7 @@ from windops_backend.outbox import enqueue_knowledge_graph_projection, enqueue_m
 from windops_backend.schemas import ApprovalRequest
 from windops_backend.services.eam import enqueue_eam_work_order_publish
 from windops_backend.services.events import append_domain_event
+from windops_backend.storage import ArtifactVerifier
 
 
 def _persistable_state(state: PublicWorkflowState) -> dict[str, Any]:
@@ -87,6 +88,12 @@ async def advance_mission_to_review(
         ),
         "evidence": [],
     }
+    from windops_backend.model_structural_workflow import StructuralMissionContext
+    from windops_backend.services.structural_missions import structural_mission_detail
+
+    structural_context = await session.get(StructuralMissionContext, mission.id)
+    if structural_context is not None:
+        state["structural_context"] = await structural_mission_detail(session, mission.id)
     graph = OpenVigilWorkflowGraph(
         session,
         SQLToolAdapter(
@@ -134,6 +141,8 @@ async def record_approval(
     settings: Settings,
     mission_id: str,
     request: ApprovalRequest,
+    *,
+    artifact_verifier: ArtifactVerifier | None = None,
 ) -> tuple[Mission, Approval, WorkOrder | None]:
     mission = await session.scalar(
         select(Mission).where(Mission.id == mission_id).with_for_update()
@@ -151,6 +160,9 @@ async def record_approval(
         raise RuntimeError("mission reached approval without a persisted decision")
     selected_alternative_id: str | None = None
     if request.action is ApprovalAction.APPROVE:
+        from windops_backend.services.structural_missions import require_reviewed_structural_claim
+
+        await require_reviewed_structural_claim(session, mission.id, artifact_verifier, settings)
         selected_alternative_id = (
             request.selected_alternative_id or decision.recommended_alternative_id
         )
@@ -160,6 +172,26 @@ async def record_approval(
             raise InvalidTransitionError(
                 "the selected alternative does not belong to this decision"
             )
+        if mission.public_state.get("structural_context"):
+            target = mission.public_state.get("review_target", {})
+            reviews = mission.public_state.get("reviews", [])
+            selected = next(
+                item
+                for item in decision.alternatives
+                if item["alternative_id"] == selected_alternative_id
+            )
+            required_types = {"engineering", "safety", "economic", "resource", "compliance"}
+            if (
+                target.get("alternative_id") != selected_alternative_id
+                or target.get("execution_plan_id") != selected.get("execution_plan_id")
+                or {item.get("review_type") for item in reviews} != required_types
+                or len(reviews) != 5
+                or any(item.get("outcome") == "fail" for item in reviews)
+            ):
+                raise InvalidTransitionError(
+                    "the exact structural execution requires five complete reviews "
+                    "without a fail; request revision"
+                )
         decision.selected_alternative_id = selected_alternative_id
     elif request.selected_alternative_id is not None:
         raise InvalidTransitionError("only approval may select a maintenance alternative")
@@ -200,6 +232,7 @@ async def record_approval(
                 session,
                 settings=settings,
                 knowledge_policy=await _mission_knowledge_policy(session, mission.turbine_id),
+                artifact_verifier=artifact_verifier,
             ),
             build_reasoning_provider(settings),
         )

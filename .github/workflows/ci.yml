@@ -238,7 +238,9 @@ jobs:
           uv sync --frozen --all-extras --all-groups
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Verify generated container dependency lock
-        run: python scripts/export_container_requirements.py --check
+        run: |
+          python scripts/export_container_requirements.py --check
+          python scripts/export_container_requirements.py --structural --check
       - name: Verify locked CARE benchmark import and CLI closure
         run: >-
           windops-care-dependency-closure
@@ -485,7 +487,8 @@ jobs:
         run: |
           set -euo pipefail
           migration_head="$(alembic heads | awk '{print $1}')"
-          test "${migration_head}" = "0028_read_audit_pipeline"
+          expected_migration_head="$(python -c 'from scripts.verify_migration_head import EXPECTED_HEAD; print(EXPECTED_HEAD)')"
+          test "${migration_head}" = "${expected_migration_head}"
           for database in windops_care_offline windops_care_full_scale windops_care_vertical; do
             WINDOPS_DATABASE_URL="postgresql+asyncpg://windops:windops-care-contract@localhost:5432/${database}" \
               alembic current | grep -F "${migration_head} (head)"

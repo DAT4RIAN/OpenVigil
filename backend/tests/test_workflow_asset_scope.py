@@ -75,7 +75,7 @@ async def test_turbine_scoped_approver_can_execute_persisted_weather_plan(
             window.wind_farm_id = "WF-UNAUTHORIZED"
     if not active_agent:
         async with app.state.session_factory() as session, session.begin():
-            definition = await session.get(AgentDefinition, "agent:work_order_agent@2026.08.1")
+            definition = await session.get(AgentDefinition, "agent:work_order_agent@2026.10.1")
             assert definition is not None
             definition.active = False
     if not allow_global:

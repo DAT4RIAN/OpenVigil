@@ -11,6 +11,9 @@ const MIN_BACKEND_TIMEOUT_MS = 1_000;
 const MAX_BACKEND_TIMEOUT_MS = 30_000;
 const MAX_GATEWAY_BODY_BYTES = 2 * 1024 * 1024;
 export const PREDICTIVE_ASSESSMENT_RUN_TIMEOUT_MS = 30_000;
+// The API bounds fresh claim/source validation at ten seconds. Leave time for
+// the graph read and response without truncating that governed verification.
+export const KNOWLEDGE_GRAPH_READ_TIMEOUT_MS = 15_000;
 
 const pathTimeoutsMs = new Map<string, number>([
   ["/api/v1/events/stream", 30_000],
@@ -22,6 +25,15 @@ const allowedGatewayPaths = [
   /^\/api\/v1\/session$/,
   /^\/api\/v1\/(?:tools|catalog)$/,
   /^\/api\/v1\/dashboard$/,
+  /^\/api\/v1\/(?:tower-components|tendon-assemblies|sensor-channels|prestress-observations)$/,
+  /^\/api\/v1\/structural-records(?:\/uploads\/presign)?$/,
+  /^\/api\/v1\/structural-analyses(?:\/[A-Za-z0-9-]{36})?$/,
+  /^\/api\/v1\/health-baselines(?:\/[A-Za-z0-9-]{36})?$/,
+  /^\/api\/v1\/engineering-claims(?:\/[A-Za-z0-9-]{36}(?:\/review)?)?$/,
+  /^\/api\/v1\/structural-missions(?:\/[A-Za-z0-9._:-]{3,40})?$/,
+  /^\/api\/v1\/structural-work-orders\/[A-Za-z0-9._:-]{3,40}(?:\/health-review|\/retests(?:\/uploads\/presign)?)?$/,
+  /^\/api\/v1\/structural-cases(?:\/[A-Za-z0-9._:-]{3,40}\/review)?$/,
+  /^\/api\/v1\/turbines\/[A-Za-z0-9._:-]+\/(?:tower-components|structural-health)$/,
   /^\/api\/v1\/turbines(?:\/[^/]+(?:\/(?:scada|health|twin-profile(?:\/artifacts\/(?:presign|view))?))?)?$/,
   /^\/api\/v1\/alarms(?:\/[^/]+)?$/,
   /^\/api\/v1\/missions(?:\/batch|\/[^/]+(?:\/(?:approvals|comments))?)?$/,
@@ -36,6 +48,8 @@ const allowedGatewayPaths = [
   /^\/api\/v1\/platform\/(?:configurations|configuration-status|data-sources|data-contracts)$/,
   /^\/api\/v1\/platform\/(?:configuration-security-audits|data-source-security-audits)\/[^/]+\/rotation-confirmation$/,
   /^\/api\/v1\/knowledge\/(?:documents(?:\/uploads\/presign|\/[^/]+)?|cases)$/,
+  /^\/api\/v1\/knowledge\/documents\/[A-Za-z0-9._-]+\/(?:passages|source)$/,
+  /^\/api\/v1\/knowledge\/passages\/[A-Za-z0-9-]{36}$/,
   /^\/api\/v1\/models(?:\/uploads\/presign|\/deployments\/[^/]+\/activate|\/[^/]+(?:\/deployments|\/rollback)?)?$/,
   /^\/api\/v1\/models\/deployments\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/anomaly-predictions\/run$/,
   /^\/api\/v1\/model-predictions\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/alert-evaluation$/,
@@ -369,7 +383,15 @@ export function requireProductionBackend(): ProductionBackendConfig & {
 export function productionBackendRequestTimeoutMs(
   backendPath: string,
   configuredTimeoutMs: number,
+  method = "GET",
 ): number {
+  if (
+    method === "GET" &&
+    (backendPath === "/api/v1/knowledge-graph" ||
+      backendPath.startsWith("/api/v1/knowledge-graph/"))
+  ) {
+    return Math.max(configuredTimeoutMs, KNOWLEDGE_GRAPH_READ_TIMEOUT_MS);
+  }
   return pathTimeoutsMs.get(backendPath) ?? configuredTimeoutMs;
 }
 
@@ -379,6 +401,36 @@ export function isAllowedProductionGatewayPath(path: string): boolean {
 
 export function isAllowedProductionGatewayRequest(method: string, path: string): boolean {
   if (!isAllowedProductionGatewayPath(path)) return false;
+  const structuralMethods: readonly [RegExp, readonly string[]][] = [
+    [/^\/api\/v1\/engineering-claims$/, ["POST"]],
+    [/^\/api\/v1\/structural-missions$/, ["POST"]],
+    [/^\/api\/v1\/structural-missions\/[A-Za-z0-9._:-]{3,40}$/, ["GET"]],
+    [/^\/api\/v1\/structural-work-orders\/[A-Za-z0-9._:-]{3,40}$/, ["GET"]],
+    [
+      /^\/api\/v1\/structural-work-orders\/[A-Za-z0-9._:-]{3,40}\/(?:health-review|retests(?:\/uploads\/presign)?)$/,
+      ["POST"],
+    ],
+    [/^\/api\/v1\/structural-cases$/, ["GET"]],
+    [/^\/api\/v1\/structural-cases\/[A-Za-z0-9._:-]{3,40}\/review$/, ["POST"]],
+    [/^\/api\/v1\/engineering-claims\/[A-Za-z0-9-]{36}$/, ["GET"]],
+    [/^\/api\/v1\/engineering-claims\/[A-Za-z0-9-]{36}\/review$/, ["POST"]],
+    [
+      /^\/api\/v1\/(?:tower-components|tendon-assemblies|sensor-channels|prestress-observations|health-baselines|structural-analyses)$/,
+      ["POST"],
+    ],
+    [/^\/api\/v1\/structural-records$/, ["GET", "POST"]],
+    [/^\/api\/v1\/structural-records\/uploads\/presign$/, ["POST"]],
+    [/^\/api\/v1\/(?:structural-analyses|health-baselines)\/[A-Za-z0-9-]{36}$/, ["GET"]],
+    [/^\/api\/v1\/turbines\/[A-Za-z0-9._:-]+\/(?:tower-components|structural-health)$/, ["GET"]],
+  ];
+  const structuralRule = structuralMethods.find(([pattern]) => pattern.test(path));
+  if (structuralRule) return structuralRule[1].includes(method.toUpperCase());
+  if (
+    /^\/api\/v1\/knowledge\/(?:documents\/[A-Za-z0-9._-]+\/(?:passages|source)|passages\/[A-Za-z0-9-]{36})$/.test(
+      path,
+    )
+  )
+    return method.toUpperCase() === "GET";
   if (
     /^\/api\/v1\/(?:models\/deployments\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/anomaly-predictions\/run|model-predictions\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/alert-evaluation)$/.test(
       path,
@@ -714,7 +766,7 @@ export async function proxyProductionBackendRequest(
     );
   }
   const controller = new AbortController();
-  const requestTimeoutMs = productionBackendRequestTimeoutMs(backendPath, config.timeoutMs);
+  const requestTimeoutMs = productionBackendRequestTimeoutMs(backendPath, config.timeoutMs, method);
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
     const upstream = await fetch(upstreamUrl, {

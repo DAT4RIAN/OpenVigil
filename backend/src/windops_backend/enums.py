@@ -49,6 +49,7 @@ class ApprovalAction(StrEnum):
 class WorkOrderStatus(StrEnum):
     SCHEDULED = "scheduled"
     IN_PROGRESS = "in_progress"
+    AWAITING_HEALTH_REVIEW = "awaiting_health_review"
     COMPLETED = "completed"
 
 

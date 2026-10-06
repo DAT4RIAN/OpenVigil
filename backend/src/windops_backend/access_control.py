@@ -10,6 +10,23 @@ from sqlalchemy.orm import ORMExecuteState, Session, with_loader_criteria
 from sqlalchemy.sql.elements import ColumnElement
 
 from windops_backend.knowledge_graph.domain import GraphAccessPolicy
+from windops_backend.model_engineering_claim import EngineeringClaim, EngineeringClaimReview
+from windops_backend.model_structural import (
+    HealthBaseline,
+    ModalObservation,
+    PrestressObservation,
+    SensorChannel,
+    StructuralAnalysisRun,
+    TendonAssembly,
+    TowerComponent,
+    WaveformRecord,
+)
+from windops_backend.model_structural_workflow import (
+    StructuralCaseReview,
+    StructuralHealthReview,
+    StructuralMissionContext,
+    StructuralRetestHandoff,
+)
 from windops_backend.models import (
     AgentDefinition,
     AgentExecution,
@@ -30,6 +47,7 @@ from windops_backend.models import (
     IngestSource,
     KnowledgeCase,
     KnowledgeDocument,
+    KnowledgePassage,
     Mission,
     MissionComment,
     ModelDeployment,
@@ -167,26 +185,29 @@ def turbine_scope_clause(
         conditions.append(_ci_match(turbine_table.c.wind_farm_id, policy.wind_farm_ids))
     if policy.turbine_ids:
         conditions.append(_ci_match(turbine_table.c.id, policy.turbine_ids))
-    conditions.append(
-        _entity_match(
-            policy,
-            (
-                turbine_table.c.id,
-                turbine_table.c.wind_farm_id,
-                farm_table.c.tenant_id,
-                *entity_columns,
-            ),
-        )
-    )
-    return exists(
+    chain = (
         select(1)
         .select_from(
-            turbine_table.join(
-                farm_table,
-                farm_table.c.id == turbine_table.c.wind_farm_id,
-            )
+            turbine_table.join(farm_table, farm_table.c.id == turbine_table.c.wind_farm_id)
         )
         .where(*conditions)
+    )
+    if not policy.entity_ids:
+        return exists(chain)
+    # Keep outer entity grants outside correlated subqueries. SQLAlchemy's
+    # include_aliases adaptation can otherwise leave an unused base table in
+    # the inner FROM list when those outer columns occur inside an OR.
+    hierarchy_match = _entity_match(
+        policy,
+        (
+            turbine_table.c.id,
+            turbine_table.c.wind_farm_id,
+            farm_table.c.tenant_id,
+        ),
+    )
+    return and_(
+        exists(chain),
+        or_(_entity_match(policy, entity_columns), exists(chain.where(hierarchy_match))),
     )
 
 
@@ -402,11 +423,22 @@ def domain_event_scope_clause(policy: GraphAccessPolicy) -> ColumnElement[bool]:
     branches: list[ColumnElement[bool]] = [
         and_(
             event.aggregate_type == "turbine",
+            ~event.event_type.like("structural.%"),
             turbine_scope_clause(
                 policy,
                 event.aggregate_id,
                 entity_columns=(event.aggregate_id,),
                 data_scopes=("asset", "telemetry"),
+            ),
+        ),
+        and_(
+            event.aggregate_type == "turbine",
+            event.event_type.like("structural.%"),
+            turbine_scope_clause(
+                policy,
+                event.aggregate_id,
+                entity_columns=(event.aggregate_id,),
+                data_scopes="structural",
             ),
         ),
         and_(
@@ -793,6 +825,10 @@ def _loader_criteria(policy: GraphAccessPolicy) -> tuple[Any, ...]:
             ),
         ),
         (
+            KnowledgePassage,
+            _knowledge_document_id_scope_clause(policy, KnowledgePassage.document_id),
+        ),
+        (
             ModelPrediction,
             turbine_scope_clause(
                 policy,
@@ -848,6 +884,64 @@ def _loader_criteria(policy: GraphAccessPolicy) -> tuple[Any, ...]:
             ),
         )
         for model, entity_column, data_scope in global_models
+    )
+    for structural_model in (
+        StructuralRetestHandoff,
+        StructuralHealthReview,
+        EngineeringClaim,
+        HealthBaseline,
+        TowerComponent,
+        TendonAssembly,
+        SensorChannel,
+        WaveformRecord,
+        StructuralAnalysisRun,
+        ModalObservation,
+        PrestressObservation,
+    ):
+        clauses.append(
+            (
+                structural_model,
+                turbine_scope_clause(
+                    policy,
+                    structural_model.turbine_id,
+                    entity_columns=(structural_model.id,),
+                    data_scopes="structural",
+                ),
+            )
+        )
+    for sidecar, identifier in (
+        (StructuralMissionContext, StructuralMissionContext.mission_id),
+        (StructuralCaseReview, StructuralCaseReview.case_id),
+    ):
+        clauses.append(
+            (
+                sidecar,
+                turbine_scope_clause(
+                    policy,
+                    sidecar.turbine_id,
+                    entity_columns=(identifier,),
+                    data_scopes="structural",
+                ),
+            )
+        )
+    claim_table = EngineeringClaim.__table__.alias("scope_engineering_claim")
+    clauses.append(
+        (
+            EngineeringClaimReview,
+            exists(
+                select(1)
+                .select_from(claim_table)
+                .where(
+                    claim_table.c.id == EngineeringClaimReview.claim_id,
+                    turbine_scope_clause(
+                        policy,
+                        claim_table.c.turbine_id,
+                        entity_columns=(claim_table.c.id,),
+                        data_scopes="structural",
+                    ),
+                )
+            ),
+        )
     )
     return tuple(
         with_loader_criteria(

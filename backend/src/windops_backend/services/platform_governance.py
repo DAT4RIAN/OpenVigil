@@ -46,7 +46,7 @@ from windops_backend.schemas import (
 )
 from windops_backend.services.eam import enqueue_eam_work_order_publish
 from windops_backend.services.events import append_domain_event
-from windops_backend.services.ingest import ensure_ingest_source
+from windops_backend.services.ingest import ensure_ingest_source, stored_source_policy
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -169,7 +169,7 @@ async def create_data_contract(
         created_by=subject,
     )
     session.add(revision)
-    policy = TelemetrySourcePolicy.model_validate(source.policy)
+    policy = stored_source_policy(source)
     variable_contracts = dict(policy.variable_contracts)
     variable_contracts[request.variable] = TelemetryVariablePolicy.model_validate(contract)
     source.policy = policy.model_copy(update={"variable_contracts": variable_contracts}).model_dump(

@@ -119,6 +119,12 @@ export async function POST(request: Request): Promise<Response> {
           match_type?: string;
           document_id?: string;
           passageId?: string;
+          passage_id?: string;
+          document_version?: string;
+          page_number?: number | null;
+          section?: string | null;
+          native_locator?: Record<string, unknown>;
+          source_sha256?: string | null;
           excerpt?: string;
           title?: string;
           fusedScore?: number;
@@ -135,21 +141,25 @@ export async function POST(request: Request): Promise<Response> {
       .filter((match) => match.match_type === "knowledge_document")
       .map((match) => {
         const documentId = String(match.document_id ?? "");
-        const passageId = String(match.passageId ?? `${documentId}#body`);
+        const passageId = String(match.passage_id ?? match.passageId ?? `${documentId}#body`);
         const quote = String(match.excerpt ?? "");
         return {
           passageId,
           docId: documentId,
           title: String(match.title ?? documentId),
-          page: 1,
-          section: "向量检索正文",
+          page:
+            typeof match.page_number === "number" && match.page_number > 0
+              ? match.page_number
+              : null,
+          section: String(match.section ?? "正文位置未标注"),
+          documentVersion: match.document_version,
+          nativeLocator: match.native_locator,
+          sourceSha256: match.source_sha256,
           quote,
           summary: quote,
           score: Number(match.fusedScore ?? match.similarity ?? 0),
           documentType: "technical-standard" as const,
-          href: String(
-            match.citation_href ?? `/knowledge?document=${encodeURIComponent(documentId)}`,
-          ),
+          href: `/knowledge?document=${encodeURIComponent(documentId)}&passage=${encodeURIComponent(passageId)}`,
         };
       });
     const topScore = citations[0]?.score ?? 0;

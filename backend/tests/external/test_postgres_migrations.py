@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import gc
 import hashlib
 import os
@@ -18,11 +19,11 @@ import httpx
 import jwt
 import pytest
 import pytest_asyncio
-from sqlalchemy import event, text
+from sqlalchemy import event, select, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 from windops_backend.config import IdentityAccessScope, Settings
 from windops_backend.enums import Environment
@@ -56,7 +57,7 @@ from windops_backend.services.operational_views import (
 
 DELEGATION_SECRET = "external-production-gateway-secret-with-at-least-forty-eight-characters"
 
-HEAD_REVISION = "0028_read_audit_pipeline"
+HEAD_REVISION = "0032_structural_workflow"
 PREVIOUS_SUPPORTED_REVISION = "0015_alarm_command_state"
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _DATABASE_IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
@@ -71,6 +72,12 @@ REQUIRED_TIMESTAMP_COLUMNS = (
     ("ingest_receipts", "received_at"),
     ("knowledge_cases", "created_at"),
     ("knowledge_documents", "updated_at"),
+    ("knowledge_passages", "created_at"),
+    ("engineering_claims", "created_at"),
+    ("engineering_claim_reviews", "created_at"),
+    ("structural_mission_contexts", "created_at"),
+    ("structural_health_reviews", "created_at"),
+    ("structural_retest_handoffs", "verified_at"),
     ("missions", "created_at"),
     ("missions", "updated_at"),
     ("resource_reservations", "created_at"),
@@ -162,6 +169,292 @@ def _run_alembic(
         text=True,
         timeout=180,
     )
+
+
+@pytest.mark.asyncio
+async def test_structural_migration_enforces_asset_links_and_concurrent_revision_identity(
+    migration_database_urls: tuple[str, str],
+) -> None:
+    from windops_backend.model_structural import TowerComponent
+    from windops_backend.models import Tenant, Turbine, WindFarm
+
+    database_url, _ = migration_database_urls
+    _run_alembic(database_url, "upgrade", "head")
+    engine = create_async_engine(database_url, pool_pre_ping=True)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    scope = {
+        "tenant_id": "structural-contract",
+        "wind_farm_id": "farm-structure",
+        "turbine_id": "TOWER-1",
+    }
+
+    def component(**changes):
+        return TowerComponent(
+            **{
+                **scope,
+                "code": "C1",
+                "revision": "r1",
+                "name": "synthetic constraint fixture",
+                "component_type": "concrete_segment",
+                "design_reference": "synthetic database contract",
+                "geometry": {},
+                "created_by": "contract-test",
+                **changes,
+            }
+        )
+
+    try:
+        async with factory() as session, session.begin():
+            session.add(Tenant(id=scope["tenant_id"], name="Synthetic constraint tenant"))
+            await session.flush()
+            session.add(
+                WindFarm(
+                    id=scope["wind_farm_id"],
+                    tenant_id=scope["tenant_id"],
+                    name="Synthetic farm",
+                    capacity_mw=1,
+                )
+            )
+            await session.flush()
+            session.add_all(
+                [
+                    Turbine(id=f"TOWER-{i}", wind_farm_id=scope["wind_farm_id"], model="synthetic")
+                    for i in (1, 2)
+                ]
+            )
+            await session.flush()
+            parent = component()
+            session.add(parent)
+            await session.flush()
+            parent_id = parent.id
+        async with factory() as session:
+            session.add(component(turbine_id="TOWER-2", parent_id=parent_id))
+            with pytest.raises(IntegrityError):
+                await session.commit()
+            await session.rollback()
+            assert not (
+                await session.scalars(
+                    select(TowerComponent).where(TowerComponent.turbine_id == "TOWER-2")
+                )
+            ).all()
+
+        async def concurrent_writer():
+            async with factory() as session:
+                session.add(component(code="concurrent-C2"))
+                try:
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    return False
+                return True
+
+        assert sorted(await asyncio.gather(concurrent_writer(), concurrent_writer())) == [
+            False,
+            True,
+        ]
+        async with factory() as session:
+            assert (
+                len(
+                    (
+                        await session.scalars(
+                            select(TowerComponent).where(TowerComponent.code == "concurrent-C2")
+                        )
+                    ).all()
+                )
+                == 1
+            )
+        _run_alembic(database_url, "downgrade", "0028_read_audit_pipeline")
+        async with engine.connect() as connection:
+            assert (
+                await connection.scalar(text("SELECT to_regclass('public.tower_components')"))
+                is None
+            )
+            assert (
+                await connection.scalar(
+                    text("SELECT count(*) FROM turbines WHERE id LIKE 'TOWER-%'")
+                )
+                == 2
+            )
+        _run_alembic(database_url, "upgrade", "head")
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_structural_workflow_migration_health_cas_and_case_governance(
+    migration_database_urls: tuple[str, str],
+) -> None:
+    from test_hybrid_structure import post
+    from test_structural_workflow import CASE, HEALTH, field_handoff, force_order, force_source
+    from windops_backend.models import (
+        StructuralCaseReview,
+        StructuralHealthReview,
+        StructuralRetestHandoff,
+        Turbine,
+    )
+    from windops_backend.storage import FieldTaskEvidence
+
+    database_url, _ = migration_database_urls
+    _run_alembic(database_url, "upgrade", "head")
+    application = create_app(
+        Settings(
+            environment=Environment.TEST,
+            database_url=database_url,
+            schema_bootstrap=False,
+            demo_seed=True,
+            agent_mode="deterministic",
+            test_auth_bypass_enabled=True,
+            outbox_inline_drain=True,
+            knowledge_graph_backend="memory",
+        )
+    )
+    async with application.router.lifespan_context(application):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=application),
+            base_url="http://test",
+            headers={
+                "X-WindOps-Test-Principal": "synthetic-postgres-system",
+                "X-WindOps-Test-Role": "test_system",
+            },
+        ) as client:
+            tendon, sensor, _, order = await force_order(application, client)
+            observation = await force_source(application, client, tendon, sensor, 125000)
+            await field_handoff(application, client, order, observation["id"])
+            work_order_id = order["work_order"]["id"]
+            mission_id = order["work_order"]["mission_id"]
+            mission = (await client.get(f"/api/v1/missions/{mission_id}")).json()
+            review_payload = {
+                "expected_mission_revision": mission["revision"],
+                "action": "resolve_review",
+                "reason": "Synthetic real-database concurrent review challenge.",
+                "hypothesis_outcome": "not_supported",
+            }
+            results = await asyncio.gather(
+                *[
+                    post(
+                        client,
+                        f"structural-work-orders/{work_order_id}/health-review",
+                        review_payload,
+                        headers={**HEALTH, "X-WindOps-Test-Principal": f"synthetic-health-{i}"},
+                    )
+                    for i in (1, 2)
+                ]
+            )
+            assert sorted(item.status_code for item in results) == [200, 409], [
+                item.text for item in results
+            ]
+            accepted = next(item.json() for item in results if item.status_code == 200)
+            case_id = accepted["knowledge_case_id"]
+            assert accepted["case_review_status"] == "pending"
+            async with application.state.session_factory() as session:
+                reviews = (await session.scalars(select(StructuralHealthReview))).all()
+                assert len(reviews) == 1
+                assert reviews[0].mission_revision == mission["revision"]
+                row = await session.get(StructuralCaseReview, case_id)
+                assert row.status == "pending" and row.revision == 1
+                originals = (await session.scalars(select(FieldTaskEvidence))).all()
+                assert len(originals) == 2
+                turbine = await session.get(Turbine, "WT-023")
+                session.add(
+                    Turbine(
+                        id="PG-OTHER-STRUCTURE",
+                        wind_farm_id=turbine.wind_farm_id,
+                        model="synthetic migration foreign-asset challenge",
+                    )
+                )
+                await session.flush()
+                session.add(
+                    StructuralRetestHandoff(
+                        id="00000000-0000-4000-8000-000000000001",
+                        tenant_id=reviews[0].tenant_id,
+                        wind_farm_id=reviews[0].wind_farm_id,
+                        turbine_id="PG-OTHER-STRUCTURE",
+                        mission_id=mission_id,
+                        work_order_id=work_order_id,
+                        health_review_id=reviews[0].id,
+                        task_id=order["tasks"][-1]["id"],
+                        prestress_id=observation["id"],
+                        source_fingerprint="f" * 64,
+                        artifact_uri=originals[-1].artifact_uri,
+                        artifact_sha256=originals[-1].artifact_sha256,
+                        measurement={"synthetic_invalid_cross_asset": True},
+                        verified_by="synthetic-author",
+                        verified_at=datetime.now(UTC),
+                    )
+                )
+                with pytest.raises(IntegrityError):
+                    await session.commit()
+                await session.rollback()
+            case_payload = {
+                "expected_revision": 1,
+                "action": "approve",
+                "reason": "Synthetic independent concurrent publication review.",
+            }
+            publications = await asyncio.gather(
+                *[
+                    post(
+                        client,
+                        f"structural-cases/{case_id}/review",
+                        case_payload,
+                        headers={**CASE, "X-WindOps-Test-Principal": f"synthetic-case-{i}"},
+                    )
+                    for i in (1, 2)
+                ]
+            )
+            assert sorted(item.status_code for item in publications) == [200, 409], [
+                item.text for item in publications
+            ]
+            async with application.state.session_factory() as session:
+                row = await session.get(StructuralCaseReview, case_id)
+                assert row.status == "approved" and row.revision == 2
+
+    _run_alembic(database_url, "downgrade", "0031_engineering_claims")
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.connect() as connection:
+            for table in (
+                "structural_mission_contexts",
+                "structural_health_reviews",
+                "structural_case_reviews",
+                "structural_retest_handoffs",
+            ):
+                assert (
+                    await connection.scalar(
+                        text("SELECT to_regclass(:table_name)"),
+                        {"table_name": f"public.{table}"},
+                    )
+                    is None
+                )
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM pg_constraint WHERE conname = 'uq_prestress_id_asset'"
+                    )
+                )
+                == 0
+            )
+            for table, identifier, value in (
+                ("missions", "id", mission_id),
+                ("work_orders", "id", work_order_id),
+                ("knowledge_cases", "id", case_id),
+            ):
+                assert (
+                    await connection.scalar(
+                        text(f"SELECT count(*) FROM {table} WHERE {identifier} = :id"),
+                        {"id": value},
+                    )
+                    == 1
+                )
+            assert await connection.scalar(text("SELECT count(*) FROM field_task_evidence")) == 2
+            assert await connection.scalar(text("SELECT count(*) FROM prestress_observations")) == 3
+        _run_alembic(database_url, "upgrade", "head")
+        async with engine.connect() as connection:
+            assert (
+                await connection.scalar(text("SELECT version_num FROM alembic_version"))
+                == HEAD_REVISION
+            )
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -1882,5 +2175,367 @@ async def _verify_previous_supported_upgrade(
                 or 0
             )
             assert residual == 0
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_passage_migration_preserves_documents_and_filters_native_vectors_in_postgres(
+    migration_database_urls: tuple[str, str],
+) -> None:
+    from windops_backend.agents.embeddings import DeterministicTestEmbeddingProvider
+    from windops_backend.agents.tools import SQLToolAdapter
+    from windops_backend.knowledge_graph.domain import GraphAccessPolicy
+    from windops_backend.knowledge_parsing import parse_knowledge_content
+    from windops_backend.models import KnowledgeDocument, KnowledgePassage, Tenant
+    from windops_backend.services.knowledge_passages import add_passages, store_passage_vectors
+
+    database_url, _ = migration_database_urls
+    _run_alembic(database_url, "upgrade", "0029_hybrid_tower_structural")
+    engine = create_async_engine(database_url, pool_pre_ping=True)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    provider = DeterministicTestEmbeddingProvider()
+    parsed = await parse_knowledge_content(b"Synthetic tendon calibration retest.", "text/plain")
+    try:
+        async with factory() as session, session.begin():
+            session.add_all(
+                [Tenant(id=name, name=name) for name in ("passage-east", "passage-west")]
+            )
+            await session.flush()
+            for side in ("east", "west"):
+                session.add(
+                    KnowledgeDocument(
+                        id=f"PASSAGE-{side}",
+                        tenant_id=f"passage-{side}",
+                        title=f"Synthetic {side} manual",
+                        document_type="maintenance-procedure",
+                        body=parsed.body,
+                        document_version="synthetic-r1",
+                        citation_uri=f"windops://knowledge/documents/PASSAGE-{side}",
+                        artifact_sha256="a" * 64,
+                        vectorized=False,
+                    )
+                )
+        _run_alembic(database_url, "upgrade", "head")
+        async with factory() as session, session.begin():
+            for side in ("east", "west"):
+                document = await session.get(KnowledgeDocument, f"PASSAGE-{side}")
+                pieces = add_passages(session, document, parsed, verified=True)
+                vectors = await provider.embed([parsed.body] * len(pieces))
+                store_passage_vectors(session, document, pieces, vectors, provider)
+            await session.flush()
+        async with factory() as session:
+            settings = Settings(environment=Environment.TEST, database_url=database_url)
+            adapter = SQLToolAdapter(
+                session,
+                settings=settings,
+                embedding_provider=provider,
+                knowledge_policy=GraphAccessPolicy.from_values(
+                    tenant_ids=["passage-east"], data_scopes=["knowledge"]
+                ),
+            )
+            matches = await adapter.query_similar_failures(
+                parsed.body, limit=1, vectorize_missing=False
+            )
+            assert len(matches) == 1 and matches[0]["document_id"] == "PASSAGE-east"
+            assert matches[0]["retrieval_method"] == "pgvector_passage_hnsw_cosine"
+            assert matches[0]["document_version"] == "synthetic-r1"
+            assert matches[0]["page_number"] is None and matches[0]["passage_id"]
+            assert (
+                len(
+                    await adapter.query_similar_failures(
+                        parsed.body, limit=10, vectorize_missing=False
+                    )
+                )
+                == 1
+            )
+            unrestricted = SQLToolAdapter(
+                session,
+                settings=settings,
+                embedding_provider=provider,
+                knowledge_policy=GraphAccessPolicy.from_values(unrestricted=True),
+            )
+            assert {
+                row["document_id"]
+                for row in await unrestricted.query_similar_failures(
+                    parsed.body, limit=10, vectorize_missing=False
+                )
+            } == {"PASSAGE-east", "PASSAGE-west"}
+            piece = await session.scalar(
+                select(KnowledgePassage).where(KnowledgePassage.document_id == "PASSAGE-east")
+            )
+            piece.document_version = "mismatched-source-version"
+            await session.commit()
+            assert (
+                await adapter.query_similar_failures(parsed.body, limit=1, vectorize_missing=False)
+                == []
+            )
+        async with factory() as session:
+            piece = await session.scalar(
+                select(KnowledgePassage).where(KnowledgePassage.document_id == "PASSAGE-east")
+            )
+            session.add(
+                KnowledgePassage(
+                    id="duplicate-ordinal",
+                    document_id=piece.document_id,
+                    ordinal=piece.ordinal,
+                    document_version="synthetic-r1",
+                    text_sha256=piece.text_sha256,
+                    parser_version=piece.parser_version,
+                    char_start=0,
+                    char_end=1,
+                    text="x",
+                    native_locator={},
+                )
+            )
+            with pytest.raises(IntegrityError):
+                await session.commit()
+            await session.rollback()
+        _run_alembic(database_url, "downgrade", "0029_hybrid_tower_structural")
+        async with engine.connect() as connection:
+            assert (
+                await connection.scalar(text("SELECT to_regclass('public.knowledge_passages')"))
+                is None
+            )
+            original = (
+                await connection.execute(
+                    text(
+                        "SELECT body, document_version FROM knowledge_documents "
+                        "WHERE id = 'PASSAGE-east'"
+                    )
+                )
+            ).one()
+            assert original.body == parsed.body and original.document_version == "synthetic-r1"
+        _run_alembic(database_url, "upgrade", "head")
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_claim_migration_concurrent_review_and_downgrade_preserve_sources(
+    migration_database_urls: tuple[str, str],
+) -> None:
+    from uuid import uuid4
+
+    from windops_backend.errors import ConflictError
+    from windops_backend.knowledge_parsing import parse_knowledge_content
+    from windops_backend.models import (
+        Alarm,
+        EngineeringClaim,
+        EngineeringClaimReview,
+        IngestReceipt,
+        KnowledgeDocument,
+        Mission,
+        TowerComponent,
+        Turbine,
+        WindFarm,
+    )
+    from windops_backend.schema_engineering_claim import (
+        EngineeringClaimCreate,
+        EngineeringClaimReviewRequest,
+    )
+    from windops_backend.services.engineering_claims import create_claim, review_claim
+    from windops_backend.services.knowledge_passages import add_passages
+    from windops_backend.storage import InMemoryArtifactVerifier
+
+    database_url, _ = migration_database_urls
+    _run_alembic(database_url, "upgrade", "head")
+    engine = create_async_engine(database_url, pool_pre_ping=True)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    settings = Settings(environment=Environment.TEST, database_url=database_url)
+    verifier = InMemoryArtifactVerifier()
+    content = b"Synthetic independent review requires scoped calibration records."
+    parsed = await parse_knowledge_content(content, "text/plain")
+    document_id = "CLAIM-SYNTHETIC-SOURCE"
+    uri = f"minio://{settings.minio_knowledge_bucket}/documents/{document_id}/source.txt"
+    sha = verifier.register_object(uri, content, "text/plain")
+    scope = {
+        "tenant_id": "tenant-east-china",
+        "wind_farm_id": "CLAIM-FARM",
+        "turbine_id": "CLAIM-TOWER-1",
+    }
+    mission_id = "CLAIM-SYNTHETIC-MISSION"
+    try:
+        async with factory() as session, session.begin():
+            session.add(
+                WindFarm(
+                    id=scope["wind_farm_id"],
+                    tenant_id=scope["tenant_id"],
+                    name="Synthetic claim fixture farm",
+                    capacity_mw=1,
+                )
+            )
+            await session.flush()
+            session.add_all(
+                [
+                    Turbine(
+                        id=f"CLAIM-TOWER-{i}", wind_farm_id=scope["wind_farm_id"], model="synthetic"
+                    )
+                    for i in (1, 2)
+                ]
+            )
+            session.add(
+                IngestReceipt(
+                    source_event_id="CLAIM-SYNTHETIC-RECEIPT",
+                    payload_hash=hashlib.sha256(content).hexdigest(),
+                )
+            )
+            await session.flush()
+            alarm = Alarm(
+                id=str(uuid4()),
+                turbine_id=scope["turbine_id"],
+                source_event_id="CLAIM-SYNTHETIC-RECEIPT",
+                code="SYNTHETIC",
+                subsystem="migration",
+                title="Synthetic migration fixture",
+                triggered_at=datetime.now(UTC),
+            )
+            session.add(alarm)
+            await session.flush()
+            session.add(
+                Mission(
+                    id=mission_id,
+                    turbine_id=scope["turbine_id"],
+                    alarm_id=alarm.id,
+                    title="Synthetic claim migration fixture",
+                )
+            )
+            component = TowerComponent(
+                **scope,
+                code="C01",
+                revision="synthetic-r1",
+                component_type="concrete_segment",
+                name="Synthetic fixture",
+                design_reference="synthetic migration contract",
+                created_by="migration-test",
+            )
+            session.add(component)
+            document = KnowledgeDocument(
+                id=document_id,
+                tenant_id=scope["tenant_id"],
+                title="Synthetic review procedure",
+                document_type="maintenance-procedure",
+                body=parsed.body,
+                document_version="synthetic-r1",
+                citation_uri=f"windops://knowledge/documents/{document_id}",
+                artifact_uri=uri,
+                artifact_sha256=sha,
+                content_type="text/plain",
+            )
+            session.add(document)
+            await session.flush()
+            pieces = add_passages(session, document, parsed, verified=True)
+            await session.flush()
+            payload = EngineeringClaimCreate(
+                turbine_id=scope["turbine_id"],
+                mission_id=mission_id,
+                component_id=component.id,
+                claim_kind="procedure_guidance",
+                conclusion="Synthetic source quote for independent review.",
+                applicability={"scope": "synthetic database challenge"},
+                evidence=[
+                    {
+                        "kind": "knowledge_passage",
+                        "source_id": pieces[0].id,
+                        "relation": "supports",
+                        "quote": parsed.body,
+                    }
+                ],
+                valid_until=datetime.now(UTC) + timedelta(days=1),
+            )
+            created = await create_claim(session, payload, "synthetic-author")
+            claim_id = created["id"]
+
+        async def reviewer(subject: str) -> str:
+            async with factory() as session:
+                try:
+                    body = await review_claim(
+                        session,
+                        claim_id,
+                        EngineeringClaimReviewRequest(
+                            expected_revision=1,
+                            action="approve",
+                            reason="Synthetic independent review challenge.",
+                        ),
+                        subject,
+                        verifier,
+                        settings,
+                    )
+                    await session.commit()
+                    assert body["revision"] == 2 and len(body["reviews"]) == 1
+                    return "approved"
+                except ConflictError:
+                    await session.rollback()
+                    return "conflict"
+
+        assert sorted(
+            await asyncio.gather(reviewer("synthetic-reviewer-a"), reviewer("synthetic-reviewer-b"))
+        ) == ["approved", "conflict"]
+        async with factory() as session:
+            claim = await session.get(EngineeringClaim, claim_id)
+            assert claim.revision == 2 and claim.review_status == "approved"
+            assert (
+                len(
+                    (
+                        await session.scalars(
+                            select(EngineeringClaimReview).where(
+                                EngineeringClaimReview.claim_id == claim_id
+                            )
+                        )
+                    ).all()
+                )
+                == 1
+            )
+            values = {
+                column.name: getattr(claim, column.name)
+                for column in claim.__table__.columns
+                if column.name != "id"
+            }
+            session.add(EngineeringClaim(**{**values, "turbine_id": "CLAIM-TOWER-2"}))
+            with pytest.raises(IntegrityError):
+                await session.commit()
+            await session.rollback()
+            session.add(
+                EngineeringClaimReview(
+                    claim_id=claim_id,
+                    claim_revision=2,
+                    action="reject",
+                    reason="Duplicate revision challenge",
+                    reviewed_by="synthetic-reviewer",
+                )
+            )
+            with pytest.raises(IntegrityError):
+                await session.commit()
+            await session.rollback()
+
+        _run_alembic(database_url, "downgrade", "0030_knowledge_passages")
+        async with engine.connect() as connection:
+            assert (
+                await connection.scalar(text("SELECT to_regclass('public.engineering_claims')"))
+                is None
+            )
+            assert (
+                await connection.scalar(
+                    text("SELECT to_regclass('public.engineering_claim_reviews')")
+                )
+                is None
+            )
+            assert (
+                await connection.scalar(
+                    text("SELECT body FROM knowledge_documents WHERE id = :id"), {"id": document_id}
+                )
+                == parsed.body
+            )
+            assert (
+                await connection.scalar(
+                    text("SELECT title FROM missions WHERE id = :id"), {"id": mission_id}
+                )
+                == "Synthetic claim migration fixture"
+            )
+            assert await connection.scalar(
+                text("SELECT count(*) FROM knowledge_passages WHERE document_id = :id"),
+                {"id": document_id},
+            ) == len(parsed.passages)
+        _run_alembic(database_url, "upgrade", "head")
     finally:
         await engine.dispose()

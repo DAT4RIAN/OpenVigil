@@ -74,6 +74,10 @@ async def claim_event(session: AsyncSession, event_id: str) -> OutboxEvent | Non
     claim_token = str(uuid4())
     result = await session.execute(
         update(OutboxEvent)
+        # Do not evaluate lease datetime predicates against already-loaded
+        # SQLite ORM rows (which lose timezone metadata). The database owns the
+        # atomic claim predicate; RETURNING synchronizes only matching rows.
+        .execution_options(synchronize_session="fetch")
         .where(
             OutboxEvent.id == event_id,
             (

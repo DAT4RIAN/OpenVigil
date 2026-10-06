@@ -1,12 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
-from io import BytesIO
 from typing import Any
 
-from docx import Document
-from pypdf import PdfReader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -14,14 +10,16 @@ from windops_backend.agents.embeddings import (
     DeterministicTestEmbeddingProvider,
     EmbeddingProvider,
     LiteLLMEmbeddingProvider,
-    aggregate_embedding_vectors,
-    chunk_embedding_text,
     embed_texts_with_controls,
-    pack_embedding_vector,
 )
 from windops_backend.config import Settings
 from windops_backend.enums import Environment
 from windops_backend.errors import ConflictError, NotFoundError
+from windops_backend.knowledge_parsing import (
+    ParsedKnowledge,
+    parse_knowledge_content,
+    parse_legacy_body,
+)
 from windops_backend.models import KnowledgeDocument
 from windops_backend.outbox import (
     OutboxLeaseLostError,
@@ -34,6 +32,13 @@ from windops_backend.outbox import (
 from windops_backend.schemas import KnowledgeDocumentCreateRequest
 from windops_backend.services.events import append_domain_event
 from windops_backend.services.knowledge_access import KnowledgeDocumentScope
+from windops_backend.services.knowledge_passages import (
+    add_passages,
+    document_passages,
+    passage_current,
+    passage_embedding_input,
+    store_passage_vectors,
+)
 from windops_backend.storage import OutboxEvent
 
 KNOWLEDGE_DOCUMENT_INDEX_REQUESTED = "knowledge.document.index.requested"
@@ -49,39 +54,8 @@ ALLOWED_KNOWLEDGE_CONTENT_TYPES = frozenset(
 )
 
 
-def _extract_knowledge_text(content: bytes, content_type: str) -> str:
-    try:
-        if content_type in {"text/plain", "text/markdown"}:
-            text = content.decode("utf-8")
-        elif content_type == "application/pdf":
-            reader = PdfReader(BytesIO(content))
-            if reader.is_encrypted:
-                raise ValueError("encrypted PDF knowledge documents are not accepted")
-            text = "\n\n".join((page.extract_text() or "").strip() for page in reader.pages)
-        elif content_type == (
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ):
-            document = Document(BytesIO(content))
-            text = "\n".join(paragraph.text.strip() for paragraph in document.paragraphs)
-        else:  # pragma: no cover - schema and object-store checks prevent this
-            raise ValueError("knowledge document content type is not supported")
-    except ValueError:
-        raise
-    except Exception as exc:
-        # Parser/library errors are input failures, not server failures. Keep
-        # implementation details out of the API response while retaining the
-        # original exception for secured worker logs and diagnostics.
-        raise ValueError("knowledge document could not be parsed") from exc
-    normalized = "\n".join(line.rstrip() for line in text.replace("\x00", "").splitlines()).strip()
-    if not normalized:
-        raise ValueError("knowledge document extraction produced no text")
-    if len(normalized) > MAX_EXTRACTED_TEXT_CHARACTERS:
-        raise ValueError("knowledge document extracted text exceeds the indexing limit")
-    return normalized
-
-
 async def extract_knowledge_text(content: bytes, content_type: str) -> str:
-    return await asyncio.to_thread(_extract_knowledge_text, content, content_type)
+    return (await parse_knowledge_content(content, content_type)).body
 
 
 async def create_knowledge_document(
@@ -92,6 +66,7 @@ async def create_knowledge_document(
     content_size_bytes: int,
     subject: str,
     scope: KnowledgeDocumentScope | None = None,
+    parsed: ParsedKnowledge | None = None,
 ) -> tuple[KnowledgeDocument, bool, str | None]:
     resolved_scope = scope or KnowledgeDocumentScope(
         tenant_id=request.tenant_id,
@@ -102,6 +77,8 @@ async def create_knowledge_document(
     existing = await session.get(KnowledgeDocument, request.document_id)
     if existing is not None:
         if existing.artifact_sha256 == request.artifact_sha256.lower():
+            if existing.document_version != request.document_version:
+                raise ConflictError("a document version requires a new immutable document ID")
             if (
                 existing.tenant_id != resolved_scope.tenant_id
                 or existing.wind_farm_id != resolved_scope.wind_farm_id
@@ -131,12 +108,34 @@ async def create_knowledge_document(
         content_type=request.content_type,
         content_size_bytes=content_size_bytes,
         document_version=request.document_version,
-        metadata_=request.metadata,
+        metadata_={
+            **request.metadata,
+            "_openvigil_source_layout": {
+                "page_count": parsed.source_page_count if parsed else None,
+                "parser_version": parsed.passages[0].parser_version if parsed else None,
+                "native_passages": len(parsed.passages) if parsed else None,
+                "unextracted_pages": (
+                    sorted(
+                        set(range(1, parsed.source_page_count + 1))
+                        - {
+                            piece.page_number
+                            for piece in parsed.passages
+                            if piece.page_number is not None
+                        }
+                    )
+                    if parsed and parsed.source_page_count is not None
+                    else []
+                ),
+            },
+        },
         ingestion_status="pending",
         vectorized=False,
         created_by=subject,
     )
     session.add(document)
+    add_passages(
+        session, document, parsed or parse_legacy_body(extracted_text), verified=parsed is not None
+    )
     event = OutboxEvent(
         event_type=KNOWLEDGE_DOCUMENT_INDEX_REQUESTED,
         aggregate_type="knowledge_document",
@@ -169,12 +168,19 @@ def _embedding_provider(settings: Settings) -> EmbeddingProvider:
 
 
 async def _mark_document_failed(
-    factory: async_sessionmaker[AsyncSession], document_id: str
-) -> None:
+    factory: async_sessionmaker[AsyncSession], document_id: str, event_id: str, claim_token: str
+) -> bool:
     async with factory() as session, session.begin():
-        document = await session.get(KnowledgeDocument, document_id)
+        try:
+            await assert_current_claim(session, event_id, claim_token)
+        except OutboxLeaseLostError:
+            return False
+        document = await session.scalar(
+            select(KnowledgeDocument).where(KnowledgeDocument.id == document_id).with_for_update()
+        )
         if document is not None and not document.vectorized:
             document.ingestion_status = "failed"
+    return True
 
 
 async def process_knowledge_document_index_event(
@@ -198,23 +204,31 @@ async def process_knowledge_document_index_event(
         document_id = str(event.payload["document_id"])
         try:
             selected_provider = provider or _embedding_provider(settings)
-            async with factory() as read_session:
-                document = await read_session.get(KnowledgeDocument, document_id)
+            async with factory() as read_session, read_session.begin():
+                document = await read_session.scalar(
+                    select(KnowledgeDocument)
+                    .where(KnowledgeDocument.id == document_id)
+                    .with_for_update()
+                )
                 if document is None:
                     raise NotFoundError(f"knowledge document {document_id} was not found")
+                passages = await document_passages(read_session, document, create_legacy=True)
                 if (
                     document.vectorized
                     and document.embedding_provider == selected_provider.provider_name
                     and document.embedding_model == selected_provider.model_name
+                    and all(passage_current(passage, selected_provider) for passage in passages)
                 ):
                     return await mark_event_succeeded(factory, event_id, claim_token)
-                embedding_inputs = chunk_embedding_text(document.title, document.body)
+                passage_ids = [passage.id for passage in passages]
+                embedding_inputs = [
+                    passage_embedding_input(document, passage) for passage in passages
+                ]
             vectors = await embed_texts_with_controls(
                 selected_provider,
                 embedding_inputs,
                 settings=settings,
             )
-            vector = aggregate_embedding_vectors(vectors)
             async with factory() as write_session, write_session.begin():
                 await assert_current_claim(write_session, event_id, claim_token)
                 document = await write_session.scalar(
@@ -224,25 +238,18 @@ async def process_knowledge_document_index_event(
                 )
                 if document is None:
                     raise NotFoundError(f"knowledge document {document_id} was not found")
+                passages = await document_passages(write_session, document)
+                if [passage.id for passage in passages] != passage_ids:
+                    raise ConflictError("immutable document passages changed during indexing")
                 if (
                     not document.vectorized
                     or document.embedding_provider != selected_provider.provider_name
                     or document.embedding_model != selected_provider.model_name
+                    or any(not passage_current(passage, selected_provider) for passage in passages)
                 ):
-                    dialect = (
-                        write_session.bind.dialect.name
-                        if write_session.bind is not None
-                        else "unknown"
+                    store_passage_vectors(
+                        write_session, document, passages, vectors, selected_provider
                     )
-                    document.embedding = (
-                        pack_embedding_vector(vector) if dialect == "sqlite" else vector
-                    )
-                    document.vectorized = True
-                    document.ingestion_status = "indexed"
-                    document.embedding_provider = selected_provider.provider_name
-                    document.embedding_model = selected_provider.model_name
-                    document.indexed_at = datetime.now(UTC)
-                    document.updated_at = document.indexed_at
                     append_domain_event(
                         write_session,
                         event_type="knowledge.document.indexed",
@@ -268,7 +275,8 @@ async def process_knowledge_document_index_event(
         except OutboxLeaseLostError:
             return False
         except BaseException as exc:
-            await _mark_document_failed(factory, document_id)
+            if not await _mark_document_failed(factory, document_id, event_id, claim_token):
+                return False
             await mark_event_failed(factory, event_id, claim_token, exc)
             raise
     return await mark_event_succeeded(factory, event_id, claim_token)
@@ -290,6 +298,7 @@ def serialize_knowledge_document(document: KnowledgeDocument) -> dict[str, Any]:
         "content_type": document.content_type,
         "content_size_bytes": document.content_size_bytes,
         "metadata": document.metadata_,
+        "source_layout": (document.metadata_ or {}).get("_openvigil_source_layout"),
         "ingestion_status": document.ingestion_status,
         "vectorized": document.vectorized,
         "embedding_provider": document.embedding_provider,

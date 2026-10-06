@@ -1,0 +1,154 @@
+.stack {
+  display: grid;
+  gap: 20px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.panel {
+  padding: 24px;
+  min-width: 0;
+}
+.form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--foreground-subtle);
+}
+.formFields {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.form > .formFields {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+.form > button {
+  justify-self: start;
+}
+.check {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--foreground-subtle);
+}
+.check input {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+}
+.field textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+.wide {
+  grid-column: 1 / -1;
+}
+.facts {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, 3fr);
+  gap: 8px 16px;
+  margin: 18px 0;
+  font-size: 13px;
+}
+.facts dt {
+  color: var(--foreground-subtle);
+}
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.notice {
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  font-size: 13px;
+}
+.error {
+  color: var(--critical);
+}
+.list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.item {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 0;
+}
+.item h3 {
+  font-size: 15px;
+  margin: 0 0 10px;
+}
+.item p {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.item small {
+  color: var(--foreground-subtle);
+  overflow-wrap: anywhere;
+}
+.item blockquote {
+  margin: 14px 0;
+  border-left: 3px solid var(--border);
+  padding-left: 12px;
+  font-size: 14px;
+}
+@media (max-width: 1000px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .panel {
+    padding: 16px;
+  }
+  .form {
+    grid-template-columns: 1fr;
+  }
+  .form > .formFields {
+    grid-template-columns: 1fr;
+  }
+  .facts {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .facts dd {
+    margin-bottom: 10px;
+  }
+}

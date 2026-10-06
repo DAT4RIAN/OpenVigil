@@ -11,7 +11,7 @@ from windops_backend.agents.tools import (
     DeterministicTestEmbeddingProvider,
     SQLToolAdapter,
 )
-from windops_backend.models import Decision, Evidence, ResourceReservation
+from windops_backend.models import Decision, Evidence, KnowledgePassage, ResourceReservation
 
 
 def anomaly_sample(event_id: str) -> dict[str, Any]:
@@ -45,8 +45,9 @@ async def create_review_mission(client: httpx.AsyncClient, event_id: str) -> dic
     return detail.json()
 
 
-def test_catalog_is_the_exact_seventeen_public_domain_tools() -> None:
+def test_catalog_is_the_exact_eighteen_public_domain_tools() -> None:
     assert [item["name"] for item in TOOL_CATALOG] == [
+        "query_structural_context",
         "get_turbine_status",
         "query_scada",
         "query_alarm_history",
@@ -82,8 +83,13 @@ async def test_graph_persists_public_evidence_decision_and_complete_execution_au
     knowledge = next(
         item for item in mission["evidence"] if item["evidence_type"] == "knowledge_citation"
     )
-    assert knowledge["retrieval_method"] == "deterministic_test_cosine"
-    assert knowledge["citation_uri"].startswith("/api/v1/knowledge/documents/")
+    assert knowledge["retrieval_method"] == "deterministic_test_passage_cosine"
+    assert knowledge["citation_uri"].startswith("windops://knowledge/passages/")
+    passage = await client.get(
+        f"/api/v1/knowledge/passages/{knowledge['citation_uri'].rsplit('/', 1)[-1]}"
+    )
+    assert passage.status_code == 200
+    assert passage.json()["text"] and passage.json()["text_sha256"]
 
     decision = mission["decision"]
     assert decision["status"] == "pending_approval"
@@ -130,10 +136,13 @@ async def test_rag_uses_explicit_test_embedding_and_honest_database_citation(
         matches = await adapter.query_similar_failures(
             "main bearing vibration temperature inspection", "WT-023"
         )
-        assert matches[0]["retrieval_method"] == "deterministic_test_cosine"
+        assert matches[0]["retrieval_method"] == "deterministic_test_passage_cosine"
         assert matches[0]["embedding_provider"] == "deterministic_test"
-        assert matches[0]["citation_uri"].startswith("windops://knowledge/documents/")
-        assert matches[0]["citation_href"].startswith("/api/v1/knowledge/documents/")
+        assert matches[0]["citation_uri"].startswith("windops://knowledge/passages/")
+        assert matches[0]["citation_href"].startswith("/api/v1/knowledge/passages/")
+        stored = await session.get(KnowledgePassage, matches[0]["passage_id"])
+        assert stored is not None and stored.document_id == matches[0]["document_id"]
+        assert stored.text_sha256 == matches[0]["text_sha256"]
 
 
 @pytest.mark.asyncio
@@ -221,7 +230,11 @@ def test_production_rag_source_requires_provider_vectors_and_pgvector_cosine() -
     agents_root = Path(__file__).parents[1] / "src" / "windops_backend" / "agents"
     tools_source = (agents_root / "tools.py").read_text(encoding="utf-8")
     embeddings_source = (agents_root / "embeddings.py").read_text(encoding="utf-8")
+    passages_source = (agents_root.parent / "services" / "knowledge_passages.py").read_text(
+        encoding="utf-8"
+    )
     assert "await litellm.aembedding" in embeddings_source
-    assert "KnowledgeDocument.embedding.cosine_distance(query_vector)" in tools_source
-    assert 'retrieval_method = "pgvector_hnsw_cosine"' in tools_source
+    assert "KnowledgePassage.embedding.cosine_distance(query_vector)" in passages_source
+    assert 'method = "pgvector_passage_hnsw_cosine"' in passages_source
+    assert "result = await retrieve_passages(" in tools_source
     assert "production PostgreSQL RAG requires a production embedding provider" in tools_source

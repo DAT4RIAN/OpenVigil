@@ -91,6 +91,17 @@ def append_domain_event(
         payload=payload,
     )
     session.add(event)
+    if event_type.startswith("structural."):
+        # Structural identities, observations and review facts share the existing
+        # transactional projection outbox. Import lazily to avoid service cycles.
+        from windops_backend.outbox import enqueue_knowledge_graph_projection
+
+        enqueue_knowledge_graph_projection(
+            session,
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            reason=event_type,
+        )
     return event
 
 

@@ -90,14 +90,14 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 cd backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[test,dev]"
+python -m pip install -e ".[test,dev,structural]"
 
 docker compose up -d
 alembic upgrade head
 windops-reference-import --reference-pack wt023
 ```
 
-現在の唯一のマイグレーション head は `0028_read_audit_pipeline` です。`backend/` から `python scripts/verify_migration_head.py` を実行すると、マイグレーショングラフと文書内の宣言を確認できます。
+現在の唯一のマイグレーション head は `0032_structural_workflow` です。`backend/` から `python scripts/verify_migration_head.py` を実行すると、マイグレーショングラフと文書内の宣言を確認できます。
 
 参照データのインポートでは `operations_manager` のキーが要求されます。その後、outbox リレー、Dramatiq ワーカー、読み取り監査ワーカー、API をそれぞれ別の 4 つのターミナルで起動します。
 
@@ -353,7 +353,7 @@ pnpm run check:repository-artifacts
 
 ### 実依存サービスを使った業務ワークフロー試験
 
-Docker Engine/Compose、Node/pnpm、Python 3.12 を用意します。`backend/` で `uv sync --frozen --extra test` を実行し、リポジトリルートに戻ります。
+Docker Engine/Compose、Node/pnpm、Python 3.12 を用意します。`backend/` で `uv sync --frozen --extra test --extra structural` を実行し、リポジトリルートに戻ります。
 
 ```bash
 pnpm exec playwright install chromium

@@ -14,6 +14,7 @@ import os
 import secrets
 import sys
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,16 @@ class LocalStackError(ValueError):
 def prepare(root: Path, frontend_port: int, api_port: int) -> dict[str, object]:
     import yaml
     from dotenv import set_key
+
+    try:
+        if version("pyOMA_2") != "1.4.3":
+            raise LocalStackError(
+                "Install the pinned backend structural extra from README first."
+            )
+    except PackageNotFoundError as exc:
+        raise LocalStackError(
+            "Install the backend structural extra from README first."
+        ) from exc
 
     folder = root / ".artifacts" / "local-stack"
     folder.mkdir(parents=True, exist_ok=True)
@@ -258,6 +269,7 @@ def main() -> None:
             "migrate",
             "api",
             "worker",
+            "structural-worker",
             "relay",
             "read-audit",
             "verify",
@@ -287,17 +299,21 @@ def main() -> None:
         from windops_backend.main import create_app
 
         uvicorn.run(create_app(settings), host="127.0.0.1", port=config["api_port"])
-    elif args.role == "worker":
+    elif args.role in {"worker", "structural-worker"}:
         from dramatiq.cli import main as dramatiq_main
 
         sys.argv = [
             "dramatiq",
-            "windops_backend.workers",
+            "windops_backend.structural_tasks"
+            if args.role == "structural-worker"
+            else "windops_backend.workers",
             "--processes",
             "1",
             "--threads",
-            "4",
+            "1" if args.role == "structural-worker" else "4",
         ]
+        if args.role == "structural-worker":
+            sys.argv.extend(["--queues", "structural-analysis"])
         raise SystemExit(dramatiq_main())
     elif args.role == "relay":
         from windops_backend.workers import run_outbox_relay

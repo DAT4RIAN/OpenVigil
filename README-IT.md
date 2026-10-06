@@ -90,14 +90,14 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 cd backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[test,dev]"
+python -m pip install -e ".[test,dev,structural]"
 
 docker compose up -d
 alembic upgrade head
 windops-reference-import --reference-pack wt023
 ```
 
-L’unica revisione finale di migrazione attuale è `0028_read_audit_pipeline`. Da `backend/`, eseguire `python scripts/verify_migration_head.py` per verificare il grafo delle migrazioni e le dichiarazioni documentate.
+L’unica revisione finale di migrazione attuale è `0032_structural_workflow`. Da `backend/`, eseguire `python scripts/verify_migration_head.py` per verificare il grafo delle migrazioni e le dichiarazioni documentate.
 
 L’importazione di riferimento richiede la chiave `operations_manager`. Avviare poi il relay outbox, il worker Dramatiq, il worker di audit delle letture e l’API in quattro terminali distinti:
 
@@ -353,7 +353,7 @@ pnpm run check:repository-artifacts
 
 ### Test del flusso operativo con dipendenze reali
 
-Preparare Docker Engine/Compose, Node/pnpm e Python 3.12. Eseguire `uv sync --frozen --extra test` in `backend/`, quindi tornare alla radice:
+Preparare Docker Engine/Compose, Node/pnpm e Python 3.12. Eseguire `uv sync --frozen --extra test --extra structural` in `backend/`, quindi tornare alla radice:
 
 ```bash
 pnpm exec playwright install chromium

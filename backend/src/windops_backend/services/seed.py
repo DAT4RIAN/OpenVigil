@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from windops_backend.agents.tools import TOOL_CATALOG, TOOL_CATALOG_VERSION
@@ -21,7 +21,7 @@ from windops_backend.models import (
     WindFarm,
 )
 
-CATALOG_VERSION_ID = "wt023-catalog-2026.08"
+CATALOG_VERSION_ID = "openvigil-catalog-2026.10.1"
 CATALOG_VERSION = TOOL_CATALOG_VERSION
 
 AGENT_CATALOG: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
@@ -29,7 +29,7 @@ AGENT_CATALOG: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
         "scada_analysis_agent",
         "SCADA Analysis Agent",
         "scada-analysis",
-        ("get_turbine_status", "query_scada", "query_alarm_history"),
+        ("get_turbine_status", "query_scada", "query_alarm_history", "query_structural_context"),
     ),
     (
         "vibration_diagnosis_agent",
@@ -37,6 +37,7 @@ AGENT_CATALOG: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
         "vibration-diagnosis",
         (
             "query_scada",
+            "query_structural_context",
             "query_vibration",
             "calculate_health_score",
             "assess_condition_evidence",
@@ -132,6 +133,26 @@ async def seed_agent_catalog(session: AsyncSession) -> None:
         agent_id = f"agent:{agent_key}@{CATALOG_VERSION}"
         skill_id = f"skill:{skill_key}@{CATALOG_VERSION}"
         if await session.get(AgentDefinition, agent_id) is None:
+            previous = await session.scalar(
+                select(AgentDefinition)
+                .where(AgentDefinition.agent_key == agent_key)
+                .order_by(AgentDefinition.version.desc(), AgentDefinition.id.desc())
+                .limit(1)
+            )
+            # Preserve operator stops and custom governed releases during a bundled
+            # catalog upgrade. Repeated seeding cannot silently reactivate a role.
+            replaces_bundled = (
+                previous is not None
+                and previous.id == f"agent:{agent_key}@2026.08.1"
+                and previous.active
+            )
+            active = previous is None or replaces_bundled
+            if previous is not None and replaces_bundled:
+                await session.execute(
+                    update(AgentDefinition)
+                    .where(AgentDefinition.id == previous.id)
+                    .values(active=False)
+                )
             session.add(
                 AgentDefinition(
                     id=agent_id,
@@ -141,7 +162,7 @@ async def seed_agent_catalog(session: AsyncSession) -> None:
                     version=CATALOG_VERSION,
                     catalog_version_id=CATALOG_VERSION_ID,
                     description=f"Auditable WT-023 graph role: {display_name}",
-                    active=True,
+                    active=active,
                 )
             )
         if await session.get(SkillDefinition, skill_id) is None:

@@ -28,7 +28,9 @@ from windops_backend.services.knowledge import (
     KNOWLEDGE_DOCUMENT_INDEX_REQUESTED,
     process_knowledge_document_index_event,
 )
+from windops_backend.services.structural import STRUCTURAL_ANALYSIS_REQUESTED
 from windops_backend.services.workflow import advance_mission_to_review
+from windops_backend.structural_worker import expired_structural_events
 
 
 def configure_broker(redis_url: str) -> RedisBroker:
@@ -172,6 +174,7 @@ async def relay_pending_once() -> int:
     factory = create_session_factory(engine)
     try:
         event_rows = await pending_events(factory)
+        event_rows.extend(await expired_structural_events(factory))
         dispatched: list[str] = []
         for event_id, event_type in event_rows:
             if event_type == MISSION_ANALYSIS_REQUESTED:
@@ -185,6 +188,19 @@ async def relay_pending_once() -> int:
                 dispatched.append(event_id)
             elif event_type == KNOWLEDGE_DOCUMENT_INDEX_REQUESTED:
                 index_knowledge_document.send(event_id)
+                dispatched.append(event_id)
+            elif event_type == STRUCTURAL_ANALYSIS_REQUESTED:
+                # Publish without importing the dedicated consumer's broker or
+                # numerical dependencies into the general business relay.
+                dramatiq.get_broker().enqueue(
+                    dramatiq.Message(
+                        queue_name="structural-analysis",
+                        actor_name="process_structural_analysis",
+                        args=(event_id,),
+                        kwargs={},
+                        options={},
+                    )
+                )
                 dispatched.append(event_id)
         await mark_dispatched(factory, dispatched)
         return len(dispatched)

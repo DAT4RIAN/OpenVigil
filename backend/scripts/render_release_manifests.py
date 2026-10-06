@@ -7,6 +7,13 @@ from typing import Any, cast
 
 import yaml  # type: ignore[import-untyped]
 
+from windops_backend.operations.hybrid_identity import (
+    HYBRID_ANNOTATIONS,
+    HYBRID_ENV,
+    STRUCTURAL_WORKLOAD,
+    hybrid_bundle_id,
+)
+
 WORKLOAD_KINDS = frozenset({"Deployment", "Job", "CronJob"})
 REQUIRED_WORKLOADS = frozenset(
     {
@@ -65,6 +72,7 @@ def render_release_manifests(
     release_id: str,
     commit_sha: str,
     image: str,
+    structural_image: str | None = None,
 ) -> list[dict[str, Any]]:
     image_digest = _validate_release(release_id, commit_sha, image)
     release = {
@@ -72,6 +80,22 @@ def render_release_manifests(
         "commit_sha": commit_sha,
         "image_digest": image_digest,
     }
+    annotations = dict(RELEASE_ANNOTATIONS)
+    variables = dict(RELEASE_ENV)
+    structural_digest = None
+    if structural_image is not None:
+        structural_digest = _validate_release(release_id, commit_sha, structural_image)
+        release.update(
+            {
+                "api_image_digest": image_digest,
+                "structural_image_digest": structural_digest,
+                "bundle_id": hybrid_bundle_id(
+                    release_id, commit_sha, image_digest, structural_digest
+                ),
+            }
+        )
+        annotations.update(HYBRID_ANNOTATIONS)
+        variables.update(HYBRID_ENV)
     observed: set[str] = set()
     for document in documents:
         if document.get("kind") not in WORKLOAD_KINDS:
@@ -81,32 +105,43 @@ def render_release_manifests(
         if not isinstance(name, str) or not name:
             raise ValueError("every workload requires metadata.name")
         observed.add(name)
+        if name == STRUCTURAL_WORKLOAD and structural_image is None:
+            raise ValueError("structural workload requires its own immutable image")
+        workload_release = (
+            {**release, "image_digest": structural_digest}
+            if name == STRUCTURAL_WORKLOAD
+            else release
+        )
         template = _pod_template(document)
         template_metadata = cast(dict[str, Any], template.setdefault("metadata", {}))
         for target_metadata in (metadata, template_metadata):
-            annotations = cast(dict[str, str], target_metadata.setdefault("annotations", {}))
-            for field, annotation in RELEASE_ANNOTATIONS.items():
-                annotations[annotation] = release[field]
+            target_annotations = cast(dict[str, str], target_metadata.setdefault("annotations", {}))
+            for field, annotation in annotations.items():
+                target_annotations[annotation] = cast(str, workload_release[field])
         pod_spec = cast(dict[str, Any], template["spec"])
         containers = cast(list[dict[str, Any]], pod_spec.get("containers"))
         if not containers:
             raise ValueError(f"{name} must contain at least one container")
-        for container in containers:
-            container["image"] = image
+        for container in [*containers, *pod_spec.get("initContainers", [])]:
+            container["image"] = structural_image if name == STRUCTURAL_WORKLOAD else image
             env = cast(list[dict[str, str]], container.setdefault("env", []))
             existing = [item.get("name") for item in env]
             if len(existing) != len(set(existing)):
                 raise ValueError(f"{name} contains duplicate environment variables")
-            for field, variable in RELEASE_ENV.items():
+            for field, variable in variables.items():
                 matching = [item for item in env if item.get("name") == variable]
                 if matching:
                     matching[0].clear()
-                    matching[0].update({"name": variable, "value": release[field]})
+                    matching[0].update(
+                        {"name": variable, "value": cast(str, workload_release[field])}
+                    )
                 else:
-                    env.append({"name": variable, "value": release[field]})
+                    env.append({"name": variable, "value": cast(str, workload_release[field])})
     missing = REQUIRED_WORKLOADS - observed
     if missing:
         raise ValueError(f"required release workloads are missing: {', '.join(sorted(missing))}")
+    if structural_image is not None and STRUCTURAL_WORKLOAD not in observed:
+        raise ValueError("hybrid release requires the structural workload")
     return documents
 
 
@@ -119,6 +154,7 @@ def main() -> int:
     parser.add_argument("--release-id", required=True)
     parser.add_argument("--commit-sha", required=True)
     parser.add_argument("--image", required=True)
+    parser.add_argument("--structural-image")
     args = parser.parse_args()
     loaded = [
         cast(dict[str, Any], document)
@@ -130,6 +166,7 @@ def main() -> int:
         release_id=args.release_id,
         commit_sha=args.commit_sha,
         image=args.image,
+        structural_image=args.structural_image,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

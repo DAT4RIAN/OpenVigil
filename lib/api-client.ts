@@ -39,18 +39,46 @@ async function parseResponse<T>(
   scope?: string,
   operationKey?: string | null,
 ): Promise<T> {
-  const payload = (await response.json()) as T & {
+  let decoded: unknown;
+  try {
+    decoded = await response.json();
+  } catch {
+    // A successful write may already be committed even if its response stream
+    // is truncated. Keep its key so callers can replay the same command.
+    const unknownWrite = response.ok && Boolean(operationKey);
+    const error = new OpenVigilApiError(
+      unknownWrite ? 0 : response.status,
+      unknownWrite ? "COMMAND_RESULT_UNKNOWN" : "INVALID_API_RESPONSE",
+      unknownWrite
+        ? "命令响应无法解析；后端可能已提交，请使用同一幂等键核验结果。"
+        : `OpenVigil API returned an unreadable response (${response.status})`,
+      response.headers.get("x-correlation-id") ?? requestCorrelationId ?? null,
+      operationKey ?? null,
+    );
+    const kind = unknownWrite ? "network" : failureKind(response.status);
+    if (kind)
+      publishApiAccessFailure({
+        kind,
+        status: unknownWrite ? null : response.status,
+        code: error.code,
+        message: error.message,
+        scope,
+        operationKey,
+      });
+    throw error;
+  }
+  const payload = decoded as T & {
     error?: { code?: string; message?: string };
     meta?: { correlationId?: string; correlation_id?: string };
   };
   if (!response.ok) {
     const error = new OpenVigilApiError(
       response.status,
-      payload.error?.code ?? "API_ERROR",
-      payload.error?.message ?? `OpenVigil API returned ${response.status}`,
+      payload?.error?.code ?? "API_ERROR",
+      payload?.error?.message ?? `OpenVigil API returned ${response.status}`,
       response.headers.get("x-correlation-id") ??
-        payload.meta?.correlationId ??
-        payload.meta?.correlation_id ??
+        payload?.meta?.correlationId ??
+        payload?.meta?.correlation_id ??
         requestCorrelationId ??
         null,
       operationKey ?? null,

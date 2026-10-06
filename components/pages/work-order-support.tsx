@@ -8,6 +8,7 @@ export const statusLabels: Record<WorkOrderStatus, string> = {
   "pending-approval": "待审批",
   scheduled: "已排程",
   "in-progress": "执行中",
+  "awaiting-health-review": "待健康复核",
   paused: "暂停",
   completed: "已完成",
   closed: "已关闭",
@@ -26,6 +27,7 @@ export const statusFilterOptions: readonly WorkOrderStatusFilter[] = [
   "pending-approval",
   "scheduled",
   "in-progress",
+  "awaiting-health-review",
   "paused",
   "completed-group",
 ];
@@ -35,6 +37,7 @@ export const statusFilterLabels: Record<WorkOrderStatusFilter, string> = {
   "pending-approval": "待审批",
   scheduled: "已排程",
   "in-progress": "执行中",
+  "awaiting-health-review": "待健康复核",
   paused: "暂停",
   completed: "已完成",
   closed: "已关闭",

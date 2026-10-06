@@ -90,14 +90,14 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 cd backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[test,dev]"
+python -m pip install -e ".[test,dev,structural]"
 
 docker compose up -d
 alembic upgrade head
 windops-reference-import --reference-pack wt023
 ```
 
-현재 유일한 마이그레이션 head는 `0028_read_audit_pipeline`입니다. `backend/`에서 `python scripts/verify_migration_head.py`를 실행하면 마이그레이션 그래프와 문서의 선언을 확인할 수 있습니다.
+현재 유일한 마이그레이션 head는 `0032_structural_workflow`입니다. `backend/`에서 `python scripts/verify_migration_head.py`를 실행하면 마이그레이션 그래프와 문서의 선언을 확인할 수 있습니다.
 
 참조 데이터 가져오기는 `operations_manager` 키를 요청합니다. 이후 outbox 릴레이, Dramatiq 워커, 읽기 감사 워커와 API를 각각 별도의 터미널 4개에서 시작합니다.
 
@@ -353,7 +353,7 @@ pnpm run check:repository-artifacts
 
 ### 실제 의존 서비스를 사용하는 업무 워크플로 테스트
 
-Docker Engine/Compose, Node/pnpm과 Python 3.12를 준비합니다. `backend/`에서 `uv sync --frozen --extra test`를 실행한 뒤 저장소 루트로 돌아옵니다.
+Docker Engine/Compose, Node/pnpm과 Python 3.12를 준비합니다. `backend/`에서 `uv sync --frozen --extra test --extra structural`를 실행한 뒤 저장소 루트로 돌아옵니다.
 
 ```bash
 pnpm exec playwright install chromium

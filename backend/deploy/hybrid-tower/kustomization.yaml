@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: windops
+resources:
+  - ../kubernetes
+  - structural-worker.yaml
+  - network-policy.yaml
+patches:
+  - target:
+      kind: NetworkPolicy
+      name: windops-runtime-egress
+    patch: "- op: replace\n  path: /spec/podSelector/matchExpressions/0/values\n  value:\
+      \ [care-worker, structural-worker]\n"
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: windops-backend
+    includeSelectors: false
+    includeTemplates: true

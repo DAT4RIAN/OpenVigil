@@ -50,16 +50,27 @@ class HybridKnowledgeRetrievalService:
         for candidate in candidates:
             match_type = str(candidate.get("match_type", "unknown"))
             lookup_id = (
-                f"{candidate['document_id']}#body"
+                str(candidate.get("passage_id") or f"{candidate['document_id']}#body")
                 if match_type == "knowledge_document" and candidate.get("document_id")
                 else str(candidate.get("case_id", ""))
             )
             if not lookup_id:
                 continue
+            graph_passage_indexed = True
             try:
                 expansion = await graph_service.subgraph(lookup_id, depth=4, policy=policy)
             except NotFoundError:
-                continue
+                if not candidate.get("passage_id"):
+                    continue
+                # PostgreSQL passages can precede their asynchronous projection.
+                # Use the authorized document context and expose that lag.
+                try:
+                    expansion = await graph_service.subgraph(
+                        str(candidate["document_id"]), depth=4, policy=policy
+                    )
+                except NotFoundError:
+                    continue
+                graph_passage_indexed = False
 
             scope_hit = entity_id is None or any(
                 node.entity_id == entity_id or node.properties.get("turbineId") == entity_id
@@ -113,10 +124,17 @@ class HybridKnowledgeRetrievalService:
                     "fusedScore": fused_score,
                     "scopeMatched": scope_hit,
                     "graphExpansion": {
+                        "passageIndexed": graph_passage_indexed,
                         "rootUid": expansion.root_uid,
                         "failureModeIds": failure_modes,
                         "evidenceIds": evidence,
                         "caseIds": cases,
+                        "engineeringClaimIds": [
+                            node.entity_id
+                            for node in expansion.nodes
+                            if node.node_type is NodeType.ENGINEERING_CLAIM
+                        ],
+                        "engineeringClaimSemantics": "reviewed_statements_not_measurement_facts",
                         "paths": [path.as_dict() for path in expansion.paths[:10]],
                     },
                 }

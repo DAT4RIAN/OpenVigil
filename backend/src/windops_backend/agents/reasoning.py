@@ -9,6 +9,7 @@ from pydantic_core.core_schema import ErrorType
 
 from windops_backend.config import Settings
 from windops_backend.schema_operations import MaintenanceReviewTarget
+from windops_backend.schema_structural_workflow import StructuralScreeningOutput
 from windops_backend.schemas import (
     MaintenanceAlternative,
     PublicDiagnosis,
@@ -43,7 +44,26 @@ PUBLIC_REASONING_SYSTEM_PROMPT = (
 
 def _response_schema(schema: type[BaseModel], public_context: dict[str, Any]) -> dict[str, Any]:
     response_schema = schema.model_json_schema()
-    if issubclass(schema, PublicDiagnosis):
+    if issubclass(schema, StructuralScreeningOutput):
+        properties = response_schema["properties"]
+        properties["component"]["const"] = public_context["analysis_profile"]["component"]
+        properties["evidence_refs"]["items"]["enum"] = [
+            item["evidence_id"] for item in public_context.get("evidence", [])
+        ]
+        properties["evidence_refs"]["uniqueItems"] = True
+        missing = public_context["structural_context"]["missing_evidence"]
+        properties["missing_evidence"]["const"] = missing
+        if missing:
+            properties["failure_mode"]["const"] = "insufficient_structural_evidence"
+        response_schema["description"] = (
+            "Interpret supplied structural measurements only; "
+            "no calibrated physical-failure probability exists. Do not infer damage, "
+            "absolute tendon "
+            "force from frequency, automatic tensioning, or operating permission. Preserve all "
+            "supplied missing evidence. The output is a retest proposal "
+            "pending independent human review."
+        )
+    elif issubclass(schema, PublicDiagnosis):
         properties = response_schema["properties"]
         properties["confidence"]["description"] = (
             "Confidence that the named physical failure is supported by the evidence, not "
@@ -337,7 +357,32 @@ def evaluate_public_output(
     minimum_diagnosis_confidence: float,
 ) -> dict[str, Any]:
     checks: list[str] = ["strict_schema"]
-    if isinstance(value, PublicDiagnosis):
+    if isinstance(value, StructuralScreeningOutput):
+        allowed = {item["evidence_id"] for item in public_context.get("evidence", [])}
+        missing = public_context["structural_context"]["missing_evidence"]
+        if value.component != public_context["analysis_profile"]["component"]:
+            raise ReasoningEvaluationError(
+                "structural interpretation component differs from its frozen scope"
+            )
+        if len(set(value.evidence_refs)) != len(value.evidence_refs) or not set(
+            value.evidence_refs
+        ).issubset(allowed):
+            raise ReasoningEvaluationError(
+                "structural interpretation cites unknown or duplicate evidence"
+            )
+        if value.missing_evidence != missing or (
+            missing and value.failure_mode != "insufficient_structural_evidence"
+        ):
+            raise ReasoningEvaluationError("structural interpretation omitted missing evidence")
+        checks.extend(
+            [
+                "structural_scope",
+                "source_grounding",
+                "missing_evidence_preserved",
+                "no_damage_probability",
+            ]
+        )
+    elif isinstance(value, PublicDiagnosis):
         profile = public_context.get("analysis_profile", {})
         expected_component = str(profile.get("component", ""))
         allowed_evidence = {
@@ -441,6 +486,14 @@ class DeterministicReasoningProvider:
                 "source": "deterministic_test_no_model",
             },
         }
+        if public_context.get("structural_context"):
+            from windops_backend.agents.structural_reasoning import deterministic_structural_output
+
+            structural_value = deterministic_structural_output(schema, public_context)
+            evaluate_public_output(
+                structural_value, public_context=public_context, minimum_diagnosis_confidence=0
+            )
+            return schema.model_validate(structural_value.model_dump())
         if schema is PublicDiagnosis:
             evidence_refs = [
                 str(item["evidence_id"]) for item in public_context.get("evidence", [])

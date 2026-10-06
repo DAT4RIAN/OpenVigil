@@ -184,9 +184,12 @@ export async function productionDecisionsResponse(request: Request): Promise<Res
       description: text(item.action),
       safetyRisk: risk(item.safety_risk),
       deteriorationRiskPercent: deteriorationRiskPercent(item.deterioration_risk_percent),
-      estimatedCostCny: number(item.estimated_cost_cny),
-      estimatedDowntimeHours: number(item.estimated_downtime_hours),
-      estimatedEnergyLossMWh: number(item.estimated_energy_loss_mwh),
+      estimatedCostCny:
+        typeof item.estimated_cost_cny === "number" ? item.estimated_cost_cny : null,
+      estimatedDowntimeHours:
+        typeof item.estimated_downtime_hours === "number" ? item.estimated_downtime_hours : null,
+      estimatedEnergyLossMWh:
+        typeof item.estimated_energy_loss_mwh === "number" ? item.estimated_energy_loss_mwh : null,
       weatherWindowId: text(item.weather_window_id) || null,
       requiredResources: list(item.required_resources).map(String),
       recommended: Boolean(item.recommended),
@@ -203,7 +206,8 @@ export async function productionDecisionsResponse(request: Request): Promise<Res
       turbineId: text(row.turbine_id),
       incident: text(row.incident),
       diagnosis: text(diagnosis.conclusion, text(row.incident)),
-      confidencePercent: Math.round(number(diagnosis.confidence) * 100),
+      confidencePercent:
+        typeof diagnosis.confidence === "number" ? Math.round(diagnosis.confidence * 100) : null,
       status: decisionStatus(row.status),
       risk: highestAlternativeRisk(alternatives),
       evidenceIds: list(row.evidence_ids).map(String),
