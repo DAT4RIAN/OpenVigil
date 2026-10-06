@@ -178,14 +178,15 @@ test("the application page and Worker route inventories remain stable", () => {
   const pages = sourceFiles.filter((filePath) => normalizePath(filePath).endsWith("/page.tsx"));
   const routes = sourceFiles.filter((filePath) => normalizePath(filePath).endsWith("/route.ts"));
 
-  assert.equal(pages.length, 23);
+  assert.equal(pages.length, 24);
+  assert.ok(pages.some((filePath) => normalizePath(filePath) === "app/structural/page.tsx"));
   assert.equal(
     pages.filter((filePath) => normalizePath(filePath) === "app/login/page.tsx").length,
     1,
   );
   assert.equal(
     inventoryHash(pages.filter((filePath) => normalizePath(filePath) !== "app/login/page.tsx")),
-    "84b674dd7ef3300972960504ee610e6662bd3abaa74ad0d4d3fa453c613d4a51",
+    "52a002a68f350cf9b0bdc81e7ffdf01f61b7b5344e11b02dc9de3afdc47dc4e6",
   );
   assert.equal(routes.length, 38);
   assert.equal(

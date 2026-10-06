@@ -1,3 +1,16 @@
+# 当前活动任务：代码重构（2026-10-06）
+
+状态：**COMPLETE_LOCAL_VERIFIED**。授权：用户要求重构当前项目，并选择按现状确定重点；基线 1183102af943fdb922d10eb1c07a344f9b940221，起点工作树干净。计划与完整记录：docs/refactor/REFACTOR_PLAN-2026-10-06.md、docs/refactor/REFACTOR_REPORT-2026-10-06.md；不可覆盖总收据：.artifacts/refactor-20261006/verification-receipt.json。
+
+- R26-01 / R26-02：DONE_LOCAL_VERIFIED。Agent工具协议/目录/参数校验与五类处理器、共享辅助函数拆分，执行主文件1934→201行；旧导出同对象、序列/100条内存历史由一处维护。82/82原声明token等价，233前端单测、完整构建/包体、覆盖门槛（91.52%/51.56%/32.90%）、typecheck/ESLint/Prettier与63/63浏览器通过。
+- R26-03：DONE_LOCAL_VERIFIED。图预算/SQL分页/构建/稳定序列化独立，主文件1361→866行；共享Outbox写入、推理schema、知识制品常量与窄配置Protocol解除三组旧SCC。52/52函数/类AST等价，无环/可达性/27 CLI、权限/图/审核/知识/事务/结构FDD及闭环回归完成；196源码strict mypy、Ruff、318 Python文件格式通过。
+- R26-04：DONE_LOCAL_VERIFIED。结构页精确路径哈希和实际Docker/子进程/CI/验证入口补齐；架构/0032唯一迁移头一致。模拟browser上传origin配置修复，真实后端仍需显式配置；八语言README Demo工具数纠正为实际16。旧告警替身改用真实Alarm、WT-023后端18工具精确集合同步，原断言保留。
+- 后端原始全量：913 passed / 2旧测试failed / 40外部门禁skipped；核心原始轮次787 passed / 相同2旧测试failed / 126 deselected。两轮在修正前已收集旧fixture。当前两个模块14/14复测通过，覆盖并解决这2项；去重915个非外部case有通过证据，不冒充一次零失败全量运行。所有原始XML/失败/trace保留，40外部条件保持UNVERIFIED。
+- 失败修正证据：旧SimpleNamespace缺已有Alarm.code，create_mission函数AST与HEAD一致；HEAD已包含query_structural_context而旧断言仅17项，保留精确18项集合。CARE进程PATH复测3/3、模拟上传10/10与完整63/63通过。首轮构建/类型基线、漏页/SCC/可达性、重叠源码的失效模态轮次、PATH/旧fixture/旧目录及harness失败均保留。
+- 保护与边界：513源/config最终快照一致；三处import格式、Dramatiq精确类型及两处旧缩进delta明确，后两者整文件AST一致，结构计算版本文件在最终回归期间保持。原.env/HEAD/index意图与历史进度后缀保留，无迁移、依赖升级、付费模型请求、提交、推送或上线。正式联合、镜像/安全发布和现场资格仍UNVERIFIED；以下首版验收属于其原源码快照。
+
+---
+
 # EXECUTION_PROGRESS.md
 
 # Long-running Execution Progress

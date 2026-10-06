@@ -11,7 +11,7 @@ from windops_backend.schema_structural_workflow import StructuralScreeningOutput
 
 
 def deterministic_structural_output(schema: type[BaseModel], context: dict[str, Any]) -> BaseModel:
-    from windops_backend.agents.reasoning import (
+    from windops_backend.agents.reasoning_contracts import (
         REVIEW_COMMITTEE_AGENT,
         AlternativeBundle,
         ReviewBundle,

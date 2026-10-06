@@ -69,7 +69,7 @@ Le dépôt utilise `pnpm-lock.yaml`. Ne générez pas et ne commitez pas `packag
 pnpm dev
 ```
 
-Ouvrez `http://localhost:3000`. La Demo par défaut comprend 64 éoliennes déterministes, le scénario d’anomalie du roulement principal WT-023, l’état du processus dans D1, des flux SSE finis, des WebSockets simulés et un environnement d’exécution d’agents avec 17 outils. Elle permet démonstrations, captures d’écran et contrôles de régression.
+Ouvrez `http://localhost:3000`. La Demo par défaut comprend 64 éoliennes déterministes, le scénario d’anomalie du roulement principal WT-023, l’état du processus dans D1, des flux SSE finis, des WebSockets simulés et un environnement d’exécution d’agents avec 16 outils. Elle permet démonstrations, captures d’écran et contrôles de régression.
 
 ### Compilation pour la production
 

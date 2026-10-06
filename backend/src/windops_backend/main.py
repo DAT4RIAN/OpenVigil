@@ -21,7 +21,7 @@ from windops_backend.errors import DomainError
 from windops_backend.identity import DelegatedIdentityAuthenticator
 from windops_backend.knowledge_graph.api import router as knowledge_graph_router
 from windops_backend.knowledge_graph.factory import create_knowledge_graph_store
-from windops_backend.knowledge_graph.projection import ProjectionLimits
+from windops_backend.knowledge_graph.projection_budget import ProjectionLimits
 from windops_backend.knowledge_graph.service import KnowledgeGraphService
 from windops_backend.observability import (
     RequestMetricsMiddleware,

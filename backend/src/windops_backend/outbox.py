@@ -11,14 +11,24 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from windops_backend.config import Settings
 from windops_backend.enums import ExecutionStatus
-from windops_backend.knowledge_graph.projection import ProjectionLimits
+from windops_backend.knowledge_graph.projection_budget import ProjectionLimits
 from windops_backend.knowledge_graph.service import project_authoritative_graph
 from windops_backend.knowledge_graph.store import KnowledgeGraphStore
 from windops_backend.models import AgentExecution
+from windops_backend.outbox_commands import (
+    KNOWLEDGE_GRAPH_PROJECTION_REQUESTED as KNOWLEDGE_GRAPH_PROJECTION_REQUESTED,
+)
+from windops_backend.outbox_commands import (
+    MISSION_ANALYSIS_REQUESTED as MISSION_ANALYSIS_REQUESTED,
+)
+from windops_backend.outbox_commands import (
+    enqueue_knowledge_graph_projection as enqueue_knowledge_graph_projection,
+)
+from windops_backend.outbox_commands import (
+    enqueue_mission_analysis as enqueue_mission_analysis,
+)
 from windops_backend.storage import OutboxEvent
 
-MISSION_ANALYSIS_REQUESTED = "mission.analysis.requested"
-KNOWLEDGE_GRAPH_PROJECTION_REQUESTED = "knowledge-graph.projection.requested"
 OUTBOX_LEASE = timedelta(minutes=5)
 # Redis delivery is considered visible for one lease window.  A relay that
 # sent an event but never sees the worker claim it must get another chance.
@@ -27,45 +37,6 @@ OUTBOX_DISPATCH_VISIBILITY = timedelta(minutes=5)
 
 class OutboxLeaseLostError(RuntimeError):
     """Raised internally when a stale worker no longer owns an event lease."""
-
-
-def enqueue_mission_analysis(session: AsyncSession, mission_id: str) -> OutboxEvent:
-    event = OutboxEvent(
-        event_type=MISSION_ANALYSIS_REQUESTED,
-        aggregate_type="mission",
-        aggregate_id=mission_id,
-        payload={"mission_id": mission_id},
-    )
-    session.add(event)
-    return event
-
-
-def enqueue_knowledge_graph_projection(
-    session: AsyncSession,
-    *,
-    aggregate_type: str,
-    aggregate_id: str,
-    reason: str,
-) -> OutboxEvent:
-    """Request an idempotent rebuild of the derived graph projection.
-
-    The row is committed in the same PostgreSQL transaction as the authoritative
-    business mutation. Replaying it is safe because the projector replaces the
-    named Neo4j projection from current SQL state.
-    """
-
-    event = OutboxEvent(
-        event_type=KNOWLEDGE_GRAPH_PROJECTION_REQUESTED,
-        aggregate_type=aggregate_type,
-        aggregate_id=aggregate_id,
-        payload={
-            "aggregate_type": aggregate_type,
-            "aggregate_id": aggregate_id,
-            "reason": reason,
-        },
-    )
-    session.add(event)
-    return event
 
 
 async def claim_event(session: AsyncSession, event_id: str) -> OutboxEvent | None:

@@ -8,6 +8,7 @@ import pytest
 from windops_backend.config import Settings
 from windops_backend.enums import ApprovalAction, Environment, MissionStatus
 from windops_backend.errors import ConflictError, DomainError, InvalidTransitionError, NotFoundError
+from windops_backend.models import Alarm
 from windops_backend.schemas import ApprovalRequest, MissionAnalysisProfile, MissionCreateRequest
 from windops_backend.services.agent_governance import control_agent, create_agent_release
 from windops_backend.services.alarms import execute_alarm_command
@@ -44,7 +45,7 @@ async def test_mission_service_rejects_invalid_missing_and_duplicate_inputs() ->
 
     session.scalar.side_effect = [
         None,
-        SimpleNamespace(id="ALARM-SERVICE-001", turbine_id="WT-SERVICE-001"),
+        Alarm(id="ALARM-SERVICE-001", turbine_id="WT-SERVICE-001", code="BEARING_REVIEW_REQUIRED"),
         SimpleNamespace(id="MISSION-EXISTING-001"),
     ]
     session.get.return_value = SimpleNamespace(id="WT-SERVICE-001")

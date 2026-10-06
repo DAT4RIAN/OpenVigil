@@ -1,4 +1,4 @@
-import type { AgentToolArguments, AgentToolName } from "./agent-tool-runtime";
+import type { AgentToolArguments, AgentToolName } from "./agent-tools/contracts";
 import type { Agent, Mission } from "./types";
 
 export interface AgentToolPreviewRequest {

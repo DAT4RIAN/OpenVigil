@@ -1,5 +1,5 @@
 import { agents } from "@/lib/agent-data";
-import { agentToolCatalog } from "@/lib/agent-tool-runtime";
+import { agentToolCatalog } from "@/lib/agent-tools/catalog";
 import {
   alarmArchive,
   demoDatasetCounts,

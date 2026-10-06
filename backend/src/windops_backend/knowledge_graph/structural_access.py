@@ -12,12 +12,12 @@ from windops_backend.access_control import attach_access_policy, data_scope_allo
 from windops_backend.config import Settings
 from windops_backend.errors import InvalidTransitionError, NotFoundError
 from windops_backend.knowledge_graph.domain import GraphAccessPolicy
-from windops_backend.knowledge_graph.projection import (
+from windops_backend.knowledge_graph.projection_budget import (
     ProjectionLimits,
     _conservative_memory_bytes,
-    _iter_bounded_scalar_rows,
     _ProjectionBudget,
 )
+from windops_backend.knowledge_graph.projection_rows import _iter_bounded_scalar_rows
 from windops_backend.knowledge_graph.structural_projection import claim_read_identity
 from windops_backend.model_base import utcnow
 from windops_backend.model_engineering_claim import EngineeringClaim

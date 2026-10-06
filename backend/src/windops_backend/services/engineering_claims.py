@@ -33,11 +33,11 @@ from windops_backend.schema_engineering_claim import (
 from windops_backend.schema_structural import aware
 from windops_backend.services.events import append_domain_event
 from windops_backend.services.idempotency import canonical_request_hash
-from windops_backend.services.knowledge import (
+from windops_backend.services.knowledge_access import knowledge_document_query
+from windops_backend.services.knowledge_contracts import (
     ALLOWED_KNOWLEDGE_CONTENT_TYPES,
     MAX_KNOWLEDGE_ARTIFACT_BYTES,
 )
-from windops_backend.services.knowledge_access import knowledge_document_query
 from windops_backend.services.structural import (
     MAX_STRUCTURAL_BYTES,
     STRUCTURAL_CONTENT_TYPES,

@@ -27,7 +27,7 @@ from windops_backend.models import (
     ToolDefinition,
     WorkOrder,
 )
-from windops_backend.outbox import enqueue_knowledge_graph_projection
+from windops_backend.outbox_commands import enqueue_knowledge_graph_projection
 from windops_backend.schemas import (
     AgentReleaseRequest,
     AgentToolExecuteRequest,

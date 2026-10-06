@@ -184,8 +184,9 @@ async def test_wt023_full_audited_workflow(client: httpx.AsyncClient) -> None:
     assert_no_private_reasoning(mission["executions"])
 
     tool_catalog = (await client.get("/api/v1/tools")).json()
-    assert tool_catalog["count"] == 17
+    assert tool_catalog["count"] == 18
     assert {item["name"] for item in tool_catalog["tools"]} == {
+        "query_structural_context",
         "get_turbine_status",
         "query_scada",
         "query_alarm_history",

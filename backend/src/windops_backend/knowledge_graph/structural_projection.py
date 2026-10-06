@@ -37,7 +37,8 @@ from windops_backend.services.engineering_claims import _effective_status, _sour
 from windops_backend.storage import FieldTaskEvidence
 
 if TYPE_CHECKING:
-    from windops_backend.knowledge_graph.projection import _ProjectionBudget, _ProjectionBuilder
+    from windops_backend.knowledge_graph.projection_budget import _ProjectionBudget
+    from windops_backend.knowledge_graph.projection_builder import _ProjectionBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +57,9 @@ def claim_read_identity(claim: EngineeringClaim) -> str:
 async def project_structural_nodes(
     session: AsyncSession, builder: _ProjectionBuilder, budget: _ProjectionBudget
 ) -> None:
-    from windops_backend.knowledge_graph.projection import (
-        _BudgetedDict,
-        _iso,
-        _iter_bounded_scalar_rows,
-        _json,
-    )
+    from windops_backend.knowledge_graph.projection_budget import _BudgetedDict
+    from windops_backend.knowledge_graph.projection_rows import _iter_bounded_scalar_rows
+    from windops_backend.knowledge_graph.projection_values import _iso, _json
 
     def link(
         kind: RelationshipType,

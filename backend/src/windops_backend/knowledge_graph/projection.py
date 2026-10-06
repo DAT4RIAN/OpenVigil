@@ -1,33 +1,55 @@
 from __future__ import annotations
 
-import hashlib
-import heapq
-import json
 import logging
 import re
-import sys
-import threading
-import tracemalloc
-from collections.abc import AsyncIterator, Mapping
-from dataclasses import dataclass, fields, is_dataclass
-from datetime import UTC, datetime
-from math import ceil
-from time import monotonic
-from typing import TYPE_CHECKING, Any, Self
+from dataclasses import dataclass
 
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql import Select
 
 from windops_backend.knowledge_graph.domain import (
-    GraphNode,
     GraphProperties,
-    GraphRelationship,
     GraphSnapshot,
     NodeType,
     RelationshipType,
-    graph_data_scope,
     graph_uid,
+)
+from windops_backend.knowledge_graph.projection_budget import (
+    ProjectionLimitExceeded as ProjectionLimitExceeded,
+)
+from windops_backend.knowledge_graph.projection_budget import ProjectionLimits as ProjectionLimits
+from windops_backend.knowledge_graph.projection_budget import _BudgetedDict as _BudgetedDict
+from windops_backend.knowledge_graph.projection_budget import (
+    _conservative_memory_bytes as _conservative_memory_bytes,
+)
+from windops_backend.knowledge_graph.projection_budget import _deep_sizeof as _deep_sizeof
+from windops_backend.knowledge_graph.projection_budget import _ProjectionBudget as _ProjectionBudget
+from windops_backend.knowledge_graph.projection_budget import (
+    _PythonPeakMemorySampler as _PythonPeakMemorySampler,
+)
+from windops_backend.knowledge_graph.projection_builder import (
+    _ProjectionBuilder as _ProjectionBuilder,
+)
+from windops_backend.knowledge_graph.projection_rows import (
+    _estimated_row_bytes as _estimated_row_bytes,
+)
+from windops_backend.knowledge_graph.projection_rows import (
+    _iter_bounded_scalar_rows as _iter_bounded_scalar_rows,
+)
+from windops_backend.knowledge_graph.projection_rows import (
+    _iter_bounded_sensor_rows as _iter_bounded_sensor_rows,
+)
+from windops_backend.knowledge_graph.projection_values import (
+    KNOWLEDGE_GRAPH_MODEL_VERSION as KNOWLEDGE_GRAPH_MODEL_VERSION,
+)
+from windops_backend.knowledge_graph.projection_values import (
+    KNOWLEDGE_GRAPH_PROJECTION_ID as KNOWLEDGE_GRAPH_PROJECTION_ID,
+)
+from windops_backend.knowledge_graph.projection_values import _iso as _iso
+from windops_backend.knowledge_graph.projection_values import _json as _json
+from windops_backend.knowledge_graph.projection_values import _slug as _slug
+from windops_backend.knowledge_graph.projection_values import (
+    _subsystem_for_variable as _subsystem_for_variable,
 )
 from windops_backend.models import (
     Alarm,
@@ -39,7 +61,6 @@ from windops_backend.models import (
     Mission,
     Resource,
     ResourceReservation,
-    ScadaSample,
     Turbine,
     WindFarm,
     WorkOrder,
@@ -47,523 +68,7 @@ from windops_backend.models import (
 )
 from windops_backend.storage import FieldTaskEvidence
 
-if TYPE_CHECKING:
-    from windops_backend.config import Settings
-
-KNOWLEDGE_GRAPH_PROJECTION_ID = "windops-operational-knowledge-v1"
-KNOWLEDGE_GRAPH_MODEL_VERSION = "2026.10.2"
-_MEMORY_ACCOUNTING_SAFETY_FACTOR = 1.50
-_PYTHON_MEMORY_HEADROOM_RATIO = 0.15
-_SNAPSHOT_HANDOFF_BYTES_PER_ITEM = 160
-_TRACEMALLOC_LOCK = threading.Lock()
-_TRACEMALLOC_USERS = 0
-_TRACEMALLOC_STARTED_BY_PROJECTION = False
 logger = logging.getLogger(__name__)
-
-
-class ProjectionLimitExceeded(RuntimeError):
-    """The authoritative projection exceeded a configured production budget."""
-
-
-def _deep_sizeof(value: object, seen: set[int] | None = None) -> int:
-    """Return the owned Python heap size of a projection value.
-
-    The traversal intentionally ignores SQLAlchemy's instance-state object so
-    a bounded source row is charged for its loaded column payload rather than
-    for the shared Session identity map. Shared children are counted once per
-    value traversal; separate live containers are charged separately.
-    """
-
-    visited = seen if seen is not None else set()
-    identity = id(value)
-    if identity in visited:
-        return 0
-    visited.add(identity)
-    size = sys.getsizeof(value)
-    if value is None or isinstance(value, str | bytes | int | float | bool):
-        return size
-    if isinstance(value, Mapping):
-        return size + sum(
-            _deep_sizeof(key, visited) + _deep_sizeof(item, visited)
-            for key, item in value.items()
-            if key != "_sa_instance_state"
-        )
-    if isinstance(value, tuple | list | set | frozenset):
-        return size + sum(_deep_sizeof(item, visited) for item in value)
-    if is_dataclass(value) and not isinstance(value, type):
-        return size + sum(
-            _deep_sizeof(getattr(value, field.name), visited) for field in fields(value)
-        )
-    state = getattr(value, "__dict__", None)
-    if isinstance(state, dict):
-        return size + _deep_sizeof(
-            {key: item for key, item in state.items() if key != "_sa_instance_state"},
-            visited,
-        )
-    return size
-
-
-def _conservative_memory_bytes(value: object, *, entry_overhead: int = 0) -> int:
-    measured = _deep_sizeof(value) + max(0, entry_overhead)
-    return max(64, ceil(measured * _MEMORY_ACCOUNTING_SAFETY_FACTOR))
-
-
-class _PythonPeakMemorySampler:
-    """Measure incremental Python allocations without disrupting external tracing."""
-
-    def __init__(self) -> None:
-        global _TRACEMALLOC_STARTED_BY_PROJECTION, _TRACEMALLOC_USERS
-
-        with _TRACEMALLOC_LOCK:
-            if not tracemalloc.is_tracing():
-                tracemalloc.start(1)
-                _TRACEMALLOC_STARTED_BY_PROJECTION = True
-            _TRACEMALLOC_USERS += 1
-        self._closed = False
-        self._baseline_current, self._baseline_peak = tracemalloc.get_traced_memory()
-        self.peak_increment_bytes = 0
-
-    def sample(self) -> int:
-        if self._closed or not tracemalloc.is_tracing():
-            return self.peak_increment_bytes
-        current, peak = tracemalloc.get_traced_memory()
-        current_increment = max(0, current - self._baseline_current)
-        new_global_peak = max(0, peak - max(self._baseline_current, self._baseline_peak))
-        self.peak_increment_bytes = max(
-            self.peak_increment_bytes,
-            current_increment,
-            new_global_peak,
-        )
-        return self.peak_increment_bytes
-
-    def close(self) -> None:
-        global _TRACEMALLOC_STARTED_BY_PROJECTION, _TRACEMALLOC_USERS
-
-        if self._closed:
-            return
-        self.sample()
-        self._closed = True
-        with _TRACEMALLOC_LOCK:
-            _TRACEMALLOC_USERS -= 1
-            if _TRACEMALLOC_USERS == 0 and _TRACEMALLOC_STARTED_BY_PROJECTION:
-                tracemalloc.stop()
-                _TRACEMALLOC_STARTED_BY_PROJECTION = False
-
-
-@dataclass(frozen=True)
-class ProjectionLimits:
-    batch_size: int = 500
-    max_source_rows: int = 250_000
-    max_nodes: int = 250_000
-    max_relationships: int = 500_000
-    max_source_bytes: int = 512 * 1024 * 1024
-    max_graph_bytes: int = 256 * 1024 * 1024
-    max_estimated_memory_bytes: int = 256 * 1024 * 1024
-    max_runtime_seconds: float = 300.0
-
-    @classmethod
-    def from_settings(cls, settings: Settings) -> Self:
-        return cls(
-            batch_size=settings.knowledge_graph_projection_batch_size,
-            max_source_rows=settings.knowledge_graph_projection_max_source_rows,
-            max_nodes=settings.knowledge_graph_projection_max_nodes,
-            max_relationships=settings.knowledge_graph_projection_max_relationships,
-            max_source_bytes=(
-                settings.knowledge_graph_projection_max_source_megabytes * 1024 * 1024
-            ),
-            max_graph_bytes=(settings.knowledge_graph_projection_max_graph_megabytes * 1024 * 1024),
-            max_estimated_memory_bytes=(
-                settings.knowledge_graph_projection_max_memory_megabytes * 1024 * 1024
-            ),
-            max_runtime_seconds=settings.knowledge_graph_projection_max_runtime_seconds,
-        )
-
-    def __post_init__(self) -> None:
-        for name in (
-            "batch_size",
-            "max_source_rows",
-            "max_nodes",
-            "max_relationships",
-            "max_source_bytes",
-            "max_graph_bytes",
-            "max_estimated_memory_bytes",
-        ):
-            if getattr(self, name) <= 0:
-                raise ValueError(f"{name} must be positive")
-        if self.max_runtime_seconds <= 0:
-            raise ValueError("max_runtime_seconds must be positive")
-
-
-class _ProjectionBudget:
-    def __init__(self, limits: ProjectionLimits) -> None:
-        self.limits = limits
-        self.started_at = monotonic()
-        self.source_rows = 0
-        self.source_bytes = 0
-        self.graph_bytes = 0
-        self.estimated_memory_bytes = 0
-        self.peak_memory_bytes = 0
-        self.actual_peak_memory_bytes = 0
-        self._memory_sampler = _PythonPeakMemorySampler()
-
-    @property
-    def python_memory_limit_bytes(self) -> int:
-        return max(
-            1,
-            int(self.limits.max_estimated_memory_bytes * (1.0 - _PYTHON_MEMORY_HEADROOM_RATIO)),
-        )
-
-    def check_actual_memory(self) -> None:
-        self.actual_peak_memory_bytes = self._memory_sampler.sample()
-        if self.actual_peak_memory_bytes > self.python_memory_limit_bytes:
-            raise ProjectionLimitExceeded(
-                "knowledge graph projection actual Python memory budget exceeded"
-            )
-        self.check_runtime()
-
-    def close(self) -> None:
-        self.actual_peak_memory_bytes = self._memory_sampler.sample()
-        self._memory_sampler.close()
-
-    def check_runtime(self) -> None:
-        if monotonic() - self.started_at > self.limits.max_runtime_seconds:
-            raise ProjectionLimitExceeded("knowledge graph projection runtime budget exceeded")
-
-    def consume_source_rows(self, count: int, byte_count: int = 0) -> None:
-        self.source_rows += count
-        self.source_bytes += max(0, byte_count)
-        if self.source_rows > self.limits.max_source_rows:
-            raise ProjectionLimitExceeded("knowledge graph projection source-row budget exceeded")
-        if self.source_bytes > self.limits.max_source_bytes:
-            raise ProjectionLimitExceeded("knowledge graph projection source-byte budget exceeded")
-        self.check_actual_memory()
-
-    def reserve_memory(self, delta: int) -> None:
-        self.estimated_memory_bytes += delta
-        if self.estimated_memory_bytes > self.limits.max_estimated_memory_bytes:
-            raise ProjectionLimitExceeded("knowledge graph projection memory budget exceeded")
-        if self.estimated_memory_bytes < 0:  # defensive accounting guard
-            self.estimated_memory_bytes = 0
-        self.peak_memory_bytes = max(self.peak_memory_bytes, self.estimated_memory_bytes)
-        self.check_actual_memory()
-
-    def reserve_graph(self, delta: int) -> None:
-        self.graph_bytes += delta
-        if self.graph_bytes > self.limits.max_graph_bytes:
-            raise ProjectionLimitExceeded("knowledge graph projection graph-byte budget exceeded")
-        if self.graph_bytes < 0:  # defensive accounting guard
-            self.graph_bytes = 0
-
-
-class _BudgetedDict[Key, Value](dict[Key, Value]):
-    """A projection-owned mapping that accounts every live key/value entry."""
-
-    def __init__(self, budget: _ProjectionBudget) -> None:
-        super().__init__()
-        self._budget = budget
-        self._reserved_bytes = _conservative_memory_bytes({})
-        self._budget.reserve_memory(self._reserved_bytes)
-
-    @staticmethod
-    def _entry_bytes(key: Key, value: Value) -> int:
-        return _conservative_memory_bytes((key, value), entry_overhead=64)
-
-    def __setitem__(self, key: Key, value: Value) -> None:
-        previous_size = self._entry_bytes(key, self[key]) if key in self else 0
-        next_size = self._entry_bytes(key, value)
-        self._budget.reserve_memory(next_size - previous_size)
-        super().__setitem__(key, value)
-        self._reserved_bytes += next_size - previous_size
-        self._budget.check_actual_memory()
-
-    def setdefault(self, key: Key, default: Value) -> Value:
-        if key in self:
-            return self[key]
-        self[key] = default
-        return default
-
-    def release(self) -> None:
-        if self._reserved_bytes <= 0:
-            return
-        super().clear()
-        self._budget.reserve_memory(-self._reserved_bytes)
-        self._reserved_bytes = 0
-
-
-def _estimated_row_bytes(row: object) -> int:
-    values: object
-    if hasattr(row, "__dict__"):
-        values = {key: value for key, value in vars(row).items() if key != "_sa_instance_state"}
-    elif hasattr(row, "_mapping"):
-        values = dict(row._mapping)
-    elif isinstance(row, tuple):
-        values = row
-    else:
-        values = row
-    return _conservative_memory_bytes(values, entry_overhead=128)
-
-
-async def _iter_bounded_scalar_rows[ProjectionRow](
-    session: AsyncSession,
-    statement: Select[tuple[ProjectionRow]],
-    *,
-    budget: _ProjectionBudget,
-    key_column: Any | None = None,
-    key_attribute: str | None = None,
-) -> AsyncIterator[ProjectionRow]:
-    last_key: object | None = None
-    while True:
-        page_statement = statement
-        if key_column is not None and last_key is not None:
-            page_statement = page_statement.where(key_column > last_key)
-        if key_column is not None:
-            page_statement = page_statement.limit(budget.limits.batch_size)
-        stream = await session.stream_scalars(
-            page_statement.execution_options(yield_per=budget.limits.batch_size)
-        )
-        page_rows: list[ProjectionRow] = []
-        try:
-            async for partition in stream.partitions(budget.limits.batch_size):
-                page_rows.extend(partition)
-        finally:
-            await stream.close()
-        if not page_rows:
-            break
-        budget.check_actual_memory()
-        partition_bytes = max(
-            _conservative_memory_bytes(page_rows),
-            _conservative_memory_bytes([None] * len(page_rows))
-            + sum(_estimated_row_bytes(row) for row in page_rows),
-        )
-        budget.consume_source_rows(len(page_rows), partition_bytes)
-        budget.reserve_memory(partition_bytes)
-        try:
-            for row in page_rows:
-                yield row
-        finally:
-            budget.reserve_memory(-partition_bytes)
-            budget.check_actual_memory()
-        if key_column is None or key_attribute is None or len(page_rows) < budget.limits.batch_size:
-            break
-        last_key = getattr(page_rows[-1], key_attribute)
-
-
-async def _iter_bounded_sensor_rows(
-    session: AsyncSession,
-    *,
-    budget: _ProjectionBudget,
-) -> AsyncIterator[tuple[str, str, str]]:
-    statement = (
-        select(ScadaSample.turbine_id, ScadaSample.variable, ScadaSample.unit)
-        .distinct()
-        .order_by(ScadaSample.turbine_id, ScadaSample.variable, ScadaSample.unit)
-        .execution_options(yield_per=budget.limits.batch_size)
-    )
-    stream = await session.stream(statement)
-    try:
-        async for partition in stream.partitions(budget.limits.batch_size):
-            budget.check_actual_memory()
-            partition_bytes = max(
-                _conservative_memory_bytes(partition),
-                _conservative_memory_bytes([None] * len(partition))
-                + sum(_estimated_row_bytes(row) for row in partition),
-            )
-            budget.consume_source_rows(len(partition), partition_bytes)
-            budget.reserve_memory(partition_bytes)
-            try:
-                for row in partition:
-                    yield (str(row[0]), str(row[1]), str(row[2]))
-            finally:
-                budget.reserve_memory(-partition_bytes)
-                budget.check_actual_memory()
-    finally:
-        await stream.close()
-
-
-def _iso(value: datetime | None) -> str | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value.isoformat()
-
-
-def _json(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
-
-
-def _slug(value: str) -> str:
-    normalized = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
-    return normalized or "unknown"
-
-
-def _subsystem_for_variable(variable: str) -> str:
-    normalized = variable.lower()
-    if "main_bearing" in normalized or "main-bearing" in normalized:
-        return "main_bearing"
-    if "gearbox" in normalized:
-        return "gearbox"
-    if "generator" in normalized:
-        return "generator"
-    return "turbine"
-
-
-class _ProjectionBuilder:
-    def __init__(self, limits: ProjectionLimits, budget: _ProjectionBudget) -> None:
-        self.limits = limits
-        self.budget = budget
-        self.nodes: dict[str, GraphNode] = {}
-        self.relationships: dict[str, GraphRelationship] = {}
-        self._largest_write_rows: list[int] = []
-        self.budget.reserve_memory(
-            _conservative_memory_bytes(self.nodes)
-            + _conservative_memory_bytes(self.relationships)
-            + _conservative_memory_bytes([0] * min(self.limits.batch_size, self.limits.max_nodes))
-        )
-        self.estimated_memory_bytes = 0
-
-    def _remember_write_row_size(self, size: int) -> None:
-        if len(self._largest_write_rows) < self.limits.batch_size:
-            heapq.heappush(self._largest_write_rows, size)
-        elif size > self._largest_write_rows[0]:
-            heapq.heapreplace(self._largest_write_rows, size)
-
-    def _reserve_memory(
-        self,
-        *,
-        previous_graph_size: int,
-        next_graph_size: int,
-        previous_memory_size: int,
-        next_memory_size: int,
-    ) -> None:
-        self.budget.reserve_graph(next_graph_size - previous_graph_size)
-        self.budget.reserve_memory(next_memory_size - previous_memory_size)
-        self.estimated_memory_bytes = self.budget.estimated_memory_bytes
-
-    def node(
-        self, node_type: NodeType, entity_id: str, **properties: str | int | float | bool | None
-    ) -> str:
-        uid = graph_uid(node_type, entity_id)
-        properties.setdefault("dataScope", graph_data_scope(node_type))
-        clean: GraphProperties = {
-            key: value
-            for key, value in properties.items()
-            if value is None or isinstance(value, str | int | float | bool)
-        }
-        node = GraphNode(
-            uid=uid,
-            node_type=node_type,
-            entity_id=entity_id,
-            properties=clean,
-        )
-        previous = self.nodes.get(uid)
-        previous_graph_size = (
-            len(_json(previous.as_dict()).encode("utf-8")) + 128 if previous is not None else 0
-        )
-        next_graph_size = len(_json(node.as_dict()).encode("utf-8")) + 128
-        previous_memory_size = (
-            _conservative_memory_bytes((uid, previous), entry_overhead=64)
-            if previous is not None
-            else 0
-        )
-        next_memory_size = _conservative_memory_bytes((uid, node), entry_overhead=64)
-        self._reserve_memory(
-            previous_graph_size=previous_graph_size,
-            next_graph_size=next_graph_size,
-            previous_memory_size=previous_memory_size,
-            next_memory_size=next_memory_size,
-        )
-        self.nodes[uid] = node
-        self._remember_write_row_size(
-            _conservative_memory_bytes(node.as_dict(), entry_overhead=384)
-        )
-        self.budget.check_actual_memory()
-        if len(self.nodes) > self.limits.max_nodes:
-            raise ProjectionLimitExceeded("knowledge graph projection node budget exceeded")
-        return uid
-
-    def relationship(
-        self,
-        relationship_type: RelationshipType,
-        source_uid: str,
-        target_uid: str,
-        *,
-        qualifier: str = "",
-        **properties: str | int | float | bool | None,
-    ) -> str:
-        identity = f"{relationship_type.value}:{source_uid}->{target_uid}"
-        if qualifier:
-            identity = f"{identity}:{qualifier}"
-        clean: GraphProperties = {
-            key: value
-            for key, value in properties.items()
-            if value is None or isinstance(value, str | int | float | bool)
-        }
-        relationship = GraphRelationship(
-            uid=identity,
-            relationship_type=relationship_type,
-            source_uid=source_uid,
-            target_uid=target_uid,
-            properties=clean,
-        )
-        previous = self.relationships.get(identity)
-        previous_graph_size = (
-            len(_json(previous.as_dict()).encode("utf-8")) + 128 if previous is not None else 0
-        )
-        next_graph_size = len(_json(relationship.as_dict()).encode("utf-8")) + 128
-        previous_memory_size = (
-            _conservative_memory_bytes((identity, previous), entry_overhead=64)
-            if previous is not None
-            else 0
-        )
-        next_memory_size = _conservative_memory_bytes((identity, relationship), entry_overhead=64)
-        self._reserve_memory(
-            previous_graph_size=previous_graph_size,
-            next_graph_size=next_graph_size,
-            previous_memory_size=previous_memory_size,
-            next_memory_size=next_memory_size,
-        )
-        self.relationships[identity] = relationship
-        self._remember_write_row_size(
-            _conservative_memory_bytes(relationship.as_dict(), entry_overhead=512)
-        )
-        self.budget.check_actual_memory()
-        if len(self.relationships) > self.limits.max_relationships:
-            raise ProjectionLimitExceeded("knowledge graph projection relationship budget exceeded")
-        return identity
-
-    def snapshot(self, projection_sequence: str | None = None) -> GraphSnapshot:
-        item_count = len(self.nodes) + len(self.relationships)
-        handoff_headroom = item_count * _SNAPSHOT_HANDOFF_BYTES_PER_ITEM
-        serialization_headroom = sum(self._largest_write_rows)
-        self.budget.reserve_memory(handoff_headroom + serialization_headroom)
-        try:
-            nodes = tuple(self.nodes[uid] for uid in sorted(self.nodes))
-            relationships = tuple(self.relationships[uid] for uid in sorted(self.relationships))
-            self.budget.check_actual_memory()
-            revision_hasher = hashlib.sha256()
-            for node in nodes:
-                revision_hasher.update(b"node\0")
-                revision_hasher.update(_json(node.as_dict()).encode("utf-8"))
-                revision_hasher.update(b"\n")
-            for relationship in relationships:
-                revision_hasher.update(b"relationship\0")
-                revision_hasher.update(_json(relationship.as_dict()).encode("utf-8"))
-                revision_hasher.update(b"\n")
-            revision = revision_hasher.hexdigest()
-            generated_at = datetime.now(UTC)
-            snapshot = GraphSnapshot(
-                projection_id=KNOWLEDGE_GRAPH_PROJECTION_ID,
-                projection_sequence=projection_sequence or f"{generated_at.isoformat()}:direct",
-                source_revision=revision,
-                generated_at=generated_at,
-                nodes=nodes,
-                relationships=relationships,
-            )
-            self.budget.check_actual_memory()
-            return snapshot
-        finally:
-            self.budget.reserve_memory(-(handoff_headroom + serialization_headroom))
 
 
 @dataclass(frozen=True, slots=True)

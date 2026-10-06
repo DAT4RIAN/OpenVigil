@@ -69,7 +69,7 @@ Il repository usa `pnpm-lock.yaml`. Non generare né includere nei commit `packa
 pnpm dev
 ```
 
-Aprire `http://localhost:3000`. La Demo predefinita include 64 turbine deterministiche, lo scenario di anomalia del cuscinetto principale WT-023, lo stato del flusso in D1, stream SSE finiti, WebSocket simulati e un ambiente di esecuzione degli agenti con 17 strumenti. Supporta dimostrazioni del prodotto, screenshot e verifiche di regressione.
+Aprire `http://localhost:3000`. La Demo predefinita include 64 turbine deterministiche, lo scenario di anomalia del cuscinetto principale WT-023, lo stato del flusso in D1, stream SSE finiti, WebSocket simulati e un ambiente di esecuzione degli agenti con 16 strumenti. Supporta dimostrazioni del prodotto, screenshot e verifiche di regressione.
 
 ### Build per la produzione
 

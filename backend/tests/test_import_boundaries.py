@@ -13,6 +13,18 @@ PACKAGE_ROOT = SOURCE_ROOT / "windops_backend"
 PYPROJECT_PATH = Path(__file__).parents[1] / "pyproject.toml"
 PUBLIC_LIBRARY_ROOTS = frozenset({"windops_backend.benchmarks.care.online"})
 MODULE_CLI_ROOTS = frozenset({"windops_backend.operations.reasoning_eval"})
+PROCESS_MODULE_REFERENCES = {
+    "windops_backend.structural_compute": "src/windops_backend/structural_process.py",
+    "windops_backend.structural_dependencies": "Dockerfile.structural",
+    "windops_backend.structural_tasks": "Dockerfile.structural",
+    "windops_backend.operations.structural_smoke": (
+        "src/windops_backend/operations/structural_artifact.py"
+    ),
+    "windops_backend.operations.structural_provenance_evidence": (
+        "scripts/structural_e2e_evidence.py"
+    ),
+    "windops_backend.operations.hybrid_release_gate": "../.github/workflows/release.yml",
+}
 
 
 def _module_name(path: Path) -> str:
@@ -144,6 +156,7 @@ def test_every_python_source_module_is_reachable_from_a_runtime_or_public_root()
         "windops_backend.main",
         *PUBLIC_LIBRARY_ROOTS,
         *MODULE_CLI_ROOTS,
+        *PROCESS_MODULE_REFERENCES,
         *(target.partition(":")[0] for target in _console_scripts().values()),
     }
     reachable: set[str] = set()
@@ -159,3 +172,8 @@ def test_every_python_source_module_is_reachable_from_a_runtime_or_public_root()
         module for module, path in module_paths.items() if path.name == "__init__.py"
     }
     assert sorted(modules - reachable - package_namespaces) == []
+
+
+def test_explicit_process_and_verification_roots_have_real_external_callers() -> None:
+    for module, caller in PROCESS_MODULE_REFERENCES.items():
+        assert module in (SOURCE_ROOT.parent / caller).read_text(encoding="utf-8"), caller

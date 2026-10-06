@@ -70,6 +70,8 @@ Demo D1 and production PostgreSQL are intentionally separate bounded contexts. D
 
 TanStack Query owns production query lifecycle. Zustand and the demo workflow helpers are used for local/demo interaction state. Three.js is confined to the digital-twin viewer; ECharts is used for operational charts.
 
+`lib/agent-tools/` separates the Demo tool contracts, catalog, argument validation and asset/telemetry/knowledge/resource/operation handlers. `lib/agent-tool-runtime.ts` retains the execution sequence and bounded in-memory history and re-exports the existing public contracts by identity. Catalog-only and type-only consumers import their owners directly; the D1 ledger still controls durable recording.
+
 The production homepage is backed by one aggregate endpoint, `/api/v1/dashboard`, while other workspaces use domain-specific collection/detail endpoints. Shared query-state components distinguish loading, empty, error, stale and successful results. Browser query-state contracts cover recovery and prohibit presenting failed queries as healthy zero values; current execution results must be recorded separately.
 
 ### 3.2 API adapters
@@ -97,9 +99,11 @@ The backend package is `backend/src/windops_backend/`:
 - `services/`: domain operations, idempotent commands, reports and integrations. Broad read/model services expose stable facade modules while contracts, queries, command transactions, inference and serialization live in bounded owner modules (`operational_*`, `benchmark_catalog_*`, `benchmark_metadata_*` and `model_*`).
 - `agents/`: governed reasoning and review orchestration; embedding providers/vector primitives are isolated in `embeddings.py`, while governed SQL tool execution remains in `tools.py`.
 - `knowledge_graph/`: Neo4j projection/query layer.
+- `knowledge_graph/projection_budget.py`, `projection_rows.py`, `projection_builder.py` and `projection_values.py`: shared resource accounting, bounded SQL traversal, snapshot construction and stable serialization. Operational and structural projection code depend on these owners; `projection.py` preserves its prior entrypoints and compatibility exports.
 - `benchmarks/care/`: CARE contract, quality, scoring, import, evaluation, replay, online inference and full-scale CLI pipeline. Historical CLI modules remain compatibility facades over dependency-neutral artifact contracts and bounded runtime/import/evaluation/prediction owners.
 - `models.py` / `schemas.py`: explicit compatibility facades over bounded `model_*` SQLAlchemy owners and `schema_*` Pydantic owners; `storage.py` owns artifact/outbox storage adapters.
 - `workers.py` / `outbox.py`: Dramatiq actors, durable claims and relay.
+- `outbox_commands.py`: dependency-neutral command-row creation in the caller's transaction, shared by domain services without importing event processors. `agents/reasoning_contracts.py` and `services/knowledge_contracts.py` similarly separate shared review schemas and artifact limits from orchestration. Deployment identity verification consumes the narrow `HybridDeploymentSettings` protocol rather than importing the settings implementation.
 - `operations/`: backup, restore, release evidence, deployment policy and release smoke tools. `report_io.py` owns only byte-equivalent streaming hashes and atomic JSON output; each verifier retains its own policy, schema and error semantics.
 
 The API process never treats Neo4j as authoritative. PostgreSQL writes domain state and outbox rows transactionally; workers may rebuild graph projections from that source.

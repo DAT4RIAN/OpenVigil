@@ -399,7 +399,9 @@ const assetBinding = {
 const productionEnvironment = {
   ASSETS: assetBinding,
   WINDOPS_RUNTIME_MODE: "production",
-  WINDOPS_ARTIFACT_UPLOAD_ORIGINS: process.env.WINDOPS_ARTIFACT_UPLOAD_ORIGINS,
+  WINDOPS_ARTIFACT_UPLOAD_ORIGINS:
+    process.env.WINDOPS_ARTIFACT_UPLOAD_ORIGINS ??
+    (REAL_BACKEND ? undefined : "https://upload.example.test"),
   WINDOPS_BACKEND_BASE_URL: BACKEND_ORIGIN,
   WINDOPS_BACKEND_AUTH_MODE: "sites_delegation",
   WINDOPS_BACKEND_DELEGATION_SECRET: DELEGATION_SECRET,

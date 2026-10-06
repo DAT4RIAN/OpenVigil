@@ -23,7 +23,7 @@ from windops_backend.models import (
     StructuralAnalysisRun,
     WaveformRecord,
 )
-from windops_backend.outbox import enqueue_mission_analysis
+from windops_backend.outbox_commands import enqueue_mission_analysis
 from windops_backend.schema_engineering_claim import (
     EngineeringClaimCreate,
     EngineeringEvidenceReference,

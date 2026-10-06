@@ -1,4 +1,4 @@
-import type { AgentToolExecution } from "@/lib/agent-tool-runtime";
+import type { AgentToolExecution } from "@/lib/agent-tools/contracts";
 import { getCurrentWorkflowAuditCycle } from "@/lib/demo-workflow";
 import type { DemoWorkflowEvent, DemoWorkflowState } from "@/lib/demo-workflow";
 import { featuredMission, missions } from "@/lib/operations-data";

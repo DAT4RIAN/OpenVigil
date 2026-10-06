@@ -25,7 +25,10 @@ from windops_backend.models import (
     ScadaSample,
     Turbine,
 )
-from windops_backend.outbox import enqueue_knowledge_graph_projection, enqueue_mission_analysis
+from windops_backend.outbox_commands import (
+    enqueue_knowledge_graph_projection,
+    enqueue_mission_analysis,
+)
 from windops_backend.schemas import IngestResult, ScadaSampleIn
 from windops_backend.services.events import append_domain_event
 

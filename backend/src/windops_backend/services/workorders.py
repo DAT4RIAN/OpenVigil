@@ -25,7 +25,7 @@ from windops_backend.models import (
     WorkOrder,
     WorkOrderTask,
 )
-from windops_backend.outbox import enqueue_knowledge_graph_projection
+from windops_backend.outbox_commands import enqueue_knowledge_graph_projection
 from windops_backend.schemas import TaskCompletionRequest
 from windops_backend.services.events import append_domain_event
 from windops_backend.storage import ArtifactVerifier, FieldTaskEvidence

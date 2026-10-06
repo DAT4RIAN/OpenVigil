@@ -27,7 +27,7 @@ from windops_backend.identity import (
     InvalidIdentityError,
 )
 from windops_backend.knowledge_graph.domain import GraphAccessPolicy
-from windops_backend.knowledge_graph.projection import ProjectionLimits
+from windops_backend.knowledge_graph.projection_budget import ProjectionLimits
 from windops_backend.knowledge_graph.store import KnowledgeGraphStore
 from windops_backend.models import (
     AgentExecution,

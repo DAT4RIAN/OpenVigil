@@ -4,11 +4,25 @@ import json
 import re
 from typing import Any, Protocol, TypeVar, get_args
 
-from pydantic import BaseModel, Field, SecretStr, ValidationError, model_validator
+from pydantic import BaseModel, SecretStr, ValidationError
 from pydantic_core.core_schema import ErrorType
 
+from windops_backend.agents.reasoning_contracts import (
+    REVIEW_COMMITTEE_AGENT as REVIEW_COMMITTEE_AGENT,
+)
+from windops_backend.agents.reasoning_contracts import (
+    AlternativeBundle as AlternativeBundle,
+)
+from windops_backend.agents.reasoning_contracts import (
+    ReasoningEvaluationError as ReasoningEvaluationError,
+)
+from windops_backend.agents.reasoning_contracts import (
+    ReviewBundle as ReviewBundle,
+)
+from windops_backend.agents.reasoning_contracts import (
+    _review_target as _review_target,
+)
 from windops_backend.config import Settings
-from windops_backend.schema_operations import MaintenanceReviewTarget
 from windops_backend.schema_structural_workflow import StructuralScreeningOutput
 from windops_backend.schemas import (
     MaintenanceAlternative,
@@ -21,7 +35,6 @@ SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
 # All five review dimensions are produced by this one governed workflow node.
 # Actual provider/model and agent-definition versions live in AgentExecution.
-REVIEW_COMMITTEE_AGENT = "review_committee"
 
 PUBLIC_REASONING_SYSTEM_PROMPT = (
     "Return one JSON object matching the supplied schema. Include only public, auditable "
@@ -218,41 +231,6 @@ def _response_schema(schema: type[BaseModel], public_context: dict[str, Any]) ->
     return response_schema
 
 
-class AlternativeBundle(BaseModel):
-    alternatives: list[MaintenanceAlternative] = Field(min_length=2, max_length=5)
-
-    @model_validator(mode="after")
-    def validate_governed_choice(self) -> "AlternativeBundle":
-        identifiers = [item.alternative_id for item in self.alternatives]
-        if len(set(identifiers)) != len(identifiers):
-            raise ValueError("maintenance alternative IDs must be unique")
-        recommended = [item for item in self.alternatives if item.recommended]
-        if len(recommended) != 1:
-            raise ValueError("exactly one maintenance alternative must be recommended")
-        if recommended[0].safety_risk == "critical":
-            raise ValueError("a critical-safety-risk alternative cannot be recommended")
-        return self
-
-
-class ReviewBundle(BaseModel):
-    reviews: list[ReviewResult] = Field(min_length=5, max_length=5)
-    # Legacy review artifacts remain readable without inventing their subject.
-    # New generation requires this shared target via schema and post-validation.
-    target: MaintenanceReviewTarget | None = None
-
-    @model_validator(mode="after")
-    def validate_review_coverage(self) -> "ReviewBundle":
-        required = {"engineering", "safety", "economic", "resource", "compliance"}
-        observed = [item.review_type for item in self.reviews]
-        if set(observed) != required or len(set(observed)) != len(observed):
-            raise ValueError("reviews must cover each governed review type exactly once")
-        return self
-
-
-class ReasoningEvaluationError(ValueError):
-    pass
-
-
 class ReasoningProviderUnavailableError(RuntimeError):
     pass
 
@@ -293,13 +271,6 @@ def _validation_diagnostics(exc: ValidationError, schema: type[BaseModel]) -> di
         "errors": errors,
         "truncated": len(details) > 20 or any(len(detail["loc"]) > 20 for detail in details[:20]),
     }
-
-
-def _review_target(public_context: dict[str, Any]) -> MaintenanceReviewTarget:
-    try:
-        return MaintenanceReviewTarget.model_validate(public_context.get("review_target"))
-    except ValueError as exc:
-        raise ReasoningEvaluationError("a governed maintenance review target is required") from exc
 
 
 def validate_review_operating_constraints(value: ReviewBundle) -> None:

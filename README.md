@@ -69,7 +69,7 @@ The repository uses `pnpm-lock.yaml`. Do not generate or commit `package-lock.js
 pnpm dev
 ```
 
-Open `http://localhost:3000`. The default Demo includes 64 deterministic turbine assets, the WT-023 main-bearing anomaly scenario, D1 workflow state, finite SSE streams, simulated WebSockets, and an Agent runtime with 17 tools. It supports product demonstrations, screenshots, and regression checks.
+Open `http://localhost:3000`. The default Demo includes 64 deterministic turbine assets, the WT-023 main-bearing anomaly scenario, D1 workflow state, finite SSE streams, simulated WebSockets, and an Agent runtime with 16 tools. It supports product demonstrations, screenshots, and regression checks.
 
 ### Production build
 

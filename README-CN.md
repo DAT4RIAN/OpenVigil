@@ -69,7 +69,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-打开 `http://localhost:3000`。默认 Demo 提供 64 台确定性风机资产、WT-023 主轴承异常故事、D1 工作流状态、有限 SSE、模拟 WebSocket 和 17-tool Agent 运行时，适合产品演示、截图和回归验证。
+打开 `http://localhost:3000`。默认 Demo 提供 64 台确定性风机资产、WT-023 主轴承异常故事、D1 工作流状态、有限 SSE、模拟 WebSocket 和 16-tool Agent 运行时，适合产品演示、截图和回归验证。
 
 ### 生产构建
 

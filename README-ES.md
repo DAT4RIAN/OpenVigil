@@ -69,7 +69,7 @@ El repositorio utiliza `pnpm-lock.yaml`. No genere ni incluya en commits `packag
 pnpm dev
 ```
 
-Abra `http://localhost:3000`. La Demo predeterminada incluye 64 aerogeneradores deterministas, el escenario de anomalía del rodamiento principal de WT-023, el estado del flujo en D1, flujos SSE finitos, WebSockets simulados y un entorno de ejecución de agentes con 17 herramientas. Permite demostraciones, capturas de pantalla y comprobaciones de regresión.
+Abra `http://localhost:3000`. La Demo predeterminada incluye 64 aerogeneradores deterministas, el escenario de anomalía del rodamiento principal de WT-023, el estado del flujo en D1, flujos SSE finitos, WebSockets simulados y un entorno de ejecución de agentes con 16 herramientas. Permite demostraciones, capturas de pantalla y comprobaciones de regresión.
 
 ### Compilación para producción
 

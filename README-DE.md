@@ -69,7 +69,7 @@ Das Repository verwendet `pnpm-lock.yaml`. Erzeugen oder committen Sie keine `pa
 pnpm dev
 ```
 
-Öffnen Sie `http://localhost:3000`. Die Standard-Demo umfasst 64 deterministische Windenergieanlagen, das Szenario einer Hauptlageranomalie an WT-023, den Workflow-Zustand in D1, endliche SSE-Streams, simulierte WebSockets und eine Agenten-Laufzeit mit 17 Werkzeugen. Sie unterstützt Produktvorführungen, Screenshots und Regressionstests.
+Öffnen Sie `http://localhost:3000`. Die Standard-Demo umfasst 64 deterministische Windenergieanlagen, das Szenario einer Hauptlageranomalie an WT-023, den Workflow-Zustand in D1, endliche SSE-Streams, simulierte WebSockets und eine Agenten-Laufzeit mit 16 Werkzeugen. Sie unterstützt Produktvorführungen, Screenshots und Regressionstests.
 
 ### Build für den Produktivbetrieb
 

@@ -13,7 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from windops_backend.enums import MissionStatus
 from windops_backend.errors import DomainError, IdempotencyConflictError, NotFoundError
 from windops_backend.models import Alarm, CommandReceipt, Mission, Turbine
-from windops_backend.outbox import enqueue_knowledge_graph_projection, enqueue_mission_analysis
+from windops_backend.outbox_commands import (
+    enqueue_knowledge_graph_projection,
+    enqueue_mission_analysis,
+)
 from windops_backend.schemas import MissionCreateRequest
 from windops_backend.services.events import append_domain_event
 

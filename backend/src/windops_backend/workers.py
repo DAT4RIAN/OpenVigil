@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Callable
+from typing import cast
 
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
@@ -10,7 +12,7 @@ from windops_backend.agents.runtime import prepare_reasoning_runtime
 from windops_backend.config import get_settings
 from windops_backend.db import create_engine, create_session_factory
 from windops_backend.knowledge_graph.factory import create_knowledge_graph_store
-from windops_backend.knowledge_graph.projection import ProjectionLimits
+from windops_backend.knowledge_graph.projection_budget import ProjectionLimits
 from windops_backend.outbox import (
     KNOWLEDGE_GRAPH_PROJECTION_REQUESTED,
     MISSION_ANALYSIS_REQUESTED,
@@ -192,7 +194,11 @@ async def relay_pending_once() -> int:
             elif event_type == STRUCTURAL_ANALYSIS_REQUESTED:
                 # Publish without importing the dedicated consumer's broker or
                 # numerical dependencies into the general business relay.
-                dramatiq.get_broker().enqueue(
+                enqueue = cast(
+                    Callable[[dramatiq.Message[None]], dramatiq.Message[None]],
+                    dramatiq.get_broker().enqueue,
+                )
+                enqueue(
                     dramatiq.Message(
                         queue_name="structural-analysis",
                         actor_name="process_structural_analysis",

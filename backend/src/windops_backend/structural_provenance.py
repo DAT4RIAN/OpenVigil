@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal, Protocol
 
 from windops_backend.operations.hybrid_identity import hybrid_bundle_id
 
-if TYPE_CHECKING:
-    from windops_backend.config import Settings
+
+class HybridDeploymentSettings(Protocol):
+    """Only the declared deployment identity fields consumed by this verifier."""
+
+    release_id: str
+    release_commit_sha: str
+    release_image_digest: str
+    api_image_digest: str
+    structural_image_digest: str
+    release_bundle_id: str
+
 
 RuntimeRole = Literal["api", "structural-worker"]
 
@@ -29,7 +38,7 @@ def execution_code_identity() -> dict[str, str]:
 
 
 def deployment_identity(
-    settings: Settings, role: RuntimeRole | None = None
+    settings: HybridDeploymentSettings, role: RuntimeRole | None = None
 ) -> dict[str, str] | None:
     """Validate trusted configuration; this does not observe the running OCI image."""
     if not any(

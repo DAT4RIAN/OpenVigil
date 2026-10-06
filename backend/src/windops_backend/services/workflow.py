@@ -14,7 +14,10 @@ from windops_backend.enums import ApprovalAction, DecisionStatus, MissionStatus
 from windops_backend.errors import ConflictError, InvalidTransitionError, NotFoundError
 from windops_backend.knowledge_graph.domain import GraphAccessPolicy
 from windops_backend.models import Alarm, Approval, Decision, Mission, Turbine, WindFarm, WorkOrder
-from windops_backend.outbox import enqueue_knowledge_graph_projection, enqueue_mission_analysis
+from windops_backend.outbox_commands import (
+    enqueue_knowledge_graph_projection,
+    enqueue_mission_analysis,
+)
 from windops_backend.schemas import ApprovalRequest
 from windops_backend.services.eam import enqueue_eam_work_order_publish
 from windops_backend.services.events import append_domain_event

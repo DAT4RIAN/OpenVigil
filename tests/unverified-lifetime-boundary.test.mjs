@@ -64,9 +64,21 @@ test("core fixture and API contracts cannot carry synthetic lifetime fields", ()
 });
 
 test("the demo Agent tool catalog does not expose unvalidated lifetime inference", async () => {
-  const runtime = await readFile(new URL("lib/agent-tool-runtime.ts", root), "utf8");
-  assert.doesNotMatch(runtime, /name:\s*["']predict_rul["']/);
-  assert.doesNotMatch(runtime, /predictedRulDays|failureProbability30d/);
+  const paths = [
+    "lib/agent-tool-runtime.ts",
+    "lib/agent-tools/contracts.ts",
+    "lib/agent-tools/catalog.ts",
+    "lib/agent-tools/assets.ts",
+    "lib/agent-tools/telemetry.ts",
+    "lib/agent-tools/operations.ts",
+    "lib/agent-tools/knowledge.ts",
+    "lib/agent-tools/resources.ts",
+  ];
+  for (const path of paths) {
+    const runtime = await readFile(new URL(path, root), "utf8");
+    assert.doesNotMatch(runtime, /name:\s*["']predict_rul["']/, path);
+    assert.doesNotMatch(runtime, /predictedRulDays|failureProbability30d/, path);
+  }
 });
 
 test("the production Agent workflow ranks condition evidence without synthetic lifetime output", async () => {

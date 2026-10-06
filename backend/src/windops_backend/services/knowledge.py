@@ -32,6 +32,18 @@ from windops_backend.outbox import (
 from windops_backend.schemas import KnowledgeDocumentCreateRequest
 from windops_backend.services.events import append_domain_event
 from windops_backend.services.knowledge_access import KnowledgeDocumentScope
+from windops_backend.services.knowledge_contracts import (
+    ALLOWED_KNOWLEDGE_CONTENT_TYPES as ALLOWED_KNOWLEDGE_CONTENT_TYPES,
+)
+from windops_backend.services.knowledge_contracts import (
+    KNOWLEDGE_DOCUMENT_INDEX_REQUESTED as KNOWLEDGE_DOCUMENT_INDEX_REQUESTED,
+)
+from windops_backend.services.knowledge_contracts import (
+    MAX_EXTRACTED_TEXT_CHARACTERS as MAX_EXTRACTED_TEXT_CHARACTERS,
+)
+from windops_backend.services.knowledge_contracts import (
+    MAX_KNOWLEDGE_ARTIFACT_BYTES as MAX_KNOWLEDGE_ARTIFACT_BYTES,
+)
 from windops_backend.services.knowledge_passages import (
     add_passages,
     document_passages,
@@ -40,18 +52,6 @@ from windops_backend.services.knowledge_passages import (
     store_passage_vectors,
 )
 from windops_backend.storage import OutboxEvent
-
-KNOWLEDGE_DOCUMENT_INDEX_REQUESTED = "knowledge.document.index.requested"
-MAX_KNOWLEDGE_ARTIFACT_BYTES = 50 * 1024 * 1024
-MAX_EXTRACTED_TEXT_CHARACTERS = 4_000_000
-ALLOWED_KNOWLEDGE_CONTENT_TYPES = frozenset(
-    {
-        "text/plain",
-        "text/markdown",
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    }
-)
 
 
 async def extract_knowledge_text(content: bytes, content_type: str) -> str:
