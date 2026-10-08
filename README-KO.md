@@ -40,6 +40,8 @@
 
 이 제품은 풍력 운영·유지보수를 위한 지능형 플랫폼으로 자리매김합니다. 로그인 이미지와 Demo 풍력단지는 시나리오의 예시이며, 제품 범위를 정의하거나 현장 연동 또는 프로덕션 인수를 입증하지 않습니다.
 
+이 문서는 **2026-10-08** 현재 저장소와 대조했습니다. 기존 풍력 터빈 정비 흐름에 더해 **육상 하이브리드 타워**를 우선합니다. 구조 모니터링, 통제된 재측정 흐름과 독립 PDF/OCR 지식 수집이 구현되어 있습니다. 2026-10-07의 최신 파서 검증은 `COMPLETE_LOCAL_SOFTWARE_VERIFIED`이며 로컬 소프트웨어와 격리 Linux 실행을 대상으로 합니다. 현장 정확도, 실제 교정·절차, 섀도 운영, 공식 릴리스 자격은 `UNVERIFIED`입니다. [실행 진행 상황](EXECUTION_PROGRESS.md)은 현재 결론과 과거 기록을 구분합니다.
+
 ## 설치
 
 ### 요구사항
@@ -108,6 +110,16 @@ windops-read-audit-worker
 uvicorn windops_backend.main:app --host 127.0.0.1 --port 8000
 ```
 
+### 선택적 분석 워커
+
+구조 분석을 수동으로 시작하려면 위의 네 서비스를 유지하고 다른 터미널의 `backend/`에서 같은 설정과 활성화된 환경으로 전용 큐를 시작합니다. `structural` extra는 pyOMA2를 제공하며 긴 계산은 HTTP 처리 밖에서 실행합니다.
+
+```powershell
+python -m dramatiq windops_backend.structural_tasks --queues structural-analysis --processes 1 --threads 1
+```
+
+PDF/OCR은 기본적으로 비활성화되어 있으며 별도 Python 환경, 미리 받은 모델, 실제 모델 매니페스트 SHA-256과 전용 `document-parse` 워커가 필요합니다. 해시 잠금 설치, `WINDOPS_DOCUMENT_PARSER_*`, 워커 명령, Linux 이미지와 격리 검증은 [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md)를 참조하세요. OCR 의존성은 API 환경에 설치하지 않습니다.
+
 ### Windows에서 재현 가능한 로컬 시작
 
 프런트엔드 의존성을 설치하고 `backend/.venv`를 만든 뒤 저장소 루트에서 다음 명령을 실행합니다.
@@ -125,6 +137,8 @@ uvicorn windops_backend.main:app --host 127.0.0.1 --port 8000
 생성된 로컬 자격 증명, Compose 설정, 프로세스 신원과 로그는 Git에서 무시되는 `.artifacts/local-stack/`에 저장됩니다. 이 설정은 격리 시작 흐름 전용으로, 사용자의 루트 `.env`를 읽거나 덮어쓰지 않고 참조 데이터도 자동으로 가져오지 않습니다. 일반 수동 시작은 계속 루트 `.env`를 사용합니다. 이 산출물 디렉터리를 공유하거나 커밋하지 마세요.
 
 시작 과정은 의존 서비스를 기다리고 Alembic 마이그레이션을 적용하며 프런트엔드를 빌드한 다음 API, Dramatiq, outbox 릴레이, 읽기 감사 워커와 프런트엔드를 시작합니다. 상태 확인에서는 마이그레이션 head, Redis, MinIO 버킷 5개, Neo4j, API 인증, 현재 요청의 읽기 감사 영속화와 로그인 페이지를 검증합니다. 실패 시 진단을 위해 의존 서비스, 데이터와 프로세스 로그를 보존합니다. `Stop-Local.ps1`은 PID, 생성 시각, 명령과 저장소 소속을 확인한 뒤 해당 프로세스와 Compose 프로젝트를 중지합니다. 컨테이너, 자격 증명과 데이터 볼륨은 보존합니다.
+
+관리 시작은 전용 `structural-analysis` 워커도 실행합니다. OCR 모델을 준비하거나 `document-parse`를 시작하지 않으므로 필요하면 위의 별도 파서 설정을 사용합니다.
 
 스타일시트 진입점이나 데이터베이스 마이그레이션을 변경하면 `pnpm check:architecture --write`를 실행하고 갱신된 아키텍처 목록을 검토하세요. `pnpm check:architecture`와 CI는 오래된 목록을 거부합니다.
 
@@ -174,6 +188,7 @@ Python 백엔드의 실행 가능한 권고는 `execution_plan_id`를 통해 현
 | 결정 / 작업 지시서   | `/decisions`, `/work-orders`         | 대안 비교, 사람의 승인, 작업 게이트와 현장 증거                  |
 | 건전성 / 예지보전    | `/health`, `/predictive-maintenance` | 건전성 매트릭스, 위험 순위, RUL 표시와 유지보수 기간             |
 | 자원 / 유지보수      | `/resources`, `/maintenance`         | 작업팀, 예비 부품, 도구, 기상 작업 가능 시간대, 일정과 충돌 확인 |
+| 구조                 | `/structural`                        | 구성 요소, 긴장재, 교정, 파형, 모드 분석, 재측정과 상태 검토     |
 | 지식 / 보고서        | `/knowledge`, `/reports`             | 증거 검색, 지식 사례, 보고서 미리 보기와 PDF/DOCX 내보내기       |
 | 데이터 / 모델 / 진단 | `/data`, `/models`, `/diagnosis`     | 데이터 거버넌스, CARE 평가, 모델 게이트와 진단 출처              |
 | 디지털 트윈 / 설정   | `/digital-twin`, `/settings`         | 2D 운영 화면, 실행 상태, 신원과 데이터 정책                      |
@@ -190,7 +205,28 @@ Demo의 에이전트 22개는 3개 계층으로 구성됩니다.
 | 검토     | 안전, 공학, 경제, 규정 준수, 자원 검토                 | 안전·공학·경제·규정 준수·자원 조건 검토     |
 | 실행     | 작업 지시서, 작업팀, 예비 부품, 유지보수, 보고서, 지식 | 승인된 결정을 통제된 실행과 피드백으로 연결 |
 
-Python 백엔드는 독립 LangGraph 워크플로와 11개 도구의 SQL 카탈로그를 사용합니다. UI와 API는 공개 가능하고 구조화된 감사 가능한 증거와 결론만 노출합니다. 모델의 비공개 Chain-of-Thought를 표시하거나 만들어 내지 않습니다.
+Python 백엔드는 독립 LangGraph 워크플로와 18개 도구의 SQL 카탈로그를 사용합니다. UI와 API는 공개 가능하고 구조화된 감사 가능한 증거와 결론만 노출합니다. 모델의 비공개 Chain-of-Thought를 표시하거나 만들어 내지 않습니다.
+
+### 육상 하이브리드 타워 운영
+
+프로덕션 작업 공간 `/structural`은 타워 구성 요소, 긴장재, 교정된 측정 채널, 원본 파형, 직접 장력 측정, 전용 분석 큐와 상태 기준선을 연결합니다. 원본은 SHA-256으로 검증합니다. pyOMA2 FDD는 품질 제외 사유, 모드와 정량화되지 않은 불확실성을 보존합니다. 타워 모드로 교정되지 않은 절대 장력을 추정할 수 없습니다.
+
+모드 변화와 직접 프리스트레스 시나리오는 Mission, 독립 공학 검토, 승인, 재측정 작업 지시, 상태 검토와 심사 대기 지식 사례를 재사용합니다. 절차 구절은 원문 위치를 보존합니다. 그래프 결론을 읽을 때 범위, 승인된 개정과 원본을 다시 검증하며 데이터 부족, 철회, 만료, 출처 변화는 사용을 차단합니다.
+
+분석은 알고리즘, 실행 코드, 설정과 교정의 식별 정보를 고정합니다. 하이브리드 배포는 API/구조 이미지 digest와 릴리스 bundle도 고정합니다. 결과 해시는 PostgreSQL JSONB 재조회 후에도 검증됩니다. 이미지 필드는 배포 선언이며 없으면 `unbound`입니다. 실제 관찰된 실행 이미지 식별에는 배포·서명 증거가 필요합니다.
+
+로컬 소프트웨어 검증은 합성 신호, 테스트 신원과 결정론적 추론을 사용합니다. 실제 SHM, 타워 매개변수, 교정, 승인된 절차와 현장 책임자는 아직 필요합니다. SSI/감쇠 자격, 교정된 절대 장력 추정과 OpenFAST/Kratos 연구에는 별도 입력과 검증이 필요합니다. 현장 및 공식 릴리스 자격은 `UNVERIFIED`입니다.
+
+### 추적 가능한 지식과 PDF/OCR 처리
+
+기본은 네이티브 TXT, Markdown, PDF, DOCX 처리입니다. 명시적인 `parser: "docling"`은 격리 Docling의 PDF 레이아웃, 표와 중국어 OCR을 선택합니다. API는 원본을 검증하고 트랜잭션으로 큐에 등록하며 전용 워커는 두 번째 격리 Python 프로세스를 실행합니다. 원본 SHA-256, 문서 버전, 모델 매니페스트, 코드 해시와 패키지 식별 정보를 고정하고 재검증합니다.
+
+- 지식 작업 공간은 `pending_parse → parsing → pending → indexed`, 재시도와 최종 `parse_failed`를 표시합니다. 임대는 오래된 워커의 게시를 막고 실제 시도는 최대 세 번입니다. 실패하거나 미완료인 처리는 검색 가능한 본문 구절이나 벡터를 생성하지 않습니다.
+- 구절은 텍스트 해시, 오프셋, 실제 페이지 번호, 영역과 표 행/열을 보존하며 빈 페이지를 다시 번호 매기지 않습니다. 표 사각형은 `table_region`이며 정확한 셀 경계나 PDF 픽셀 미리보기가 아닙니다. 모든 OCR 구절은 `requires_numeric_review=true`로 표시하며 공학적 사용 전에 숫자, 부호, 단위와 읽기 순서를 원본과 대조해야 합니다.
+- 네이티브 v1 요청 해시와 생략/명시적 `native` 재생 호환성을 유지합니다. 파서를 바꾸려면 새 불변 문서 ID가 필요합니다. 제출 응답이 불명확하면 파일, 문서 ID와 멱등 키를 보존해 확인하며 매 재생은 현재 권한을 검사한 뒤 영수증을 반환합니다.
+- 한도는 50 MiB, 200페이지와 파싱 하위 프로세스 180초입니다. 암호화, 빈 내용, 손상, 초과, 식별 불일치 입력은 명시적으로 실패합니다. 모델은 미리 받아 검증하며 실행 중 암묵적 다운로드, 원격 서비스와 외부 플러그인을 비활성화합니다.
+
+성공하면 구절을 게시하고 기존 pgvector 인덱싱과 범위 제한 Neo4j 투영을 요청합니다. 원본 링크는 해시·권한 재검증 후 발급합니다. `GET /api/v1/knowledge/parser-capabilities`는 설정만 선언하며 `worker_health_verified=false`는 워커 준비 상태를 증명하지 않습니다. 인덱스와 출처는 OCR 정확도나 현장 작업 허가를 보장하지 않습니다. [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md)를 참조하세요.
 
 ### CARE v6 벤치마크
 
@@ -214,6 +250,7 @@ CARE 데이터셋과 해당 라이선스가 적용되는 파생 배포 산출물
 | `/api/runtime`                                | 현재 실행 모드, 백엔드 준비 상태와 민감 정보를 제거한 릴리스 신원  |
 | `/api/workflow/:assetId`                      | Demo 워크플로 스냅샷, 승인, 작업 지시서와 감사 상태                |
 | `/api/backend/:path+`                         | 프로덕션 모드의 허용 목록 기반 FastAPI 게이트웨이                  |
+| `/api/v1/knowledge/parser-capabilities`       | 백엔드 파서 설정과 한도이며 워커 상태 확인이 아님                  |
 | `/api/v1/events/stream`                       | 커서 재개와 제한된 재연결을 지원하는 프로덕션 SSE                  |
 | `/ws/scada`, `/ws/alarms`, `/ws/agent-events` | Demo 모의 실시간 채널. 프로덕션에서는 요건 미충족 시 안전하게 거부 |
 
@@ -243,6 +280,8 @@ vinext / React 19 애플리케이션
                ├── MinIO 통제 산출물
                ├── Neo4j 파생 지식 그래프
                ├── LiteLLM 추론과 임베딩
+               ├── 격리 구조 워커 / pyOMA2 FDD
+               ├── 격리 문서 워커 / Docling + OCR
                └── SCADA / MQTT / HTTPS / EAM 커넥터
 ```
 
@@ -259,6 +298,8 @@ Demo D1과 프로덕션 PostgreSQL은 별도 경계입니다. 둘 사이에 암�
 | 비동기    | PostgreSQL transactional outbox, Redis, Dramatiq            |
 | 데이터    | PostgreSQL, TimescaleDB, pgvector, MinIO, Neo4j             |
 | AI        | LiteLLM, OpenAI 호환 공급자, 별도 임베딩 경로               |
+| 구조      | pyOMA2 FDD, 전용 큐, 격리 계산 하위 프로세스                |
+| 문서      | Docling, 표 추출, 중국어 OCR, 별도 CPU 해시 잠금 환경       |
 | 품질      | Node test runner, Playwright, Pytest, Ruff, mypy, Bandit    |
 
 안정적인 호환성 식별자인 `windops_backend`, `WINDOPS_*`, `x-windops-*`와 기존 데이터베이스·오브젝트 스토리지·텔레메트리 네임스페이스를 유지합니다.
@@ -421,6 +462,7 @@ SQLite 테스트는 결정론적 임베딩, 메모리 내 산출물 검증기와
 - 재해 복구, 부하 시험, SLO, 경보 라우팅, DAST, 수동 침투 시험과 릴리스 후 확인.
 - 브라우저 WCAG, 시각 회귀와 지원 기기 인수.
 - CARE 라이선스 검토, 프로덕션 오브젝트 스토리지 재생과 풍력단지 간 온톨로지 매핑의 수동 검토.
+- 하이브리드 타워 현장 교정·분야 정확도, OCR 숫자 수동 검토·정확도 평가와 동일 버전 API·구조 워커·신규 문서 이미지 릴리스 자격. 문서 워커는 자체 서명, SBOM/CVE 증거와 네트워크/자원 정책이 필요하며 기존 두 이미지 보고서는 이를 자격화하지 않습니다.
 
 Cloudflare Sites는 Web 애플리케이션과 신원 게이트웨이만 호스팅하며 Python 백엔드는 호스팅하지 않습니다. Sites 릴리스 성공은 백엔드, 의존 스택 또는 현장 시스템의 인수를 대체하지 않습니다. 자세한 증거 상태는 [EXECUTION_PROGRESS.md](./EXECUTION_PROGRESS.md), [AUDIT_REPORT.md](./AUDIT_REPORT.md), [UI_AUDIT_REPORT.md](./UI_AUDIT_REPORT.md)에 기록됩니다.
 

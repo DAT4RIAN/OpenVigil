@@ -40,6 +40,8 @@
 
 Das Produkt ist als intelligente Plattform für die Betriebsführung und Instandhaltung von Windenergieanlagen positioniert. Die Bilder auf der Anmeldeseite und der Demo-Windpark veranschaulichen ein Szenario; sie definieren weder den Produktumfang noch belegen sie eine Anbindung vor Ort oder eine Produktionsabnahme.
 
+Diese Dokumentation wurde am **2026-10-08** mit dem Repository abgeglichen. Der aktuelle Softwareumfang priorisiert **Onshore-Hybridtürme** zusätzlich zum bestehenden Anlagenbetrieb. Strukturüberwachung, geregelte Nachmessungen und die unabhängige PDF/OCR-Wissensaufnahme sind implementiert. Die jüngste Parser-Abnahme vom 2026-10-07 ist `COMPLETE_LOCAL_SOFTWARE_VERIFIED` und umfasst lokale Software sowie isolierte Linux-Ausführung. Feldgenauigkeit, reale Kalibrierung und Verfahren, Schattenbetrieb und formale Release-Qualifikation bleiben `UNVERIFIED`. Der [Ausführungsstand](EXECUTION_PROGRESS.md) trennt aktuelle Ergebnisse von historischen Snapshots.
+
 ## Installation
 
 ### Voraussetzungen
@@ -108,6 +110,16 @@ windops-read-audit-worker
 uvicorn windops_backend.main:app --host 127.0.0.1 --port 8000
 ```
 
+### Optionale Analyse-Worker
+
+Lassen Sie für den manuellen Strukturbetrieb die vier Dienste oben laufen und starten Sie die dedizierte Queue in einem weiteren Terminal aus `backend/`, mit derselben Konfiguration und aktivierter Umgebung. Das Extra `structural` liefert pyOMA2; lange Berechnungen laufen außerhalb von HTTP-Anfragen.
+
+```powershell
+python -m dramatiq windops_backend.structural_tasks --queues structural-analysis --processes 1 --threads 1
+```
+
+PDF/OCR ist standardmäßig deaktiviert und benötigt eine separate Python-Umgebung, vorab geladene Modelle, deren tatsächlichen Manifest-SHA-256 und einen dedizierten `document-parse`-Worker. [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md) beschreibt Hash-Lock-Installation, `WINDOPS_DOCUMENT_PARSER_*`, Worker-Befehl, Linux-Image und isolierte Prüfung. OCR-Abhängigkeiten gehören nicht in die API-Umgebung.
+
 ### Wiederholbarer lokaler Start unter Windows
 
 Führen Sie nach der Installation der Frontend-Abhängigkeiten und dem Anlegen von `backend/.venv` diese Befehle im Repository-Stamm aus:
@@ -125,6 +137,8 @@ Dies ist eine isolierte Entwicklungsumgebung. Das Frontend bleibt im Demo-Modus;
 Generierte lokale Zugangsdaten, Compose-Konfiguration, Prozessidentitäten und Protokolle werden im ignorierten Verzeichnis `.artifacts/local-stack/` gespeichert. Diese Konfiguration gehört zum isolierten Startablauf: Sie liest oder überschreibt die `.env` des Benutzers im Repository-Stamm nicht und importiert Referenzdaten nicht automatisch. Beim gewöhnlichen manuellen Start wird weiterhin die `.env` im Repository-Stamm verwendet. Teilen oder committen Sie dieses Artefaktverzeichnis nicht.
 
 Der Start wartet auf die Abhängigkeiten, wendet Alembic-Migrationen an, baut das Frontend und startet API, Dramatiq, Outbox-Relay, Read-Audit-Worker und Frontend. Die Statusprüfung kontrolliert den Migrations-Head, Redis, fünf MinIO-Buckets, Neo4j, API-Authentifizierung, die Speicherung des Read-Audits für die aktuelle Anfrage und die Anmeldeseite. Bei Fehlern bleiben Abhängigkeiten, Daten und Prozessprotokolle für die Diagnose erhalten. `Stop-Local.ps1` prüft PID, Erstellungszeit, Befehl und Repository-Zugehörigkeit, bevor es die zugehörigen Prozesse und das Compose-Projekt stoppt; Container, Zugangsdaten und Datenvolumes bleiben erhalten.
+
+Der verwaltete Start startet auch den dedizierten `structural-analysis`-Worker. Er bereitet keine OCR-Modelle vor und startet keinen `document-parse`-Worker; verwenden Sie dafür die separate Parser-Einrichtung oben.
 
 Führen Sie nach Änderungen an Stylesheet-Einstiegspunkten oder Datenbankmigrationen `pnpm check:architecture --write` aus und prüfen Sie das aktualisierte Architekturverzeichnis. `pnpm check:architecture` und CI weisen ein veraltetes Verzeichnis zurück.
 
@@ -165,18 +179,19 @@ Das Ausführungsregister für reale Modelle speichert in `evaluation_result.requ
 
 ### Fachliche Arbeitsbereiche
 
-| Arbeitsbereich                           | Route                                | Hauptfunktionen                                                                                 |
-| ---------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| Betriebszentrale                         | `/`                                  | Flottenzustand, Risikoobjekte, Missions und Agentenaktivität                                    |
-| Windpark / Windenergieanlage             | `/wind-farms`, `/turbines/:id`       | Anlagentopologie, Zustand, SCADA, Alarme und Instandhaltungskontext                             |
-| SCADA / Alarme                           | `/scada`, `/alarms`                  | Zeitreihenüberwachung, Schwellen, Qualitätscodes, Anomalien und Bearbeitungsstatus              |
-| Agenten / Missions                       | `/agents`, `/missions`               | Agentenorganisation, Aufgabenwarteschlangen, Nachweise, Kollaborationsverlauf und Freigabereife |
-| Entscheidungen / Arbeitsaufträge         | `/decisions`, `/work-orders`         | Alternativenvergleich, menschliche Freigabe, Aufgabenkontrollen und Nachweise vor Ort           |
-| Zustand / Vorausschauende Instandhaltung | `/health`, `/predictive-maintenance` | Zustandsmatrizen, Risikorangfolge, RUL-Anzeige und Wartungsfenster                              |
-| Ressourcen / Instandhaltung              | `/resources`, `/maintenance`         | Teams, Ersatzteile, Werkzeuge, Wetterfenster, Kalender und Konfliktprüfung                      |
-| Wissen / Berichte                        | `/knowledge`, `/reports`             | Nachweissuche, Wissensfälle, Berichtsvorschau und PDF/DOCX-Export                               |
-| Daten / Modelle / Diagnose               | `/data`, `/models`, `/diagnosis`     | Daten-Governance, CARE-Bewertung, Modellprüfungen und Diagnoseherkunft                          |
-| Digitaler Zwilling / Einstellungen       | `/digital-twin`, `/settings`         | 2D-Betriebsansichten, Laufzeitstatus, Identität und Datenrichtlinien                            |
+| Arbeitsbereich                           | Route                                | Hauptfunktionen                                                                                         |
+| ---------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Betriebszentrale                         | `/`                                  | Flottenzustand, Risikoobjekte, Missions und Agentenaktivität                                            |
+| Windpark / Windenergieanlage             | `/wind-farms`, `/turbines/:id`       | Anlagentopologie, Zustand, SCADA, Alarme und Instandhaltungskontext                                     |
+| SCADA / Alarme                           | `/scada`, `/alarms`                  | Zeitreihenüberwachung, Schwellen, Qualitätscodes, Anomalien und Bearbeitungsstatus                      |
+| Agenten / Missions                       | `/agents`, `/missions`               | Agentenorganisation, Aufgabenwarteschlangen, Nachweise, Kollaborationsverlauf und Freigabereife         |
+| Entscheidungen / Arbeitsaufträge         | `/decisions`, `/work-orders`         | Alternativenvergleich, menschliche Freigabe, Aufgabenkontrollen und Nachweise vor Ort                   |
+| Zustand / Vorausschauende Instandhaltung | `/health`, `/predictive-maintenance` | Zustandsmatrizen, Risikorangfolge, RUL-Anzeige und Wartungsfenster                                      |
+| Ressourcen / Instandhaltung              | `/resources`, `/maintenance`         | Teams, Ersatzteile, Werkzeuge, Wetterfenster, Kalender und Konfliktprüfung                              |
+| Struktur                                 | `/structural`                        | Komponenten, Spannglieder, Kalibrierung, Wellenformen, Modalanalyse, Nachmessung und Gesundheitsprüfung |
+| Wissen / Berichte                        | `/knowledge`, `/reports`             | Nachweissuche, Wissensfälle, Berichtsvorschau und PDF/DOCX-Export                                       |
+| Daten / Modelle / Diagnose               | `/data`, `/models`, `/diagnosis`     | Daten-Governance, CARE-Bewertung, Modellprüfungen und Diagnoseherkunft                                  |
+| Digitaler Zwilling / Einstellungen       | `/digital-twin`, `/settings`         | 2D-Betriebsansichten, Laufzeitstatus, Identität und Datenrichtlinien                                    |
 
 Die Seite für den digitalen Zwilling bietet betrieblichen Kontext. Sie beansprucht weder physikalische Simulation noch Echtzeitsteuerung oder ein ingenieurtechnisches 3D-Modell.
 
@@ -190,7 +205,28 @@ Die 22 Agenten der Demo sind in drei Ebenen organisiert:
 | Prüfung      | Sicherheits-, technische, wirtschaftliche, Compliance- und Ressourcenprüfung                | Sicherheits-, Technik-, Wirtschafts-, Compliance- und Ressourcenbedingungen prüfen |
 | Ausführung   | Arbeitsauftrag, Team, Ersatzteile, Instandhaltung, Bericht, Wissen                          | Genehmigte Entscheidungen in geregelte Ausführung und Rückmeldung überführen       |
 
-Das Python-Backend verwendet einen unabhängigen LangGraph-Workflow und einen SQL-Katalog mit 11 Werkzeugen. UI und APIs zeigen ausschließlich öffentliche, strukturierte, auditierbare Nachweise und Schlussfolgerungen. Sie zeigen oder erfinden keine verborgene Chain-of-Thought eines Modells.
+Das Python-Backend verwendet einen unabhängigen LangGraph-Workflow und einen SQL-Katalog mit 18 Werkzeugen. UI und APIs zeigen ausschließlich öffentliche, strukturierte, auditierbare Nachweise und Schlussfolgerungen. Sie zeigen oder erfinden keine verborgene Chain-of-Thought eines Modells.
+
+### Betrieb von Onshore-Hybridtürmen
+
+Der Produktionsarbeitsbereich `/structural` verbindet Turmkomponenten, Spannglieder, kalibrierte Messkanäle, Originalwellenformen, direkte Kraftmessungen, eine dedizierte Analyse-Queue und Gesundheitsreferenzen. Originalobjekte werden per SHA-256 geprüft. pyOMA2 FDD erhält Qualitätsausschlüsse, Moden und nicht quantifizierte Unsicherheit; Turmmoden erlauben keine Schätzung unkalibrierter absoluter Spanngliedkräfte.
+
+Modale Drift und direkte Vorspannung verwenden Missions, unabhängige technische Prüfung, Freigaben, Nachmessungsaufträge, Gesundheitsprüfung und noch zu prüfende Wissensfälle. Verfahrenspassagen behalten ihre Originalpositionen. Graph-Abfragen prüfen Geltungsbereich, freigegebene Revisionen und Originalquellen erneut; unzureichende Daten, Rücknahme, Ablauf und Quellenänderungen verhindern die Verwendung.
+
+Analysen frieren Algorithmus, Ausführungscode, Konfiguration und Kalibrierungsidentitäten ein. Eine Hybridbereitstellung bindet außerdem API- und Struktur-Image-Digests sowie das Release-Bundle. Ergebnishashes bleiben nach PostgreSQL-JSONB-Rücklesen prüfbar. Image-Felder sind Bereitstellungsdeklarationen und bleiben ohne Konfiguration `unbound`; beobachtete Laufzeitidentität benötigt weiterhin Bereitstellungs- und Signaturnachweise.
+
+Lokale Softwareabnahme verwendet synthetische Signale, Testidentitäten und deterministisches Reasoning. Reales SHM, Turmparameter, Kalibrierung, autorisierte Verfahren und verantwortliches Feldpersonal fehlen noch. SSI/Dämpfungsqualifikation, kalibrierte absolute Kraftschätzung und OpenFAST/Kratos-Forschung benötigen eigene Eingaben und Prüfungen. Feld- und formale Release-Qualifikation bleiben `UNVERIFIED`.
+
+### Nachvollziehbares Wissen und PDF/OCR-Verarbeitung
+
+Native TXT-, Markdown-, PDF- und DOCX-Verarbeitung bleibt Standard. Explizites `parser: "docling"` wählt isolierte Docling-Verarbeitung für PDF-Layout, Tabellen und chinesische OCR. Die API prüft das Original und reiht die Arbeit transaktional ein; ein dedizierter Worker verwendet einen zweiten isolierten Python-Prozess. Original-SHA-256, Dokumentversion, Modellmanifest, Codehashes und Paketidentitäten werden eingefroren und erneut geprüft.
+
+- Der Wissensbereich zeigt `pending_parse → parsing → pending → indexed`, Wiederholungen und den Endzustand `parse_failed`. Leases verhindern Veröffentlichungen veralteter Worker; höchstens drei tatsächliche Versuche sind erlaubt. Fehlgeschlagene oder unvollständige Verarbeitung erzeugt keine durchsuchbaren Textpassagen oder Vektoren.
+- Passagen behalten Texthashes, Offsets, tatsächliche Seitenzahlen, Seitenbereiche und Tabellenzeilen/-spalten. Leere Seiten werden nicht neu nummeriert. Tabellenrechtecke sind ausdrücklich `table_region`, keine exakten Zellrahmen oder PDF-Pixelvorschau. Jede OCR-Passage trägt `requires_numeric_review=true`: Zahlen, Vorzeichen, Einheiten und Lesereihenfolge vor technischer Verwendung am Original prüfen.
+- Der native v1-Anfragehash und Replay mit ausgelassenem/explizitem `native` bleiben kompatibel. Ein Parserwechsel benötigt eine neue unveränderliche Dokument-ID. Unbekannte Übermittlungsergebnisse behalten Datei, Dokument-ID und Idempotenzschlüssel zur Prüfung; jedes Replay prüft aktuelle Rechte vor der Rückgabe eines Belegs.
+- Grenzen sind 50 MiB, 200 Seiten und 180 Sekunden für den Parser-Unterprozess. Verschlüsselte, leere, ungültige, übergroße oder identitätsabweichende Eingaben scheitern ausdrücklich. Modelle werden vorab geladen und geprüft; implizite Downloads, entfernte Dienste und externe Plugins sind zur Laufzeit deaktiviert.
+
+Erfolgreiche Verarbeitung veröffentlicht Passagen und fordert bestehende pgvector-Indizierung und bereichsbeschränkte Neo4j-Projektion an. Originallinks erfordern neue Hash- und Rechteprüfung. `GET /api/v1/knowledge/parser-capabilities` meldet nur Konfiguration; `worker_health_verified=false` belegt keine Worker-Bereitschaft. Indizierung und Herkunft zertifizieren weder OCR-Genauigkeit noch Feldarbeiten. Siehe [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md).
 
 ### CARE v6 Benchmark
 
@@ -214,6 +250,7 @@ Der CARE-Datensatz und abgeleitete Distributionsartefakte, die seiner Lizenz unt
 | `/api/runtime`                                | Aktueller Laufzeitmodus, Backend-Bereitschaft und bereinigte Release-Identität                          |
 | `/api/workflow/:assetId`                      | Demo-Workflow-Snapshots, Freigaben, Arbeitsaufträge und Audit-Zustand                                   |
 | `/api/backend/:path+`                         | Über eine Positivliste beschränktes FastAPI-Gateway im Produktivmodus                                   |
+| `/api/v1/knowledge/parser-capabilities`       | Backend-Parserkonfiguration und Grenzen; keine Worker-Zustandsprüfung                                   |
 | `/api/v1/events/stream`                       | Produktions-SSE mit Cursor-Fortsetzung und begrenztem Wiederverbinden                                   |
 | `/ws/scada`, `/ws/alarms`, `/ws/agent-events` | Simulierte Demo-Echtzeitkanäle; im Produktivmodus werden nicht erfüllte Anforderungen sicher abgewiesen |
 
@@ -243,6 +280,8 @@ vinext / React 19 Anwendung
                ├── MinIO geregelte Artefakte
                ├── Neo4j abgeleiteter Wissensgraph
                ├── LiteLLM Reasoning und Embeddings
+               ├── Isolierter Struktur-Worker / pyOMA2 FDD
+               ├── Isolierter Dokument-Worker / Docling + OCR
                └── SCADA / MQTT / HTTPS / EAM Konnektoren
 ```
 
@@ -250,16 +289,18 @@ Demo-D1 und Produktions-PostgreSQL bilden getrennte Grenzen. Zwischen ihnen gibt
 
 ### Technologie-Stack
 
-| Ebene     | Technologien                                                  |
-| --------- | ------------------------------------------------------------- |
-| Web       | React 19, TypeScript, vinext, Vite, Tailwind CSS              |
-| Daten-UI  | TanStack Query, TanStack Table, Zustand, ECharts, Three.js    |
-| Edge      | Cloudflare Worker, D1, SSE, WebSocket                         |
-| Backend   | Python 3.12, FastAPI, Pydantic, async SQLAlchemy, LangGraph   |
-| Asynchron | PostgreSQL transactional outbox, Redis, Dramatiq              |
-| Daten     | PostgreSQL, TimescaleDB, pgvector, MinIO, Neo4j               |
-| KI        | LiteLLM, OpenAI-kompatible Anbieter, separater Embedding-Pfad |
-| Qualität  | Node test runner, Playwright, Pytest, Ruff, mypy, Bandit      |
+| Ebene     | Technologien                                                                      |
+| --------- | --------------------------------------------------------------------------------- |
+| Web       | React 19, TypeScript, vinext, Vite, Tailwind CSS                                  |
+| Daten-UI  | TanStack Query, TanStack Table, Zustand, ECharts, Three.js                        |
+| Edge      | Cloudflare Worker, D1, SSE, WebSocket                                             |
+| Backend   | Python 3.12, FastAPI, Pydantic, async SQLAlchemy, LangGraph                       |
+| Asynchron | PostgreSQL transactional outbox, Redis, Dramatiq                                  |
+| Daten     | PostgreSQL, TimescaleDB, pgvector, MinIO, Neo4j                                   |
+| KI        | LiteLLM, OpenAI-kompatible Anbieter, separater Embedding-Pfad                     |
+| Struktur  | pyOMA2 FDD, dedizierte Queue, isolierter Berechnungsprozess                       |
+| Dokumente | Docling, Tabellenextraktion, chinesische OCR, separate CPU-Umgebung mit Hash-Lock |
+| Qualität  | Node test runner, Playwright, Pytest, Ruff, mypy, Bandit                          |
 
 Stabile Kompatibilitätskennungen wie `windops_backend`, `WINDOPS_*`, `x-windops-*` sowie die vorhandenen Datenbank-, Objektspeicher- und Telemetrie-Namensräume bleiben erhalten.
 
@@ -421,6 +462,7 @@ Der Produktionskandidat umfasst delegierte Identität, RBAC, Datenbereiche, Idem
 - Notfallwiederherstellung, Lasttests, SLOs, Alarmweiterleitung, DAST, manuelle Penetrationstests und Prüfungen nach dem Release.
 - Browser-WCAG, visuelle Regression und Abnahme unterstützter Geräte.
 - Prüfung der CARE-Lizenz, Replays aus produktivem Objektspeicher und manuelle Prüfung windparkübergreifender Ontologiezuordnungen.
+- Feldkalibrierung und Fachgenauigkeit für Hybridtürme, manuelle OCR-Zahlenprüfung und Genauigkeitsbewertung sowie versionsgleiche Release-Qualifikation von API, Struktur-Worker und neuem Dokument-Image. Der Dokument-Worker benötigt eigene Signatur-, SBOM/CVE- und Netzwerk-/Ressourcennachweise; der bestehende Zwei-Image-Bericht qualifiziert ihn nicht.
 
 Cloudflare Sites hostet nur die Webanwendung und das Identitätsgateway, nicht das Python-Backend. Ein erfolgreicher Sites-Release ersetzt keine Abnahme von Backend, Abhängigkeiten oder Systemen vor Ort. Der detaillierte Nachweisstatus steht in [EXECUTION_PROGRESS.md](./EXECUTION_PROGRESS.md), [AUDIT_REPORT.md](./AUDIT_REPORT.md) und [UI_AUDIT_REPORT.md](./UI_AUDIT_REPORT.md).
 

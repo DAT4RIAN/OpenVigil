@@ -40,6 +40,8 @@
 
 Il prodotto è concepito come piattaforma intelligente per la gestione e la manutenzione eoliche. Le immagini di accesso e il parco Demo illustrano uno scenario; non definiscono l’ambito del prodotto né dimostrano integrazione sul campo o accettazione in produzione.
 
+Documentazione verificata rispetto al repository il **2026-10-08**. L’ambito attuale privilegia le **torri ibride onshore** insieme al flusso esistente di manutenzione delle turbine. Monitoraggio strutturale, nuove misurazioni governate e acquisizione PDF/OCR indipendente sono implementati. L’ultimo collaudo del parser, del 2026-10-07, è `COMPLETE_LOCAL_SOFTWARE_VERIFIED` e copre software locale ed esecuzione Linux isolata. Accuratezza sul campo, calibrazione e procedure reali, esercizio in osservazione e qualifica formale di rilascio restano `UNVERIFIED`. Il [progresso](EXECUTION_PROGRESS.md) distingue conclusioni attuali e istantanee storiche.
+
 ## Installazione
 
 ### Requisiti
@@ -108,6 +110,16 @@ windops-read-audit-worker
 uvicorn windops_backend.main:app --host 127.0.0.1 --port 8000
 ```
 
+### Worker di analisi opzionali
+
+Per avviare manualmente l’analisi strutturale, mantenere i quattro servizi precedenti e avviare la coda dedicata in un altro terminale da `backend/`, con la stessa configurazione e l’ambiente attivato. L’extra `structural` fornisce pyOMA2; i calcoli lunghi avvengono fuori dalle richieste HTTP.
+
+```powershell
+python -m dramatiq windops_backend.structural_tasks --queues structural-analysis --processes 1 --threads 1
+```
+
+PDF/OCR è disabilitato per impostazione predefinita e richiede un ambiente Python separato, modelli precaricati, lo SHA-256 reale del loro manifesto e un worker `document-parse` dedicato. [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md) descrive installazione bloccata tramite hash, `WINDOPS_DOCUMENT_PARSER_*`, comando del worker, immagine Linux e verifica isolata. Tenere le dipendenze OCR fuori dall’ambiente API.
+
 ### Avvio locale riproducibile su Windows
 
 Dopo aver installato le dipendenze frontend e creato `backend/.venv`, eseguire questi comandi dalla radice del repository:
@@ -125,6 +137,8 @@ Si tratta di uno stack di sviluppo isolato. Il frontend resta in Demo e il backe
 Credenziali locali generate, configurazione Compose, identità dei processi e log sono salvati nella directory ignorata `.artifacts/local-stack/`. Questa configurazione appartiene all’avvio isolato: non legge né sovrascrive il `.env` dell’utente nella radice e non importa automaticamente dati di riferimento. L’avvio manuale ordinario continua a usare il `.env` nella radice. Non condividere né includere nei commit questa directory di artefatti.
 
 L’avvio attende le dipendenze, applica le migrazioni Alembic, compila il frontend e avvia API, Dramatiq, relay outbox, worker di audit delle letture e frontend. I controlli di stato verificano la revisione finale di migrazione, Redis, cinque bucket MinIO, Neo4j, autenticazione API, persistenza dell’audit di lettura della richiesta corrente e pagina di accesso. In caso di errore, dipendenze, dati e log sono conservati per la diagnosi. `Stop-Local.ps1` verifica PID, ora di creazione, comando e appartenenza al repository prima di fermare i processi e il progetto Compose corrispondenti; conserva container, credenziali e volumi dati.
+
+L’avvio gestito esegue anche il worker dedicato `structural-analysis`. Non prepara i modelli OCR né avvia `document-parse`; quando necessario usare la configurazione separata del parser sopra.
 
 Dopo aver modificato i punti di ingresso dei fogli di stile o le migrazioni del database, eseguire `pnpm check:architecture --write` e controllare l’inventario aggiornato dell’architettura. `pnpm check:architecture` e CI rifiutano un inventario obsoleto.
 
@@ -165,18 +179,19 @@ Il registro di esecuzione dei modelli reali salva in `evaluation_result.request`
 
 ### Aree di lavoro
 
-| Area                            | Route                                | Capacità principali                                                                                       |
-| ------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Centro operativo                | `/`                                  | Stato della flotta, oggetti di rischio, Mission e attività degli agenti                                   |
-| Parco eolico / Turbina          | `/wind-farms`, `/turbines/:id`       | Topologia degli asset, stato, SCADA, allarmi e contesto di manutenzione                                   |
-| SCADA / Allarmi                 | `/scada`, `/alarms`                  | Monitoraggio temporale, soglie, codici di qualità, anomalie e stato di gestione                           |
-| Agenti / Mission                | `/agents`, `/missions`               | Organizzazione degli agenti, code, evidenze, cronologia di collaborazione e preparazione all’approvazione |
-| Decisioni / Ordini di lavoro    | `/decisions`, `/work-orders`         | Confronto delle alternative, approvazione umana, controlli delle attività ed evidenze sul campo           |
-| Stato / Manutenzione predittiva | `/health`, `/predictive-maintenance` | Matrici di stato, graduatoria dei rischi, visualizzazione RUL e finestre di manutenzione                  |
-| Risorse / Manutenzione          | `/resources`, `/maintenance`         | Squadre, ricambi, strumenti, finestre meteo, calendari e controllo dei conflitti                          |
-| Conoscenze / Report             | `/knowledge`, `/reports`             | Ricerca di evidenze, casi di conoscenza, anteprime ed esportazione PDF/DOCX                               |
-| Dati / Modelli / Diagnosi       | `/data`, `/models`, `/diagnosis`     | Governance dei dati, valutazione CARE, controlli dei modelli e provenienza delle diagnosi                 |
-| Gemello digitale / Impostazioni | `/digital-twin`, `/settings`         | Viste operative 2D, stato di esecuzione, identità e politiche dei dati                                    |
+| Area                            | Route                                | Capacità principali                                                                                         |
+| ------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Centro operativo                | `/`                                  | Stato della flotta, oggetti di rischio, Mission e attività degli agenti                                     |
+| Parco eolico / Turbina          | `/wind-farms`, `/turbines/:id`       | Topologia degli asset, stato, SCADA, allarmi e contesto di manutenzione                                     |
+| SCADA / Allarmi                 | `/scada`, `/alarms`                  | Monitoraggio temporale, soglie, codici di qualità, anomalie e stato di gestione                             |
+| Agenti / Mission                | `/agents`, `/missions`               | Organizzazione degli agenti, code, evidenze, cronologia di collaborazione e preparazione all’approvazione   |
+| Decisioni / Ordini di lavoro    | `/decisions`, `/work-orders`         | Confronto delle alternative, approvazione umana, controlli delle attività ed evidenze sul campo             |
+| Stato / Manutenzione predittiva | `/health`, `/predictive-maintenance` | Matrici di stato, graduatoria dei rischi, visualizzazione RUL e finestre di manutenzione                    |
+| Risorse / Manutenzione          | `/resources`, `/maintenance`         | Squadre, ricambi, strumenti, finestre meteo, calendari e controllo dei conflitti                            |
+| Struttura                       | `/structural`                        | Componenti, precompressione, calibrazione, forme d’onda, analisi modale, nuove misure e revisione di salute |
+| Conoscenze / Report             | `/knowledge`, `/reports`             | Ricerca di evidenze, casi di conoscenza, anteprime ed esportazione PDF/DOCX                                 |
+| Dati / Modelli / Diagnosi       | `/data`, `/models`, `/diagnosis`     | Governance dei dati, valutazione CARE, controlli dei modelli e provenienza delle diagnosi                   |
+| Gemello digitale / Impostazioni | `/digital-twin`, `/settings`         | Viste operative 2D, stato di esecuzione, identità e politiche dei dati                                      |
 
 La pagina del gemello digitale fornisce contesto operativo. Non dichiara simulazione fisica, controllo in tempo reale o un modello 3D di livello ingegneristico.
 
@@ -190,7 +205,28 @@ I 22 agenti della Demo sono organizzati in tre livelli:
 | Revisione  | Sicurezza, ingegneria, economia, conformità, risorse                                         | Esaminare condizioni di sicurezza, ingegneria, economia, conformità e risorse |
 | Esecuzione | Ordini di lavoro, squadre, ricambi, manutenzione, report, conoscenze                         | Trasformare decisioni approvate in esecuzione governata e feedback            |
 
-Il backend Python usa un flusso LangGraph indipendente e un catalogo SQL con 11 strumenti. UI e API espongono solo evidenze e conclusioni pubbliche, strutturate e verificabili tramite audit. Non mostrano né inventano la Chain-of-Thought nascosta di un modello.
+Il backend Python usa un flusso LangGraph indipendente e un catalogo SQL con 18 strumenti. UI e API espongono solo evidenze e conclusioni pubbliche, strutturate e verificabili tramite audit. Non mostrano né inventano la Chain-of-Thought nascosta di un modello.
+
+### Gestione delle torri ibride onshore
+
+L’area di produzione `/structural` collega componenti della torre, cavi di precompressione, canali calibrati, forme d’onda originali, misure dirette di forza, una coda di analisi dedicata e riferimenti di salute. Gli originali sono verificati tramite SHA-256. pyOMA2 FDD conserva esclusioni di qualità, modi e incertezza non quantificata; i modi della torre non permettono di stimare forze assolute non calibrate.
+
+Deriva modale e precompressione diretta riutilizzano Missions, revisione tecnica indipendente, approvazioni, ordini di nuova misurazione, revisione di salute e casi di conoscenza da approvare. I passaggi delle procedure conservano la posizione originale. Le letture del grafo ricontrollano ambito, revisioni approvate e originali; dati insufficienti, ritiro, scadenza o cambiamenti delle fonti ne impediscono l’uso.
+
+Le analisi fissano identità di algoritmo, codice eseguito, configurazione e calibrazione. Il deployment ibrido fissa anche digest delle immagini API/strutturale e bundle di rilascio. Gli hash restano verificabili dopo rilettura PostgreSQL JSONB. I campi immagine sono dichiarazioni di deployment e rimangono `unbound` se assenti; l’identità osservata richiede ancora evidenze di deployment e firma.
+
+Il collaudo locale usa segnali sintetici, identità di test e ragionamento deterministico. SHM reale, parametri della torre, calibrazione, procedure autorizzate e responsabili sul campo sono ancora necessari. SSI/smorzamento, inferenza di forza assoluta calibrata e ricerca OpenFAST/Kratos richiedono input e verifiche separati. Campo e rilascio formale restano `UNVERIFIED`.
+
+### Conoscenza tracciabile e analisi PDF/OCR
+
+L’analisi nativa TXT, Markdown, PDF e DOCX resta predefinita. `parser: "docling"` seleziona esplicitamente Docling isolato per layout PDF, tabelle e OCR cinese. L’API verifica l’originale e accoda il lavoro nella transazione; un worker dedicato esegue un secondo processo Python isolato. SHA-256 originale, versione del documento, manifesto dei modelli, hash del codice e identità dei pacchetti vengono fissati e ricontrollati.
+
+- L’area di conoscenza mostra `pending_parse → parsing → pending → indexed`, ritentativi e lo stato terminale `parse_failed`. Le lease impediscono pubblicazioni di worker obsoleti; sono consentiti al massimo tre tentativi effettivi. Analisi fallite o incomplete non generano passaggi di testo o vettori ricercabili.
+- I passaggi mantengono hash, offset, pagine effettive, regioni e righe/colonne delle tabelle. Le pagine vuote non sono rinumerate. I rettangoli delle tabelle sono `table_region`, non contorni esatti delle celle o anteprime pixel del PDF. Ogni passaggio OCR ha `requires_numeric_review=true`: verificare numeri, segni, unità e ordine di lettura sull’originale prima dell’uso tecnico.
+- Hash nativo v1 e replay con `native` omesso/esplicito restano compatibili. Cambiare parser richiede un nuovo ID documentale immutabile. Una risposta di invio sconosciuta conserva file, ID e chiave di idempotenza per verifica; ogni replay controlla i permessi attuali prima di restituire la ricevuta.
+- I limiti includono 50 MiB, 200 pagine e 180 secondi di sottoprocesso. Input cifrati, vuoti, invalidi, eccessivi o con identità discordante falliscono esplicitamente. I modelli sono precaricati e verificati; download impliciti, servizi remoti e plugin esterni sono disabilitati durante l’esecuzione.
+
+Il successo pubblica passaggi e richiede l’indicizzazione pgvector e la proiezione Neo4j con ambito controllato esistenti. I link originali richiedono nuove verifiche di hash e permessi. `GET /api/v1/knowledge/parser-capabilities` dichiara solo la configurazione; `worker_health_verified=false` non prova disponibilità del worker. Indice e provenienza non certificano accuratezza OCR né autorizzano lavori sul campo. Vedere [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md).
 
 ### Benchmark CARE v6
 
@@ -214,6 +250,7 @@ Il dataset CARE e gli artefatti derivati di distribuzione soggetti alla sua lice
 | `/api/runtime`                                | Modalità corrente, disponibilità del backend e identità di rilascio con dati sensibili rimossi |
 | `/api/workflow/:assetId`                      | Snapshot Demo, approvazioni, ordini di lavoro e stato di audit                                 |
 | `/api/backend/:path+`                         | Gateway FastAPI su lista di consentiti in produzione                                           |
+| `/api/v1/knowledge/parser-capabilities`       | Configurazione e limiti del parser backend; non verifica la salute del worker                  |
 | `/api/v1/events/stream`                       | SSE di produzione con ripresa tramite cursore e riconnessione limitata                         |
 | `/ws/scada`, `/ws/alarms`, `/ws/agent-events` | Canali Demo simulati; rifiuto sicuro in produzione se i requisiti non sono soddisfatti         |
 
@@ -243,6 +280,8 @@ Applicazione vinext / React 19
                ├── artefatti governati MinIO
                ├── grafo di conoscenza derivato Neo4j
                ├── ragionamento ed embedding LiteLLM
+               ├── Worker strutturale isolato / pyOMA2 FDD
+               ├── Worker documentale isolato / Docling + OCR
                └── connettori SCADA / MQTT / HTTPS / EAM
 ```
 
@@ -250,16 +289,18 @@ D1 della Demo e PostgreSQL di produzione sono confini separati. Non esiste repli
 
 ### Stack tecnologico
 
-| Livello     | Tecnologie                                                            |
-| ----------- | --------------------------------------------------------------------- |
-| Web         | React 19, TypeScript, vinext, Vite, Tailwind CSS                      |
-| UI dei dati | TanStack Query, TanStack Table, Zustand, ECharts, Three.js            |
-| Edge        | Cloudflare Worker, D1, SSE, WebSocket                                 |
-| Backend     | Python 3.12, FastAPI, Pydantic, async SQLAlchemy, LangGraph           |
-| Asincrono   | PostgreSQL transactional outbox, Redis, Dramatiq                      |
-| Dati        | PostgreSQL, TimescaleDB, pgvector, MinIO, Neo4j                       |
-| IA          | LiteLLM, fornitori compatibili OpenAI, percorso di embedding separato |
-| Qualità     | Node test runner, Playwright, Pytest, Ruff, mypy, Bandit              |
+| Livello     | Tecnologie                                                                           |
+| ----------- | ------------------------------------------------------------------------------------ |
+| Web         | React 19, TypeScript, vinext, Vite, Tailwind CSS                                     |
+| UI dei dati | TanStack Query, TanStack Table, Zustand, ECharts, Three.js                           |
+| Edge        | Cloudflare Worker, D1, SSE, WebSocket                                                |
+| Backend     | Python 3.12, FastAPI, Pydantic, async SQLAlchemy, LangGraph                          |
+| Asincrono   | PostgreSQL transactional outbox, Redis, Dramatiq                                     |
+| Dati        | PostgreSQL, TimescaleDB, pgvector, MinIO, Neo4j                                      |
+| IA          | LiteLLM, fornitori compatibili OpenAI, percorso di embedding separato                |
+| Struttura   | pyOMA2 FDD, coda dedicata, sottoprocesso di calcolo isolato                          |
+| Documenti   | Docling, estrazione tabelle, OCR cinese, ambiente CPU separato bloccato tramite hash |
+| Qualità     | Node test runner, Playwright, Pytest, Ruff, mypy, Bandit                             |
 
 Sono mantenuti gli identificatori stabili di compatibilità `windops_backend`, `WINDOPS_*`, `x-windops-*` e i namespace esistenti di database, archiviazione a oggetti e telemetria.
 
@@ -421,6 +462,7 @@ Il candidato include identità delegata, RBAC, ambiti dei dati, idempotenza, rev
 - Disaster recovery, test di carico, SLO, instradamento degli allarmi, DAST, test di penetrazione manuali e controlli dopo il rilascio.
 - WCAG nel browser, regressione visiva e collaudo dei dispositivi supportati.
 - Esame della licenza CARE, replay dall’archivio a oggetti di produzione e revisione manuale delle corrispondenze ontologiche tra parchi.
+- Calibrazione e accuratezza sul campo delle torri ibride, revisione numerica e valutazione OCR, e qualifica di rilascio della stessa versione API, worker strutturale e nuova immagine documentale. Il worker documentale necessita di firma, evidenze SBOM/CVE e politiche di rete/risorse proprie; il rapporto esistente a due immagini non lo qualifica.
 
 Cloudflare Sites ospita solo l’applicazione Web e il gateway d’identità, non il backend Python. Un rilascio Sites riuscito non sostituisce il collaudo del backend, delle dipendenze o dei sistemi sul campo. Lo stato dettagliato delle evidenze è registrato in [EXECUTION_PROGRESS.md](./EXECUTION_PROGRESS.md), [AUDIT_REPORT.md](./AUDIT_REPORT.md) e [UI_AUDIT_REPORT.md](./UI_AUDIT_REPORT.md).
 

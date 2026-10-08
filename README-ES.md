@@ -40,6 +40,8 @@
 
 El producto se orienta a la operación y el mantenimiento inteligentes de parques eólicos. Las imágenes de inicio de sesión y el parque Demo ilustran un escenario; no definen el alcance del producto ni prueban la integración en campo o la aceptación en producción.
 
+Documentación contrastada con el repositorio el **2026-10-08**. El alcance actual prioriza las **torres híbridas terrestres** junto al flujo existente de mantenimiento de aerogeneradores. Ya están implementados la monitorización estructural, las nuevas mediciones gobernadas y la ingesta independiente PDF/OCR. La última aceptación del parser, del 2026-10-07, es `COMPLETE_LOCAL_SOFTWARE_VERIFIED` y cubre software local y ejecución Linux aislada. La precisión en campo, la calibración y los procedimientos reales, la operación en sombra y la cualificación formal de publicación siguen `UNVERIFIED`. El [progreso](EXECUTION_PROGRESS.md) distingue conclusiones actuales de registros históricos.
+
 ## Instalación
 
 ### Requisitos
@@ -108,6 +110,16 @@ windops-read-audit-worker
 uvicorn windops_backend.main:app --host 127.0.0.1 --port 8000
 ```
 
+### Workers de análisis opcionales
+
+Para iniciar manualmente el análisis estructural, mantenga los cuatro servicios anteriores y arranque la cola dedicada en otro terminal desde `backend/`, con la misma configuración y el entorno activado. El extra `structural` proporciona pyOMA2; los cálculos largos se ejecutan fuera de HTTP.
+
+```powershell
+python -m dramatiq windops_backend.structural_tasks --queues structural-analysis --processes 1 --threads 1
+```
+
+PDF/OCR está desactivado por defecto y requiere un entorno Python independiente, modelos descargados previamente, el SHA-256 real de su manifiesto y un worker `document-parse` dedicado. [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md) explica la instalación con hashes, `WINDOPS_DOCUMENT_PARSER_*`, el comando del worker, la imagen Linux y la validación aislada. Mantenga las dependencias OCR fuera del entorno API.
+
 ### Inicio local reproducible en Windows
 
 Tras instalar las dependencias del frontend y crear `backend/.venv`, ejecute estos comandos desde la raíz del repositorio:
@@ -125,6 +137,8 @@ Es un entorno de desarrollo aislado. El frontend permanece en Demo y el backend 
 Las credenciales locales generadas, la configuración Compose, las identidades de proceso y los registros se guardan en el directorio ignorado `.artifacts/local-stack/`. Esta configuración pertenece al inicio aislado: no lee ni sobrescribe la `.env` del usuario en la raíz ni importa automáticamente datos de referencia. El inicio manual habitual sigue usando la `.env` de la raíz. No comparta ni incluya este directorio de artefactos en commits.
 
 El inicio espera a las dependencias, aplica migraciones Alembic, compila el frontend e inicia API, Dramatiq, relay de outbox, worker de auditoría de lecturas y frontend. Las comprobaciones de estado verifican la revisión final de migración, Redis, cinco buckets MinIO, Neo4j, autenticación de API, persistencia de la auditoría de lectura de la solicitud actual y página de acceso. Los fallos conservan dependencias, datos y registros para diagnóstico. `Stop-Local.ps1` verifica PID, fecha de creación, comando y pertenencia al repositorio antes de detener los procesos correspondientes y el proyecto Compose; conserva contenedores, credenciales y volúmenes de datos.
+
+El inicio gestionado también ejecuta el worker dedicado `structural-analysis`. No prepara modelos OCR ni inicia `document-parse`; configure el parser por separado como se indica arriba.
 
 Tras cambiar los puntos de entrada de estilos o las migraciones de base de datos, ejecute `pnpm check:architecture --write` y revise el inventario de arquitectura actualizado. `pnpm check:architecture` y CI rechazan un inventario desactualizado.
 
@@ -174,6 +188,7 @@ El registro de ejecución de modelos reales guarda en `evaluation_result.request
 | Decisiones / Órdenes              | `/decisions`, `/work-orders`         | Comparación de alternativas, aprobación humana, controles de tareas y evidencias de campo            |
 | Estado / Mantenimiento predictivo | `/health`, `/predictive-maintenance` | Matrices de estado, clasificación de riesgos, visualización de RUL y ventanas de mantenimiento       |
 | Recursos / Mantenimiento          | `/resources`, `/maintenance`         | Equipos, repuestos, herramientas, ventanas meteorológicas, calendarios y conflictos                  |
+| Estructura                        | `/structural`                        | Componentes, tendones, calibración, ondas, análisis modal, nuevas mediciones y revisión de salud     |
 | Conocimiento / Informes           | `/knowledge`, `/reports`             | Recuperación de evidencias, casos de conocimiento, vistas previas y exportación PDF/DOCX             |
 | Datos / Modelos / Diagnóstico     | `/data`, `/models`, `/diagnosis`     | Gobernanza de datos, evaluación CARE, controles de modelos y procedencia del diagnóstico             |
 | Gemelo digital / Ajustes          | `/digital-twin`, `/settings`         | Vistas operativas 2D, estado de ejecución, identidad y políticas de datos                            |
@@ -190,7 +205,28 @@ Los 22 agentes de la Demo se organizan en tres capas:
 | Revisión  | Seguridad, ingeniería, economía, cumplimiento, recursos                                           | Revisar condiciones de seguridad, ingeniería, economía, cumplimiento y recursos |
 | Ejecución | Órdenes de trabajo, equipos, repuestos, mantenimiento, informes, conocimiento                     | Convertir decisiones aprobadas en ejecución gobernada y retroalimentación       |
 
-El backend Python utiliza un flujo LangGraph independiente y un catálogo SQL con 11 herramientas. La interfaz y las API muestran únicamente evidencias y conclusiones públicas, estructuradas y auditables. No muestran ni inventan la Chain-of-Thought oculta de un modelo.
+El backend Python utiliza un flujo LangGraph independiente y un catálogo SQL con 18 herramientas. La interfaz y las API muestran únicamente evidencias y conclusiones públicas, estructuradas y auditables. No muestran ni inventan la Chain-of-Thought oculta de un modelo.
+
+### Operación de torres híbridas terrestres
+
+El espacio de producción `/structural` conecta componentes de torre, tendones, canales calibrados, formas de onda originales, mediciones directas de fuerza, una cola de análisis dedicada y referencias de salud. Los originales se comprueban mediante SHA-256. pyOMA2 FDD conserva exclusiones de calidad, modos e incertidumbre no cuantificada; los modos de torre no permiten estimar fuerza absoluta de tendones sin calibración.
+
+La deriva modal y el pretensado directo reutilizan Missions, revisión técnica independiente, aprobaciones, órdenes de nueva medición, revisión de salud y casos de conocimiento pendientes. Los pasajes de procedimientos conservan su ubicación original. Las lecturas del grafo vuelven a comprobar alcance, revisiones aprobadas y originales; datos insuficientes, retirada, caducidad o cambios de fuente impiden consumir conclusiones.
+
+Los análisis fijan identidades de algoritmo, código ejecutado, configuración y calibración. El despliegue híbrido también fija los digests de las imágenes API y estructural y su paquete de publicación. Los hashes de resultados pueden verificarse tras la lectura PostgreSQL JSONB. Los campos de imagen son declaraciones de despliegue y quedan `unbound` cuando faltan; la identidad observada requiere evidencias de despliegue y firma.
+
+La aceptación local utiliza señales sintéticas, identidades de prueba y razonamiento determinista. Siguen pendientes SHM real, parámetros de torre, calibración, procedimientos autorizados y responsables de campo. SSI/amortiguamiento, inferencia de fuerza absoluta calibrada e investigación OpenFAST/Kratos requieren entradas y validación independientes. Campo y publicación formal siguen `UNVERIFIED`.
+
+### Conocimiento trazable y procesamiento PDF/OCR
+
+El procesamiento nativo TXT, Markdown, PDF y DOCX sigue siendo predeterminado. `parser: "docling"` selecciona explícitamente Docling aislado para diseño PDF, tablas y OCR chino. La API verifica el original y encola transaccionalmente; un worker dedicado ejecuta un segundo proceso Python aislado. SHA-256 original, versión documental, manifiesto de modelos, hashes de código e identidades de paquetes se fijan y vuelven a comprobar.
+
+- El espacio de conocimiento muestra `pending_parse → parsing → pending → indexed`, reintentos y el estado terminal `parse_failed`. Las concesiones impiden publicar a workers obsoletos; se permiten como máximo tres intentos reales. Un procesamiento fallido o incompleto no genera pasajes de texto ni vectores consultables.
+- Los pasajes conservan hashes, offsets, páginas reales, regiones y filas/columnas de tablas. Las páginas vacías no se renumeran. Los rectángulos de tablas son `table_region`, no cajas exactas de celdas ni vistas de píxeles del PDF. Cada pasaje OCR lleva `requires_numeric_review=true`: coteje números, signos, unidades y orden de lectura con el original antes de uso técnico.
+- El hash nativo v1 y la repetición con `native` omitido/explícito siguen compatibles. Cambiar de parser exige otro ID documental inmutable. Una respuesta de envío desconocida conserva archivo, ID y clave de idempotencia para verificar; cada repetición comprueba permisos actuales antes de devolver el recibo.
+- Los límites incluyen 50 MiB, 200 páginas y 180 segundos de subproceso. Entradas cifradas, vacías, inválidas, excesivas o con identidad discrepante fallan explícitamente. Los modelos se descargan y verifican antes; en ejecución se desactivan descargas implícitas, servicios remotos y plugins externos.
+
+El éxito publica pasajes y solicita la indexación pgvector y la proyección Neo4j con alcance restringido existentes. Los enlaces originales requieren nuevas comprobaciones de hash y permisos. `GET /api/v1/knowledge/parser-capabilities` solo informa configuración; `worker_health_verified=false` no acredita disponibilidad del worker. Índice y procedencia no certifican precisión OCR ni autorizan trabajo de campo. Véase [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md).
 
 ### Benchmark CARE v6
 
@@ -214,6 +250,7 @@ El conjunto CARE y los artefactos derivados de distribución sujetos a su licenc
 | `/api/runtime`                                | Modo actual, disponibilidad del backend e identidad de lanzamiento con datos sensibles ocultos |
 | `/api/workflow/:assetId`                      | Instantáneas del flujo Demo, aprobaciones, órdenes y estado de auditoría                       |
 | `/api/backend/:path+`                         | Gateway FastAPI limitado por lista de permitidos en producción                                 |
+| `/api/v1/knowledge/parser-capabilities`       | Configuración y límites del parser backend; no comprueba salud del worker                      |
 | `/api/v1/events/stream`                       | SSE de producción con reanudación por cursor y reconexión acotada                              |
 | `/ws/scada`, `/ws/alarms`, `/ws/agent-events` | Canales Demo simulados; rechazan las operaciones en producción si no se cumplen los requisitos |
 
@@ -243,6 +280,8 @@ Aplicación vinext / React 19
                ├── artefactos gobernados en MinIO
                ├── grafo de conocimiento derivado en Neo4j
                ├── razonamiento y embeddings con LiteLLM
+               ├── Worker estructural aislado / pyOMA2 FDD
+               ├── Worker documental aislado / Docling + OCR
                └── conectores SCADA / MQTT / HTTPS / EAM
 ```
 
@@ -250,16 +289,18 @@ D1 de Demo y PostgreSQL de producción son límites separados. No existe replica
 
 ### Tecnologías
 
-| Capa              | Tecnologías                                                             |
-| ----------------- | ----------------------------------------------------------------------- |
-| Web               | React 19, TypeScript, vinext, Vite, Tailwind CSS                        |
-| Interfaz de datos | TanStack Query, TanStack Table, Zustand, ECharts, Three.js              |
-| Edge              | Cloudflare Worker, D1, SSE, WebSocket                                   |
-| Backend           | Python 3.12, FastAPI, Pydantic, async SQLAlchemy, LangGraph             |
-| Asíncrona         | PostgreSQL transactional outbox, Redis, Dramatiq                        |
-| Datos             | PostgreSQL, TimescaleDB, pgvector, MinIO, Neo4j                         |
-| IA                | LiteLLM, proveedores compatibles con OpenAI, vía de embeddings separada |
-| Calidad           | Node test runner, Playwright, Pytest, Ruff, mypy, Bandit                |
+| Capa              | Tecnologías                                                                    |
+| ----------------- | ------------------------------------------------------------------------------ |
+| Web               | React 19, TypeScript, vinext, Vite, Tailwind CSS                               |
+| Interfaz de datos | TanStack Query, TanStack Table, Zustand, ECharts, Three.js                     |
+| Edge              | Cloudflare Worker, D1, SSE, WebSocket                                          |
+| Backend           | Python 3.12, FastAPI, Pydantic, async SQLAlchemy, LangGraph                    |
+| Asíncrona         | PostgreSQL transactional outbox, Redis, Dramatiq                               |
+| Datos             | PostgreSQL, TimescaleDB, pgvector, MinIO, Neo4j                                |
+| IA                | LiteLLM, proveedores compatibles con OpenAI, vía de embeddings separada        |
+| Estructura        | pyOMA2 FDD, cola dedicada, subproceso de cálculo aislado                       |
+| Documentos        | Docling, extracción de tablas, OCR chino, entorno CPU independiente con hashes |
+| Calidad           | Node test runner, Playwright, Pytest, Ruff, mypy, Bandit                       |
 
 Se conservan los identificadores estables de compatibilidad `windops_backend`, `WINDOPS_*`, `x-windops-*` y los espacios de nombres existentes de base de datos, almacenamiento de objetos y telemetría.
 
@@ -421,6 +462,7 @@ El candidato incluye identidad delegada, RBAC, ámbitos de datos, idempotencia, 
 - Recuperación ante desastres, carga, SLO, encaminamiento de alertas, DAST, pentesting manual y controles posteriores al lanzamiento.
 - WCAG en navegador, regresión visual y aceptación de dispositivos compatibles.
 - Revisión de licencia CARE, reproducción desde almacenamiento de producción y revisión manual de correspondencias ontológicas entre parques.
+- Calibración y precisión de campo de torres híbridas, revisión numérica y evaluación OCR, y cualificación de publicación de la misma versión de API, worker estructural e imagen documental nueva. El worker documental requiere firma, evidencias SBOM/CVE y políticas de red/recursos propias; el informe existente de dos imágenes no lo cualifica.
 
 Cloudflare Sites aloja solo la aplicación Web y el gateway de identidad, no el backend Python. Un lanzamiento Sites exitoso no reemplaza la aceptación de backend, dependencias ni sistemas de campo. El estado detallado de evidencias está en [EXECUTION_PROGRESS.md](./EXECUTION_PROGRESS.md), [AUDIT_REPORT.md](./AUDIT_REPORT.md) y [UI_AUDIT_REPORT.md](./UI_AUDIT_REPORT.md).
 

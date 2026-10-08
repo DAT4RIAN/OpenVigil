@@ -40,6 +40,8 @@
 
 The product is positioned as an intelligent platform for wind operations and maintenance. Login imagery and the Demo wind farm illustrate a scenario; they do not define the product's scope or prove field integration or production acceptance.
 
+Documentation checked against the repository on **2026-10-08**. The current software scope prioritizes **onshore hybrid towers** alongside the existing turbine operations workflow. Structural monitoring, governed retest workflows, and the independent PDF/OCR ingestion path are implemented. The latest document-parser acceptance dated 2026-10-07 is `COMPLETE_LOCAL_SOFTWARE_VERIFIED`; it covers local software and isolated Linux execution. Field accuracy, real calibration and procedures, shadow operation, and formal release qualification remain `UNVERIFIED`. [Execution progress](EXECUTION_PROGRESS.md) separates current conclusions from historical snapshots.
+
 ## Installation
 
 ### Requirements
@@ -108,6 +110,16 @@ windops-read-audit-worker
 uvicorn windops_backend.main:app --host 127.0.0.1 --port 8000
 ```
 
+### Optional analysis workers
+
+For manual structural startup, keep the four services above running and start the dedicated queue in another terminal from `backend/`, with the same configuration and activated environment. The `structural` extra supplies pyOMA2; long calculations run outside HTTP handlers.
+
+```powershell
+python -m dramatiq windops_backend.structural_tasks --queues structural-analysis --processes 1 --threads 1
+```
+
+PDF/OCR is disabled by default and requires a separate Python environment, prefetched models, their actual manifest SHA-256, and a dedicated `document-parse` worker. Follow [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md) for the hash-locked installation, `WINDOPS_DOCUMENT_PARSER_*` settings, worker command, Linux image, and isolated validation. Keep OCR dependencies out of the API environment.
+
 ### Repeatable local startup on Windows
 
 After installing frontend dependencies and creating `backend/.venv`, run these commands from the repository root:
@@ -125,6 +137,8 @@ This is an isolated development stack. The frontend remains in Demo, and the ind
 Generated local credentials, Compose configuration, process identities, and logs are stored in the ignored `.artifacts/local-stack/` directory. This configuration belongs to the isolated startup workflow: it does not read or overwrite the user's root `.env` or automatically import reference data. Ordinary manual startup continues to use the root `.env`. Do not share or commit this artifact directory.
 
 Startup waits for dependencies, applies Alembic migrations, builds the frontend, and starts the API, Dramatiq, outbox relay, read-audit worker, and frontend. Status checks verify the migration head, Redis, five MinIO buckets, Neo4j, API authentication, read-audit persistence for the current request, and the login page. Failures preserve dependencies, data, and process logs for diagnosis. `Stop-Local.ps1` verifies PID, creation time, command, and repository ownership before stopping the corresponding processes and Compose project; containers, credentials, and data volumes are retained.
+
+The managed startup also launches the dedicated `structural-analysis` worker. It does not prepare OCR models or start the `document-parse` worker; use the separate parser setup above when needed.
 
 After changing stylesheet entry points or database migrations, run `pnpm check:architecture --write` and review the updated architecture inventory. `pnpm check:architecture` and CI reject an outdated inventory.
 
@@ -174,6 +188,7 @@ The real-model execution ledger records the request digest, message size in UTF-
 | Decision / Work Order     | `/decisions`, `/work-orders`         | Alternative comparison, human approval, task gates, and field evidence                     |
 | Health / Predictive       | `/health`, `/predictive-maintenance` | Health matrices, risk ranking, RUL display, and maintenance windows                        |
 | Resource / Maintenance    | `/resources`, `/maintenance`         | Crews, spare parts, tools, weather windows, calendars, and conflict checks                 |
+| Structural                | `/structural`                        | Components, tendons, calibration, waveforms, modal analysis, retests, and health review    |
 | Knowledge / Reports       | `/knowledge`, `/reports`             | Evidence retrieval, knowledge cases, report previews, and PDF/DOCX export                  |
 | Data / Models / Diagnosis | `/data`, `/models`, `/diagnosis`     | Data governance, CARE evaluation, model gates, and diagnosis provenance                    |
 | Digital Twin / Settings   | `/digital-twin`, `/settings`         | 2D operational views, runtime status, identity, and data policies                          |
@@ -190,7 +205,7 @@ The Demo's 22 Agents are organized into three layers:
 | Review    | Safety, Engineering, Economic, Compliance, Resource Review                        | Review safety, engineering, economics, compliance, and resource conditions  |
 | Execution | Work Order, Crew, Spare Parts, Maintenance, Report, Knowledge                     | Turn approved decisions into governed execution and feedback                |
 
-The Python backend uses an independent LangGraph workflow and a governed SQL tool catalog. The UI and APIs expose only public, structured, auditable evidence and conclusions. They do not display or fabricate a model's hidden Chain-of-Thought.
+The Python backend uses an independent LangGraph workflow and a governed SQL catalog with 18 tools. The UI and APIs expose only public, structured, auditable evidence and conclusions. They do not display or fabricate a model's hidden Chain-of-Thought.
 
 ### Onshore hybrid tower operations
 
@@ -198,9 +213,20 @@ The production workspace at `/structural` connects tower components, tendons, ca
 
 Modal drift and direct prestress scenarios reuse Missions, independent engineering review, approvals, retest work orders, health review, and pending knowledge cases. Procedure passages retain original locations. Graph statement reads revalidate scope, approved revisions, and original sources; insufficient data, withdrawal, expiry, and source drift prevent consumption.
 
-Analyses freeze algorithm, execution code, configuration, and calibration identities. A hybrid deployment also freezes both API and structural image digests and their release bundle. Result hashes survive PostgreSQL JSONB roundtrips. Image fields are explicitly deployment declarations and remain `unbound` when absent; independently observed runtime identity still requires deployment and signature evidence.
+Analyses freeze algorithm, execution code, configuration, and calibration identities. A hybrid deployment also freezes both API and structural image digests and their release bundle. Result hashes survive PostgreSQL JSONB roundtrips. Image fields are deployment declarations and remain `unbound` when absent; independently observed runtime identity still requires deployment and signature evidence.
 
-Local software acceptance uses synthetic signals, test identities, and deterministic reasoning. Real SHM, tower parameters, calibration, authorized procedures, and responsible field personnel remain pending; field and formal release qualification remain unverified. See [execution progress](EXECUTION_PROGRESS.md) for implementation and evidence.
+Local software acceptance uses synthetic signals, test identities, and deterministic reasoning. Real SHM, tower parameters, calibration, authorized procedures, and responsible field personnel remain pending. SSI/damping qualification, calibrated absolute force inference, and OpenFAST/Kratos research require separate inputs and validation. Field and formal release qualification remain `UNVERIFIED`.
+
+### Traceable knowledge and PDF/OCR parsing
+
+Native TXT, Markdown, PDF, and DOCX parsing remains the default. Explicit `parser: "docling"` selects isolated Docling PDF layout, table, and Chinese OCR processing. The API verifies the original and queues work transactionally; a dedicated worker runs a second isolated Python process. Original SHA-256, document version, model manifest, execution-code hashes, and package identities are frozen and rechecked.
+
+- The knowledge workspace shows `pending_parse → parsing → pending → indexed`, retry status, and terminal `parse_failed`. Leases prevent stale workers from publishing; at most three actual attempts are allowed. Failed or unfinished parsing creates no searchable body passages or vectors.
+- Passages retain text hashes, offsets, actual page numbers, page regions, and table row/column locations. Blank pages keep their numbering. Table rectangles are explicitly `table_region`, not exact cell boxes or a pixel preview of the PDF. Every OCR passage has `requires_numeric_review=true`: verify numbers, signs, units, and reading order against the original before engineering use.
+- The native v1 request hash and omitted/explicit `native` replay remain compatible. Changing the parser requires a new immutable document ID. An unknown submission response retains the file, document ID, and idempotency key for verification; every replay rechecks current permissions before returning a receipt.
+- Limits include 50 MiB, 200 pages, and a 180-second parsing subprocess. Encrypted, empty, invalid, oversized, or identity-mismatched inputs fail explicitly. Models are prefetched and verified; runtime parsing disables implicit downloads, remote services, and external plugins.
+
+Successful parsing publishes passages and requests the existing pgvector indexing and scoped Neo4j projection. Original links are issued only after fresh hash and permission checks. `GET /api/v1/knowledge/parser-capabilities` reports configuration only; `worker_health_verified=false` does not establish worker readiness. Indexing and provenance do not certify OCR accuracy or authorize field work. See [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md).
 
 ### CARE v6 benchmark
 
@@ -224,6 +250,7 @@ The CARE dataset and derived distribution artifacts subject to its license follo
 | `/api/runtime`                                | Current runtime mode, backend readiness, and redacted release identity |
 | `/api/workflow/:assetId`                      | Demo workflow snapshots, approvals, work orders, and audit state       |
 | `/api/backend/:path+`                         | Allowlisted FastAPI gateway in production mode                         |
+| `/api/v1/knowledge/parser-capabilities`       | Backend parser configuration and limits; not a worker health probe     |
 | `/api/v1/events/stream`                       | Production SSE with cursor resume and bounded reconnection             |
 | `/ws/scada`, `/ws/alarms`, `/ws/agent-events` | Simulated Demo real-time channels; fail closed in production mode      |
 
@@ -253,6 +280,8 @@ vinext / React 19 application
                ├── MinIO governed artifacts
                ├── Neo4j derived knowledge graph
                ├── LiteLLM reasoning and embeddings
+               ├── Isolated structural worker / pyOMA2 FDD
+               ├── Isolated document worker / Docling + OCR
                └── SCADA / MQTT / HTTPS / EAM connectors
 ```
 
@@ -260,16 +289,18 @@ Demo D1 and production PostgreSQL are separate boundaries. There is no implicit 
 
 ### Technology stack
 
-| Layer   | Technologies                                                  |
-| ------- | ------------------------------------------------------------- |
-| Web     | React 19, TypeScript, vinext, Vite, Tailwind CSS              |
-| Data UI | TanStack Query, TanStack Table, Zustand, ECharts, Three.js    |
-| Edge    | Cloudflare Worker, D1, SSE, WebSocket                         |
-| Backend | Python 3.12, FastAPI, Pydantic, async SQLAlchemy, LangGraph   |
-| Async   | PostgreSQL transactional outbox, Redis, Dramatiq              |
-| Data    | PostgreSQL, TimescaleDB, pgvector, MinIO, Neo4j               |
-| AI      | LiteLLM, OpenAI-compatible providers, separate embedding path |
-| Quality | Node test runner, Playwright, Pytest, Ruff, mypy, Bandit      |
+| Layer      | Technologies                                                                 |
+| ---------- | ---------------------------------------------------------------------------- |
+| Web        | React 19, TypeScript, vinext, Vite, Tailwind CSS                             |
+| Data UI    | TanStack Query, TanStack Table, Zustand, ECharts, Three.js                   |
+| Edge       | Cloudflare Worker, D1, SSE, WebSocket                                        |
+| Backend    | Python 3.12, FastAPI, Pydantic, async SQLAlchemy, LangGraph                  |
+| Async      | PostgreSQL transactional outbox, Redis, Dramatiq                             |
+| Data       | PostgreSQL, TimescaleDB, pgvector, MinIO, Neo4j                              |
+| AI         | LiteLLM, OpenAI-compatible providers, separate embedding path                |
+| Structural | pyOMA2 FDD, dedicated queue, isolated calculation subprocess                 |
+| Documents  | Docling, table extraction, Chinese OCR, separate hash-locked CPU environment |
+| Quality    | Node test runner, Playwright, Pytest, Ruff, mypy, Bandit                     |
 
 Stable compatibility identifiers retain `windops_backend`, `WINDOPS_*`, `x-windops-*`, and the existing database, object-storage, and telemetry namespaces.
 
@@ -431,6 +462,7 @@ The production candidate includes delegated identity, RBAC, data scopes, idempot
 - Disaster recovery, load tests, SLOs, alert routing, DAST, manual penetration testing, and post-release checks.
 - Browser WCAG, visual regression, and supported-device acceptance.
 - CARE license review, production object-storage replay, and manual review of ontology mappings across farms.
+- Hybrid-tower field calibration and domain accuracy, OCR numeric review and accuracy evaluation, and same-version release qualification of the API, structural worker, and new document-parser image. The document worker needs its own signature, SBOM/CVE evidence, and network/resource policies; the existing two-image report does not qualify it.
 
 Cloudflare Sites hosts only the Web application and identity gateway; it does not host the Python backend. A successful Sites release does not replace acceptance of the backend, dependency stack, or field systems. Detailed evidence status is recorded in [EXECUTION_PROGRESS.md](./EXECUTION_PROGRESS.md), [AUDIT_REPORT.md](./AUDIT_REPORT.md), and [UI_AUDIT_REPORT.md](./UI_AUDIT_REPORT.md).
 

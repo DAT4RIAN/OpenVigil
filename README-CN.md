@@ -40,6 +40,8 @@
 
 产品统一定位为“风电智能运维平台”。登录页图片与 Demo 风场只代表展示场景，不限定业务范围，也不构成现场接入或生产验收证据。
 
+本文于 **2026-10-08** 按当前仓库核对。现阶段在既有风机运维闭环上优先面向**陆上混塔**，已实现结构监测、受控复测闭环与独立 PDF/OCR 知识入库。2026-10-07 文档解析最新验收状态为 `COMPLETE_LOCAL_SOFTWARE_VERIFIED`，覆盖本地软件和隔离 Linux 执行；现场精度、真实校准与规程、影子运行和正式发布资格仍为 `UNVERIFIED`。[执行进度](EXECUTION_PROGRESS.md) 区分当前结论与历史快照。
+
 ## 安装
 
 ### 环境要求
@@ -108,6 +110,16 @@ windops-read-audit-worker
 uvicorn windops_backend.main:app --host 127.0.0.1 --port 8000
 ```
 
+### 可选分析 worker
+
+手动启用结构分析时，保留上述四项服务，在另一个终端从 `backend/` 使用相同配置和已激活环境启动专用队列。`structural` extra 提供 pyOMA2，长计算在 HTTP 请求之外执行。
+
+```powershell
+python -m dramatiq windops_backend.structural_tasks --queues structural-analysis --processes 1 --threads 1
+```
+
+PDF/OCR 默认关闭，需要独立 Python 环境、预取模型、实际模型清单 SHA-256 和专用 `document-parse` worker。哈希锁安装、`WINDOPS_DOCUMENT_PARSER_*` 配置、worker 命令、Linux 镜像与隔离验证见 [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md)。OCR 依赖保持在 API 环境之外。
+
 ### 可重复的 Windows 本地启动
 
 完成前端依赖安装和 `backend/.venv` 创建后，可在仓库根目录运行：
@@ -125,6 +137,8 @@ uvicorn windops_backend.main:app --host 127.0.0.1 --port 8000
 自动生成的本地凭据、Compose 配置、进程身份和日志位于被忽略的 `.artifacts/local-stack/`。这是该隔离启动流程专用的运行配置；不读取或覆盖用户根目录 `.env`，不自动导入参考数据。普通手动启动仍使用根目录 `.env`。不要分享或提交该制品目录。
 
 启动流程会等待依赖就绪、执行 Alembic 迁移、构建前端，并启动 API、Dramatiq、outbox relay、read-audit worker 和前端。状态检查验证迁移头、Redis、五个 MinIO 桶、Neo4j、API 鉴权、当前请求的读审计落库及登录页面。失败时保留依赖和数据用于诊断；日志中保留各进程输出。`Stop-Local.ps1` 核验 PID、创建时间、命令和仓库归属后停止对应进程及 Compose 项目，保留容器、凭据和数据卷。
+
+托管启动同时运行专用 `structural-analysis` worker；不会准备 OCR 模型或启动 `document-parse` worker，需要时按上述独立解析说明配置。
 
 修改样式入口或数据库迁移后，执行 `pnpm check:architecture --write` 更新架构事实清单并检查差异；`pnpm check:architecture` 和 CI 会拒绝过期清单。
 
@@ -174,6 +188,7 @@ Python 后端的可执行建议必须通过 `execution_plan_id` 绑定当前 Mis
 | Decision / Work Order     | `/decisions`、`/work-orders`         | 方案比较、人工审批、任务门禁和现场证据             |
 | Health / Predictive       | `/health`、`/predictive-maintenance` | 健康矩阵、风险排序、RUL 展示和维护窗口             |
 | Resource / Maintenance    | `/resources`、`/maintenance`         | 班组、备件、工具、天气窗、日历和冲突检查           |
+| Structural                | `/structural`                        | 构件、索束、校准、波形、模态分析、复测与健康复核   |
 | Knowledge / Reports       | `/knowledge`、`/reports`             | 证据检索、知识案例、报告预览与 PDF/DOCX 导出       |
 | Data / Models / Diagnosis | `/data`、`/models`、`/diagnosis`     | 数据治理、CARE 评估、模型门禁和诊断溯源            |
 | Digital Twin / Settings   | `/digital-twin`、`/settings`         | 2D 运行态示意、运行时、身份与数据策略状态          |
@@ -190,7 +205,7 @@ Demo 中的 22 个 Agent 分为三层：
 | Review    | Safety、Engineering、Economic、Compliance、Resource Review                        | 复核安全、工程、经济、合规和资源条件   |
 | Execution | Work Order、Crew、Spare Parts、Maintenance、Report、Knowledge                     | 把获批决策转换为受控执行与反馈         |
 
-Python 后端使用独立的 LangGraph 工作流和受治理 SQL 工具目录。界面与 API 只展示公开、结构化、可审计的依据，不展示或伪造模型隐藏的 Chain-of-Thought。
+Python 后端使用独立的 LangGraph 工作流和包含 18 个工具的受治理 SQL 目录。界面与 API 只展示公开、结构化、可审计的依据，不展示或伪造模型隐藏的 Chain-of-Thought。
 
 ### 陆上混塔运维
 
@@ -198,9 +213,20 @@ Python 后端使用独立的 LangGraph 工作流和受治理 SQL 工具目录。
 
 模态漂移与直接预应力场景复用 Mission、工程结论独立复核、审批、复测工单、健康复核和待审案例。规程段落保留原文定位，图谱结论读取重新核对权限、批准修订与来源原件；不足、撤回、过期和来源变化会阻止消费结论。
 
-分析记录冻结算法、执行代码、配置和校准身份；双镜像部署时还冻结 API / 结构镜像 digest 与发布 bundle。结果哈希可在 PostgreSQL JSONB 回读后复算。镜像字段明确表示部署声明，未配置时为 `unbound`；正式运行镜像身份仍需外部部署与签名证据。
+分析记录冻结算法、执行代码、配置和校准身份；双镜像部署时还冻结 API / 结构镜像 digest 与发布 bundle。结果哈希可在 PostgreSQL JSONB 回读后复算。镜像字段表示部署声明，未配置时为 `unbound`；正式运行镜像身份仍需外部部署与签名证据。
 
-本地软件验收使用合成信号、测试身份和确定性推理。真实 SHM、混塔参数、校准、授权规程和现场责任人待提供，现场与正式发布资格保持未验证。当前实施与证据见 [执行进度](EXECUTION_PROGRESS.md)。
+本地软件验收使用合成信号、测试身份和确定性推理。真实 SHM、混塔参数、校准、授权规程和现场责任人待提供。SSI/阻尼资格、标定绝对索力推断及 OpenFAST/Kratos 研究需独立输入和验证；现场与正式发布资格保持 `UNVERIFIED`。
+
+### 可追溯知识与 PDF/OCR 解析
+
+默认保留原生 TXT、Markdown、PDF、DOCX 解析。显式 `parser: "docling"` 选择隔离的 Docling PDF 布局、表格与中文 OCR；API 验证原件并事务性排队，专用 worker 在第二个独立 Python 进程计算。原件 SHA-256、文档版本、模型清单、执行代码哈希与包身份冻结并重新核对。
+
+- 知识工作台展示 `pending_parse → parsing → pending → indexed`、重试及终态 `parse_failed`。租约阻止过期 worker 发布，最多三次实际尝试；失败或未完成解析不生成可检索正文段落或向量。
+- 段落保留文本哈希、偏移、实际页码、页内区域和表格行列，空白页不重新编号。表格矩形明确为 `table_region`，不是精确单元格框或原 PDF 像素预览。所有 OCR 段落标记 `requires_numeric_review=true`，工程使用前须对照原件核对数字、正负号、单位和读序。
+- 保留原生 v1 请求哈希及省略/显式 `native` 重放兼容；更换解析器需新不可变文档 ID。未知提交响应保留文件、文档 ID 和幂等键以核验，每次重放先核对当前权限再返回收据。
+- 上限包括 50 MiB、200 页和 180 秒解析子进程。加密、空白、损坏、超限或身份不匹配输入明确失败；模型预取并验证，运行时关闭隐式下载、远程服务和外部插件。
+
+成功解析发布段落并请求既有 pgvector 索引和受范围约束的 Neo4j 投影；原件链接重新校验哈希与权限后签发。`GET /api/v1/knowledge/parser-capabilities` 只声明配置，`worker_health_verified=false` 不证明 worker 就绪。索引与溯源不代表 OCR 精度或现场作业许可。详见 [DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md)。
 
 ### CARE v6 基准
 
@@ -224,6 +250,7 @@ CARE 数据集及受其许可证约束的派生分发制品遵循 CC BY-SA 4.0�
 | `/api/runtime`                                | 当前运行模式、后端就绪状态与脱敏发布身份 |
 | `/api/workflow/:assetId`                      | Demo 工作流快照、审批、工单和审计状态    |
 | `/api/backend/:path+`                         | 生产模式下受允许列表约束的 FastAPI 网关  |
+| `/api/v1/knowledge/parser-capabilities`       | 后端解析配置与上限；不是 worker 探活接口 |
 | `/api/v1/events/stream`                       | 生产 SSE，支持游标续传和有界重连         |
 | `/ws/scada`、`/ws/alarms`、`/ws/agent-events` | Demo 模拟实时通道；生产模式失败关闭      |
 
@@ -253,6 +280,8 @@ vinext / React 19 application
                ├── MinIO governed artifacts
                ├── Neo4j derived knowledge graph
                ├── LiteLLM reasoning and embeddings
+               ├── 独立结构 worker / pyOMA2 FDD
+               ├── 独立文档 worker / Docling + OCR
                └── SCADA / MQTT / HTTPS / EAM connectors
 ```
 
@@ -260,16 +289,18 @@ Demo D1 与生产 PostgreSQL 是两个独立边界，不做隐式数据复制，
 
 ### 技术栈
 
-| 层      | 技术                                                        |
-| ------- | ----------------------------------------------------------- |
-| Web     | React 19、TypeScript、vinext、Vite、Tailwind CSS            |
-| Data UI | TanStack Query、TanStack Table、Zustand、ECharts、Three.js  |
-| Edge    | Cloudflare Worker、D1、SSE、WebSocket                       |
-| Backend | Python 3.12、FastAPI、Pydantic、SQLAlchemy async、LangGraph |
-| Async   | PostgreSQL transactional outbox、Redis、Dramatiq            |
-| Data    | PostgreSQL、TimescaleDB、pgvector、MinIO、Neo4j             |
-| AI      | LiteLLM、OpenAI-compatible providers、独立 embedding 路径   |
-| Quality | Node test runner、Playwright、Pytest、Ruff、mypy、Bandit    |
+| 层         | 技术                                                        |
+| ---------- | ----------------------------------------------------------- |
+| Web        | React 19、TypeScript、vinext、Vite、Tailwind CSS            |
+| Data UI    | TanStack Query、TanStack Table、Zustand、ECharts、Three.js  |
+| Edge       | Cloudflare Worker、D1、SSE、WebSocket                       |
+| Backend    | Python 3.12、FastAPI、Pydantic、SQLAlchemy async、LangGraph |
+| Async      | PostgreSQL transactional outbox、Redis、Dramatiq            |
+| Data       | PostgreSQL、TimescaleDB、pgvector、MinIO、Neo4j             |
+| AI         | LiteLLM、OpenAI-compatible providers、独立 embedding 路径   |
+| Structural | pyOMA2 FDD、专用队列、隔离计算子进程                        |
+| Documents  | Docling、表格提取、中文 OCR、独立 CPU 哈希锁环境            |
+| Quality    | Node test runner、Playwright、Pytest、Ruff、mypy、Bandit    |
 
 稳定兼容标识仍保留 `windops_backend`、`WINDOPS_*`、`x-windops-*` 和既有数据库、对象存储与遥测命名空间。
 
@@ -431,6 +462,7 @@ SQLite 测试使用确定性 embedding、内存制品 verifier 和内存图存�
 - 灾难恢复、负载、SLO、告警路由、DAST、人工渗透与发布后验证；
 - 浏览器 WCAG、视觉回归和受支持终端验收；
 - CARE 许可证复核、生产对象存储回放和跨场 ontology 人工审核。
+- 混塔现场校准与领域精度、OCR 数值人工复核与精度评估，以及 API、结构 worker 和新增文档解析镜像的同版本发布资格。文档 worker 需要独立签名、SBOM/CVE 证据及网络/资源政策，既有双镜像报告不覆盖其资格。
 
 Cloudflare Sites 只承载 Web 与身份网关，不托管 Python 后端。Sites 发布成功不能替代后端、依赖栈和现场系统验收。详细证据状态以 [EXECUTION_PROGRESS.md](./EXECUTION_PROGRESS.md)、[AUDIT_REPORT.md](./AUDIT_REPORT.md) 和 [UI_AUDIT_REPORT.md](./UI_AUDIT_REPORT.md) 为准。
 
