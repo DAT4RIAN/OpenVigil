@@ -7,6 +7,7 @@ export default defineConfig({
   testIgnore: [
     ...(process.env.WINDOPS_E2E_REAL_BACKEND === "1" ? [] : ["**/real-cross-layer.spec.ts"]),
     ...(process.env.WINDOPS_BUSINESS_E2E === "1" ? [] : ["**/business-cross-layer.spec.ts"]),
+    ...(process.env.WINDOPS_E2E_DOCUMENT === "1" ? [] : ["**/document-cross-layer.spec.ts"]),
     ...(process.env.WINDOPS_E2E_STRUCTURAL === "1" ? [] : ["**/structural-cross-layer.spec.ts"]),
     ...(process.env.WINDOPS_E2E_STRUCTURAL_MODAL === "1"
       ? []

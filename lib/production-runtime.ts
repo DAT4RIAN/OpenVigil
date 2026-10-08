@@ -50,6 +50,7 @@ const allowedGatewayPaths = [
   /^\/api\/v1\/knowledge\/(?:documents(?:\/uploads\/presign|\/[^/]+)?|cases)$/,
   /^\/api\/v1\/knowledge\/documents\/[A-Za-z0-9._-]+\/(?:passages|source)$/,
   /^\/api\/v1\/knowledge\/passages\/[A-Za-z0-9-]{36}$/,
+  /^\/api\/v1\/knowledge\/parser-capabilities$/,
   /^\/api\/v1\/models(?:\/uploads\/presign|\/deployments\/[^/]+\/activate|\/[^/]+(?:\/deployments|\/rollback)?)?$/,
   /^\/api\/v1\/models\/deployments\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/anomaly-predictions\/run$/,
   /^\/api\/v1\/model-predictions\/[A-Za-z0-9][A-Za-z0-9._-]{2,63}\/alert-evaluation$/,
@@ -426,7 +427,7 @@ export function isAllowedProductionGatewayRequest(method: string, path: string):
   const structuralRule = structuralMethods.find(([pattern]) => pattern.test(path));
   if (structuralRule) return structuralRule[1].includes(method.toUpperCase());
   if (
-    /^\/api\/v1\/knowledge\/(?:documents\/[A-Za-z0-9._-]+\/(?:passages|source)|passages\/[A-Za-z0-9-]{36})$/.test(
+    /^\/api\/v1\/knowledge\/(?:parser-capabilities|documents\/[A-Za-z0-9._-]+\/(?:passages|source)|passages\/[A-Za-z0-9-]{36})$/.test(
       path,
     )
   )

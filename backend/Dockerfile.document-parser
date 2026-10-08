@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+
+# Supply an immutable API runtime with exactly requirements.container.txt.
+ARG BACKEND_IMAGE=registry.invalid/windops-backend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+FROM ${BACKEND_IMAGE} AS builder
+USER root
+WORKDIR /build
+COPY requirements.container.txt requirements.document-parser.txt ./
+RUN cmp /app/requirements.container.txt requirements.container.txt \
+    && python -m venv /opt/document-parser \
+    && /opt/document-parser/bin/python -m pip install --require-hashes \
+       --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.document-parser.txt \
+    && /opt/document-parser/bin/python -m pip check
+COPY pyproject.toml ./
+COPY src ./src
+RUN python -m pip wheel --no-deps --wheel-dir /wheels .
+
+FROM ${BACKEND_IMAGE} AS document-worker
+ARG BACKEND_IMAGE
+ARG WINDOPS_RELEASE_ID=unreleased
+ARG WINDOPS_COMMIT_SHA=unknown
+LABEL org.opencontainers.image.title="OpenVigil document parser worker" \
+    org.opencontainers.image.version="${WINDOPS_RELEASE_ID}" \
+    org.opencontainers.image.revision="${WINDOPS_COMMIT_SHA}" \
+    org.opencontainers.image.base.name="${BACKEND_IMAGE}"
+USER root
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+       libxcb1 libgl1 libglib2.0-0t64 libxext6 libx11-6 libsm6 libice6 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /opt/document-parser /opt/document-parser
+COPY --from=builder /wheels /wheels
+COPY requirements.document-parser.txt /app/requirements.document-parser.txt
+RUN python -m pip install --no-index --find-links=/wheels --no-deps --force-reinstall windops-backend \
+    && python -m pip check \
+    && rm -rf /wheels
+ENV WINDOPS_DOCUMENT_PARSER_PYTHON=/opt/document-parser/bin/python \
+    WINDOPS_DOCUMENT_PARSER_MODELS_PATH=/models \
+    WINDOPS_DOCUMENT_PARSER_RUNTIME_DIRECTORY=/tmp \
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+USER 10001:10001
+HEALTHCHECK NONE
+CMD ["dramatiq", "windops_backend.document_parse_tasks", "--queues", "document-parse", "--processes", "1", "--threads", "1"]

@@ -1,0 +1,4 @@
+# Dedicated document-parse runtime; never part of the API dependency closure.
+# Docling version matches the selected local reference snapshot.
+docling-slim[extract-core,format-pdf,models-local,feat-ocr-rapidocr-onnx]==2.133.0
+pypdf==6.17.0

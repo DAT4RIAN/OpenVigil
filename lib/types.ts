@@ -549,6 +549,9 @@ export interface KnowledgeDocument {
   readonly relatedTurbineIds: readonly string[];
   readonly relatedMissionIds: readonly string[];
   readonly ingestionStatus?: string;
+  readonly parseStatus?: string | null;
+  readonly parseErrorCode?: string | null;
+  readonly requiresNumericReview?: boolean;
   readonly embeddingProvider?: string | null;
   readonly embeddingModel?: string | null;
   readonly artifactUri?: string | null;

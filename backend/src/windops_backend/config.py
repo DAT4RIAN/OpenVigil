@@ -176,6 +176,13 @@ class Settings(BaseSettings):
     embedding_timeout_seconds: int = Field(default=20, ge=1, le=120)
     embedding_batch_size: int = Field(default=16, ge=1, le=128)
     embedding_max_retries: int = Field(default=2, ge=0, le=5)
+    document_parser_enabled: bool = False
+    document_parser_models_path: Path | None = None
+    document_parser_model_manifest_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    document_parser_python: str | None = None
+    document_parser_runtime_directory: Path | None = None
     knowledge_graph_backend: Literal["memory", "neo4j"] = "neo4j"
     neo4j_uri: str = "neo4j://localhost:7687"
     neo4j_user: str = "neo4j"
@@ -277,6 +284,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def enforce_environment_boundaries(self) -> "Settings":
+        if self.document_parser_enabled and (
+            self.document_parser_models_path is None
+            or not self.document_parser_model_manifest_sha256
+            or not self.document_parser_python
+        ):
+            raise ValueError("document parser requires its isolated Python and pinned model bundle")
         # Optional for legacy deployments; a partial hybrid declaration is invalid.
         deployment_identity(self)
         if self.local_acceptance:

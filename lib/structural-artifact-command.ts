@@ -55,6 +55,7 @@ export class StructuralArtifactCommand {
   ): Promise<T> {
     if (this.running) throw new Error("已有制品命令正在提交。");
     this.running = true;
+    const previouslyUnknown = this.resultUnknown;
     let commandStage = false;
     try {
       if (!this.resultUnknown) {
@@ -153,7 +154,11 @@ export class StructuralArtifactCommand {
       this.resultUnknown = false;
       return result;
     } catch (cause) {
-      this.resultUnknown = commandStage && cause instanceof OpenVigilApiError && cause.status === 0;
+      this.resultUnknown =
+        previouslyUnknown ||
+        (commandStage &&
+          cause instanceof OpenVigilApiError &&
+          (cause.status === 0 || cause.status >= 500));
       throw cause;
     } finally {
       this.running = false;

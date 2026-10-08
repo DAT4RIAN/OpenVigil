@@ -23,6 +23,47 @@ const input = () => ({
   },
 });
 
+test("proxy failure after a write freezes its key and an authorization failure cannot erase uncertainty", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  let stage = 0;
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), ...init });
+    if (String(url).endsWith("presign")) return Response.json(grant);
+    if (init.method === "PUT") return new Response(null, { status: 200 });
+    if (stage === 0) return Response.json({ error: { code: "BACKEND_TIMEOUT" } }, { status: 504 });
+    if (stage === 1) return Response.json({ error: { code: "FORBIDDEN" } }, { status: 403 });
+    return Response.json(result);
+  };
+  try {
+    const command = new StructuralArtifactCommand();
+    await assert.rejects(
+      () => command.run(input(), valid),
+      (error) => error.status === 504,
+    );
+    assert.equal(command.resultUnknown, true);
+    stage = 1;
+    await assert.rejects(
+      () => command.run(input(), valid),
+      (error) => error.status === 403,
+    );
+    assert.equal(command.resultUnknown, true);
+    stage = 2;
+    assert.deepEqual(await command.run(input(), valid), result);
+    assert.equal(command.resultUnknown, false);
+    const writes = calls.filter((call) => call.url.endsWith("/retests"));
+    assert.equal(writes.length, 3);
+    assert.equal(new Set(writes.map((call) => call.body)).size, 1);
+    assert.equal(
+      new Set(writes.map((call) => new Headers(call.headers).get("idempotency-key"))).size,
+      1,
+    );
+    assert.equal(calls.filter((call) => call.method === "PUT").length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("lost handoff response replays frozen revision, artifact and key without another PUT", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];

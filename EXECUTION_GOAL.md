@@ -1,5 +1,11 @@
 # OpenVigil 混塔风电运维智能体平台执行目标
 
+## 当前增量阶段（2026-10-07）
+
+兼容性收尾状态：COMPLETE_LOCAL_SOFTWARE_VERIFIED。原生v1旧键哈希与省略/显式native重放兼容、撤权重放拒绝已验证；当前八模块80项（含13专项）、实际服务与Linux204安装源码重验通过。最终收据为 `.artifacts/document-parser-20261007/software-verification-receipt-v2.json`；首轮验收及历史收据保留其原快照。
+
+本次用户再次 `/goal` 授权继续按原技术方案开发。已有首版与重构落在 HEAD `6c5721b`；本次补齐独立 Docling/OCR、表格/页面来源与受控异步知识入库，状态为 COMPLETE_LOCAL_SOFTWARE_VERIFIED。当前源码实际服务与Linux隔离探针、相关回归及保护/清理核对通过，具体任务与验收见 [本次实施任务](docs/design/document-parser-implementation-2026-10-07.md)、[本次软件验收](docs/reports/document-parser-software-acceptance-2026-10-07.md)。现场精度、条件性科学研究与正式发布仍按实际前提验证，历史收据和发布阻断保留。当前进度以 `EXECUTION_PROGRESS.md` 顶部为准。
+
 开始日期：2026-10-05（北京时间）。当前用户 `/goal` 授权按照本地 `docs/design/hybrid-tower-operations-agent-technical-plan.md` 开发；参考源码在 `C:\coding\reference`，只读使用。用户确认先实现软件，试点资料后续提供。
 
 ## 执行范围

@@ -1,4 +1,20 @@
-# 当前活动任务：代码重构（2026-10-06）
+# 当前活动任务：文档解析增量（2026-10-07）
+
+**兼容性收尾 COMPLETE_LOCAL_SOFTWARE_VERIFIED（2026-10-07）**：保留原生v1请求哈希，省略/显式native都可用旧键重放；换parser拒绝旧键，原生/Docling均在读取收据或原件前复核当前权限，撤权不增加replay_count。专项13/13（包含在当前八模块80/80中，不重复相加）；208源码strict mypy、相关Ruff通过。最终实际服务20261007104442-70218e与Linuximage-20261007104429-756032重新验证当前源码，204安装源/结果SHA/对象/图/审计、cleanup与.env/index/HEAD/五个参考源SHA全部核对。最终收据：`.artifacts/document-parser-20261007/software-verification-receipt-v2.json`；下述v1收据保留为首轮快照。
+
+状态：**COMPLETE_LOCAL_SOFTWARE_VERIFIED**。按原混塔技术方案在既有平台上补齐独立 PDF/OCR 软件链路。起点 HEAD `6c5721b`，工作树干净；未重做历史首版闭环或重构。任务：[本次实施任务](docs/design/document-parser-implementation-2026-10-07.md)；运行说明：[DOCUMENT_PARSER.md](backend/DOCUMENT_PARSER.md)；验收：[本次软件验收](docs/reports/document-parser-software-acceptance-2026-10-07.md)。
+
+- D07-01：DONE_LOCAL_VERIFIED。已读取规则/目标/当前验收/技术方案/源码与本地 Docling 参考；当前知识段落/入库、结构子进程、结构工作流与真实 FDD 模态闭环五模块42项回归正常 exit0；收集数量与输出/进程退出对应，首轮未请求 JUnit，不冒充已有 XML。`d07-01-receipt.json` 保存范围/退出状态及 `.env`/index/HEAD 保护核对。
+- D07-02：DONE_WINDOWS_LINUX_VERIFIED。通用CPU哈希锁/Windows87包、pip check、预取模型来源/许可证/commit与字节清单核对。七执行模块/12核心包在子进程实际观察；actual-runtime-v5.xml六项真实离线转换全通过：两页中文、正负数/单位、15段/9表格单元格、空白第一页及坏PDF/空白/加密/超尺寸/错模型拒绝。Linux当前镜像无网络/只读/UID10001探针通过，204已安装源码逐字节一致；主环境不安装OCR依赖。SQLite/内存对象接口夹具与实际服务分别说明；领域OCR精度UNVERIFIED。
+- D07-03：DONE_LOCAL_SOFTWARE_VERIFIED。显式入口、独立actor/relay、租约恢复、三次尝试终态、原件前后重验、解析/段落/索引事件事务发布接通。十项声明协议状态挑战及真实服务终态通过；当前知识/权限/图/解析/哈希八模块77项、运行器/结果/隔离broker21项通过（不同轮次与重叠不累加）。待解析/失败正文不产生向量或#body引用；旧租约不能成功或失败写入。
+- D07-04：DONE_LOCAL_SOFTWARE_VERIFIED。知识工作台接通真实状态/页码/区域、配置读取重试与数值复核提示；7项浏览器fixture全通过，236项前端单测、构建/包体/类型/ESLint/Prettier通过。未知响应冻结文件/文档ID/幂等键，503→403→202只一次PUT；真实服务最终保留三次上传授权超时，原键核验后取得真实200/202并完成索引。表格框明确table_region，不伪造精确单元格框。
+- D07-05：DONE_CURRENT_SOURCE_LOCAL_VERIFIED。最终真实服务20261007102500-1a5b57的browser1/1、PG/Redis/MinIO/Neo4j/专用worker、两原件SHA、15段/9单元格/1536维向量、JSONB回读结果SHA、持久读审计、三次坏PDF失败及越权拒绝全部核对；最终Linuximage-20261007102459-8e6ac0通过。服务与镜像源码运行期间不变，自有服务/registry/volume/进程清理；208源码strict mypy、26文件Ruff lint/format与架构检查通过。总收据：`.artifacts/document-parser-20261007/software-verification-receipt.json`。
+- 失败与修复：原始坐标/CPU索引/HOME/调用参数/浏览器定位与所有服务超时失败保留。Linux发现Windows锁未带平台条件、API site-packages污染独立NumPy、OpenCV缺实际动态库，分别由通用锁、-I显式包加载与专用镜像动态库修复，并重新验证。四旧文件仅统一混合换行，归一化字节与AST一致；最终服务/镜像在格式后的精确源码重跑。旧首版/重构/D07早轮收据保留为原快照，不冒充当前源码。
+- 保护：原 `.env`、Git index/HEAD、历史收据与其他项目服务保持；独立临时依赖/模型/证据使用 `.artifacts/document-parser-20261007/`。不提交、推送、发布或上线。真实试点、领域精度和正式发布资格继续 UNVERIFIED。
+
+---
+
+# 历史活动任务：代码重构（2026-10-06）
 
 状态：**COMPLETE_LOCAL_VERIFIED**。授权：用户要求重构当前项目，并选择按现状确定重点；基线 1183102af943fdb922d10eb1c07a344f9b940221，起点工作树干净。计划与完整记录：docs/refactor/REFACTOR_PLAN-2026-10-06.md、docs/refactor/REFACTOR_REPORT-2026-10-06.md；不可覆盖总收据：.artifacts/refactor-20261006/verification-receipt.json。
 

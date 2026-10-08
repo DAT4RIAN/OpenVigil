@@ -299,11 +299,20 @@ class KnowledgeDocumentCreateRequest(BaseModel):
     artifact_uri: str = Field(min_length=16, max_length=1024)
     artifact_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
     content_type: KnowledgeContentType
+    parser: Literal["native", "docling"] = "native"
     tenant_id: str | None = Field(default=None, min_length=1, max_length=64)
     wind_farm_id: str | None = Field(default=None, min_length=1, max_length=36)
     turbine_id: str | None = Field(default=None, min_length=1, max_length=32)
     data_scope: Literal["knowledge"] = "knowledge"
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_parser_request(self) -> KnowledgeDocumentCreateRequest:
+        if self.parser == "docling" and self.content_type != "application/pdf":
+            raise ValueError("Docling parsing requires a PDF knowledge artifact")
+        if "_openvigil_document_parse" in self.metadata:
+            raise ValueError("document parsing state is owned by the server")
+        return self
 
 
 ModelArtifactContentType = Literal[

@@ -42,7 +42,8 @@ import { featuredMission } from "@/lib/operations-data";
 import type { KnowledgeDocument, KnowledgeDocumentType } from "@/lib/types";
 import { useAccessibleDialog } from "@/lib/use-accessible-dialog";
 import { useDemoWorkflow } from "@/lib/use-demo-workflow";
-import { knowledgeSourceLocation } from "@/lib/knowledge-source";
+import { knowledgeIngestionLabel, knowledgeSourceLocation } from "@/lib/knowledge-source";
+import { StructuralArtifactCommand as KnowledgeArtifactCommand } from "@/lib/structural-artifact-command";
 import { KnowledgeCitationDrawer, KnowledgeSourceViewer } from "./knowledge-source-viewer";
 
 import styles from "./knowledge-base-page.module.css";
@@ -67,11 +68,9 @@ interface KnowledgeDocumentsEnvelope {
   };
 }
 
-interface KnowledgeUploadGrant {
-  readonly document_id: string;
-  readonly artifact_uri: string;
-  readonly upload_url: string;
-  readonly required_headers: Readonly<Record<string, string>>;
+interface KnowledgeParserCapabilities {
+  readonly docling_pdf_configured: boolean;
+  readonly max_artifact_bytes: number;
 }
 
 const typeLabel: Record<KnowledgeDocumentType, string> = {
@@ -160,9 +159,7 @@ function DocumentDrawer({
               {runtimeMode === "production"
                 ? document.vectorized
                   ? "已索引"
-                  : document.ingestionStatus === "failed"
-                    ? "索引失败"
-                    : "等待索引"
+                  : knowledgeIngestionLabel(document.ingestionStatus)
                 : document.vectorized
                   ? "已进入演示检索目录"
                   : "浏览器派生 · 待持久化索引"}
@@ -170,7 +167,12 @@ function DocumentDrawer({
           </div>
 
           {runtimeMode === "production" ? (
-            <KnowledgeSourceViewer documentId={document.id} citedPassageId={citedPassageId} />
+            <KnowledgeSourceViewer
+              documentId={document.id}
+              citedPassageId={citedPassageId}
+              ingestionStatus={document.ingestionStatus}
+              requiresNumericReview={document.requiresNumericReview}
+            />
           ) : (
             <section className={styles.previewPage}>
               <span>文档预览 · 第 {citedPage ?? 1} 页</span>
@@ -279,10 +281,33 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadUnknown, setUploadUnknown] = useState(false);
+  const artifactCommand = useRef(new KnowledgeArtifactCommand());
+  const uploadFlight = useRef(false);
+  const frozenUpload = useRef<{
+    readonly file: File;
+    readonly documentId: string;
+    readonly contentType: string;
+    readonly parser: "docling" | "native";
+  } | null>(null);
+  const [parseScannedPdf, setParseScannedPdf] = useState(false);
+  const parserCapabilities = useQuery({
+    queryKey: ["knowledge-parser-capabilities", runtimeMode],
+    enabled: runtimeMode === "production",
+    queryFn: ({ signal }) =>
+      apiGet<KnowledgeParserCapabilities>("/api/backend/knowledge/parser-capabilities", signal),
+  });
   const documentQuery = useQuery({
     queryKey: ["knowledge-documents", runtimeMode],
     queryFn: ({ signal }) => apiGet<KnowledgeDocumentsEnvelope>("/api/knowledge-documents", signal),
     initialData: runtimeMode === "demo" ? { data: { documents: knowledgeDocuments } } : undefined,
+    refetchInterval: (query) =>
+      runtimeMode === "production" &&
+      query.state.data?.data.documents.some((document) =>
+        ["pending_parse", "parsing", "pending"].includes(document.ingestionStatus ?? ""),
+      )
+        ? 2500
+        : false,
   });
 
   const workflowDocument = useMemo<KnowledgeDocument | null>(() => {
@@ -441,7 +466,9 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
         cell: ({ row }) => (
           <span className={row.original.vectorized ? styles.indexed : styles.pendingIndex}>
             {row.original.vectorized ? <CheckCircle2 size={12} /> : <LoaderCircle size={12} />}
-            {row.original.vectorized ? "已编目" : "待索引"}
+            {row.original.vectorized
+              ? "已编目"
+              : knowledgeIngestionLabel(row.original.ingestionStatus)}
           </span>
         ),
       },
@@ -495,6 +522,7 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
     }
   };
   const uploadKnowledgeDocument = async (file: File) => {
+    if (uploadFlight.current) return;
     const extension = file.name.split(".").pop()?.toLowerCase();
     const contentType =
       file.type ||
@@ -517,49 +545,68 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
       setUploadError("仅支持 UTF-8 TXT/Markdown、PDF 和 DOCX 文档。");
       return;
     }
+    if (
+      !artifactCommand.current.resultUnknown &&
+      file.size > (parserCapabilities.data?.max_artifact_bytes ?? 50 * 1024 * 1024)
+    ) {
+      setUploadError("知识制品不能超过 50 MiB。");
+      return;
+    }
+    const selectedParser =
+      contentType === "application/pdf" && parseScannedPdf ? "docling" : "native";
+    if (
+      !artifactCommand.current.resultUnknown &&
+      selectedParser === "docling" &&
+      parserCapabilities.data?.docling_pdf_configured !== true
+    ) {
+      setUploadError("扫描件解析尚未配置，请先确认后台解析服务。");
+      return;
+    }
     setUploading(true);
+    uploadFlight.current = true;
     setUploadError(null);
     try {
-      const bytes = await file.arrayBuffer();
-      const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]
-        .map((value) => value.toString(16).padStart(2, "0"))
-        .join("");
-      const documentId = `KD-${crypto.randomUUID()}`;
-      const grant = await apiPost<KnowledgeUploadGrant>(
-        "/api/backend/knowledge/documents/uploads/presign",
+      if (!artifactCommand.current.resultUnknown) {
+        frozenUpload.current = {
+          file,
+          documentId: `KD-${crypto.randomUUID()}`,
+          contentType,
+          parser: selectedParser,
+        };
+      }
+      const frozen = frozenUpload.current;
+      if (!frozen) throw new Error("没有可核验的知识提交。");
+      const title = frozen.file.name.replace(/\.[^.]+$/, "");
+      await artifactCommand.current.run(
         {
-          document_id: documentId,
-          file_name: file.name,
-          content_type: contentType,
-          artifact_sha256: digest,
+          file: frozen.file,
+          presignPath: "/api/backend/knowledge/documents/uploads/presign",
+          presignBody: { document_id: frozen.documentId, content_type: frozen.contentType },
+          commandPath: "/api/backend/knowledge/documents",
+          commandBody: {
+            document_id: frozen.documentId,
+            title,
+            document_type: "maintenance-procedure",
+            document_version: "1",
+            content_type: frozen.contentType,
+            parser: frozen.parser,
+            metadata: { summary: title, language: "zh-CN", tags: ["uploaded"] },
+          },
         },
+        (value): value is { document_id: string; ingestion_status: string } =>
+          value !== null &&
+          typeof value === "object" &&
+          (value as Record<string, unknown>).document_id === frozen.documentId &&
+          typeof (value as Record<string, unknown>).ingestion_status === "string",
       );
-      const uploaded = await fetch(grant.upload_url, {
-        method: "PUT",
-        headers: { ...grant.required_headers, "content-type": contentType },
-        body: file,
-      });
-      if (!uploaded.ok) throw new Error(`对象存储上传失败（${uploaded.status}）`);
-      const title = file.name.replace(/\.[^.]+$/, "");
-      await apiPost("/api/backend/knowledge/documents", {
-        document_id: documentId,
-        title,
-        document_type: "maintenance-procedure",
-        document_version: "1",
-        artifact_uri: grant.artifact_uri,
-        artifact_sha256: digest,
-        content_type: contentType,
-        metadata: {
-          summary: title,
-          language: "zh-CN",
-          tags: ["uploaded"],
-        },
-      });
+      frozenUpload.current = null;
       await documentQuery.refetch();
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "知识制品上传失败。");
     } finally {
       setUploading(false);
+      uploadFlight.current = false;
+      setUploadUnknown(artifactCommand.current.resultUnknown);
       if (uploadInputRef.current) uploadInputRef.current.value = "";
     }
   };
@@ -584,6 +631,19 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
         actions={
           runtimeMode === "production" ? (
             <>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={parseScannedPdf}
+                  disabled={
+                    uploading ||
+                    uploadUnknown ||
+                    parserCapabilities.data?.docling_pdf_configured !== true
+                  }
+                  onChange={(event) => setParseScannedPdf(event.target.checked)}
+                />{" "}
+                PDF 扫描件解析
+              </label>
               <input
                 ref={uploadInputRef}
                 hidden
@@ -596,7 +656,7 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
               />
               <Button
                 variant="primary"
-                disabled={uploading}
+                disabled={uploading || uploadUnknown}
                 onClick={() => uploadInputRef.current?.click()}
               >
                 <Upload size={15} /> {uploading ? "校验并上传中…" : "上传知识制品"}
@@ -615,13 +675,55 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
           </span>
         </section>
       ) : null}
+      {runtimeMode === "production" && parserCapabilities.isError ? (
+        <section className="controlled-entry-note" role="alert">
+          <ShieldAlert size={16} />
+          <span>
+            <strong>扫描件解析配置暂时无法读取</strong>
+            <small>后台读取失败，确认连接恢复后可重新获取配置。</small>
+          </span>
+          <Button
+            variant="secondary"
+            disabled={parserCapabilities.isFetching}
+            onClick={() => void parserCapabilities.refetch()}
+          >
+            重试解析配置
+          </Button>
+        </section>
+      ) : null}
+      {runtimeMode === "production" && parseScannedPdf ? (
+        <p className={styles.sourceNote}>
+          PDF 将在后台解析。OCR 文字和表格中的数字、正负号、小数点与单位需对照原件复核。
+        </p>
+      ) : null}
+      {runtimeMode === "production" && parserCapabilities.isError ? (
+        <p role="status" className={styles.sourceNote}>
+          扫描件解析配置暂时无法读取。普通文字文档仍可上传。
+        </p>
+      ) : null}
       {uploadError ? (
         <section className="controlled-entry-note" role="alert">
           <ShieldAlert size={16} />
           <span>
-            <strong>知识制品未写入</strong>
+            <strong>{uploadUnknown ? "知识提交响应未确认" : "知识制品未写入"}</strong>
             <small>{uploadError}</small>
           </span>
+        </section>
+      ) : null}
+      {uploadUnknown ? (
+        <section className="controlled-entry-note" role="alert">
+          <span>
+            <strong>提交结果尚待核验</strong>
+            <small>已保留原文件、文档身份与幂等键。核验同一提交期间不能更换输入。</small>
+          </span>
+          <Button
+            disabled={uploading}
+            onClick={() => {
+              if (frozenUpload.current) void uploadKnowledgeDocument(frozenUpload.current.file);
+            }}
+          >
+            核验同一提交
+          </Button>
         </section>
       ) : null}
 
@@ -869,7 +971,9 @@ export function KnowledgeBasePage({ runtimeMode }: { runtimeMode: "demo" | "prod
       {selectedDocument ? (
         <DocumentDrawer
           key={selectedDocument.id}
-          document={selectedDocument}
+          document={
+            documents.find((document) => document.id === selectedDocument.id) ?? selectedDocument
+          }
           citedPage={citedPage}
           citedPassageId={citedPassageId}
           runtimeMode={runtimeMode}

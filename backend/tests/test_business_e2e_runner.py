@@ -43,7 +43,7 @@ def test_private_ca_is_only_valid_for_loopback(tmp_path: Path) -> None:
     assert key_path.parent == tmp_path
 
 
-@pytest.mark.parametrize("kind", ["general", "structural"])
+@pytest.mark.parametrize("kind", ["general", "structural", "document"])
 @pytest.mark.parametrize("hybrid", [False, True])
 def test_isolated_bootstrap_registers_only_its_own_broker_actors(kind: str, hybrid: bool) -> None:
     from windops_backend.operations.hybrid_identity import hybrid_bundle_id
@@ -116,7 +116,10 @@ def test_isolated_bootstrap_registers_only_its_own_broker_actors(kind: str, hybr
             assert state["own_digest"] == "sha256:" + ("c" if kind == "structural" else "b") * 64
         if kind == "structural":
             assert actors == ["process_structural_analysis"]
+        elif kind == "document":
+            assert actors == ["parse_knowledge_document"]
         else:
             assert "process_mission_analysis" in actors
             assert "project_knowledge_graph" in actors
             assert "process_structural_analysis" not in actors
+            assert "parse_knowledge_document" not in actors

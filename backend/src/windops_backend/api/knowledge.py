@@ -30,6 +30,7 @@ from windops_backend.schemas import (
     KnowledgeDocumentCreateRequest,
     KnowledgeDocumentUploadRequest,
 )
+from windops_backend.services.document_parse import configured_parse_identity
 from windops_backend.services.idempotency import (
     execute_idempotent_command,
     replace_idempotent_response,
@@ -49,6 +50,31 @@ from windops_backend.services.knowledge_access import (
 from windops_backend.storage import ArtifactVerifier
 
 router = APIRouter()
+
+
+@router.get("/knowledge/parser-capabilities", tags=["knowledge"])
+async def knowledge_parser_capabilities(
+    settings: Settings = Depends(get_runtime_settings),
+    principal: Principal = Depends(require_read_access),
+) -> dict[str, Any]:
+    del principal
+    configured = bool(
+        settings.document_parser_enabled
+        and settings.document_parser_models_path is not None
+        and settings.document_parser_model_manifest_sha256
+        and settings.document_parser_python
+    )
+    return {
+        "native": True,
+        "docling_pdf_configured": configured,
+        "configuration_status": "configured" if configured else "unconfigured",
+        "max_pdf_pages": 200,
+        "max_pdf_page_width_points": 2000,
+        "max_pdf_page_height_points": 2000,
+        "max_artifact_bytes": MAX_KNOWLEDGE_ARTIFACT_BYTES,
+        "ocr_requires_numeric_review": True,
+        "worker_health_verified": False,
+    }
 
 
 @router.get("/knowledge/documents", tags=["knowledge"])
@@ -140,6 +166,16 @@ async def ingest_knowledge_document(
     principal: Principal = Depends(require_roles("operations_manager")),
 ) -> dict[str, Any]:
     event_ids: list[str] = []
+    # Current scope is required even when the command receipt is replayed.
+    scope = await resolve_knowledge_document_scope(
+        session,
+        document_id=payload.document_id,
+        policy=principal.graph_access_policy(),
+        tenant_id=payload.tenant_id,
+        wind_farm_id=payload.wind_farm_id,
+        turbine_id=payload.turbine_id,
+        data_scope=payload.data_scope,
+    )
 
     async def operation() -> dict[str, Any]:
         try:
@@ -153,26 +189,31 @@ async def ingest_knowledge_document(
             )
             if stored_content_type != payload.content_type:
                 raise ValueError("stored knowledge object content type does not match the command")
-            parsed = await parse_knowledge_content(content, stored_content_type)
+            parse_identity = (
+                await configured_parse_identity(
+                    settings,
+                    source_sha256=payload.artifact_sha256,
+                    document_version=payload.document_version,
+                )
+                if payload.parser == "docling"
+                else None
+            )
+            parsed = (
+                await parse_knowledge_content(content, stored_content_type)
+                if parse_identity is None
+                else None
+            )
         except ValueError as exc:
             raise InvalidTransitionError(str(exc)) from exc
-        scope = await resolve_knowledge_document_scope(
-            session,
-            document_id=payload.document_id,
-            policy=principal.graph_access_policy(),
-            tenant_id=payload.tenant_id,
-            wind_farm_id=payload.wind_farm_id,
-            turbine_id=payload.turbine_id,
-            data_scope=payload.data_scope,
-        )
         document, document_replayed, event_id = await create_knowledge_document(
             session,
             payload,
-            extracted_text=parsed.body,
+            extracted_text=parsed.body if parsed else "",
             content_size_bytes=len(content),
             subject=principal.subject,
             scope=scope,
             parsed=parsed,
+            parse_identity=parse_identity,
         )
         if event_id is not None:
             event_ids.append(event_id)
@@ -184,11 +225,23 @@ async def ingest_knowledge_document(
         command_type="knowledge.document.ingest.v1",
         target=payload.document_id,
         idempotency_key=idempotency_key,
-        payload=payload,
+        # Native v1 receipts predate the parser field. Preserve their exact
+        # canonical payload; explicit Docling remains a different command input.
+        payload=payload.model_dump(exclude={"parser"}) if payload.parser == "native" else payload,
         status_code=status.HTTP_202_ACCEPTED,
         operation=operation,
     )
     await session.commit()
+    if payload.parser == "docling":
+        if event_ids and not settings.outbox_inline_drain:
+            from windops_backend.workers import dispatch_document_parse_event_ids
+
+            dispatch_document_parse_event_ids(event_ids)
+            await mark_dispatched(
+                cast(async_sessionmaker[AsyncSession], request.app.state.session_factory), event_ids
+            )
+        response.headers["Idempotency-Replayed"] = "true" if replayed else "false"
+        return result
     if event_ids:
         factory = cast(async_sessionmaker[AsyncSession], request.app.state.session_factory)
         if settings.outbox_inline_drain:

@@ -22,6 +22,7 @@ from windops_backend.outbox import (
     process_outbox_event,
     redelivery_retry_delay_ms,
 )
+from windops_backend.services.document_parse import recoverable_document_parse_events
 from windops_backend.services.eam import (
     EAM_WORK_ORDER_PUBLISH_REQUESTED,
     process_eam_publish_event,
@@ -30,6 +31,7 @@ from windops_backend.services.knowledge import (
     KNOWLEDGE_DOCUMENT_INDEX_REQUESTED,
     process_knowledge_document_index_event,
 )
+from windops_backend.services.knowledge_contracts import KNOWLEDGE_DOCUMENT_PARSE_REQUESTED
 from windops_backend.services.structural import STRUCTURAL_ANALYSIS_REQUESTED
 from windops_backend.services.workflow import advance_mission_to_review
 from windops_backend.structural_worker import expired_structural_events
@@ -168,6 +170,22 @@ def dispatch_knowledge_document_event_ids(event_ids: list[str]) -> None:
         index_knowledge_document.send(event_id)
 
 
+def dispatch_document_parse_event_ids(event_ids: list[str]) -> None:
+    enqueue = cast(
+        Callable[[dramatiq.Message[None]], dramatiq.Message[None]], dramatiq.get_broker().enqueue
+    )
+    for event_id in event_ids:
+        enqueue(
+            dramatiq.Message(
+                queue_name="document-parse",
+                actor_name="parse_knowledge_document",
+                args=(event_id,),
+                kwargs={},
+                options={},
+            )
+        )
+
+
 async def relay_pending_once() -> int:
     """Dispatch pending rows and visibility-expired deliveries left by outages."""
 
@@ -177,6 +195,7 @@ async def relay_pending_once() -> int:
     try:
         event_rows = await pending_events(factory)
         event_rows.extend(await expired_structural_events(factory))
+        event_rows.extend(await recoverable_document_parse_events(factory))
         dispatched: list[str] = []
         for event_id, event_type in event_rows:
             if event_type == MISSION_ANALYSIS_REQUESTED:
@@ -190,6 +209,9 @@ async def relay_pending_once() -> int:
                 dispatched.append(event_id)
             elif event_type == KNOWLEDGE_DOCUMENT_INDEX_REQUESTED:
                 index_knowledge_document.send(event_id)
+                dispatched.append(event_id)
+            elif event_type == KNOWLEDGE_DOCUMENT_PARSE_REQUESTED:
+                dispatch_document_parse_event_ids([event_id])
                 dispatched.append(event_id)
             elif event_type == STRUCTURAL_ANALYSIS_REQUESTED:
                 # Publish without importing the dedicated consumer's broker or

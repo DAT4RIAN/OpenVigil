@@ -500,7 +500,7 @@ class SQLToolAdapter:
                 (
                     await self.session.scalars(
                         select(KnowledgeDocument)
-                        .where(self._stale_embedding_clause())
+                        .where(self._stale_embedding_clause(), KnowledgeDocument.body != "")
                         .order_by(KnowledgeDocument.id)
                         .limit(self.settings.embedding_batch_size)
                     )

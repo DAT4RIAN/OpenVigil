@@ -58,6 +58,8 @@ if os.getenv("WINDOPS_E2E_PROCESS_KIND") == "structural":
     # Each Dramatiq process owns one broker registry. Importing the general
     # actors first would replace their broker when structural_tasks is loaded.
     from windops_backend import structural_tasks  # noqa: E402, F401
+elif os.getenv("WINDOPS_E2E_PROCESS_KIND") == "document":
+    from windops_backend import document_parse_tasks  # noqa: E402, F401
 else:
     from windops_backend import workers  # noqa: E402
 
@@ -88,6 +90,31 @@ def run_structural_worker() -> None:
         broker.close()  # type: ignore[no-untyped-call]
 
 
+def run_document_worker() -> None:
+    """Actual isolated actor registry and single-thread document queue consumer."""
+    if os.getenv("WINDOPS_E2E_PROCESS_KIND") != "document":
+        raise RuntimeError("Dedicated document process identity is required")
+    import dramatiq
+
+    broker = dramatiq.get_broker()
+    if set(broker.actors) != {"parse_knowledge_document"}:
+        raise RuntimeError("Dedicated document actor registry is required")
+    stopped = threading.Event()
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, lambda *_: stopped.set())
+    broker.emit_after("process_boot")  # type: ignore[no-untyped-call]
+    worker = dramatiq.Worker(  # type: ignore[no-untyped-call]
+        broker, queues={"document-parse"}, worker_threads=1
+    )
+    worker.start()  # type: ignore[no-untyped-call]
+    print("Owned document Dramatiq worker started: processes=1 threads=1", flush=True)
+    try:
+        stopped.wait()
+    finally:
+        worker.stop(timeout=30_000)  # type: ignore[no-untyped-call]
+        broker.close()  # type: ignore[no-untyped-call]
+
+
 def main() -> None:
     role = sys.argv[1]
     if role == "api":
@@ -111,6 +138,8 @@ def main() -> None:
         run_read_audit_worker()
     elif role == "structural-worker":
         run_structural_worker()
+    elif role == "document-worker":
+        run_document_worker()
     else:
         raise ValueError("Unknown fixture process role")
 

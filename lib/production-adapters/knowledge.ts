@@ -30,6 +30,7 @@ export async function productionKnowledgeDocumentsResponse(request: Request): Pr
   const documents = result.rows.map((row) => {
     const metadata = record(row.metadata);
     const sourceLayout = record(row.source_layout);
+    const parseState = record(row.parse_state);
     const documentType = text(row.document_type, "technical-standard");
     return {
       id: text(row.document_id),
@@ -50,6 +51,9 @@ export async function productionKnowledgeDocumentsResponse(request: Request): Pr
       relatedTurbineIds: list(metadata.related_turbine_ids).map(String),
       relatedMissionIds: list(metadata.related_mission_ids).map(String),
       ingestionStatus: text(row.ingestion_status, "pending"),
+      parseStatus: text(parseState.status) || null,
+      parseErrorCode: text(parseState.error_code) || null,
+      requiresNumericReview: sourceLayout.requires_numeric_review === true,
       embeddingProvider: text(row.embedding_provider) || null,
       embeddingModel: text(row.embedding_model) || null,
       artifactUri: text(row.artifact_uri) || null,

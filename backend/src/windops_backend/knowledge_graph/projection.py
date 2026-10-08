@@ -460,7 +460,9 @@ async def _build_knowledge_graph_snapshot(
     has_passages = exists(select(1).where(KnowledgePassage.document_id == KnowledgeDocument.id))
     async for document in _iter_bounded_scalar_rows(
         session,
-        select(KnowledgeDocument).where(~has_passages).order_by(KnowledgeDocument.id),
+        select(KnowledgeDocument)
+        .where(~has_passages, KnowledgeDocument.body != "")
+        .order_by(KnowledgeDocument.id),
         budget=budget,
         key_column=KnowledgeDocument.id,
         key_attribute="id",

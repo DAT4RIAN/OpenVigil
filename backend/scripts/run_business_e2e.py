@@ -180,11 +180,23 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--scenario",
-        choices=("maintenance", "structural", "structural-modal", "structural-scope"),
+        choices=("maintenance", "structural", "structural-modal", "structural-scope", "document"),
         default="maintenance",
     )
-    scenario = parser.parse_args().scenario
+    parser.add_argument("--document-python", type=Path)
+    parser.add_argument("--document-models", type=Path)
+    parser.add_argument("--document-fixture", type=Path)
+    arguments = parser.parse_args()
+    scenario = arguments.scenario
     structural = scenario in {"structural", "structural-modal", "structural-scope"}
+    document = scenario == "document"
+    if document:
+        for name in ("document_python", "document_models", "document_fixture"):
+            path = getattr(arguments, name)
+            if path is None or not path.resolve().is_relative_to(ROOT / ".artifacts"):
+                parser.error("Document acceptance inputs must exist in this checkout's .artifacts")
+            if not path.exists():
+                parser.error("A required document acceptance input is missing")
     run_id = f"{datetime.now(UTC):%Y%m%d%H%M%S}-{secrets.token_hex(3)}"
     project = f"openvigil-business-e2e-{run_id}"
     folder = ROOT / ".artifacts/business-e2e" / run_id
@@ -236,11 +248,21 @@ def main() -> None:
             "tests/e2e/structural-scope-cross-layer.spec.ts",
         )
     }
-    if structural:
+    if structural or document:
         report["backend_source_sha256"] = {
             path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in (BACKEND / "src").rglob("*.py")
         }
+    if document:
+        for name in (
+            "backend/scripts/document_e2e_evidence.py",
+            "tests/e2e/document-cross-layer.spec.ts",
+            "components/pages/knowledge-base-page.tsx",
+            "components/pages/knowledge-source-viewer.tsx",
+            "lib/knowledge-source.ts",
+            "lib/structural-artifact-command.ts",
+        ):
+            report["source_sha256"][name] = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
     env = {key: value for key, value in os.environ.items() if not key.startswith("WINDOPS_")}
     env.pop("NODE_TLS_REJECT_UNAUTHORIZED", None)
     env["PYTHONPATH"] = os.pathsep.join([str(BACKEND / "src"), str(BACKEND / "scripts")])
@@ -420,6 +442,21 @@ def main() -> None:
             "trusted_hosts": ["127.0.0.1", "localhost"],
         }
         config_path = folder / "settings.json"
+        if document:
+            models = arguments.document_models.resolve()
+            config.update(
+                document_parser_enabled=True,
+                document_parser_python=str(arguments.document_python.resolve()),
+                document_parser_models_path=str(models),
+                document_parser_model_manifest_sha256=hashlib.sha256(
+                    (models / "openvigil-model-manifest.json").read_bytes()
+                ).hexdigest(),
+                document_parser_runtime_directory=str(folder),
+            )
+            env["WINDOPS_E2E_DOCUMENT"] = "1"
+            env["WINDOPS_E2E_DOCUMENT_FIXTURE"] = str(arguments.document_fixture.resolve())
+            env["WINDOPS_E2E_DOCUMENT_RECEIPT"] = str(folder / "document-browser.json")
+            env["PLAYWRIGHT_JUNIT_OUTPUT_FILE"] = str(folder / "browser.xml")
         if structural:
             # Explicit release fixtures exercise software binding; these are not
             # observed image identities or a formal signed release qualification.
@@ -529,6 +566,12 @@ def main() -> None:
         start([sys.executable, script, "read-audit"], "read-audit.log")
         if structural:
             start_structural_worker()
+        if document:
+            start(
+                [sys.executable, script, "document-worker"],
+                "document-worker.log",
+                process_env={"WINDOPS_E2E_PROCESS_KIND": "document"},
+            )
         if scenario == "structural-scope":
             from structural_scope_evidence import OwnedInfrastructureChallenges
 
@@ -548,11 +591,12 @@ def main() -> None:
                     "structural": "tests/e2e/structural-cross-layer.spec.ts",
                     "structural-modal": "tests/e2e/structural-modal-cross-layer.spec.ts",
                     "structural-scope": "tests/e2e/structural-scope-cross-layer.spec.ts",
+                    "document": "tests/e2e/document-cross-layer.spec.ts",
                 }[scenario],
                 "--retries=0",
                 *(
                     ["--reporter=line,junit,./scripts/playwright-no-skips-reporter.mjs"]
-                    if structural
+                    if structural or document
                     else []
                 ),
             ],
@@ -569,7 +613,9 @@ def main() -> None:
             browser_code = browser.returncode
         else:
             browser_code = browser.wait(
-                timeout=1140 if scenario == "structural-modal" else (600 if structural else 360)
+                timeout=1140
+                if scenario == "structural-modal"
+                else (600 if structural or document else 360)
             )
         if browser_code:
             raise subprocess.CalledProcessError(browser_code, "business browser tests")
@@ -578,7 +624,16 @@ def main() -> None:
             for child in children
         ):
             raise RuntimeError("A business service exited unexpectedly")
-        if structural:
+        if document:
+            from document_e2e_evidence import document_database_evidence
+
+            junit = ET.parse(folder / "browser.xml").getroot()
+            if len(junit.findall(".//testcase")) != 1 or any(
+                junit.findall(f".//{tag}") for tag in ("failure", "error", "skipped")
+            ):
+                raise RuntimeError("Document browser evidence must contain one successful test")
+            report["database"] = asyncio.run(document_database_evidence(config, folder))
+        elif structural:
             from structural_e2e_evidence import structural_database_evidence
 
             junit = ET.parse(folder / "browser.xml").getroot()

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+from copy import deepcopy
 from typing import Any
+from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from windops_backend.agents.embeddings import (
@@ -38,6 +41,7 @@ from windops_backend.services.knowledge_contracts import (
 from windops_backend.services.knowledge_contracts import (
     KNOWLEDGE_DOCUMENT_INDEX_REQUESTED as KNOWLEDGE_DOCUMENT_INDEX_REQUESTED,
 )
+from windops_backend.services.knowledge_contracts import KNOWLEDGE_DOCUMENT_PARSE_REQUESTED
 from windops_backend.services.knowledge_contracts import (
     MAX_EXTRACTED_TEXT_CHARACTERS as MAX_EXTRACTED_TEXT_CHARACTERS,
 )
@@ -67,16 +71,33 @@ async def create_knowledge_document(
     subject: str,
     scope: KnowledgeDocumentScope | None = None,
     parsed: ParsedKnowledge | None = None,
+    parse_identity: dict[str, Any] | None = None,
 ) -> tuple[KnowledgeDocument, bool, str | None]:
+    if (request.parser == "docling") != (parse_identity is not None):
+        raise ValueError("document parser request does not match its server-owned identity")
     resolved_scope = scope or KnowledgeDocumentScope(
         tenant_id=request.tenant_id,
         wind_farm_id=request.wind_farm_id,
         turbine_id=request.turbine_id,
         data_scope=request.data_scope,
     )
+    if session.bind is not None and session.bind.dialect.name == "postgresql":
+        # Different keys/subjects must serialize the same immutable document ID.
+        digest = hashlib.sha256(f"knowledge-document:{request.document_id}".encode()).digest()
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(:lock_id)"),
+            {"lock_id": int.from_bytes(digest[:8], "big", signed=True)},
+        )
     existing = await session.get(KnowledgeDocument, request.document_id)
     if existing is not None:
         if existing.artifact_sha256 == request.artifact_sha256.lower():
+            existing_parser = (
+                "docling"
+                if (existing.metadata_ or {}).get("_openvigil_document_parse")
+                else "native"
+            )
+            if existing_parser != request.parser:
+                raise ConflictError("a different parser requires a new immutable document ID")
             if existing.document_version != request.document_version:
                 raise ConflictError("a document version requires a new immutable document ID")
             if (
@@ -93,6 +114,21 @@ async def create_knowledge_document(
         raise ConflictError(
             f"knowledge document {request.document_id} already exists with different content"
         )
+    event_id = str(uuid4())
+    parse_state = (
+        {
+            "identity": deepcopy(parse_identity),
+            "event_id": event_id,
+            "status": "pending",
+            "attempts": 0,
+            "error_code": None,
+            "started_at": None,
+            "completed_at": None,
+            "result_sha256": None,
+        }
+        if parse_identity is not None
+        else None
+    )
     document = KnowledgeDocument(
         id=request.document_id,
         tenant_id=resolved_scope.tenant_id,
@@ -110,6 +146,7 @@ async def create_knowledge_document(
         document_version=request.document_version,
         metadata_={
             **request.metadata,
+            **({"_openvigil_document_parse": parse_state} if parse_state else {}),
             "_openvigil_source_layout": {
                 "page_count": parsed.source_page_count if parsed else None,
                 "parser_version": parsed.passages[0].parser_version if parsed else None,
@@ -128,19 +165,31 @@ async def create_knowledge_document(
                 ),
             },
         },
-        ingestion_status="pending",
+        ingestion_status="pending_parse" if parse_state else "pending",
         vectorized=False,
         created_by=subject,
     )
     session.add(document)
-    add_passages(
-        session, document, parsed or parse_legacy_body(extracted_text), verified=parsed is not None
-    )
+    if parse_state is None:
+        add_passages(
+            session,
+            document,
+            parsed or parse_legacy_body(extracted_text),
+            verified=parsed is not None,
+        )
     event = OutboxEvent(
-        event_type=KNOWLEDGE_DOCUMENT_INDEX_REQUESTED,
+        id=event_id,
+        event_type=(
+            KNOWLEDGE_DOCUMENT_PARSE_REQUESTED
+            if parse_state
+            else KNOWLEDGE_DOCUMENT_INDEX_REQUESTED
+        ),
         aggregate_type="knowledge_document",
         aggregate_id=document.id,
-        payload={"document_id": document.id},
+        payload={
+            "document_id": document.id,
+            **({"parse_identity": deepcopy(parse_identity)} if parse_state else {}),
+        },
     )
     session.add(event)
     append_domain_event(
@@ -299,6 +348,7 @@ def serialize_knowledge_document(document: KnowledgeDocument) -> dict[str, Any]:
         "content_size_bytes": document.content_size_bytes,
         "metadata": document.metadata_,
         "source_layout": (document.metadata_ or {}).get("_openvigil_source_layout"),
+        "parse_state": (document.metadata_ or {}).get("_openvigil_document_parse"),
         "ingestion_status": document.ingestion_status,
         "vectorized": document.vectorized,
         "embedding_provider": document.embedding_provider,
